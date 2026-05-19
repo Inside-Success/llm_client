@@ -30,9 +30,14 @@ from llm_client.workflow.context import WorkflowContext
 logger = logging.getLogger(__name__)
 
 DuetVerdict = Literal["pass", "revise", "block"]
-DEFAULT_PLAN_MODEL = "codex/gpt-5-codex"
+# Defaults use the ChatGPT-account-compatible codex model. The API-only
+# ``codex/gpt-5-codex`` model gives stronger code performance but errors on
+# ChatGPT-account auth ("The 'gpt-5-codex' model is not supported when using
+# Codex with a ChatGPT account."). Operators with API auth can override per
+# stage via ``DuetRoles(plan="codex/gpt-5-codex", ...)``.
+DEFAULT_PLAN_MODEL = "codex/gpt-5.4"
 DEFAULT_PLAN_REVIEW_MODEL = "claude-code/opus"
-DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5-codex"
+DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5.4"
 DEFAULT_IMPLEMENT_REVIEW_MODEL = "claude-code/opus"
 
 STAGES = ("plan", "plan_review", "implement", "implement_review")
@@ -58,8 +63,10 @@ class DuetTask(BaseModel):
 class DuetRoles(BaseModel):
     """Per-stage model assignment.
 
-    Defaults to ``codex/gpt-5-codex`` for implement stages and
+    Defaults to ``codex/gpt-5.4`` for implement stages and
     ``claude-code/opus`` for review stages. Override per stage as needed.
+    Operators with Codex API auth (not ChatGPT-account auth) can switch
+    implement stages to ``codex/gpt-5-codex`` for stronger code performance.
     """
 
     plan: str = DEFAULT_PLAN_MODEL
