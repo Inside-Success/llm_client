@@ -1,0 +1,698 @@
+"""Implementer/reviewer duet workflow.
+
+Sequences four stages -- plan, plan_review, implement, implement_review --
+where any stage can be assigned to either ``claude-code`` or ``codex/*`` via
+``DuetRoles``. Reviewer stages return a structured ``verdict`` that drives
+LangGraph conditional edges deterministically. Implementer stages emit a
+markdown narrative plus a JSON sidecar so the reviewer sees both prose
+reasoning and machine-checkable atoms.
+
+Context transfer between stages is via durable artifacts on disk -- no tool
+transcripts. The next stage's prompt receives the prior artifacts and a
+workspace path; the agent re-reads the workspace fresh.
+
+See ``docs/plans/29_implementer_reviewer_duet.md`` for the full design.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from pathlib import Path
+from typing import Any, Callable, Literal, TypedDict
+
+from pydantic import BaseModel, Field
+
+from llm_client.workflow.config import WorkflowConfig
+from llm_client.workflow.context import WorkflowContext
+
+logger = logging.getLogger(__name__)
+
+DuetVerdict = Literal["pass", "revise", "block"]
+DEFAULT_PLAN_MODEL = "codex/gpt-5-codex"
+DEFAULT_PLAN_REVIEW_MODEL = "claude-code/opus"
+DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5-codex"
+DEFAULT_IMPLEMENT_REVIEW_MODEL = "claude-code/opus"
+
+STAGES = ("plan", "plan_review", "implement", "implement_review")
+
+
+class DuetTask(BaseModel):
+    """The task the duet is asked to plan, implement, and review.
+
+    Persisted to ``<run_dir>/task.json`` at the start of a run.
+    """
+
+    task_id: str
+    title: str
+    goal: str
+    success_criteria: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    workspace_path: str
+    base_commit_sha: str | None = None
+    allowed_paths: list[str] = Field(default_factory=list)
+    forbidden_paths: list[str] = Field(default_factory=list)
+
+
+class DuetRoles(BaseModel):
+    """Per-stage model assignment.
+
+    Defaults to ``codex/gpt-5-codex`` for implement stages and
+    ``claude-code/opus`` for review stages. Override per stage as needed.
+    """
+
+    plan: str = DEFAULT_PLAN_MODEL
+    plan_review: str = DEFAULT_PLAN_REVIEW_MODEL
+    implement: str = DEFAULT_IMPLEMENT_MODEL
+    implement_review: str = DEFAULT_IMPLEMENT_REVIEW_MODEL
+
+    def for_stage(self, stage: str) -> str:
+        if stage not in STAGES:
+            raise ValueError(f"Unknown duet stage: {stage!r}. Valid: {STAGES}")
+        return getattr(self, stage)
+
+
+class PlanStepAtom(BaseModel):
+    step_id: str
+    description: str
+    files_touched: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    acceptance_check: str = ""
+
+
+class PlanArtifact(BaseModel):
+    """Sidecar JSON for a plan; the narrative lives in ``plan.md``."""
+
+    plan_id: str
+    task_id: str
+    author_model: str
+    steps: list[PlanStepAtom]
+    assumptions: list[str] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    non_goals: list[str] = Field(default_factory=list)
+    risks: list[dict[str, str]] = Field(default_factory=list)
+    estimated_diff_size_loc: int | None = None
+    estimated_files_changed: int | None = None
+
+
+class PlanReviewBlocker(BaseModel):
+    step_id: str | None = None
+    claim: str
+    evidence_path: str | None = None
+    suggested_fix: str = ""
+
+
+class PlanReview(BaseModel):
+    """Structured plan-review verdict. Drives the plan_review router."""
+
+    verdict: DuetVerdict
+    blockers: list[PlanReviewBlocker] = Field(default_factory=list)
+    nits: list[dict[str, str]] = Field(default_factory=list)
+    unverified_claims: list[dict[str, str]] = Field(default_factory=list)
+    missing_acceptance_checks: list[str] = Field(default_factory=list)
+    scope_creep_findings: list[str] = Field(default_factory=list)
+    reviewer_summary: str = ""
+    reviewer_model: str = ""
+
+
+class ImplementFileChange(BaseModel):
+    path: str
+    plus_loc: int = 0
+    minus_loc: int = 0
+    intent: str = ""
+
+
+class ImplementCommit(BaseModel):
+    sha: str
+    message: str
+
+
+class ImplementDeviation(BaseModel):
+    step_id: str
+    what_changed: str
+    why: str
+
+
+class ImplementDecision(BaseModel):
+    """A single one-line entry in the implementer's decisions journal."""
+
+    decision: str
+    rejected_alternative: str = ""
+    why: str = ""
+
+
+class ImplementArtifact(BaseModel):
+    """Sidecar JSON for an implementation; narrative in ``implement.md``."""
+
+    implement_id: str
+    plan_id: str
+    head_commit_sha: str | None = None
+    base_commit_sha: str | None = None
+    files_changed: list[ImplementFileChange] = Field(default_factory=list)
+    commits: list[ImplementCommit] = Field(default_factory=list)
+    deviations_from_plan: list[ImplementDeviation] = Field(default_factory=list)
+    decisions: list[ImplementDecision] = Field(default_factory=list)
+    tests_added: list[str] = Field(default_factory=list)
+    tests_run: dict[str, int] = Field(default_factory=dict)
+    known_gaps: list[str] = Field(default_factory=list)
+    followups_for_next_cycle: list[str] = Field(default_factory=list)
+
+
+class ImplementReview(BaseModel):
+    """Structured implementation-review verdict."""
+
+    verdict: DuetVerdict
+    correctness_findings: list[dict[str, str]] = Field(default_factory=list)
+    contract_violations: list[dict[str, str]] = Field(default_factory=list)
+    unverified_test_claims: list[str] = Field(default_factory=list)
+    missing_followups_from_plan: list[str] = Field(default_factory=list)
+    scope_drift_findings: list[str] = Field(default_factory=list)
+    reviewer_summary: str = ""
+    reviewer_model: str = ""
+
+
+class DuetSignoff(BaseModel):
+    task_id: str
+    final_verdict: DuetVerdict
+    total_plan_cycles: int
+    total_implement_cycles: int
+    trace_id: str
+    final_commit_sha: str | None = None
+    artifacts_index: dict[str, str] = Field(default_factory=dict)
+
+
+class DuetState(TypedDict, total=False):
+    """LangGraph state for the duet workflow."""
+
+    task: dict[str, Any]
+    run_dir: str
+    plan_cycle: int
+    implement_cycle: int
+    plan_md: str
+    plan_sidecar: dict[str, Any]
+    plan_review: dict[str, Any]
+    implement_md: str
+    implement_sidecar: dict[str, Any]
+    implement_review: dict[str, Any]
+    final_verdict: DuetVerdict
+    error: str
+    _wf_trace_id: str
+    _wf_max_budget: float
+    _wf_task_prefix: str
+    _wf_current_stage: str
+
+
+# ---------------------------------------------------------------------------
+# Prompt builders
+# ---------------------------------------------------------------------------
+
+
+_IMPLEMENTER_RESPONSE_FORMAT = """
+Respond with a markdown narrative followed by a single fenced JSON sidecar.
+
+The narrative explains your reasoning, key decisions, and (for implement
+stages) what you changed and why. The sidecar is the machine-checkable atom
+view. Format the sidecar exactly like this at the end of your reply:
+
+```json
+{ "...": "..." }
+```
+
+The JSON must validate against the schema described in the prompt. If the
+schema cannot be satisfied, explain why in the narrative and emit a JSON
+object with only the field ``error`` populated.
+""".strip()
+
+
+def _task_brief(task: dict[str, Any]) -> str:
+    lines = [
+        f"task_id: {task.get('task_id', '?')}",
+        f"title: {task.get('title', '?')}",
+        f"goal: {task.get('goal', '?')}",
+        f"workspace_path: {task.get('workspace_path', '?')}",
+    ]
+    if task.get("success_criteria"):
+        lines.append("success_criteria:")
+        lines.extend(f"  - {c}" for c in task["success_criteria"])
+    if task.get("constraints"):
+        lines.append("constraints:")
+        lines.extend(f"  - {c}" for c in task["constraints"])
+    if task.get("allowed_paths"):
+        lines.append(f"allowed_paths: {task['allowed_paths']}")
+    if task.get("forbidden_paths"):
+        lines.append(f"forbidden_paths: {task['forbidden_paths']}")
+    return "\n".join(lines)
+
+
+def _plan_prompt(task: dict[str, Any], prior_review: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    system = (
+        "You are the planner in an implementer/reviewer duet. Produce a plan "
+        "the reviewer can audit. Keep steps concrete and acceptance checks "
+        "machine-verifiable where possible."
+    )
+    user_parts = [
+        "## Task",
+        _task_brief(task),
+        "",
+        "## Schema for the JSON sidecar",
+        json.dumps(PlanArtifact.model_json_schema(), indent=2),
+        "",
+        _IMPLEMENTER_RESPONSE_FORMAT,
+    ]
+    if prior_review:
+        user_parts.extend([
+            "",
+            "## Prior plan review (revise on these blockers before reproposing)",
+            json.dumps(prior_review, indent=2),
+        ])
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "\n".join(user_parts)},
+    ]
+
+
+def _plan_review_prompt(
+    task: dict[str, Any],
+    plan_md: str,
+    plan_sidecar: dict[str, Any],
+) -> list[dict[str, Any]]:
+    system = (
+        "You are the reviewer in an implementer/reviewer duet. Your output is "
+        "consumed by an automatic router, so the verdict must be one of: pass, "
+        "revise, block. Use 'block' only when the plan should not proceed without "
+        "human re-scoping. Do not edit any files."
+    )
+    user_parts = [
+        "## Task",
+        _task_brief(task),
+        "",
+        "## Plan narrative",
+        plan_md,
+        "",
+        "## Plan sidecar (JSON)",
+        json.dumps(plan_sidecar, indent=2),
+        "",
+        "Return a PlanReview JSON object. Be specific: blockers must cite a step "
+        "and propose a fix; nits are non-blocking; unverified_claims call out "
+        "things the plan asserts without evidence.",
+    ]
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "\n".join(user_parts)},
+    ]
+
+
+def _implement_prompt(
+    task: dict[str, Any],
+    plan_md: str,
+    plan_sidecar: dict[str, Any],
+    prior_review: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    system = (
+        "You are the implementer in an implementer/reviewer duet. Make the "
+        "smallest change that satisfies the plan and its acceptance checks. "
+        "Write a one-line entry in the decisions journal whenever you reject "
+        "an alternative the reviewer might wonder about."
+    )
+    user_parts = [
+        "## Task",
+        _task_brief(task),
+        "",
+        "## Approved plan (narrative)",
+        plan_md,
+        "",
+        "## Approved plan (sidecar)",
+        json.dumps(plan_sidecar, indent=2),
+        "",
+        "## Schema for the JSON sidecar of your response",
+        json.dumps(ImplementArtifact.model_json_schema(), indent=2),
+        "",
+        _IMPLEMENTER_RESPONSE_FORMAT,
+    ]
+    if prior_review:
+        user_parts.extend([
+            "",
+            "## Prior implementation review (address these before reproposing)",
+            json.dumps(prior_review, indent=2),
+        ])
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "\n".join(user_parts)},
+    ]
+
+
+def _implement_review_prompt(
+    task: dict[str, Any],
+    plan_md: str,
+    implement_md: str,
+    implement_sidecar: dict[str, Any],
+) -> list[dict[str, Any]]:
+    system = (
+        "You are the reviewer in an implementer/reviewer duet. Your output is "
+        "consumed by an automatic router; verdict must be one of: pass, revise, "
+        "block. Inspect the workspace via your file-reading tools to verify the "
+        "diff matches the narrative. Do not edit any files."
+    )
+    user_parts = [
+        "## Task",
+        _task_brief(task),
+        "",
+        "## Approved plan",
+        plan_md,
+        "",
+        "## Implementer narrative",
+        implement_md,
+        "",
+        "## Implementer sidecar (JSON)",
+        json.dumps(implement_sidecar, indent=2),
+        "",
+        "Return an ImplementReview JSON object. correctness_findings should "
+        "cite file:line. contract_violations should reference the task's "
+        "constraints. unverified_test_claims call out tests the implementer "
+        "claims pass but you cannot confirm.",
+    ]
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "\n".join(user_parts)},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Implementer response parser
+# ---------------------------------------------------------------------------
+
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
+
+
+def _parse_implementer_response(content: str) -> tuple[str, dict[str, Any]]:
+    """Split an implementer reply into (markdown_narrative, json_sidecar).
+
+    Implementer stages must end with a fenced ``json`` block. Anything before
+    the last fenced block is the narrative; the fenced block parses as JSON.
+
+    Raises:
+        ValueError: if no fenced JSON sidecar is found or it fails to parse.
+    """
+    matches = list(_JSON_FENCE_RE.finditer(content))
+    if not matches:
+        raise ValueError(
+            "Implementer response missing fenced JSON sidecar. "
+            "Expected a final ```json ... ``` block."
+        )
+    last = matches[-1]
+    narrative = content[: last.start()].rstrip()
+    sidecar_raw = last.group(1)
+    try:
+        sidecar = json.loads(sidecar_raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Failed to parse implementer JSON sidecar: {exc}") from exc
+    if not isinstance(sidecar, dict):
+        raise ValueError(
+            f"Implementer JSON sidecar must be an object, got {type(sidecar).__name__}"
+        )
+    return narrative, sidecar
+
+
+# ---------------------------------------------------------------------------
+# Artifact persistence
+# ---------------------------------------------------------------------------
+
+
+def _persist_text(run_dir: str, name: str, content: str) -> str:
+    path = Path(run_dir) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return str(path)
+
+
+def _persist_json(run_dir: str, name: str, payload: dict[str, Any]) -> str:
+    path = Path(run_dir) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return str(path)
+
+
+# ---------------------------------------------------------------------------
+# Node factories
+# ---------------------------------------------------------------------------
+
+
+def _make_plan_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    def plan_node(state: dict[str, Any]) -> dict[str, Any]:
+        ctx = WorkflowContext.current(state, stage="plan")
+        task = state["task"]
+        prior_review = state.get("plan_review") if state.get("plan_cycle", 0) > 0 else None
+        messages = _plan_prompt(task, prior_review=prior_review)
+        result = ctx.call_llm(roles.plan, messages)
+        narrative, sidecar = _parse_implementer_response(result.content)
+        sidecar.setdefault("plan_id", f"plan_{state.get('plan_cycle', 0)}")
+        sidecar.setdefault("task_id", task.get("task_id", "?"))
+        sidecar["author_model"] = roles.plan
+        run_dir = state["run_dir"]
+        _persist_text(run_dir, "plan.md", narrative)
+        _persist_json(run_dir, "plan.json", sidecar)
+        return {"plan_md": narrative, "plan_sidecar": sidecar}
+
+    return plan_node
+
+
+def _make_plan_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    def plan_review_node(state: dict[str, Any]) -> dict[str, Any]:
+        ctx = WorkflowContext.current(state, stage="plan_review")
+        task = state["task"]
+        messages = _plan_review_prompt(task, state["plan_md"], state["plan_sidecar"])
+        review, _meta = ctx.call_llm_structured(roles.plan_review, messages, PlanReview)
+        payload = review.model_dump()
+        payload["reviewer_model"] = roles.plan_review
+        _persist_json(state["run_dir"], "plan_review.json", payload)
+        return {"plan_review": payload, "plan_cycle": state.get("plan_cycle", 0) + 1}
+
+    return plan_review_node
+
+
+def _make_implement_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    def implement_node(state: dict[str, Any]) -> dict[str, Any]:
+        ctx = WorkflowContext.current(state, stage="implement")
+        task = state["task"]
+        prior_review = state.get("implement_review") if state.get("implement_cycle", 0) > 0 else None
+        messages = _implement_prompt(
+            task,
+            state["plan_md"],
+            state["plan_sidecar"],
+            prior_review=prior_review,
+        )
+        result = ctx.call_llm(roles.implement, messages)
+        narrative, sidecar = _parse_implementer_response(result.content)
+        sidecar.setdefault("implement_id", f"impl_{state.get('implement_cycle', 0)}")
+        sidecar.setdefault("plan_id", state["plan_sidecar"].get("plan_id", "?"))
+        run_dir = state["run_dir"]
+        _persist_text(run_dir, "implement.md", narrative)
+        _persist_json(run_dir, "implement.json", sidecar)
+        return {"implement_md": narrative, "implement_sidecar": sidecar}
+
+    return implement_node
+
+
+def _make_implement_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    def implement_review_node(state: dict[str, Any]) -> dict[str, Any]:
+        ctx = WorkflowContext.current(state, stage="implement_review")
+        task = state["task"]
+        messages = _implement_review_prompt(
+            task,
+            state["plan_md"],
+            state["implement_md"],
+            state["implement_sidecar"],
+        )
+        review, _meta = ctx.call_llm_structured(roles.implement_review, messages, ImplementReview)
+        payload = review.model_dump()
+        payload["reviewer_model"] = roles.implement_review
+        _persist_json(state["run_dir"], "implement_review.json", payload)
+        return {"implement_review": payload, "implement_cycle": state.get("implement_cycle", 0) + 1}
+
+    return implement_review_node
+
+
+def _make_signoff_node(verdict: DuetVerdict) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    def signoff_node(state: dict[str, Any]) -> dict[str, Any]:
+        task = state["task"]
+        run_dir = state["run_dir"]
+        artifacts = {
+            "task": "task.json",
+            "plan_md": "plan.md" if state.get("plan_md") else "",
+            "plan_sidecar": "plan.json" if state.get("plan_sidecar") else "",
+            "plan_review": "plan_review.json" if state.get("plan_review") else "",
+            "implement_md": "implement.md" if state.get("implement_md") else "",
+            "implement_sidecar": "implement.json" if state.get("implement_sidecar") else "",
+            "implement_review": "implement_review.json" if state.get("implement_review") else "",
+        }
+        signoff = DuetSignoff(
+            task_id=task.get("task_id", "?"),
+            final_verdict=verdict,
+            total_plan_cycles=state.get("plan_cycle", 0),
+            total_implement_cycles=state.get("implement_cycle", 0),
+            trace_id=state.get("_wf_trace_id", ""),
+            artifacts_index={k: v for k, v in artifacts.items() if v},
+        )
+        _persist_json(run_dir, "signoff.json", signoff.model_dump())
+        return {"final_verdict": verdict}
+
+    return signoff_node
+
+
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+
+
+def _make_plan_review_router(max_revise_cycles: int) -> Callable[[dict[str, Any]], str]:
+    def plan_review_router(state: dict[str, Any]) -> str:
+        review = state.get("plan_review") or {}
+        verdict = review.get("verdict", "block")
+        if verdict == "pass":
+            return "implement"
+        if verdict == "revise":
+            # plan_cycle has already been incremented in the review node
+            if state.get("plan_cycle", 0) > max_revise_cycles:
+                return "signoff_block"
+            return "plan"
+        return "signoff_block"
+
+    return plan_review_router
+
+
+def _make_implement_review_router(max_revise_cycles: int) -> Callable[[dict[str, Any]], str]:
+    def implement_review_router(state: dict[str, Any]) -> str:
+        review = state.get("implement_review") or {}
+        verdict = review.get("verdict", "block")
+        if verdict == "pass":
+            return "signoff_pass"
+        if verdict == "revise":
+            if state.get("implement_cycle", 0) > max_revise_cycles:
+                return "signoff_block"
+            return "implement"
+        return "signoff_block"
+
+    return implement_review_router
+
+
+# ---------------------------------------------------------------------------
+# Builder
+# ---------------------------------------------------------------------------
+
+
+def build_duet_workflow(
+    *,
+    run_dir: str | Path,
+    task: DuetTask | dict[str, Any],
+    trace_id: str,
+    max_budget: float,
+    roles: DuetRoles | None = None,
+    max_revise_cycles: int = 1,
+    task_prefix: str = "duet",
+    checkpointer: Any | None = None,
+) -> tuple[Any, dict[str, Any]]:
+    """Build a compiled LangGraph app for the implementer/reviewer duet.
+
+    Args:
+        run_dir: Directory for durable artifacts (created if missing).
+        task: The duet task. Accepts either a DuetTask or a plain dict.
+        trace_id: Shared trace_id across all LLM calls in the run.
+        max_budget: USD budget for the entire run (passed through WorkflowContext).
+        roles: Per-stage model assignment. Defaults applied if None.
+        max_revise_cycles: How many ``revise`` verdicts each gate allows before
+            promoting to ``block``. Defaults to 1 (i.e. one retry).
+        task_prefix: Task-label prefix for observability. Defaults to ``"duet"``.
+        checkpointer: LangGraph checkpointer. Defaults to InMemorySaver.
+
+    Returns:
+        (compiled_app, initial_state). Caller invokes
+        ``compiled_app.invoke(initial_state, config={"configurable": {"thread_id": ...}})``.
+
+    Raises:
+        ImportError: if ``langgraph`` is not installed.
+    """
+    from llm_client.workflow.builder import build_workflow
+
+    task_obj = task if isinstance(task, DuetTask) else DuetTask(**task)
+    task_dict = task_obj.model_dump()
+
+    run_dir_path = Path(run_dir)
+    run_dir_path.mkdir(parents=True, exist_ok=True)
+    _persist_json(str(run_dir_path), "task.json", task_dict)
+
+    resolved_roles = roles or DuetRoles()
+
+    plan_node = _make_plan_node(resolved_roles)
+    plan_review_node = _make_plan_review_node(resolved_roles)
+    implement_node = _make_implement_node(resolved_roles)
+    implement_review_node = _make_implement_review_node(resolved_roles)
+    signoff_pass_node = _make_signoff_node("pass")
+    signoff_block_node = _make_signoff_node("block")
+
+    plan_review_router = _make_plan_review_router(max_revise_cycles)
+    implement_review_router = _make_implement_review_router(max_revise_cycles)
+
+    config = WorkflowConfig.from_dict({
+        "task_prefix": task_prefix,
+        "max_budget": max_budget,
+    })
+
+    app = build_workflow(
+        state_schema=DuetState,
+        config=config,
+        nodes={
+            "plan": plan_node,
+            "plan_review": plan_review_node,
+            "implement": implement_node,
+            "implement_review": implement_review_node,
+            "signoff_pass": signoff_pass_node,
+            "signoff_block": signoff_block_node,
+        },
+        edges=[
+            ("plan", "plan_review"),
+            ("implement", "implement_review"),
+        ],
+        conditional_edges={
+            "plan_review": plan_review_router,
+            "implement_review": implement_review_router,
+        },
+        entry_point="plan",
+        finish_points=["signoff_pass", "signoff_block"],
+        checkpointer=checkpointer,
+    )
+
+    ctx = WorkflowContext(
+        trace_id=trace_id,
+        max_budget=max_budget,
+        task_prefix=task_prefix,
+    )
+    initial_state: dict[str, Any] = ctx.inject_into_state({
+        "task": task_dict,
+        "run_dir": str(run_dir_path),
+        "plan_cycle": 0,
+        "implement_cycle": 0,
+    })
+
+    return app, initial_state
+
+
+__all__ = [
+    "DuetVerdict",
+    "DuetTask",
+    "DuetRoles",
+    "PlanStepAtom",
+    "PlanArtifact",
+    "PlanReview",
+    "PlanReviewBlocker",
+    "ImplementArtifact",
+    "ImplementFileChange",
+    "ImplementCommit",
+    "ImplementDecision",
+    "ImplementDeviation",
+    "ImplementReview",
+    "DuetSignoff",
+    "DuetState",
+    "build_duet_workflow",
+]

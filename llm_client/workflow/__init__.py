@@ -36,3 +36,47 @@ try:
     __all__.append("build_workflow")
 except ImportError:
     pass
+
+# Duet schemas are pure-Pydantic so they import without langgraph. The
+# build_duet_workflow() entrypoint itself imports build_workflow lazily.
+from llm_client.workflow.duet import (
+    DuetRoles,
+    DuetSignoff,
+    DuetState,
+    DuetTask,
+    DuetVerdict,
+    ImplementArtifact,
+    ImplementCommit,
+    ImplementDecision,
+    ImplementDeviation,
+    ImplementFileChange,
+    ImplementReview,
+    PlanArtifact,
+    PlanReview,
+    PlanReviewBlocker,
+    PlanStepAtom,
+)
+
+__all__.extend([
+    "DuetRoles",
+    "DuetSignoff",
+    "DuetState",
+    "DuetTask",
+    "DuetVerdict",
+    "ImplementArtifact",
+    "ImplementCommit",
+    "ImplementDecision",
+    "ImplementDeviation",
+    "ImplementFileChange",
+    "ImplementReview",
+    "PlanArtifact",
+    "PlanReview",
+    "PlanReviewBlocker",
+    "PlanStepAtom",
+])
+
+try:
+    from llm_client.workflow.duet import build_duet_workflow
+    __all__.append("build_duet_workflow")
+except ImportError:
+    pass

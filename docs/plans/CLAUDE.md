@@ -34,6 +34,7 @@ Track all implementation work here.
 | 26 | [Gemini Strict-Schema Behavior Study](26_gemini-strict-schema-behavior-study.md) | High | ✅ Complete | - |
 | 27 | [Direct Gemini Thinking Budget Policy](27_direct-gemini-thinking-budget-policy.md) | High | ✅ Complete | 26 |
 | 28 | [OpenRouter Gemini 3.1 Pro Registry And Tyler Validation](28_openrouter-gemini31-pro-registry-and-tyler-validation.md) | High | ✅ Complete | 26, 27 |
+| 29 | [Implementer/Reviewer Duet Workflow](29_implementer_reviewer_duet.md) | Medium | 📋 In Progress | - |
 
 
 ## Status Key
