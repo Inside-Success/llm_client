@@ -47,6 +47,15 @@ DEFAULT_IMPLEMENT_REVIEW_MODEL = "claude-code/opus"
 # SDK's own internal default is 300s; match it here.
 DEFAULT_DUET_STAGE_TIMEOUT_S = 300
 
+# Default ``codex_transport="sdk"`` in-process SDK can hit a Pydantic
+# ValidationError when it sees ``FileChangeItem.status="in_progress"`` from
+# a streaming codex turn while the local SDK schema still only accepts
+# ``completed|failed``. ``codex_transport="auto"`` keeps SDK as primary but
+# falls back to CLI on this known transport-compatibility issue. See
+# llm_client.sdk.agents._is_codex_sdk_parse_validation_error for detection.
+# Harmless on non-codex stages (claude-code/* adapters ignore the kwarg).
+DEFAULT_DUET_CODEX_TRANSPORT = "auto"
+
 STAGES = ("plan", "plan_review", "implement", "implement_review")
 
 
@@ -459,7 +468,12 @@ def _make_plan_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, An
         task = state["task"]
         prior_review = state.get("plan_review") if state.get("plan_cycle", 0) > 0 else None
         messages = _plan_prompt(task, prior_review=prior_review)
-        result = ctx.call_llm(roles.plan, messages, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S)
+        result = ctx.call_llm(
+            roles.plan,
+            messages,
+            timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+            codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
+        )
         narrative, sidecar = _parse_implementer_response(result.content)
         sidecar.setdefault("plan_id", f"plan_{state.get('plan_cycle', 0)}")
         sidecar.setdefault("task_id", task.get("task_id", "?"))
@@ -478,7 +492,11 @@ def _make_plan_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[
         task = state["task"]
         messages = _plan_review_prompt(task, state["plan_md"], state["plan_sidecar"])
         review, _meta = ctx.call_llm_structured(
-            roles.plan_review, messages, PlanReview, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+            roles.plan_review,
+            messages,
+            PlanReview,
+            timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+            codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
         )
         payload = review.model_dump()
         payload["reviewer_model"] = roles.plan_review
@@ -499,7 +517,12 @@ def _make_implement_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[st
             state["plan_sidecar"],
             prior_review=prior_review,
         )
-        result = ctx.call_llm(roles.implement, messages, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S)
+        result = ctx.call_llm(
+            roles.implement,
+            messages,
+            timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+            codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
+        )
         narrative, sidecar = _parse_implementer_response(result.content)
         sidecar.setdefault("implement_id", f"impl_{state.get('implement_cycle', 0)}")
         sidecar.setdefault("plan_id", state["plan_sidecar"].get("plan_id", "?"))
@@ -522,7 +545,11 @@ def _make_implement_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], 
             state["implement_sidecar"],
         )
         review, _meta = ctx.call_llm_structured(
-            roles.implement_review, messages, ImplementReview, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+            roles.implement_review,
+            messages,
+            ImplementReview,
+            timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+            codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
         )
         payload = review.model_dump()
         payload["reviewer_model"] = roles.implement_review
