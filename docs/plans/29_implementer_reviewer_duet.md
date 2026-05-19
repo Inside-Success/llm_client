@@ -122,3 +122,19 @@ Out of scope for this plan (deliberately):
 - Human-in-the-loop interrupt after `implement_review` (LangGraph supports it natively; just not wired in v1).
 - Per-stage retry/fallback override via `WorkflowConfig`.
 - Prompt assets promoted to `prompts/` once stable.
+
+## Live-smoke findings (2026-05-19)
+
+First end-to-end live invocation against the toy task "add a one-line docstring to `multiply()`" surfaced three real failure modes the 8 unit tests didn't catch (tests stub `call_llm`). All three are now fixed; the docstring task completes pass→pass→pass→pass in ~3.6 min total.
+
+- **F-1 (commit `99b9c13`)**: Hard-coded `DEFAULT_PLAN_MODEL = DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5-codex"` errors out on ChatGPT-account auth — `"The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account"`. Defaults switched to `codex/gpt-5.4`; API-auth operators can override per stage.
+- **F-2 (commit `6f51425`)**: Framework-wide `call_llm` default timeout of 60s (from `llm_client/core/config.py`) is too short for codex agent calls that legitimately spend tens of seconds doing workspace exploration. Added `DEFAULT_DUET_STAGE_TIMEOUT_S = 300` (matches the codex SDK's own internal default) and threaded it through all four call sites.
+- **F-4 (commit `c7e7c40`)**: Default `codex_transport="sdk"` hits a Pydantic `ValidationError` when the streaming codex protocol emits `FileChangeItem.status="in_progress"` and the locally installed SDK schema only accepts `"completed"|"failed"`. The fallback (`codex_transport="auto"` triggers retry via CLI on this specific error) already exists in `llm_client.sdk.agents._is_codex_sdk_parse_validation_error`. Added `DEFAULT_DUET_CODEX_TRANSPORT = "auto"` and threaded it through all four call sites.
+
+### Remaining concerns not fixed
+
+- **F-3 (codex over-context-load)**: When codex runs from a worktree with extensive `AGENTS.md` / plan surfaces, it reads many files before producing its answer — wasteful for small tasks. The 300s timeout absorbs this for now, but cost-per-call is dominated by setup overhead. Mitigation candidate: pass a scratch `working_directory` instead of the worktree root, so codex doesn't auto-load surrounding context. Defer until cost data justifies the work.
+- **Parser adversarial fixtures (R-2 from review)**: tests still use canned LLM output; should add fixtures for (a) `\`\`\`json` example block before the sidecar, (b) trailing non-JSON fence, (c) malformed JSON in last fence.
+- **Calibration baseline (R-3 from review)**: 3 known-good + 3 known-broken implementations as a fixed eval set to distinguish well-calibrated reviewer from noise generator. Should be the focus of Plan #30.
+- **Reviewer-grounding (R-2a from review)**: make `evidence_path` / `file_line` REQUIRED on `PlanReviewBlocker` and `correctness_finding` so reviewer must cite, not opine.
+- **Calibration anchors in reviewer prompts (R-3a from review)**: prompts say "verdict must be one of: pass, revise, block" with one anchor — no concrete examples of when to `pass` vs `revise`. Add 1-2 worked examples per verdict in the prompt body.
