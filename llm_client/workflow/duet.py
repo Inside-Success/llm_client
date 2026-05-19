@@ -40,6 +40,13 @@ DEFAULT_PLAN_REVIEW_MODEL = "claude-code/opus"
 DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5.4"
 DEFAULT_IMPLEMENT_REVIEW_MODEL = "claude-code/opus"
 
+# Codex agent calls legitimately take minutes — codex auto-explores the
+# workspace (sed reads, glob walks) before answering. The framework-wide
+# ``call_llm`` default of 60s is appropriate for stateless OpenAI/Anthropic
+# calls but produces spurious ``CODEX_TIMEOUT`` on duet stages. The codex
+# SDK's own internal default is 300s; match it here.
+DEFAULT_DUET_STAGE_TIMEOUT_S = 300
+
 STAGES = ("plan", "plan_review", "implement", "implement_review")
 
 
@@ -452,7 +459,7 @@ def _make_plan_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, An
         task = state["task"]
         prior_review = state.get("plan_review") if state.get("plan_cycle", 0) > 0 else None
         messages = _plan_prompt(task, prior_review=prior_review)
-        result = ctx.call_llm(roles.plan, messages)
+        result = ctx.call_llm(roles.plan, messages, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S)
         narrative, sidecar = _parse_implementer_response(result.content)
         sidecar.setdefault("plan_id", f"plan_{state.get('plan_cycle', 0)}")
         sidecar.setdefault("task_id", task.get("task_id", "?"))
@@ -470,7 +477,9 @@ def _make_plan_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[
         ctx = WorkflowContext.current(state, stage="plan_review")
         task = state["task"]
         messages = _plan_review_prompt(task, state["plan_md"], state["plan_sidecar"])
-        review, _meta = ctx.call_llm_structured(roles.plan_review, messages, PlanReview)
+        review, _meta = ctx.call_llm_structured(
+            roles.plan_review, messages, PlanReview, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+        )
         payload = review.model_dump()
         payload["reviewer_model"] = roles.plan_review
         _persist_json(state["run_dir"], "plan_review.json", payload)
@@ -490,7 +499,7 @@ def _make_implement_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[st
             state["plan_sidecar"],
             prior_review=prior_review,
         )
-        result = ctx.call_llm(roles.implement, messages)
+        result = ctx.call_llm(roles.implement, messages, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S)
         narrative, sidecar = _parse_implementer_response(result.content)
         sidecar.setdefault("implement_id", f"impl_{state.get('implement_cycle', 0)}")
         sidecar.setdefault("plan_id", state["plan_sidecar"].get("plan_id", "?"))
@@ -512,7 +521,9 @@ def _make_implement_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], 
             state["implement_md"],
             state["implement_sidecar"],
         )
-        review, _meta = ctx.call_llm_structured(roles.implement_review, messages, ImplementReview)
+        review, _meta = ctx.call_llm_structured(
+            roles.implement_review, messages, ImplementReview, timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
+        )
         payload = review.model_dump()
         payload["reviewer_model"] = roles.implement_review
         _persist_json(state["run_dir"], "implement_review.json", payload)
