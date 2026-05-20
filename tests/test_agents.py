@@ -563,6 +563,52 @@ class TestBuildAgentOptions:
         )
         assert options.permission_mode == "bypassPermissions"
 
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    @pytest.mark.parametrize(
+        "alias, full_id",
+        [
+            ("opus", "claude-opus-4-7"),
+            ("sonnet", "claude-sonnet-4-6"),
+            ("haiku", "claude-haiku-4-5-20251001"),
+            ("Opus", "claude-opus-4-7"),  # case-insensitive
+            ("SONNET", "claude-sonnet-4-6"),
+        ],
+    )
+    def test_short_alias_resolves_to_full_model_id(self, monkeypatch, alias, full_id) -> None:
+        """Short aliases (opus/sonnet/haiku) must resolve to full Anthropic model IDs.
+
+        Bare aliases are silently ignored by the Claude Agent SDK and cause the
+        session to fall back to its default model. Without resolution, asking
+        for ``claude-code/opus`` actually runs whatever the CLI session default
+        is (typically Sonnet), making reviewer-model defaults meaningless.
+        """
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr("llm_client._auto_loaded_keys", frozenset())
+        _, options, _ = _build_agent_options(
+            f"claude-code/{alias}",
+            [{"role": "user", "content": "Hi"}],
+        )
+        assert options.model == full_id
+
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    def test_full_model_id_passes_through_unchanged(self, monkeypatch) -> None:
+        """A full model ID like ``claude-opus-4-1-20250805`` must not be remapped."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr("llm_client._auto_loaded_keys", frozenset())
+        _, options, _ = _build_agent_options(
+            "claude-code/claude-opus-4-1-20250805",
+            [{"role": "user", "content": "Hi"}],
+        )
+        assert options.model == "claude-opus-4-1-20250805"
+
+    def test_resolve_unknown_alias_passes_through(self) -> None:
+        """Unknown values pass through unchanged so callers can pin specific IDs."""
+        from llm_client.sdk.agents_claude import _resolve_claude_code_model
+
+        assert _resolve_claude_code_model("claude-opus-4-1-20250805") == "claude-opus-4-1-20250805"
+        assert _resolve_claude_code_model("some-future-model") == "some-future-model"
+        assert _resolve_claude_code_model(None) is None
+
 
 class TestOnTurnCallback:
     """Test on_turn callback fires during agent execution."""
