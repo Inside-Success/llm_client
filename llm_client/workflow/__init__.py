@@ -21,12 +21,32 @@ Usage::
 
 from llm_client.workflow.config import StageConfig, StageRetryConfig, WorkflowConfig
 from llm_client.workflow.context import WorkflowContext
+from llm_client.workflow.duet_base import (
+    DuetVerdict as _DuetVerdictBase,
+    ImplementReviewBase,
+    PlanReviewBase,
+    TaskFamily,
+)
+from llm_client.workflow.duet_registry import (
+    get_task_family,
+    list_task_families,
+    register_task_family,
+)
+
+# Side-effect import: registers built-in profiles ("generic", "plan_doc_review").
+from llm_client.workflow import profiles as _profiles  # noqa: F401
 
 __all__ = [
     "StageConfig",
     "StageRetryConfig",
     "WorkflowConfig",
     "WorkflowContext",
+    "PlanReviewBase",
+    "ImplementReviewBase",
+    "TaskFamily",
+    "get_task_family",
+    "list_task_families",
+    "register_task_family",
 ]
 
 # build_workflow is imported lazily to avoid requiring langgraph at import time

@@ -99,11 +99,14 @@ def _build_task(args: argparse.Namespace, workspace: str) -> dict[str, Any]:
 def cmd_duet_review(args: argparse.Namespace) -> None:
     from llm_client import call_llm_structured
     from llm_client.workflow.duet import (
-        ImplementReview,
-        PlanReview,
         _implement_review_prompt,
         _plan_review_prompt,
     )
+    # Side-effect import: registers built-in profiles before lookup.
+    import llm_client.workflow.profiles  # noqa: F401
+    from llm_client.workflow.duet_registry import get_task_family
+
+    family = get_task_family(args.task_family)
 
     workspace = str(Path(args.workspace).resolve())
     out_dir = Path(args.out).resolve()
@@ -130,11 +133,11 @@ def cmd_duet_review(args: argparse.Namespace) -> None:
         "note": "Synthetic sidecar; the plan doc is the source of truth.",
     }
 
-    print(f"=== plan_review ({args.reviewer_model}) ===", flush=True)
+    print(f"=== plan_review ({args.reviewer_model}, family={family.name}) ===", flush=True)
     plan_review, _meta = call_llm_structured(
         args.reviewer_model,
-        _plan_review_prompt(task, plan_md, plan_sidecar),
-        PlanReview,
+        _plan_review_prompt(task, plan_md, plan_sidecar, family=family),
+        family.plan_review_schema,
         task="duet.plan_review",
         trace_id=f"{task['task_id']}/plan_review",
         max_budget=args.max_budget,
@@ -158,11 +161,11 @@ def cmd_duet_review(args: argparse.Namespace) -> None:
         (out_dir / "implement.md").write_text(impl_md, encoding="utf-8")
         (out_dir / "implement.json").write_text(json.dumps(impl_sidecar, indent=2), encoding="utf-8")
 
-        print(f"\n=== implement_review ({args.reviewer_model}) ===", flush=True)
+        print(f"\n=== implement_review ({args.reviewer_model}, family={family.name}) ===", flush=True)
         impl_review, _meta = call_llm_structured(
             args.reviewer_model,
-            _implement_review_prompt(task, plan_md, impl_md, impl_sidecar),
-            ImplementReview,
+            _implement_review_prompt(task, plan_md, impl_md, impl_sidecar, family=family),
+            family.implement_review_schema,
             task="duet.implement_review",
             trace_id=f"{task['task_id']}/implement_review",
             max_budget=args.max_budget,
@@ -212,6 +215,15 @@ def register_parser(subparsers: Any) -> None:
         "--reviewer-model",
         default="claude-code/opus",
         help="Reviewer model (default: claude-code/opus, resolves to current Opus full ID)",
+    )
+    p.add_argument(
+        "--task-family",
+        default="generic",
+        help=(
+            "Registered duet profile (default: generic). Built-ins: generic, plan_doc_review. "
+            "Use plan_doc_review when reviewing a plan document against the repo's TEMPLATE.md "
+            "structure for richer findings (template_section_misses, references_unverified)."
+        ),
     )
     p.add_argument(
         "--impl-base",

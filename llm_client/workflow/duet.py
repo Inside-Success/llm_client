@@ -26,10 +26,14 @@ from pydantic import BaseModel, Field
 
 from llm_client.workflow.config import WorkflowConfig
 from llm_client.workflow.context import WorkflowContext
+from llm_client.workflow.duet_base import (
+    DuetVerdict,
+    ImplementReviewBase,
+    PlanReviewBase,
+    TaskFamily,
+)
 
 logger = logging.getLogger(__name__)
-
-DuetVerdict = Literal["pass", "revise", "block"]
 # Defaults use the ChatGPT-account-compatible codex model. The API-only
 # ``codex/gpt-5-codex`` model gives stronger code performance but errors on
 # ChatGPT-account auth ("The 'gpt-5-codex' model is not supported when using
@@ -134,17 +138,19 @@ class PlanReviewBlocker(BaseModel):
     suggested_fix: str = ""
 
 
-class PlanReview(BaseModel):
-    """Structured plan-review verdict. Drives the plan_review router."""
+class PlanReview(PlanReviewBase):
+    """Generic plan-review schema; the default for the duet chassis.
 
-    verdict: DuetVerdict
+    Subclassed by domain profiles that need extra fields. The router only
+    branches on ``verdict`` (inherited from ``PlanReviewBase``), so subclass
+    additions don't break control flow.
+    """
+
     blockers: list[PlanReviewBlocker] = Field(default_factory=list)
     nits: list[dict[str, str]] = Field(default_factory=list)
     unverified_claims: list[dict[str, str]] = Field(default_factory=list)
     missing_acceptance_checks: list[str] = Field(default_factory=list)
     scope_creep_findings: list[str] = Field(default_factory=list)
-    reviewer_summary: str = ""
-    reviewer_model: str = ""
 
 
 class ImplementFileChange(BaseModel):
@@ -205,17 +211,14 @@ class CorrectnessFinding(BaseModel):
     severity: Literal["info", "warn", "high"] = "warn"
 
 
-class ImplementReview(BaseModel):
-    """Structured implementation-review verdict."""
+class ImplementReview(ImplementReviewBase):
+    """Generic implementation-review schema; the default for the duet chassis."""
 
-    verdict: DuetVerdict
     correctness_findings: list[CorrectnessFinding] = Field(default_factory=list)
     contract_violations: list[dict[str, str]] = Field(default_factory=list)
     unverified_test_claims: list[str] = Field(default_factory=list)
     missing_followups_from_plan: list[str] = Field(default_factory=list)
     scope_drift_findings: list[str] = Field(default_factory=list)
-    reviewer_summary: str = ""
-    reviewer_model: str = ""
 
 
 class DuetSignoff(BaseModel):
@@ -291,7 +294,29 @@ def _task_brief(task: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _plan_prompt(task: dict[str, Any], prior_review: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def _family_context_blocks(family: TaskFamily | None, task: dict[str, Any]) -> list[str]:
+    """Render ``family.context_loader(task)`` as ``## <label>`` markdown blocks.
+
+    Returns an empty list when no family is provided or the loader emits
+    nothing. Each entry's content is rendered verbatim — the loader owns
+    formatting.
+    """
+    if family is None:
+        return []
+    blocks = family.context_loader(task)
+    if not blocks:
+        return []
+    rendered: list[str] = []
+    for label, content in blocks.items():
+        rendered.extend(["", f"## {label}", content])
+    return rendered
+
+
+def _plan_prompt(
+    task: dict[str, Any],
+    prior_review: dict[str, Any] | None = None,
+    family: TaskFamily | None = None,
+) -> list[dict[str, Any]]:
     system = (
         "You are the planner in an implementer/reviewer duet. Produce a plan "
         "the reviewer can audit. Keep steps concrete and acceptance checks "
@@ -300,6 +325,7 @@ def _plan_prompt(task: dict[str, Any], prior_review: dict[str, Any] | None = Non
     user_parts = [
         "## Task",
         _task_brief(task),
+        *_family_context_blocks(family, task),
         "",
         "## Schema for the JSON sidecar",
         json.dumps(PlanArtifact.model_json_schema(), indent=2),
@@ -312,6 +338,8 @@ def _plan_prompt(task: dict[str, Any], prior_review: dict[str, Any] | None = Non
             "## Prior plan review (revise on these blockers before reproposing)",
             json.dumps(prior_review, indent=2),
         ])
+    if family and family.plan_prompt_addendum:
+        user_parts.append(family.plan_prompt_addendum)
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": "\n".join(user_parts)},
@@ -322,6 +350,7 @@ def _plan_review_prompt(
     task: dict[str, Any],
     plan_md: str,
     plan_sidecar: dict[str, Any],
+    family: TaskFamily | None = None,
 ) -> list[dict[str, Any]]:
     system = (
         "You are the reviewer in an implementer/reviewer duet. Your output is "
@@ -332,6 +361,7 @@ def _plan_review_prompt(
     user_parts = [
         "## Task",
         _task_brief(task),
+        *_family_context_blocks(family, task),
         "",
         "## Plan narrative",
         plan_md,
@@ -347,6 +377,8 @@ def _plan_review_prompt(
         "non-blocking; unverified_claims call out things the plan asserts but "
         "you could not check from the available artifacts.",
     ]
+    if family and family.plan_review_prompt_addendum:
+        user_parts.append(family.plan_review_prompt_addendum)
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": "\n".join(user_parts)},
@@ -358,6 +390,7 @@ def _implement_prompt(
     plan_md: str,
     plan_sidecar: dict[str, Any],
     prior_review: dict[str, Any] | None = None,
+    family: TaskFamily | None = None,
 ) -> list[dict[str, Any]]:
     system = (
         "You are the implementer in an implementer/reviewer duet. Make the "
@@ -368,6 +401,7 @@ def _implement_prompt(
     user_parts = [
         "## Task",
         _task_brief(task),
+        *_family_context_blocks(family, task),
         "",
         "## Approved plan (narrative)",
         plan_md,
@@ -386,6 +420,8 @@ def _implement_prompt(
             "## Prior implementation review (address these before reproposing)",
             json.dumps(prior_review, indent=2),
         ])
+    if family and family.implement_prompt_addendum:
+        user_parts.append(family.implement_prompt_addendum)
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": "\n".join(user_parts)},
@@ -397,6 +433,7 @@ def _implement_review_prompt(
     plan_md: str,
     implement_md: str,
     implement_sidecar: dict[str, Any],
+    family: TaskFamily | None = None,
 ) -> list[dict[str, Any]]:
     system = (
         "You are the reviewer in an implementer/reviewer duet. Your output is "
@@ -407,6 +444,7 @@ def _implement_review_prompt(
     user_parts = [
         "## Task",
         _task_brief(task),
+        *_family_context_blocks(family, task),
         "",
         "## Approved plan",
         plan_md,
@@ -425,6 +463,8 @@ def _implement_review_prompt(
         "should reference the task's constraints. Severity defaults to 'warn'; "
         "use 'high' only when the finding would break correctness or contract.",
     ]
+    if family and family.implement_review_prompt_addendum:
+        user_parts.append(family.implement_review_prompt_addendum)
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": "\n".join(user_parts)},
@@ -492,12 +532,12 @@ def _persist_json(run_dir: str, name: str, payload: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _make_plan_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def _make_plan_node(roles: DuetRoles, family: TaskFamily) -> Callable[[dict[str, Any]], dict[str, Any]]:
     def plan_node(state: dict[str, Any]) -> dict[str, Any]:
         ctx = WorkflowContext.current(state, stage="plan")
         task = state["task"]
         prior_review = state.get("plan_review") if state.get("plan_cycle", 0) > 0 else None
-        messages = _plan_prompt(task, prior_review=prior_review)
+        messages = _plan_prompt(task, prior_review=prior_review, family=family)
         result = ctx.call_llm(
             roles.plan,
             messages,
@@ -517,15 +557,15 @@ def _make_plan_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, An
     return plan_node
 
 
-def _make_plan_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def _make_plan_review_node(roles: DuetRoles, family: TaskFamily) -> Callable[[dict[str, Any]], dict[str, Any]]:
     def plan_review_node(state: dict[str, Any]) -> dict[str, Any]:
         ctx = WorkflowContext.current(state, stage="plan_review")
         task = state["task"]
-        messages = _plan_review_prompt(task, state["plan_md"], state["plan_sidecar"])
+        messages = _plan_review_prompt(task, state["plan_md"], state["plan_sidecar"], family=family)
         review, _meta = ctx.call_llm_structured(
             roles.plan_review,
             messages,
-            PlanReview,
+            family.plan_review_schema,
             timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
             codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
             cwd=task["workspace_path"],
@@ -538,7 +578,7 @@ def _make_plan_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[
     return plan_review_node
 
 
-def _make_implement_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def _make_implement_node(roles: DuetRoles, family: TaskFamily) -> Callable[[dict[str, Any]], dict[str, Any]]:
     def implement_node(state: dict[str, Any]) -> dict[str, Any]:
         ctx = WorkflowContext.current(state, stage="implement")
         task = state["task"]
@@ -548,6 +588,7 @@ def _make_implement_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[st
             state["plan_md"],
             state["plan_sidecar"],
             prior_review=prior_review,
+            family=family,
         )
         result = ctx.call_llm(
             roles.implement,
@@ -567,7 +608,7 @@ def _make_implement_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[st
     return implement_node
 
 
-def _make_implement_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def _make_implement_review_node(roles: DuetRoles, family: TaskFamily) -> Callable[[dict[str, Any]], dict[str, Any]]:
     def implement_review_node(state: dict[str, Any]) -> dict[str, Any]:
         ctx = WorkflowContext.current(state, stage="implement_review")
         task = state["task"]
@@ -576,11 +617,12 @@ def _make_implement_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], 
             state["plan_md"],
             state["implement_md"],
             state["implement_sidecar"],
+            family=family,
         )
         review, _meta = ctx.call_llm_structured(
             roles.implement_review,
             messages,
-            ImplementReview,
+            family.implement_review_schema,
             timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
             codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
             cwd=task["workspace_path"],
@@ -670,6 +712,7 @@ def build_duet_workflow(
     roles: DuetRoles | None = None,
     max_revise_cycles: int = 1,
     task_prefix: str = "duet",
+    task_family: str = "generic",
     checkpointer: Any | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Build a compiled LangGraph app for the implementer/reviewer duet.
@@ -683,6 +726,9 @@ def build_duet_workflow(
         max_revise_cycles: How many ``revise`` verdicts each gate allows before
             promoting to ``block``. Defaults to 1 (i.e. one retry).
         task_prefix: Task-label prefix for observability. Defaults to ``"duet"``.
+        task_family: Registered profile name. Defaults to ``"generic"``. Lookup
+            via ``llm_client.workflow.duet_registry.get_task_family``; unknown
+            names raise ``KeyError``.
         checkpointer: LangGraph checkpointer. Defaults to InMemorySaver.
 
     Returns:
@@ -691,8 +737,13 @@ def build_duet_workflow(
 
     Raises:
         ImportError: if ``langgraph`` is not installed.
+        KeyError: if ``task_family`` is not registered.
     """
     from llm_client.workflow.builder import build_workflow
+
+    # Ensure built-in profiles are registered before resolving by name.
+    import llm_client.workflow.profiles  # noqa: F401
+    from llm_client.workflow.duet_registry import get_task_family
 
     task_obj = task if isinstance(task, DuetTask) else DuetTask(**task)
     task_dict = task_obj.model_dump()
@@ -702,11 +753,12 @@ def build_duet_workflow(
     _persist_json(str(run_dir_path), "task.json", task_dict)
 
     resolved_roles = roles or DuetRoles()
+    resolved_family = get_task_family(task_family)
 
-    plan_node = _make_plan_node(resolved_roles)
-    plan_review_node = _make_plan_review_node(resolved_roles)
-    implement_node = _make_implement_node(resolved_roles)
-    implement_review_node = _make_implement_review_node(resolved_roles)
+    plan_node = _make_plan_node(resolved_roles, resolved_family)
+    plan_review_node = _make_plan_review_node(resolved_roles, resolved_family)
+    implement_node = _make_implement_node(resolved_roles, resolved_family)
+    implement_review_node = _make_implement_review_node(resolved_roles, resolved_family)
     signoff_pass_node = _make_signoff_node("pass")
     signoff_block_node = _make_signoff_node("block")
 

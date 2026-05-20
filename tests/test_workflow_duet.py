@@ -33,6 +33,7 @@ from llm_client.workflow.duet import (
     _parse_implementer_response,
     build_duet_workflow,
 )
+from llm_client.workflow.duet_base import ImplementReviewBase, PlanReviewBase
 
 
 @dataclass
@@ -104,10 +105,13 @@ class _DuetHarness:
         response_model: type,
         **kwargs: Any,
     ) -> tuple[Any, _StubResult]:
-        if response_model is PlanReview:
+        # Accept any schema that inherits from the duet review base classes
+        # so profile-specialized subclasses (e.g. PlanDocPlanReview) route to
+        # the right queue.
+        if isinstance(response_model, type) and issubclass(response_model, PlanReviewBase):
             kind = "plan_review"
             queue = self.plan_reviews
-        elif response_model is ImplementReview:
+        elif isinstance(response_model, type) and issubclass(response_model, ImplementReviewBase):
             kind = "implement_review"
             queue = self.impl_reviews
         else:
@@ -333,6 +337,86 @@ def test_duet_threads_workspace_path_as_cwd(harness: _DuetHarness, tmp_path: Pat
         "implement": expected_cwd,
         "implement_review": expected_cwd,
     }
+
+
+def test_duet_default_task_family_is_generic(harness: _DuetHarness, tmp_path: Path) -> None:
+    """When task_family is unspecified, ``build_duet_workflow`` must resolve to
+    ``generic`` and produce the same behavior as before Plan #31. Verified by
+    checking the structured-call response_model is the generic ``PlanReview``.
+    """
+    captured_schemas: list[type] = []
+    original = harness.call_llm_structured
+
+    def capture_schema(model, messages, response_model, **kwargs):
+        captured_schemas.append(response_model)
+        return original(model, messages, response_model, **kwargs)
+
+    harness.call_llm_structured = capture_schema  # type: ignore[assignment]
+
+    run_dir = tmp_path / "run"
+    harness.plan_responses = [_plan_response("v1")]
+    harness.plan_reviews = [PlanReview(verdict="pass")]
+    harness.impl_responses = [_impl_response("v1")]
+    harness.impl_reviews = [ImplementReview(verdict="pass")]
+
+    app, init = build_duet_workflow(
+        run_dir=run_dir,
+        task=_task(tmp_path / "ws"),
+        trace_id="t-generic-default",
+        max_budget=1.0,
+        # no task_family= passed
+    )
+    _run(app, init, "t-generic-default")
+
+    assert captured_schemas == [PlanReview, ImplementReview]
+
+
+def test_duet_with_plan_doc_review_profile_uses_specialized_schema(
+    harness: _DuetHarness, tmp_path: Path
+) -> None:
+    """``task_family='plan_doc_review'`` must route the plan_review call to
+    the specialized ``PlanDocPlanReview`` schema while keeping the generic
+    ``ImplementReview`` for the implementation review.
+    """
+    from llm_client.workflow.profiles.plan_doc_review import PlanDocPlanReview
+
+    captured_schemas: list[type] = []
+    original = harness.call_llm_structured
+
+    def capture_schema(model, messages, response_model, **kwargs):
+        captured_schemas.append(response_model)
+        return original(model, messages, response_model, **kwargs)
+
+    harness.call_llm_structured = capture_schema  # type: ignore[assignment]
+
+    run_dir = tmp_path / "run"
+    harness.plan_responses = [_plan_response("v1")]
+    harness.plan_reviews = [PlanDocPlanReview(verdict="pass")]
+    harness.impl_responses = [_impl_response("v1")]
+    harness.impl_reviews = [ImplementReview(verdict="pass")]
+
+    app, init = build_duet_workflow(
+        run_dir=run_dir,
+        task=_task(tmp_path / "ws"),
+        trace_id="t-plan-doc-review",
+        max_budget=1.0,
+        task_family="plan_doc_review",
+    )
+    _run(app, init, "t-plan-doc-review")
+
+    assert captured_schemas == [PlanDocPlanReview, ImplementReview]
+
+
+def test_duet_unknown_task_family_raises_at_build_time(tmp_path: Path) -> None:
+    """Mistyped or missing profile name must fail loud, not silently fall back."""
+    with pytest.raises(KeyError, match="not registered"):
+        build_duet_workflow(
+            run_dir=tmp_path / "run",
+            task=_task(tmp_path / "ws"),
+            trace_id="t-unknown",
+            max_budget=1.0,
+            task_family="this_profile_does_not_exist",
+        )
 
 
 def test_plan_review_blocker_requires_evidence_path() -> None:
