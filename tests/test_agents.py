@@ -168,6 +168,99 @@ class TestParseAgentModel:
         assert model == "Opus"  # underlying model preserves case
 
 
+class TestWorkspaceKwargAliasing:
+    """The Claude SDK reads ``cwd``; the Codex SDK reads ``working_directory``.
+
+    Callers like the duet that thread one canonical name shouldn't be silently
+    dropped by whichever SDK doesn't recognize that spelling. The
+    ``_normalize_workspace_kwargs`` helper aliases between them at the route
+    boundary; these tests assert the aliasing happens before the SDK adapter
+    consumes the kwargs.
+    """
+
+    def test_normalize_aliases_cwd_to_working_directory_for_codex(self) -> None:
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"cwd": "/workspace"}
+        _normalize_workspace_kwargs("codex", kwargs)
+        assert kwargs == {"working_directory": "/workspace"}
+
+    def test_normalize_aliases_working_directory_to_cwd_for_claude(self) -> None:
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"working_directory": "/workspace"}
+        _normalize_workspace_kwargs("claude-code", kwargs)
+        assert kwargs == {"cwd": "/workspace"}
+
+    def test_normalize_preserves_sdk_native_when_both_present_codex(self) -> None:
+        """Explicit ``working_directory`` wins; ``cwd`` is dropped on codex."""
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"working_directory": "/native", "cwd": "/alias"}
+        _normalize_workspace_kwargs("codex", kwargs)
+        assert kwargs == {"working_directory": "/native"}
+
+    def test_normalize_preserves_sdk_native_when_both_present_claude(self) -> None:
+        """Explicit ``cwd`` wins; ``working_directory`` is dropped on claude-code."""
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"cwd": "/native", "working_directory": "/alias"}
+        _normalize_workspace_kwargs("claude-code", kwargs)
+        assert kwargs == {"cwd": "/native"}
+
+    def test_normalize_noop_when_neither_present(self) -> None:
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"timeout": 60}
+        _normalize_workspace_kwargs("codex", kwargs)
+        assert kwargs == {"timeout": 60}
+
+    def test_route_call_passes_working_directory_to_codex_adapter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """End-to-end: a caller passing ``cwd=`` to a codex model must surface
+        ``working_directory=`` at the codex adapter boundary.
+
+        This catches the Plan #30 gap that the workflow-layer stub-seam test
+        could not: the codex SDK falls back to ``os.getcwd()`` when
+        ``working_directory`` is missing, so silent kwarg drop = silent wrong-tree
+        inspection.
+        """
+        from llm_client.sdk import agents as agents_mod
+
+        captured: dict = {}
+
+        def fake_call_codex(model, messages, **kwargs):
+            captured.update(kwargs)
+            return None
+
+        monkeypatch.setattr(agents_mod, "_call_codex", fake_call_codex)
+        agents_mod._route_call(
+            "codex/gpt-5.4",
+            [{"role": "user", "content": "hi"}],
+            cwd="/abs/workspace",
+        )
+        assert captured.get("working_directory") == "/abs/workspace"
+        assert "cwd" not in captured
+
+    def test_route_call_passes_cwd_to_claude_adapter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Inverse: ``working_directory=`` on a claude-code model must surface as ``cwd=``."""
+        from llm_client.sdk import agents as agents_mod
+
+        captured: dict = {}
+
+        def fake_call_agent(model, messages, **kwargs):
+            captured.update(kwargs)
+            return None
+
+        monkeypatch.setattr(agents_mod, "_call_agent", fake_call_agent)
+        agents_mod._route_call(
+            "claude-code/opus",
+            [{"role": "user", "content": "hi"}],
+            working_directory="/abs/workspace",
+        )
+        assert captured.get("cwd") == "/abs/workspace"
+        assert "working_directory" not in captured
+
+
 class TestCodexReasoningEffortNormalization:
     def test_minimal_coerces_to_low_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT", raising=False)
