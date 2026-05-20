@@ -120,9 +120,17 @@ class PlanArtifact(BaseModel):
 
 
 class PlanReviewBlocker(BaseModel):
+    """A blocker flagged in plan review.
+
+    ``evidence_path`` is required so reviewer verdicts are falsifiable: a
+    blocker without a citation is opinion, not evidence. Reviewers that
+    genuinely cannot cite a source should downgrade to a ``nit`` or to an
+    ``unverified_claim`` instead of emitting a blocker.
+    """
+
     step_id: str | None = None
     claim: str
-    evidence_path: str | None = None
+    evidence_path: str
     suggested_fix: str = ""
 
 
@@ -182,11 +190,26 @@ class ImplementArtifact(BaseModel):
     followups_for_next_cycle: list[str] = Field(default_factory=list)
 
 
+class CorrectnessFinding(BaseModel):
+    """A code-level finding from implementation review.
+
+    Required ``file_path`` + ``line`` make the finding falsifiable: a reader
+    can open the citation and check the claim. Reviewers that cannot cite a
+    specific line should use ``unverified_test_claims`` or a free-text
+    ``scope_drift_findings`` entry instead.
+    """
+
+    file_path: str
+    line: int
+    claim: str
+    severity: Literal["info", "warn", "high"] = "warn"
+
+
 class ImplementReview(BaseModel):
     """Structured implementation-review verdict."""
 
     verdict: DuetVerdict
-    correctness_findings: list[dict[str, str]] = Field(default_factory=list)
+    correctness_findings: list[CorrectnessFinding] = Field(default_factory=list)
     contract_violations: list[dict[str, str]] = Field(default_factory=list)
     unverified_test_claims: list[str] = Field(default_factory=list)
     missing_followups_from_plan: list[str] = Field(default_factory=list)
@@ -316,9 +339,13 @@ def _plan_review_prompt(
         "## Plan sidecar (JSON)",
         json.dumps(plan_sidecar, indent=2),
         "",
-        "Return a PlanReview JSON object. Be specific: blockers must cite a step "
-        "and propose a fix; nits are non-blocking; unverified_claims call out "
-        "things the plan asserts without evidence.",
+        "Return a PlanReview JSON object. Groundedness rules: every blocker MUST "
+        "include an evidence_path (e.g. 'docs/plans/...md#section' or a "
+        "'file.py:LL-LL' range) — a blocker without a citation is opinion, not "
+        "evidence, and the router treats it as a process error. If you cannot "
+        "cite a source, downgrade to a nit or to an unverified_claim. Nits are "
+        "non-blocking; unverified_claims call out things the plan asserts but "
+        "you could not check from the available artifacts.",
     ]
     return [
         {"role": "system", "content": system},
@@ -390,10 +417,13 @@ def _implement_review_prompt(
         "## Implementer sidecar (JSON)",
         json.dumps(implement_sidecar, indent=2),
         "",
-        "Return an ImplementReview JSON object. correctness_findings should "
-        "cite file:line. contract_violations should reference the task's "
-        "constraints. unverified_test_claims call out tests the implementer "
-        "claims pass but you cannot confirm.",
+        "Return an ImplementReview JSON object. Groundedness rules: every "
+        "correctness_findings entry MUST have file_path (str) and line (int) — "
+        "the schema enforces this and ungrounded findings will fail validation. "
+        "If you cannot cite a specific line, use unverified_test_claims (free "
+        "text) or scope_drift_findings (free text) instead. contract_violations "
+        "should reference the task's constraints. Severity defaults to 'warn'; "
+        "use 'high' only when the finding would break correctness or contract.",
     ]
     return [
         {"role": "system", "content": system},
@@ -473,6 +503,7 @@ def _make_plan_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[str, An
             messages,
             timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
             codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
+            cwd=task["workspace_path"],
         )
         narrative, sidecar = _parse_implementer_response(result.content)
         sidecar.setdefault("plan_id", f"plan_{state.get('plan_cycle', 0)}")
@@ -497,6 +528,7 @@ def _make_plan_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[
             PlanReview,
             timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
             codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
+            cwd=task["workspace_path"],
         )
         payload = review.model_dump()
         payload["reviewer_model"] = roles.plan_review
@@ -522,6 +554,7 @@ def _make_implement_node(roles: DuetRoles) -> Callable[[dict[str, Any]], dict[st
             messages,
             timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
             codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
+            cwd=task["workspace_path"],
         )
         narrative, sidecar = _parse_implementer_response(result.content)
         sidecar.setdefault("implement_id", f"impl_{state.get('implement_cycle', 0)}")
@@ -550,6 +583,7 @@ def _make_implement_review_node(roles: DuetRoles) -> Callable[[dict[str, Any]], 
             ImplementReview,
             timeout=DEFAULT_DUET_STAGE_TIMEOUT_S,
             codex_transport=DEFAULT_DUET_CODEX_TRANSPORT,
+            cwd=task["workspace_path"],
         )
         payload = review.model_dump()
         payload["reviewer_model"] = roles.implement_review
@@ -729,6 +763,7 @@ __all__ = [
     "DuetRoles",
     "PlanStepAtom",
     "PlanArtifact",
+    "CorrectnessFinding",
     "PlanReview",
     "PlanReviewBlocker",
     "ImplementArtifact",

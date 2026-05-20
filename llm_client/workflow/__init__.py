@@ -40,6 +40,7 @@ except ImportError:
 # Duet schemas are pure-Pydantic so they import without langgraph. The
 # build_duet_workflow() entrypoint itself imports build_workflow lazily.
 from llm_client.workflow.duet import (
+    CorrectnessFinding,
     DuetRoles,
     DuetSignoff,
     DuetState,
@@ -58,6 +59,7 @@ from llm_client.workflow.duet import (
 )
 
 __all__.extend([
+    "CorrectnessFinding",
     "DuetRoles",
     "DuetSignoff",
     "DuetState",

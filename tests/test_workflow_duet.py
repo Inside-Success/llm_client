@@ -24,10 +24,12 @@ except ImportError:
 pytestmark = pytest.mark.skipif(not HAS_LANGGRAPH, reason="langgraph not installed")
 
 from llm_client.workflow.duet import (
+    CorrectnessFinding,
     DuetRoles,
     DuetTask,
     ImplementReview,
     PlanReview,
+    PlanReviewBlocker,
     _parse_implementer_response,
     build_duet_workflow,
 )
@@ -74,6 +76,7 @@ class _DuetHarness:
 
     def __init__(self) -> None:
         self.call_log: list[tuple[str, str]] = []  # (kind, model)
+        self.call_kwargs: list[tuple[str, dict[str, Any]]] = []  # (kind, kwargs)
         self.plan_responses: list[str] = []
         self.impl_responses: list[str] = []
         self.plan_reviews: list[PlanReview] = []
@@ -89,6 +92,7 @@ class _DuetHarness:
             kind = "plan"
             queue = self.plan_responses
         self.call_log.append((kind, model))
+        self.call_kwargs.append((kind, dict(kwargs)))
         if not queue:
             raise AssertionError(f"No stub {kind} response queued for model {model}")
         return _StubResult(content=queue.pop(0), model=model)
@@ -109,6 +113,7 @@ class _DuetHarness:
         else:
             raise AssertionError(f"Unexpected response_model: {response_model}")
         self.call_log.append((kind, model))
+        self.call_kwargs.append((kind, dict(kwargs)))
         if not queue:
             raise AssertionError(f"No stub {kind} response queued for model {model}")
         return queue.pop(0), _StubResult(content="", model=model)
@@ -296,6 +301,95 @@ def test_duet_persists_artifacts_to_run_dir(harness: _DuetHarness, tmp_path: Pat
     }
     actual = {p.name for p in run_dir.iterdir()}
     assert expected.issubset(actual), f"missing artifacts: {expected - actual}"
+
+
+def test_duet_threads_workspace_path_as_cwd(harness: _DuetHarness, tmp_path: Path) -> None:
+    """Every stage must receive cwd=task.workspace_path so the agent SDK inspects
+    the right tree. Without this, reviewer "inspect the workspace" prompts
+    silently misfire when the duet is invoked from anywhere other than the
+    workspace root.
+    """
+    run_dir = tmp_path / "run"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    harness.plan_responses = [_plan_response("v1")]
+    harness.plan_reviews = [PlanReview(verdict="pass")]
+    harness.impl_responses = [_impl_response("v1")]
+    harness.impl_reviews = [ImplementReview(verdict="pass")]
+
+    app, init = build_duet_workflow(
+        run_dir=run_dir,
+        task=_task(workspace),
+        trace_id="t-cwd",
+        max_budget=1.0,
+    )
+    _run(app, init, "t-cwd")
+
+    expected_cwd = str(workspace)
+    saw = {kind: kwargs.get("cwd") for kind, kwargs in harness.call_kwargs}
+    assert saw == {
+        "plan": expected_cwd,
+        "plan_review": expected_cwd,
+        "implement": expected_cwd,
+        "implement_review": expected_cwd,
+    }
+
+
+def test_plan_review_blocker_requires_evidence_path() -> None:
+    """A blocker without evidence_path must fail validation before reaching the
+    router. Reviewer verdicts must be falsifiable.
+    """
+    import pydantic
+
+    # Valid blocker
+    blocker = PlanReviewBlocker(claim="x", evidence_path="docs/plan.md#step-3")
+    assert blocker.evidence_path == "docs/plan.md#step-3"
+
+    # Missing evidence_path → ValidationError
+    with pytest.raises(pydantic.ValidationError, match="evidence_path"):
+        PlanReviewBlocker(claim="x")
+
+
+def test_correctness_finding_requires_file_and_line() -> None:
+    """A correctness finding without file_path + line is unfalsifiable opinion."""
+    import pydantic
+
+    # Valid finding
+    finding = CorrectnessFinding(file_path="x.py", line=42, claim="off by one")
+    assert finding.severity == "warn"  # default
+
+    # Missing file_path
+    with pytest.raises(pydantic.ValidationError, match="file_path"):
+        CorrectnessFinding(line=42, claim="x")  # type: ignore[call-arg]
+
+    # Missing line
+    with pytest.raises(pydantic.ValidationError, match="line"):
+        CorrectnessFinding(file_path="x.py", claim="x")  # type: ignore[call-arg]
+
+
+def test_implement_review_rejects_ungrounded_correctness_findings() -> None:
+    """correctness_findings is now list[CorrectnessFinding], not list[dict[str, str]].
+
+    Loose dicts that omit file_path or line are rejected by the schema, so
+    reviewers cannot smuggle in opinion-as-code-finding.
+    """
+    import pydantic
+
+    # Valid review
+    review = ImplementReview(
+        verdict="pass",
+        correctness_findings=[
+            CorrectnessFinding(file_path="x.py", line=10, claim="ok"),
+        ],
+    )
+    assert review.correctness_findings[0].file_path == "x.py"
+
+    # Loose dict missing line → ValidationError
+    with pytest.raises(pydantic.ValidationError, match="line"):
+        ImplementReview(
+            verdict="pass",
+            correctness_findings=[{"file_path": "x.py", "claim": "no line"}],  # type: ignore[list-item]
+        )
 
 
 def test_parse_implementer_response_missing_fence_raises() -> None:

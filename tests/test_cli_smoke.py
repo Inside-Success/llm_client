@@ -13,6 +13,7 @@ CLI_CMDS = [
     ["adoption", "--help"],
     ["backfill", "--help"],
     ["tool-lint", "--help"],
+    ["duet-review", "--help"],
 ]
 
 
