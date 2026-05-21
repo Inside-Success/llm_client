@@ -20,15 +20,20 @@ from llm_client.workflow.duet_registry import (
 
 @pytest.fixture
 def empty_registry():
-    """Yield with the registry cleared, then restore built-ins after the test."""
+    """Yield with the registry cleared, then restore built-ins after the test.
+
+    Restoration re-registers the existing profile objects rather than reloading
+    the modules — reloading creates fresh class objects, which would break any
+    other test that imported the schema classes at module-import time.
+    """
+    from llm_client.workflow.profiles.generic import GENERIC_PROFILE
+    from llm_client.workflow.profiles.plan_doc_review import PLAN_DOC_REVIEW_PROFILE
+
     _reset_for_tests()
     yield
     _reset_for_tests()
-    # Re-register built-ins for downstream tests in the same run.
-    import importlib
-    import llm_client.workflow.profiles as profiles_pkg
-    importlib.reload(profiles_pkg.generic)
-    importlib.reload(profiles_pkg.plan_doc_review)
+    register_task_family(GENERIC_PROFILE)
+    register_task_family(PLAN_DOC_REVIEW_PROFILE)
 
 
 class _MinimalPlanReview(PlanReviewBase):
@@ -74,11 +79,12 @@ def test_generic_profile_is_registered_at_workflow_import() -> None:
     """``from llm_client.workflow import build_duet_workflow`` should also
     register the built-in profiles via the side-effect import in
     ``llm_client.workflow.__init__``.
+
+    Verified by importing the package (which triggers the side-effect import
+    of ``profiles``) and checking the registry. We do NOT reload — that would
+    create fresh class objects and break ``is`` comparisons in other tests.
     """
-    # Importing the workflow package triggers profile registration.
-    import importlib
-    import llm_client.workflow
-    importlib.reload(llm_client.workflow)
+    import llm_client.workflow  # noqa: F401
 
     families = list_task_families()
     assert "generic" in families

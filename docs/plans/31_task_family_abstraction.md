@@ -70,7 +70,7 @@ Out of scope (deliberately):
 1. `duet_base.py`: `PlanReviewBase(BaseModel)` with `verdict: DuetVerdict`, `reviewer_summary: str = ""`, `reviewer_model: str = ""`. Same shape for `ImplementReviewBase`. `TaskFamily` as a frozen dataclass holding `name`, `plan_review_schema: type[PlanReviewBase]`, `implement_review_schema: type[ImplementReviewBase]`, four prompt-addendum strings (system/user × plan/implement reviewer), and `context_loader: Callable[[dict], dict[str, str]]` with an empty-dict default.
 2. `duet_registry.py`: module-level `_REGISTRY: dict[str, TaskFamily]`. `register_task_family(family)` raises if name already registered. `get_task_family(name)` raises if missing. `list_task_families()` returns names.
 3. `profiles/generic.py`: define `GenericPlanReview(PlanReviewBase)` and `GenericImplementReview(ImplementReviewBase)` carrying today's fields. Construct the `TaskFamily` with empty addenda + empty context loader. Register at import.
-4. `profiles/plan_doc_review.py`: `PlanDocPlanReview(PlanReviewBase)` with extra fields `template_section_misses: list[str]`, `references_unverified: list[CitationRef]`, `acceptance_criteria_unmeasurable: list[str]`, plus the generic blocker/nit lists for backward compat. Reuse `GenericImplementReview` since most implementation reviews of a plan-doc revision look the same. Prompt addenda say "this is a plan-doc review against TEMPLATE.md: Gap, References Reviewed, Files Affected, Plan, Required Tests, Acceptance Criteria, Notes; flag missing sections; verify cited file:line ranges or list them as unverified." Register at import.
+4. `profiles/plan_doc_review.py`: `PlanDocPlanReview(PlanReview)` with extra fields `template_section_misses: list[str]`, `references_unverified: list[CitationRef]`, `acceptance_criteria_unmeasurable: list[str]`. Inheriting from `PlanReview` (rather than directly from `PlanReviewBase`) lets us reuse `blockers`, `nits`, `unverified_claims`, `missing_acceptance_checks`, `scope_creep_findings` without duplication; `PlanReview` already extends `PlanReviewBase`, so the router contract still holds. Reuse `GenericImplementReview` since most implementation reviews of a plan-doc revision look the same. Prompt addenda say "this is a plan-doc review against TEMPLATE.md: Gap, References Reviewed, Files Affected, Plan, Required Tests, Acceptance Criteria, Notes; flag missing sections; verify cited file:line ranges or list them as unverified." Register at import.
 5. `profiles/__init__.py`: import the two modules so registration happens on `from llm_client.workflow.profiles import *` (or whenever the workflow package loads).
 6. `duet.py`: re-parent `PlanReview` and `ImplementReview` to `PlanReviewBase` / `ImplementReviewBase` (no field changes — pure inheritance). Add `task_family: str = "generic"` kwarg to `build_duet_workflow`. Thread `family = get_task_family(task_family)` and pass it to `_make_plan_node` / `_make_plan_review_node` / `_make_implement_node` / `_make_implement_review_node`. Each node resolves `family.plan_review_schema` (etc.) and concatenates `family.*_prompt_addendum` into the user message. The chassis's base prompt still owns the response-format contract and the schema-emission block.
 7. `duet.py` prompt builders gain an optional `family: TaskFamily | None = None` param; when present, the user message gains `## <label>` blocks from `family.context_loader(task)` and the `family.*_prompt_addendum` suffix.
@@ -91,8 +91,11 @@ Out of scope (deliberately):
 | `tests/test_workflow_profiles.py` | `test_registry_register_and_get` | `register_task_family` + `get_task_family` round-trip. |
 | `tests/test_workflow_profiles.py` | `test_registry_get_missing_raises` | Unknown name surfaces a clear error. |
 | `tests/test_workflow_profiles.py` | `test_registry_double_register_raises` | Duplicate name is a programmer error, not silent overwrite. |
-| `tests/test_workflow_profiles.py` | `test_generic_profile_is_registered_at_import` | `from llm_client.workflow.profiles` triggers `generic` registration. |
-| `tests/test_workflow_profiles.py` | `test_plan_doc_review_schema_has_template_sections_field` | Specialized schema has the new fields and still validates a minimal `verdict=pass` payload. |
+| `tests/test_workflow_profiles.py` | `test_generic_profile_is_registered_at_workflow_import` | Importing `llm_client.workflow` triggers `generic` registration via the side-effect import in `__init__`. |
+| `tests/test_workflow_profiles.py` | `test_plan_doc_review_schema_has_template_section_fields` | Specialized schema has the new fields and still validates a minimal `verdict=pass` payload. |
+| `tests/test_cli_duet.py` | `test_cli_default_task_family_threads_generic_planreview_schema` | CLI default routes the structured call to `PlanReview`. |
+| `tests/test_cli_duet.py` | `test_cli_plan_doc_review_threads_specialized_schema` | `--task-family plan_doc_review` reaches `call_llm_structured` with `PlanDocPlanReview`; `cwd` resolved to workspace. |
+| `tests/test_cli_duet.py` | `test_cli_unknown_task_family_raises` | Bogus profile name raises `KeyError` before any LLM call. |
 | `tests/test_workflow_duet.py` | `test_duet_default_task_family_is_generic` | Existing happy-path uses the `generic` profile; behavior unchanged. |
 | `tests/test_workflow_duet.py` | `test_duet_with_plan_doc_review_profile_uses_specialized_schema` | Passing `task_family="plan_doc_review"` to the builder routes the structured call to the specialized schema. |
 
@@ -109,11 +112,11 @@ Out of scope (deliberately):
 
 ## Acceptance Criteria
 
-- [ ] All required tests pass.
+- [ ] `pytest tests/test_workflow_profiles.py tests/test_workflow_duet.py tests/test_workflow_builder.py tests/test_workflow_context_config.py tests/test_agents.py::TestBuildAgentOptions tests/test_agents.py::TestWorkspaceKwargAliasing tests/test_cli_smoke.py tests/test_cli_duet.py -q` exits 0.
 - [ ] `generic` profile is the default; existing duet calls behave identically.
 - [ ] `plan_doc_review` profile is registered at import and surfaces `template_section_misses` + `references_unverified` + `acceptance_criteria_unmeasurable` in the schema.
 - [ ] Unknown `task_family` name raises a clear error (no silent fallback to generic).
-- [ ] CLI `duet-review --task-family <name>` accepts the flag and threads to the call.
+- [ ] `tests/test_cli_duet.py::test_cli_plan_doc_review_threads_specialized_schema` asserts the resolved family schema actually reaches `call_llm_structured` from `cmd_duet_review`.
 
 ---
 
