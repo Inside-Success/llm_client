@@ -91,11 +91,14 @@ def analyze_run(label: str, run_dir: Path) -> dict:
             row["round_1_b_cross_leak_count"] = len(row["round_1_b_referenced_a_claims"])
         out["rounds"].append(row)
 
-    # Verifier ledger analysis — use the parser-fix retro ledger if present
-    # (canonical) else fall back to the live ledger.
-    retro = run_dir / "retro_verifier_ledger_with_parser_fix.json"
-    live = run_dir / "verifier_ledger.json"
-    ledger_path = retro if retro.exists() else (live if live.exists() else None)
+    # Verifier ledger analysis — prefer the most recent retro ledger
+    # (post-fix > parser-fix > live).
+    candidates = [
+        run_dir / "retro_verifier_ledger_post_fix.json",
+        run_dir / "retro_verifier_ledger_with_parser_fix.json",
+        run_dir / "verifier_ledger.json",
+    ]
+    ledger_path = next((c for c in candidates if c.exists()), None)
     if ledger_path:
         data = _load_if_exists(ledger_path)
         if isinstance(data, dict) and "entries" in data:

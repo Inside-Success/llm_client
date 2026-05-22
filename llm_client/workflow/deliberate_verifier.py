@@ -476,6 +476,14 @@ def _detect_fabricated_peer_refs(
     A fabricated peer reference is one of:
     - ``agreed_with_peer`` entry whose ID doesn't match any peer claim_id
     - ``disagreed_with_peer[*].peer_claim_id`` that doesn't match any peer claim_id
+
+    ``peer_position`` is the peer's position the agent could have seen — under
+    the Plan #35 barrier protocol this is the peer's round-(N-1) snapshot.
+    A ``None`` here means "no peer exists at all" (e.g., 1-agent debate
+    nonsense path); the function returns ``[]``. An empty position ``{}``
+    (or one with no claims) means "peer should have written but didn't yet"
+    — every reference is fabricated. Callers must pass an empty dict (not
+    ``None``) for the round-1 case under the barrier.
     """
     if peer_position is None:
         return []
@@ -590,7 +598,36 @@ def verify_round(
     for agent_name, current_position in latest_positions.items():
         own_prior = prior_positions_by_agent.get(agent_name)
         peer_name = peer_of.get(agent_name)
-        peer_prior = latest_positions.get(peer_name) if peer_name else None
+        # Plan #35 interaction fix: under the Within-Round barrier (Plan #35),
+        # an agent's round-N references resolve against what the agent ACTUALLY
+        # SAW — peer's round-(N-1) snapshot — not the peer's same-round
+        # current position. Previously this was sourced from latest_positions,
+        # which produced false fabricated_peer_ref flags whenever the peer
+        # silently renamed claim_ids between rounds (the agent referenced
+        # legitimately-seen prior ids, but the verifier compared against the
+        # peer's new ids and reported fabrication). v3 self-deliberation
+        # surfaced 7 false positives on round 2 from this exact pattern.
+        # The agent's own_prior comparison stays on prior_positions_by_agent
+        # (silent_retire / silent_rename are about what the agent itself
+        # changed, not about what the agent saw).
+        if peer_name is None:
+            # No peer exists at all (degenerate 1-agent case). Don't fire
+            # fabricated_peer_ref; it's structurally meaningless.
+            peer_prior = None
+        elif round_num == 1:
+            # Round 1 under the barrier: peer hasn't written anything yet.
+            # Pass an empty position (not None) so any agreed/disagreed
+            # reference fires as fabricated — the agent claims to have seen
+            # something the snapshot didn't contain.
+            peer_prior = {"claims": []}
+        else:
+            # Round 2+ under the barrier: peer's actual prior-round snapshot.
+            # Pre-Plan-#35 this read from latest_positions[peer_name] which
+            # produced false fabricated_peer_ref flags when peer renamed
+            # claim_ids between rounds (legitimate references to ids the
+            # agent actually saw got flagged because the peer's same-round
+            # current position no longer contained those ids).
+            peer_prior = prior_positions_by_agent.get(peer_name) or {"claims": []}
         new_entries.extend(
             _lineage_entries(
                 agent_name=agent_name,

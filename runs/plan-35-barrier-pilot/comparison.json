@@ -117,6 +117,61 @@
   "v3 barrier+anon": {
     "label": "v3 barrier+anon",
     "run_dir": "runs/plan-35-barrier-pilot/v3",
-    "rounds": []
+    "verdict": "productive_disagreement",
+    "total_rounds": 3,
+    "rounds": [
+      {
+        "round": 1,
+        "agent_a_n_claims": 6,
+        "agent_a_agreed_with_peer_n": 0,
+        "agent_a_disagreed_n": 0,
+        "agent_a_state": "initial",
+        "agent_b_n_claims": 8,
+        "agent_b_agreed_with_peer_n": 0,
+        "agent_b_disagreed_n": 0,
+        "agent_b_state": "initial",
+        "round_1_b_referenced_a_claims": [],
+        "round_1_b_cross_leak_count": 0
+      },
+      {
+        "round": 2,
+        "agent_a_n_claims": 6,
+        "agent_a_agreed_with_peer_n": 6,
+        "agent_a_disagreed_n": 2,
+        "agent_a_state": "revised",
+        "agent_b_n_claims": 9,
+        "agent_b_agreed_with_peer_n": 4,
+        "agent_b_disagreed_n": 2,
+        "agent_b_state": "revised"
+      }
+    ],
+    "ledger_path": "runs/plan-35-barrier-pilot/v3/retro_verifier_ledger_post_fix.json",
+    "ledger_total": 118,
+    "ledger_by_status": {
+      "verified": 111,
+      "content_mismatch_warning": 7
+    },
+    "ledger_by_lineage": {
+      "silent_retire": 7
+    },
+    "ledger_per_round": {
+      "1": {
+        "n": 43,
+        "by_status": {
+          "verified": 43
+        },
+        "lineage_flags": {}
+      },
+      "2": {
+        "n": 75,
+        "by_status": {
+          "verified": 68,
+          "content_mismatch_warning": 7
+        },
+        "lineage_flags": {
+          "silent_retire": 7
+        }
+      }
+    }
   }
 }
