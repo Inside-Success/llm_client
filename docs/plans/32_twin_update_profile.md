@@ -27,8 +27,8 @@ Profile registers from `llm_client.workflow.profiles.twin_update`. Lives library
 
 ## References Reviewed
 
-- `workspace/docs/references/twin_fidelity_signoff_rubric.md:24-178` — Axis B (6 states), Axis B-prompt (5 states), Axis C (3 states), row statuses, hard-stop overclaim rules. These map directly to the `twin_fidelity_rubric_misses` schema.
-- `workspace/docs/references/twin_fidelity_signoff_rubric.md:180-188` — hard-stop overclaim rules that the profile's prompt addendum must surface so the reviewer knows when to call out overclaim.
+- `workspace/docs/references/twin_fidelity_signoff_rubric.md:24-139` — Axis B (6 states), Axis B-prompt (5 states), Axis C (3 states), row statuses. These map directly to the `twin_fidelity_rubric_misses` schema.
+- `workspace/docs/references/twin_fidelity_signoff_rubric.md:182-186` — the five hard-stop overclaim rules the profile's prompt addendum must surface verbatim so the reviewer knows when to call out overclaim.
 - `reference/experimental_garbage/pcm-v1-working-set/vision/pcm_v2_full.md:1-122` — PCM v2's 5 layers (Knowledge / Voice / Reasoning / Values+Boundaries / Emotional) plus the per-layer signal-density model. Maps to the `PcmLayerFinding` Literal.
 - Root `/home/brian/brian-work-next/AGENTS.md` Customer-twin proof and authority contract — every current-behavior claim must trace to personal reproduction; missing authority artifacts are blocking by default. Maps to `ProofAuthorityGap`.
 - `llm_client/workflow/duet_base.py:62-89` — `TaskFamily` dataclass with `context_loader` callable, the extension hook for the customer/ai/ticket params this profile needs.
@@ -63,11 +63,11 @@ Out of scope (deliberately):
 
 1. Add `extra: dict[str, Any] = Field(default_factory=dict)` to `DuetTask` in `duet.py`. This is the small chassis change that lets profile context_loaders read per-task params (customer slug, ai slug, ticket id, etc.) without forking the task schema.
 2. Define `PcmLayer` as a `Literal["Knowledge", "Voice", "Reasoning", "Values and Boundaries", "Emotional"]` plus a numeric mapping helper.
-3. Define `AxisB`, `AxisBPrompt`, `AxisC` Literals from the rubric authority. Mirror the canonical short labels exactly (no longer-form renames; that's a separate decision per D2 ratification).
+3. Define `AxisB`, `AxisBPrompt`, `AxisC` Literals from the rubric authority. Mirror the canonical short labels exactly (no longer-form renames; that's a separate decision per D2 ratification). `TwinFidelityRubricMiss.axis` also accepts `"row_status"` so reviewers can flag overclaim driven by row-status violations (e.g. critical row marked `partial` while claiming `qa_ready`), per `twin_fidelity_signoff_rubric.md:106-124`.
 4. Define `PcmLayerFinding(layer, finding, severity, evidence_path)`, `TwinFidelityRubricMiss(axis, item, why_missed, suggested_remediation)`, `ProofAuthorityGap(claim, missing_artifact, why_blocking, narrower_claim_still_safe)`, `ScopeViolation(proposed_change, customer_constraint_violated, evidence_path)`. All `evidence_path` fields required (groundedness rule from Plan #30).
 5. Define `TwinUpdatePlanReview(PlanReview)` with `pcm_layer_findings`, `twin_fidelity_rubric_misses`, `proof_authority_gaps`, `scope_violations`.
 6. Define `PcmLayerRegression(layer, regression, severity, evidence_path)` and `SignoffAxesClaim(axis_b, axis_b_prompt, axis_c, overclaim_risk, reason)`. Define `TwinUpdateImplementReview(ImplementReview)` with `pcm_layer_regressions`, `signoff_axes_claim`, `published_prod_qa_evidence_path`.
-7. Build `_PLAN_REVIEW_ADDENDUM` text that surfaces the 5 PCM layers (with one-line descriptions from PCM v2), the three rubric axes with their canonical level vocabulary, the four hard-stop overclaim rules from the rubric authority, and the proof-authority contract requirement.
+7. Build `_PLAN_REVIEW_ADDENDUM` text that surfaces the 5 PCM layers (with one-line descriptions from PCM v2), the three rubric axes with their canonical level vocabulary, all five hard-stop overclaim rules from `twin_fidelity_signoff_rubric.md:182-186`, and the proof-authority contract requirement.
 8. Build `_IMPLEMENT_REVIEW_ADDENDUM` text that requires the reviewer to declare `signoff_axes_claim` and to call out PCM layer regressions specifically (Voice fix that breaks Reasoning, etc.).
 9. Build `_load_twin_context_pack(task)` context_loader that reads `task["extra"]` for `customer`, `ai`, `ticket_id`, `complaint_text`, `customer_constraints[]` and emits labeled blocks. Stub-only on filesystem walks for v1.
 10. Wire registration in `profiles/__init__.py`.
@@ -105,8 +105,9 @@ Out of scope (deliberately):
 - [ ] `pytest tests/test_workflow_profiles.py tests/test_workflow_duet.py tests/test_workflow_builder.py tests/test_workflow_context_config.py tests/test_agents.py::TestBuildAgentOptions tests/test_agents.py::TestWorkspaceKwargAliasing tests/test_cli_smoke.py tests/test_cli_duet.py -q` exits 0.
 - [ ] `list_task_families()` returns a sorted list including `twin_update`.
 - [ ] `get_task_family("twin_update").plan_review_schema` accepts a `verdict=pass` payload with all four specialized list fields populated (PCM findings, rubric misses, proof gaps, scope violations).
-- [ ] `_PLAN_REVIEW_ADDENDUM` mentions all 5 PCM layer names and the three rubric axis label sets verbatim.
+- [ ] `_PLAN_REVIEW_ADDENDUM` contains every PCM layer name (5), every Axis B / B-prompt / C state name (6+5+3=14), and all five hard-stop overclaim rules verbatim from `twin_fidelity_signoff_rubric.md:182-186`. Drift caught automatically by `test_twin_update_addendum_mentions_pcm_layers_and_rubric` iterating every Literal value.
 - [ ] `DuetTask(workspace_path=..., extra={"customer": "x"})` validates and round-trips through `model_dump()`.
+- [ ] CLI flags routed through `_build_task_extras`: `--customer`, `--ai`, `--ticket-id`, `--complaint-file`, `--customer-constraints`, `--published-prod-qa-artifact`. All optional; all flow into `task["extra"]` where the twin_update profile's `context_loader` consumes them.
 
 ---
 

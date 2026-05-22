@@ -220,13 +220,14 @@ When the plan claims a level it has not earned, emit a
 ``twin_fidelity_rubric_misses`` entry with the axis name (lowercase, exactly as
 listed above), the item, why it was missed, and a suggested remediation.
 
-### Hard-stop overclaim rules (from twin_fidelity_signoff_rubric.md)
+### Hard-stop overclaim rules (from twin_fidelity_signoff_rubric.md:182-186)
 
 Flag a rubric miss for any of:
 - ``100%`` without ``of N currently covered scenarios on <lane>``
 - multiple lanes collapsed into one status line without naming the authoritative lane
 - a customer-facing behavior ticket called ``done`` from evals alone
 - a source-faithfulness ticket called ``verified`` when the judge never saw the source authority
+- a closeout that rests on one long generalized persona scenario as the only signoff proof
 
 ### Proof authority contract
 

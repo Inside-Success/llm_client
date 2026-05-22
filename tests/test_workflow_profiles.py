@@ -258,24 +258,49 @@ def test_pcm_layer_finding_requires_evidence_path() -> None:
 
 
 def test_twin_update_addendum_mentions_pcm_layers_and_rubric() -> None:
-    """Reviewer prompt addendum must surface PCM layer names and the three
-    rubric axis vocabularies so the structured-output model knows what to
-    populate.
+    """Reviewer prompt addendum must surface every PCM layer, every Axis
+    state name, and every hard-stop overclaim rule verbatim. Iterates the
+    Literal values so any future authority drift fails this test
+    automatically (caught Plan #32's 4-vs-5 hard-stop drift).
     """
+    from typing import get_args
+
+    from llm_client.workflow.profiles.twin_update import (
+        AxisB,
+        AxisBPrompt,
+        AxisC,
+        PcmLayer,
+    )
+
     family = get_task_family("twin_update")
     addendum = family.plan_review_prompt_addendum
 
-    # All 5 PCM layer names appear.
-    for layer in ("Knowledge", "Voice", "Reasoning", "Values and Boundaries", "Emotional"):
+    # Every PCM v2 layer must appear.
+    for layer in get_args(PcmLayer):
         assert layer in addendum, f"PCM layer {layer!r} missing from plan addendum"
 
-    # Axis vocabularies appear.
-    for axis_value in ("regression_signal_only", "prod_verified", "prompt_prod_cleared", "candidate_fix"):
+    # Every Axis B / B-prompt / C state must appear.
+    for axis_value in get_args(AxisB) + get_args(AxisBPrompt) + get_args(AxisC):
         assert axis_value in addendum, f"rubric value {axis_value!r} missing from plan addendum"
+
+    # All five hard-stop overclaim rules from twin_fidelity_signoff_rubric.md:182-186.
+    # The 4-vs-5 drift Plan #32's self-review caught is locked in here.
+    hard_stop_signatures = [
+        "100%",  # rule 1: "100%" without of-N qualifier
+        "multiple lanes",  # rule 2: lanes collapsed without naming authority
+        "evals alone",  # rule 3: customer-facing ticket called done from evals alone
+        "judge never saw",  # rule 4: source-faithfulness verified without source authority
+        "generalized persona",  # rule 5: persona scenario as only signoff proof
+    ]
+    for sig in hard_stop_signatures:
+        assert sig in addendum, f"hard-stop rule signature {sig!r} missing from plan addendum"
 
     impl_addendum = family.implement_review_prompt_addendum
     assert "signoff_axes_claim" in impl_addendum
-    assert "Reasoning" in impl_addendum  # PCM layer mention in impl too
+    # Every PCM layer should also appear in the implement-review addendum so
+    # the reviewer can score PCM regressions consistently.
+    for layer in get_args(PcmLayer):
+        assert layer in impl_addendum, f"PCM layer {layer!r} missing from impl addendum"
 
 
 def test_twin_update_context_loader_reads_task_extras() -> None:
