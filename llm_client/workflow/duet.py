@@ -485,13 +485,18 @@ def _plan_review_prompt(
         "## Plan sidecar (JSON)",
         json.dumps(plan_sidecar, indent=2),
         "",
-        "Return a PlanReview JSON object. Groundedness rules: every blocker MUST "
-        "include an evidence_path (e.g. 'docs/plans/...md#section' or a "
-        "'file.py:LL-LL' range) — a blocker without a citation is opinion, not "
-        "evidence, and the router treats it as a process error. If you cannot "
-        "cite a source, downgrade to a nit or to an unverified_claim. Nits are "
-        "non-blocking; unverified_claims call out things the plan asserts but "
-        "you could not check from the available artifacts.",
+        "Return a PlanReview JSON object. Groundedness rules: every blocker "
+        "MUST include an evidence_path (e.g. 'docs/plans/...md#section' or "
+        "'file.py:LL-LL') — a blocker without a citation is opinion, not "
+        "evidence, and the router treats it as a process error. If you "
+        "cannot cite a source, downgrade to a nit or an unverified_claim. "
+        "Field shapes (all object lists are typed Pydantic models — see "
+        "the schema for required fields): blockers[] take PlanReviewBlocker "
+        "(claim + evidence_path + suggested_fix); nits[] take Nit "
+        "(claim + optional location + optional suggested_fix; non-blocking "
+        "reviewer observations); unverified_claims[] take UnverifiedClaim "
+        "(claim + reason_unverified; things the plan asserts that you "
+        "could not check from the available artifacts).",
     ]
     if family and family.plan_review_prompt_addendum:
         user_parts.append(family.plan_review_prompt_addendum)
@@ -573,11 +578,17 @@ def _implement_review_prompt(
         "",
         "Return an ImplementReview JSON object. Groundedness rules: every "
         "correctness_findings entry MUST have file_path (str) and line (int) — "
-        "the schema enforces this and ungrounded findings will fail validation. "
-        "If you cannot cite a specific line, use unverified_test_claims (free "
-        "text) or scope_drift_findings (free text) instead. contract_violations "
-        "should reference the task's constraints. Severity defaults to 'warn'; "
-        "use 'high' only when the finding would break correctness or contract.",
+        "the schema enforces this and ungrounded findings will fail "
+        "validation. If you cannot cite a specific line, use "
+        "unverified_test_claims (list[str]) or scope_drift_findings "
+        "(list[str]) instead. Field shapes (typed Pydantic models — see "
+        "the schema for required fields): correctness_findings[] take "
+        "CorrectnessFinding (file_path + line + claim + severity); "
+        "contract_violations[] take ContractViolation (constraint + "
+        "violation + evidence_path; reference one of the task's stated "
+        "constraints by name in 'constraint'). Severity defaults to "
+        "'warn'; use 'high' only when the finding would break correctness "
+        "or a stated contract.",
     ]
     if family and family.implement_review_prompt_addendum:
         user_parts.append(family.implement_review_prompt_addendum)
