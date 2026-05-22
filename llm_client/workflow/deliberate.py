@@ -336,6 +336,28 @@ def _task_brief(task: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _anonymize_peer_for_prompt(peer_latest: dict[str, Any]) -> dict[str, Any]:
+    """Plan #35 Phase 2: strip peer identity fields before serializing into
+    the agent's prompt.
+
+    Replaces the peer's ``agent_name`` (e.g. ``"agent_a"``) with the neutral
+    label ``"peer"`` and clears ``reviewer_model`` (which would otherwise leak
+    the underlying model identity like ``"claude-code/opus"`` /
+    ``"codex/gpt-5.4"``). The arXiv:2510.07517 result (Identity Bias in
+    Multi-Agent Debate, 2025) shows prompt-level anonymization drops the
+    conformity-obstinacy gap from 0.608 to 0.024 on MMLU; this is the cheapest
+    bias-reduction intervention available.
+
+    All other fields — claims, evidence, claim_ids, agreed_with_peer,
+    disagreed_with_peer — are preserved because the convergence detector and
+    verifier ledger key on claim_id, not on speaker identity.
+    """
+    anonymized = dict(peer_latest)
+    anonymized["agent_name"] = "peer"
+    anonymized["reviewer_model"] = ""
+    return anonymized
+
+
 def _position_prompt(
     task: dict[str, Any],
     agent_name: str,
@@ -367,7 +389,7 @@ def _position_prompt(
             "## Peer's most-recent position",
             "Reference peer claims by their claim_id when acknowledging or disagreeing.",
             "",
-            json.dumps(peer_latest, indent=2),
+            json.dumps(_anonymize_peer_for_prompt(peer_latest), indent=2),
         ])
     else:
         user_parts.extend([
@@ -469,7 +491,18 @@ def _make_agent_position_node(
         round_num = state["round"]
         latest = state.get("latest_positions") or {}
         own_prior = latest.get(agent.name)
-        peer_latest = latest.get(peer_name)
+        # Plan #35: read peer state from the round-(N-1) snapshot, not from
+        # latest_positions. This is the Within-Round barrier protocol — the
+        # cascade `agent_a → agent_b → verifier` would otherwise let agent_b
+        # see agent_a's freshest round-N output (same-round second-mover
+        # advantage). The verifier publishes prior_positions_by_agent at the
+        # end of every round, so on round N this dict contains round-(N-1)
+        # positions for both agents. Round 1: the dict is empty, which
+        # matches the "no peer state yet" semantics already documented in
+        # _position_prompt. Citations: Du et al. (arXiv:2305.14325);
+        # 2026 controlled study (arXiv:2603.28813); see Plan #35.
+        prior_by_agent = state.get("prior_positions_by_agent") or {}
+        peer_latest = prior_by_agent.get(peer_name)
 
         messages = _position_prompt(
             task,

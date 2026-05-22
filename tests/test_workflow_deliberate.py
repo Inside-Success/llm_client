@@ -552,3 +552,250 @@ def test_wrong_agent_count_raises_at_build_time(tmp_path: Path) -> None:
                 ("c", "codex/gpt-5.4"),
             ],
         )
+
+
+# ---------------------------------------------------------------------------
+# Plan #35: Within-Round Barrier Protocol
+#
+# Contract: in round N, agent_b reads agent_a's round-(N-1) position from
+# prior_positions_by_agent, NOT agent_a's freshest round-N position from
+# latest_positions. This eliminates the same-round second-mover advantage
+# the cascade topology would otherwise grant. The verifier publishes
+# prior_positions_by_agent at end-of-round, so within a round both agents
+# read the same round-(N-1) snapshot.
+#
+# References: Du et al. arXiv:2305.14325; 2603.28813; 2510.07517. See
+# docs/plans/35_deliberation_within_round_barrier_protocol.md.
+# ---------------------------------------------------------------------------
+
+
+def test_barrier_round_1_both_agents_see_empty_peer_state(
+    harness: _DeliberationHarness, tmp_path: Path
+) -> None:
+    """Round 1: prior_positions_by_agent is empty, so both agents see
+    'None yet — this is round 1.' regardless of execution order."""
+    run_dir = tmp_path / "run"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "foo.py").write_text("line 1\n")
+
+    # Round 1
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=1, claims=[_claim("a1", "AGENT_A_R1_MARKER")],
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=1, claims=[_claim("b1", "AGENT_B_R1_MARKER")],
+    ))
+    # Round 2 to satisfy max_rounds and let synthesis fire
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=2, claims=[_claim("a1", "AGENT_A_R2_MARKER")],
+        state="stable",
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=2, claims=[_claim("b1", "AGENT_B_R2_MARKER")],
+        state="stable",
+    ))
+    harness.push("synthesis", Position(
+        agent_name="synthesis", round=2, claims=[],
+        reviewer_summary="done",
+    ))
+
+    app, init = build_deliberation_workflow(
+        run_dir=run_dir,
+        task=_task(workspace),
+        trace_id="t-barrier-r1",
+        max_budget=1.0,
+        max_rounds=2,
+    )
+    _run(app, init, "t-barrier-r1")
+
+    # Both round-1 prompts should report no peer state. Under the cascade
+    # topology this assertion would fail for agent_b — the bug Plan #35 fixes.
+    agent_a_r1_prompt = harness.call_messages[0][-1]["content"]
+    agent_b_r1_prompt = harness.call_messages[1][-1]["content"]
+    assert "None yet — this is round 1." in agent_a_r1_prompt
+    assert "None yet — this is round 1." in agent_b_r1_prompt
+    assert "AGENT_A_R1_MARKER" not in agent_b_r1_prompt, (
+        "BARRIER VIOLATION: agent_b's round-1 prompt should not contain "
+        "agent_a's round-1 marker — that's same-round second-mover leakage."
+    )
+
+
+def test_barrier_round_2_agent_b_sees_round_1_not_round_2(
+    harness: _DeliberationHarness, tmp_path: Path
+) -> None:
+    """Round 2: agent_b's prompt must contain agent_a's round-1 marker,
+    not agent_a's freshest round-2 marker, even though agent_a writes
+    round-2 first within the round's edge sequence."""
+    run_dir = tmp_path / "run"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "foo.py").write_text("line 1\n")
+
+    # Round 1
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=1, claims=[_claim("a1", "AGENT_A_R1_MARKER")],
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=1, claims=[_claim("b1", "AGENT_B_R1_MARKER")],
+    ))
+    # Round 2 — agent_a emits a different marker
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=2, claims=[_claim("a1", "AGENT_A_R2_MARKER")],
+        state="stable",
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=2, claims=[_claim("b1", "AGENT_B_R2_MARKER")],
+        state="stable",
+    ))
+    harness.push("synthesis", Position(
+        agent_name="synthesis", round=2, claims=[], reviewer_summary="done",
+    ))
+
+    app, init = build_deliberation_workflow(
+        run_dir=run_dir,
+        task=_task(workspace),
+        trace_id="t-barrier-r2",
+        max_budget=1.0,
+        max_rounds=3,
+    )
+    _run(app, init, "t-barrier-r2")
+
+    # Find agent_b round-2 prompt
+    agent_b_calls = [i for i, (k, _) in enumerate(harness.call_log) if k == "agent_b"]
+    assert len(agent_b_calls) >= 2
+    agent_b_r2_prompt = harness.call_messages[agent_b_calls[1]][-1]["content"]
+
+    # MUST contain agent_a's round-1 content (the barrier snapshot)
+    assert "AGENT_A_R1_MARKER" in agent_b_r2_prompt, (
+        "agent_b round-2 prompt is missing agent_a's round-1 marker — "
+        "the barrier should expose round-(N-1) peer state."
+    )
+    # MUST NOT contain agent_a's freshest round-2 content
+    assert "AGENT_A_R2_MARKER" not in agent_b_r2_prompt, (
+        "BARRIER VIOLATION: agent_b round-2 prompt contains agent_a's freshest "
+        "round-2 marker — this is the same-round second-mover leak that "
+        "Plan #35's barrier protocol prevents."
+    )
+
+
+def test_anonymization_strips_peer_agent_name_and_reviewer_model(
+    harness: _DeliberationHarness, tmp_path: Path
+) -> None:
+    """Plan #35 Phase 2: peer_latest serialized into the prompt must not
+    contain the peer's agent_name or reviewer_model — those leak identity
+    and trigger the conformity/obstinacy bias documented in arXiv:2510.07517."""
+    run_dir = tmp_path / "run"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "foo.py").write_text("line 1\n")
+
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=1, claims=[_claim("a1", "AGENT_A_R1")],
+        reviewer_model="claude-code/opus",
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=1, claims=[_claim("b1", "AGENT_B_R1")],
+        reviewer_model="codex/gpt-5.4",
+    ))
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=2, claims=[_claim("a1", "AGENT_A_R2")],
+        state="stable",
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=2, claims=[_claim("b1", "AGENT_B_R2")],
+        state="stable",
+    ))
+    harness.push("synthesis", Position(
+        agent_name="synthesis", round=2, claims=[], reviewer_summary="done",
+    ))
+
+    app, init = build_deliberation_workflow(
+        run_dir=run_dir,
+        task=_task(workspace),
+        trace_id="t-anon",
+        max_budget=1.0,
+        max_rounds=3,
+    )
+    _run(app, init, "t-anon")
+
+    # Check agent_a's round-2 prompt — peer state (agent_b's round-1) must
+    # be anonymized. The peer's reviewer_model ("codex/gpt-5.4") and the
+    # peer's agent_name ("agent_b") must not appear in the rendered JSON.
+    agent_a_calls = [i for i, (k, _) in enumerate(harness.call_log) if k == "agent_a"]
+    agent_a_r2 = harness.call_messages[agent_a_calls[1]][-1]["content"]
+
+    # Extract just the "Peer's most-recent position" section, bounded by
+    # the next "##" header (typically "## Your prior position" which
+    # legitimately contains the agent's own model identity).
+    peer_section_start = agent_a_r2.find("## Peer's most-recent position")
+    assert peer_section_start >= 0
+    next_header = agent_a_r2.find("\n## ", peer_section_start + 1)
+    peer_section = (
+        agent_a_r2[peer_section_start:next_header]
+        if next_header > 0
+        else agent_a_r2[peer_section_start:]
+    )
+
+    assert '"agent_name": "agent_b"' not in peer_section, (
+        "peer agent_name leaked into prompt — anonymization failed"
+    )
+    assert "codex/gpt-5.4" not in peer_section, (
+        "peer reviewer_model leaked into prompt — anonymization failed"
+    )
+    # The neutral label SHOULD appear
+    assert '"agent_name": "peer"' in peer_section
+
+    # The agent's OWN role header should still use its own real name
+    # (anonymization only hides peer identity, not self identity)
+    assert "## Your role: agent_a" in agent_a_r2
+
+    # Claim IDs MUST still pass through (the verifier needs them)
+    assert "b1" in peer_section
+
+
+def test_barrier_round_2_agent_a_sees_round_1_peer_state(
+    harness: _DeliberationHarness, tmp_path: Path
+) -> None:
+    """Round 2: agent_a runs first and reads agent_b's round-1 from the
+    snapshot. Confirms the snapshot publishes correctly at end-of-round-1."""
+    run_dir = tmp_path / "run"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "foo.py").write_text("line 1\n")
+
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=1, claims=[_claim("a1", "AGENT_A_R1_MARKER")],
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=1, claims=[_claim("b1", "AGENT_B_R1_MARKER")],
+    ))
+    harness.push("agent_a", Position(
+        agent_name="agent_a", round=2, claims=[_claim("a1", "AGENT_A_R2_MARKER")],
+        state="stable",
+    ))
+    harness.push("agent_b", Position(
+        agent_name="agent_b", round=2, claims=[_claim("b1", "AGENT_B_R2_MARKER")],
+        state="stable",
+    ))
+    harness.push("synthesis", Position(
+        agent_name="synthesis", round=2, claims=[], reviewer_summary="done",
+    ))
+
+    app, init = build_deliberation_workflow(
+        run_dir=run_dir,
+        task=_task(workspace),
+        trace_id="t-barrier-r2a",
+        max_budget=1.0,
+        max_rounds=3,
+    )
+    _run(app, init, "t-barrier-r2a")
+
+    agent_a_calls = [i for i, (k, _) in enumerate(harness.call_log) if k == "agent_a"]
+    assert len(agent_a_calls) >= 2
+    agent_a_r2_prompt = harness.call_messages[agent_a_calls[1]][-1]["content"]
+
+    assert "AGENT_B_R1_MARKER" in agent_a_r2_prompt, (
+        "agent_a round-2 prompt should contain agent_b's round-1 marker "
+        "from the snapshot."
+    )
