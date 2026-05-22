@@ -128,6 +128,15 @@ def _build_task_extras(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_duet_review(args: argparse.Namespace) -> None:
+    """Execute the ``duet-review`` subcommand.
+
+    Resolves ``--task-family`` to a registered profile, builds the
+    review task dict from CLI args (twin-update extras land in
+    ``task["extra"]``), runs ``plan_review`` always, and runs
+    ``implement_review`` when ``--impl-base`` is set. Writes one JSON
+    artifact per stage to ``--out``. No implementer stage; this is a
+    review-only entry point against existing plan-doc + git-diff inputs.
+    """
     from llm_client import call_llm_structured  # type: ignore[attr-defined]
     from llm_client.workflow.duet import (
         _implement_review_prompt,
@@ -218,6 +227,12 @@ def cmd_duet_review(args: argparse.Namespace) -> None:
 
 
 def register_parser(subparsers: Any) -> None:
+    """Register the ``duet-review`` subcommand on the ``python -m llm_client`` parser.
+
+    Wires the argparse surface (``--plan-doc``, ``--workspace``, ``--out``,
+    ``--task-family``, ``--impl-base``, twin-update flags, etc.) to
+    ``cmd_duet_review``. Called from ``llm_client/__main__.py``.
+    """
     p = subparsers.add_parser(
         "duet-review",
         help="Review-only duet pass: run reviewer halves against existing artifacts",

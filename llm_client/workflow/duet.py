@@ -122,12 +122,25 @@ class DuetRoles(BaseModel):
     implement_review: str = DEFAULT_IMPLEMENT_REVIEW_MODEL
 
     def for_stage(self, stage: str) -> str:
+        """Resolve the model string assigned to ``stage``.
+
+        Raises ``ValueError`` for unknown stage names so callers get a loud
+        error rather than a silent fallback to the default model.
+        """
         if stage not in STAGES:
             raise ValueError(f"Unknown duet stage: {stage!r}. Valid: {STAGES}")
         return str(getattr(self, stage))
 
 
 class PlanStepAtom(BaseModel):
+    """One step of an implementer-authored plan.
+
+    Plans decompose a task into a small number of these atoms so the reviewer
+    can score each step independently and so dependency ordering is explicit.
+    ``acceptance_check`` should be a sentence the reviewer can later confirm
+    or deny against the implementation diff.
+    """
+
     step_id: str
     description: str
     files_touched: list[str] = Field(default_factory=list)
@@ -181,6 +194,14 @@ class PlanReview(PlanReviewBase):
 
 
 class ImplementFileChange(BaseModel):
+    """One file the implementer touched, with line-count deltas + intent.
+
+    Surfaced in the implement sidecar so the reviewer can scan the diff shape
+    without re-deriving it. ``intent`` is the implementer's one-line
+    justification — the reviewer treats it as the implementer's claim, not as
+    independent evidence.
+    """
+
     path: str
     plus_loc: int = 0
     minus_loc: int = 0
@@ -188,11 +209,20 @@ class ImplementFileChange(BaseModel):
 
 
 class ImplementCommit(BaseModel):
+    """A single git commit produced by the implement stage."""
+
     sha: str
     message: str
 
 
 class ImplementDeviation(BaseModel):
+    """A plan step the implementer chose to do differently, with the reason.
+
+    The reviewer uses these to distinguish "intentional plan revision" from
+    "implementer drift." Empty list means the implementation followed the
+    plan as written.
+    """
+
     step_id: str
     what_changed: str
     why: str
@@ -249,6 +279,14 @@ class ImplementReview(ImplementReviewBase):
 
 
 class DuetSignoff(BaseModel):
+    """Terminal record of a duet run: verdict, cycle counts, artifact index.
+
+    Persisted to ``<run_dir>/signoff.json`` at the workflow's terminal node.
+    The authoritative source for "what was the final verdict and where are
+    the artifacts" once the LangGraph state is gone. ``artifacts_index``
+    values are filenames relative to ``run_dir``.
+    """
+
     task_id: str
     final_verdict: DuetVerdict
     total_plan_cycles: int
