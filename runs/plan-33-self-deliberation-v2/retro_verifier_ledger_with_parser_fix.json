@@ -1,0 +1,1410 @@
+[
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_round1_anchor",
+    "evidence_path": "llm_client/workflow/deliberate.py:4-7",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      4,
+      7
+    ],
+    "snippet": "\nWhere the duet is asymmetric (one implementer + one gating reviewer + 1 revise\ncycle), deliberation is symmetric: both agents get the same task brief and\nworkspace, each writes its own ``Position`` (claims + evidence + open\nquestions), they exchange positions, and they iterate until a rule-based\nconvergence detector fires or the round cap is hit.\n\nTopology (two-agent v1):",
+    "notes": "resolved lines 4-7 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_round1_anchor",
+    "evidence_path": "llm_client/workflow/deliberate.py:9-17",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      9,
+      17
+    ],
+    "snippet": "convergence detector fires or the round cap is hit.\n\nTopology (two-agent v1):\n  round 1: agent_a writes initial position \u2192 agent_b writes initial position\n  round 2: agent_a reads agent_b's prior + own prior, writes revised position\n           \u2192 agent_b reads agent_a's latest + own prior, writes revised\n  ...\n  convergence_check after each round:\n    - converged: both latest positions have empty ``disagreed_with_peer``\n      AND ``round >= 2`` AND each agent's ``agreed_with_peer`` covers the\n      peer's claim IDs.\n    - productive_disagreement: round cap reached with residual\n      ``disagreed_with_peer`` on either side.",
+    "notes": "resolved lines 9-17 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_round1_anchor",
+    "evidence_path": "llm_client/workflow/deliberate.py:364-380",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      364,
+      380
+    ],
+    "snippet": "    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",",
+    "notes": "resolved lines 364-380 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_round1_anchor",
+    "evidence_path": "llm_client/workflow/deliberate.py:466-480",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      466,
+      480
+    ],
+    "snippet": "    \"\"\"\n\n    def position_node(state: dict[str, Any]) -> dict[str, Any]:\n        ctx = WorkflowContext.current(state, stage=f\"deliberate.{agent.name}\")\n        task = state[\"task\"]\n        round_num = state[\"round\"]\n        latest = state.get(\"latest_positions\") or {}\n        own_prior = latest.get(agent.name)\n        peer_latest = latest.get(peer_name)\n\n        messages = _position_prompt(\n            task,\n            agent.name,\n            round_num,\n            own_prior=own_prior,\n            peer_latest=peer_latest,\n        )\n        position, _meta = ctx.call_llm_structured(\n            agent.model,",
+    "notes": "resolved lines 466-480 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_round1_anchor",
+    "evidence_path": "tests/test_workflow_deliberate.py:205-209",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/tests/test_workflow_deliberate.py",
+    "line_range": [
+      205,
+      209
+    ],
+    "snippet": "\n\ndef test_round_1_produces_independent_positions(harness: _DeliberationHarness, tmp_path: Path) -> None:\n    \"\"\"Round 1: agent_a writes first, agent_b second. Neither has peer context\n    on its own first call (agent_a's first prompt has no peer; agent_b's first\n    prompt may have agent_a's round-1 position).\n    \"\"\"\n    run_dir = tmp_path / \"run\"\n    workspace = tmp_path / \"ws\"",
+    "notes": "resolved lines 205-209 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "llm_client/workflow/deliberate.py:232-247",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      232,
+      247
+    ],
+    "snippet": "    ledger: VerifierLedger | None = None,\n) -> DeliberationVerdict | None:\n    \"\"\"Decide whether deliberation has reached a terminal state.\n\n    When ``ledger`` is provided (Plan #34): refuse to fire ``\"converged\"`` if\n    the latest round has any unverified ledger entry OR any lineage flag\n    (silent rename / silent retire / fabricated peer reference). This makes\n    the convergence verdict depend on resolved evidence rather than\n    agents' self-reported ``agreed_with_peer`` / ``disagreed_with_peer``.\n\n    When ``ledger`` is ``None``: preserves the pre-Plan-#34 behavior so\n    callers that haven't migrated still work.\n\n    Returns:\n        ``\"converged\"`` if round >= 2 and every agent's latest position has\n        an empty ``disagreed_with_peer`` AND covers every claim ID the peer\n        last emitted in ``agreed_with_peer`` AND (when ledger supplied) the\n        latest round has no unverified entries or lineage flags.\n\n        ``\"stalled\"`` if every agent's latest position has zero claims (i.e.",
+    "notes": "resolved lines 232-247 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "llm_client/workflow/deliberate.py:294-315",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      294,
+      315
+    ],
+    "snippet": "            break\n\n    if converged_signal:\n        # Plan #34: when a ledger is provided, also require that the latest\n        # round in the ledger has no unverified citations or lineage flags.\n        # The ledger's round numbers track position.round (not the router's\n        # state[\"round\"] which is one ahead of the latest position), so look\n        # up the latest round from the ledger itself.\n        if ledger is not None:\n            latest_round = ledger.latest_round()\n            if latest_round is not None:\n                if (\n                    ledger.has_unverified_in_round(latest_round)\n                    or ledger.has_lineage_flag_in_round(latest_round)\n                ):\n                    converged_signal = False\n\n    if converged_signal:\n        return \"converged\"\n\n    if round_num >= max_rounds:\n        return \"productive_disagreement\"\n\n    return None\n\n",
+    "notes": "resolved lines 294-315 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "llm_client/workflow/deliberate.py:661-680",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      661,
+      680
+    ],
+    "snippet": "    \"\"\"\n\n    def router(state: dict[str, Any]) -> str:\n        latest = state.get(\"latest_positions\") or {}\n        round_num = state.get(\"round\", 0)\n        max_rounds = state.get(\"max_rounds\", 3)\n        # Plan #34: thread the verifier ledger into the convergence check.\n        ledger_entries = state.get(\"verifier_ledger\") or []\n        ledger: VerifierLedger | None = None\n        if ledger_entries:\n            ledger = VerifierLedger(\n                entries=[LedgerEntry(**e) for e in ledger_entries],\n            )\n        verdict = detect_convergence(latest, round_num, max_rounds, ledger=ledger)\n        if verdict is None:\n            return \"agent_a\"  # continue to next round\n        if verdict == \"converged\":\n            return \"synthesis_converged\"\n        if verdict == \"stalled\":\n            return \"signoff_stalled\"\n        # productive_disagreement\n        return \"synthesis_productive_disagreement\"\n\n    return router",
+    "notes": "resolved lines 661-680 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "tests/test_workflow_deliberate.py:421-464",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/tests/test_workflow_deliberate.py",
+    "line_range": [
+      421,
+      464
+    ],
+    "snippet": "\n\ndef test_detect_convergence_backward_compat_without_ledger() -> None:\n    \"\"\"detect_convergence(latest, round, max, ledger=None) preserves Plan-#33 behavior.\"\"\"\n    from llm_client.workflow.deliberate import detect_convergence\n\n    positions = {\n        \"agent_a\": Position(\n            agent_name=\"agent_a\", round=2, claims=[_claim(\"a1\", \"X\")],\n            agreed_with_peer=[\"b1\"], disagreed_with_peer=[],\n        ).model_dump(),\n        \"agent_b\": Position(\n            agent_name=\"agent_b\", round=2, claims=[_claim(\"b1\", \"Y\")],\n            agreed_with_peer=[\"a1\"], disagreed_with_peer=[],\n        ).model_dump(),\n    }\n    # No ledger arg \u2192 backward compat \u2192 converged.\n    assert detect_convergence(positions, round_num=2, max_rounds=3) == \"converged\"\n\n\ndef test_detect_convergence_refused_when_ledger_has_unverified_in_latest_round() -> None:\n    \"\"\"Even with agreement metadata complete, an unverified ledger entry in the\n    latest round blocks the converged verdict.\n    \"\"\"\n    from llm_client.workflow.deliberate import detect_convergence\n    from llm_client.workflow.deliberate_verifier import LedgerEntry, VerifierLedger\n\n    positions = {\n        \"agent_a\": Position(\n            agent_name=\"agent_a\", round=2, claims=[_claim(\"a1\", \"X\")],\n            agreed_with_peer=[\"b1\"], disagreed_with_peer=[],\n        ).model_dump(),\n        \"agent_b\": Position(\n            agent_name=\"agent_b\", round=2, claims=[_claim(\"b1\", \"Y\")],\n            agreed_with_peer=[\"a1\"], disagreed_with_peer=[],\n        ).model_dump(),\n    }\n    ledger = VerifierLedger()\n    ledger.extend([\n        LedgerEntry(\n            agent_name=\"agent_a\", round=2, claim_id=\"a1\",\n            evidence_path=\"bogus.py:1\", status=\"file_not_found\",\n        ),\n    ])\n    # Ledger has an unverified citation in round 2 \u2192 refuses converged.\n    assert detect_convergence(positions, round_num=2, max_rounds=3, ledger=ledger) is None\n\n",
+    "notes": "resolved lines 421-464 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "tests/test_workflow_deliberate.py:497-525",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/tests/test_workflow_deliberate.py",
+    "line_range": [
+      497,
+      525
+    ],
+    "snippet": "\n\ndef test_detect_convergence_fires_when_ledger_is_clean() -> None:\n    \"\"\"When agents agree AND the ledger has only verified entries in the\n    latest round, converged still fires.\n    \"\"\"\n    from llm_client.workflow.deliberate import detect_convergence\n    from llm_client.workflow.deliberate_verifier import LedgerEntry, VerifierLedger\n\n    positions = {\n        \"agent_a\": Position(\n            agent_name=\"agent_a\", round=2, claims=[_claim(\"a1\", \"X\")],\n            agreed_with_peer=[\"b1\"], disagreed_with_peer=[],\n        ).model_dump(),\n        \"agent_b\": Position(\n            agent_name=\"agent_b\", round=2, claims=[_claim(\"b1\", \"Y\")],\n            agreed_with_peer=[\"a1\"], disagreed_with_peer=[],\n        ).model_dump(),\n    }\n    ledger = VerifierLedger()\n    ledger.extend([\n        LedgerEntry(\n            agent_name=\"agent_a\", round=2, claim_id=\"a1\",\n            evidence_path=\"x.py:1\", status=\"verified\",\n        ),\n        LedgerEntry(\n            agent_name=\"agent_b\", round=2, claim_id=\"b1\",\n            evidence_path=\"y.py:2\", status=\"verified\",\n        ),\n    ])\n    assert detect_convergence(positions, round_num=2, max_rounds=3, ledger=ledger) == \"converged\"\n\n",
+    "notes": "resolved lines 497-525 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:22-25",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      22,
+      25
+    ],
+    "snippet": "2. Resolves each reference against the workspace and attaches a content\n   snippet from the cited range.\n3. Tracks claim lineage across rounds: detects silent rename, silent retire,\n   and fabricated peer references.\n4. Builds a ledger consumed by ``detect_convergence`` so the convergence\n   verdict depends on verified evidence, not self-reports.\n\nDesign: pure-Python, no LLM, no network. Deterministic. The chassis is",
+    "notes": "resolved lines 22-25 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:123-136",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      123,
+      136
+    ],
+    "snippet": "        return max(e.round for e in self.entries)\n\n    def has_unverified_in_round(self, round_num: int) -> bool:\n        \"\"\"True if any non-lineage entry in this round failed verification.\n\n        Lineage flags are checked separately by ``has_lineage_flag_in_round``.\n        \"\"\"\n        for e in self.latest_round_entries(round_num):\n            if e.lineage_flag is not None:\n                continue\n            if e.status != \"verified\":\n                return True\n        return False\n\n    def has_lineage_flag_in_round(self, round_num: int) -> bool:\n        return any(e.lineage_flag is not None for e in self.latest_round_entries(round_num))\n\n    def to_dict(self) -> dict[str, Any]:",
+    "notes": "resolved lines 123-136 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:403-441",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      403,
+      441
+    ],
+    "snippet": "                )\n            )\n\n    for disagreement in position.get(\"disagreed_with_peer\") or []:\n        # Disagreement evidence_paths get a synthetic claim_id so they show\n        # up in the ledger but don't collide with the agent's own claim_ids.\n        peer_claim_id = disagreement.get(\"peer_claim_id\", \"?\")\n        synthetic_id = f\"disagreement_against_{peer_claim_id}\"\n        evidence_path = disagreement.get(\"evidence_path\", \"\")\n        for citation in parse_evidence_path(evidence_path):\n            entries.append(\n                _verify_one_citation(\n                    citation, workspace_path, agent_name, round_num, synthetic_id\n                )\n            )\n\n    return entries\n\n\n# ---------------------------------------------------------------------------\n# Cross-round lineage tracking\n# ---------------------------------------------------------------------------\n\n\ndef _claims_by_id(position: dict[str, Any]) -> dict[str, dict[str, Any]]:\n    return {c.get(\"claim_id\", \"?\"): c for c in (position.get(\"claims\") or [])}\n\n\ndef _detect_silent_rename(\n    prior: dict[str, dict[str, Any]],\n    current: dict[str, dict[str, Any]],\n) -> list[tuple[str, str, str]]:\n    \"\"\"Return list of ``(old_id, new_id, claim_text_excerpt)`` tuples.\n\n    A silent rename = same claim text in a different ``claim_id``. We compare\n    the first 80 chars of ``claim`` text as the equivalence key; trailing\n    edits to a claim wouldn't get flagged as renames (intentional \u2014 the\n    point is to catch IDs swapped wholesale).\n    \"\"\"\n    prior_text_to_id = {\n        (c.get(\"claim\") or \"\")[:80]: cid for cid, c in prior.items()\n    }\n    renames: list[tuple[str, str, str]] = []",
+    "notes": "resolved lines 403-441 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_convergence_syntax",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:478-580",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      478,
+      580
+    ],
+    "snippet": "    A fabricated peer reference is one of:\n    - ``agreed_with_peer`` entry whose ID doesn't match any peer claim_id\n    - ``disagreed_with_peer[*].peer_claim_id`` that doesn't match any peer claim_id\n    \"\"\"\n    if peer_position is None:\n        return []\n    peer_ids = {c.get(\"claim_id\", \"?\") for c in (peer_position.get(\"claims\") or [])}\n    fabricated: list[tuple[str, str]] = []\n    for ref in own_position.get(\"agreed_with_peer\") or []:\n        if ref not in peer_ids:\n            fabricated.append((\"agreed_with_peer\", ref))\n    for dis in own_position.get(\"disagreed_with_peer\") or []:\n        peer_id = dis.get(\"peer_claim_id\", \"?\")\n        if peer_id not in peer_ids:\n            fabricated.append((\"disagreed_with_peer\", peer_id))\n    return fabricated\n\n\ndef _lineage_entries(\n    agent_name: str,\n    round_num: int,\n    own_prior: dict[str, Any] | None,\n    own_current: dict[str, Any],\n    peer_prior: dict[str, Any] | None,\n) -> list[LedgerEntry]:\n    \"\"\"Emit lineage ledger entries for one agent at one round.\"\"\"\n    entries: list[LedgerEntry] = []\n\n    if own_prior is not None:\n        prior_claims = _claims_by_id(own_prior)\n        current_claims = _claims_by_id(own_current)\n        renames = _detect_silent_rename(prior_claims, current_claims)\n        for old_id, new_id, text in renames:\n            entries.append(\n                LedgerEntry(\n                    agent_name=agent_name,\n                    round=round_num,\n                    claim_id=new_id,\n                    evidence_path=\"\",\n                    status=\"content_mismatch_warning\",\n                    lineage_flag=\"silent_rename\",\n                    lineage_detail=(\n                        f\"claim_id {old_id!r} (round {own_prior.get('round','?')}) \"\n                        f\"appears to be renamed to {new_id!r} (same text prefix: {text!r})\"\n                    ),\n                )\n            )\n        for retired_id in _detect_silent_retire(prior_claims, current_claims, renames):\n            entries.append(\n                LedgerEntry(\n                    agent_name=agent_name,\n                    round=round_num,\n                    claim_id=retired_id,\n                    evidence_path=\"\",\n                    status=\"content_mismatch_warning\",\n                    lineage_flag=\"silent_retire\",\n                    lineage_detail=(\n                        f\"claim_id {retired_id!r} was present in round \"\n                        f\"{own_prior.get('round','?')} but absent in this round \"\n                        \"with no rename match \u2014 silently retired\"\n                    ),\n                )\n            )\n\n    for ref_type, fabricated_id in _detect_fabricated_peer_refs(own_current, peer_prior):\n        entries.append(\n            LedgerEntry(\n                agent_name=agent_name,\n                round=round_num,\n                claim_id=fabricated_id,\n                evidence_path=\"\",\n                status=\"content_mismatch_warning\",\n                lineage_flag=\"fabricated_peer_ref\",\n                lineage_detail=(\n                    f\"{ref_type} references peer claim_id {fabricated_id!r} \"\n                    f\"but peer's latest position has no such claim_id\"\n                ),\n            )\n        )\n\n    return entries\n\n\ndef verify_round(\n    latest_positions: dict[str, dict[str, Any]],\n    prior_positions_by_agent: dict[str, dict[str, Any]],\n    prior_ledger: VerifierLedger,\n    round_num: int,\n    workspace_path: str,\n) -> VerifierLedger:\n    \"\"\"Verify a full round's worth of positions and extend the ledger.\n\n    Args:\n        latest_positions: ``{agent_name: position_dict}`` for the current round.\n        prior_positions_by_agent: ``{agent_name: position_dict}`` for the\n            previous round (or empty when round_num == 1).\n        prior_ledger: ledger entries from rounds 1..round_num-1.\n        round_num: 1-indexed current round.\n        workspace_path: absolute path used for resolving citations.\n    \"\"\"\n    new_entries: list[LedgerEntry] = []\n\n    # Per-citation verification.\n    for position in latest_positions.values():\n        new_entries.extend(verify_position(position, workspace_path))\n\n    # Cross-round lineage tracking. Build a quick map of agent \u2192 peer name",
+    "notes": "resolved lines 478-580 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "llm_client/workflow/deliberate.py:100-115",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      100,
+      115
+    ],
+    "snippet": "\n\nclass PositionClaim(BaseModel):\n    \"\"\"One atomic claim an agent makes in its position.\n\n    ``claim_id`` lets the peer agent reference this claim by ID in\n    ``agreed_with_peer`` / ``disagreed_with_peer``. ``evidence_path`` is\n    required \u2014 a claim without a citation is opinion, not evidence (same\n    groundedness contract as duet's ``PlanReviewBlocker``).\n    \"\"\"\n\n    model_config = ConfigDict(extra=\"forbid\")\n\n    claim_id: str\n    claim: str\n    severity: ClaimSeverity = \"warn\"\n    evidence_path: str\n\n\nclass PositionEvidence(BaseModel):",
+    "notes": "resolved lines 100-115 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "llm_client/workflow/deliberate.py:117-129",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      117,
+      129
+    ],
+    "snippet": "\n\nclass PositionEvidence(BaseModel):\n    \"\"\"A piece of evidence the agent pulled into its position.\n\n    Agents cite explicit evidence so the peer can scrutinize the source\n    rather than just the claim. ``content_snippet`` is the actual text the\n    agent saw \u2014 required for falsifiability.\n    \"\"\"\n\n    model_config = ConfigDict(extra=\"forbid\")\n\n    label: str\n    citation: str\n    content_snippet: str\n\n",
+    "notes": "resolved lines 117-129 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "llm_client/workflow/deliberate.py:132-143",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      132,
+      143
+    ],
+    "snippet": "\n\nclass DisagreementAtom(BaseModel):\n    \"\"\"A specific disagreement with one of the peer's claims.\n\n    Required ``evidence_path`` keeps disagreement falsifiable \u2014 an agent\n    can't just say \"I disagree\" without citing why.\n    \"\"\"\n\n    model_config = ConfigDict(extra=\"forbid\")\n\n    peer_claim_id: str\n    my_counterclaim: str\n    evidence_path: str\n\n",
+    "notes": "resolved lines 132-143 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:19-25",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      19,
+      25
+    ],
+    "snippet": "This module:\n\n1. Parses ``evidence_path`` strings into ``(file_path, line_range)`` references.\n2. Resolves each reference against the workspace and attaches a content\n   snippet from the cited range.\n3. Tracks claim lineage across rounds: detects silent rename, silent retire,\n   and fabricated peer references.\n4. Builds a ledger consumed by ``detect_convergence`` so the convergence\n   verdict depends on verified evidence, not self-reports.\n\nDesign: pure-Python, no LLM, no network. Deterministic. The chassis is",
+    "notes": "resolved lines 19-25 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:171-227",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      171,
+      227
+    ],
+    "snippet": "    section: str | None\n    parseable: bool\n\n    @classmethod\n    def unparseable(cls, raw: str) -> ParsedCitation:\n        return cls(raw=raw, file_path=None, line_range=None, section=None, parseable=False)\n\n\ndef parse_evidence_path(evidence_path: str) -> list[ParsedCitation]:\n    \"\"\"Parse a multi-citation ``evidence_path`` string into citations.\n\n    Splits on ``;`` (the convention agents use for multiple citations) and\n    tries the file:line, file#section, and bare-file patterns. Pieces that\n    don't match any pattern become ``unparseable`` entries \u2014 they still get\n    a ledger row so the citation isn't silently lost.\n    \"\"\"\n    citations: list[ParsedCitation] = []\n    if not evidence_path or not evidence_path.strip():\n        citations.append(ParsedCitation.unparseable(\"\"))\n        return citations\n\n    for piece in evidence_path.split(\";\"):\n        piece = piece.strip()\n        if not piece:\n            continue\n\n        if m := _FILE_LINE_LIST_RE.match(piece):\n            path = m.group(\"path\")\n            for raw_range in m.group(\"ranges\").split(\",\"):\n                rm = _LINE_RANGE_RE.match(raw_range.strip())\n                if not rm:\n                    citations.append(ParsedCitation.unparseable(piece))\n                    continue\n                start = int(rm.group(\"start\"))\n                end = int(rm.group(\"end\")) if rm.group(\"end\") else start\n                citations.append(\n                    ParsedCitation(\n                        raw=f\"{path}:{raw_range.strip()}\",\n                        file_path=path,\n                        line_range=(start, end),\n                        section=None,\n                        parseable=True,\n                    )\n                )\n            continue\n\n        if m := _FILE_LINE_RE.match(piece):\n            start = int(m.group(\"start\"))\n            end = int(m.group(\"end\")) if m.group(\"end\") else start\n            citations.append(\n                ParsedCitation(\n                    raw=piece,\n                    file_path=m.group(\"path\"),\n                    line_range=(start, end),\n                    section=None,\n                    parseable=True,\n                )\n            )\n            continue\n\n        if m := _FILE_SECTION_RE.match(piece):",
+    "notes": "resolved lines 171-227 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:292-347",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      292,
+      347
+    ],
+    "snippet": "\n    When ``line_range`` is provided, extracts \u00b1``_SNIPPET_CONTEXT_LINES``\n    around the cited range. When omitted, returns the first 20 lines as a\n    pointer (file-only citation).\n    \"\"\"\n    try:\n        lines = path.read_text(encoding=\"utf-8\", errors=\"replace\").splitlines()\n    except OSError as exc:\n        return None, f\"read_error: {exc}\"\n\n    total = len(lines)\n    if line_range is None:\n        snippet_lines = lines[:20]\n        notes = f\"no line_range cited; first 20 lines of {total}\"\n    else:\n        start, end = line_range\n        if start < 1 or end < start:\n            return None, f\"invalid_range: start={start} end={end}\"\n        if end > total:\n            return None, f\"line_range_out_of_bounds: end={end} > file_lines={total}\"\n        snip_start = max(1, start - _SNIPPET_CONTEXT_LINES)\n        snip_end = min(total, end + _SNIPPET_CONTEXT_LINES)\n        snippet_lines = lines[snip_start - 1 : snip_end]\n        notes = f\"resolved lines {start}-{end} with \u00b1{_SNIPPET_CONTEXT_LINES} context\"\n\n    return \"\\n\".join(snippet_lines), notes\n\n\ndef _verify_one_citation(\n    citation: ParsedCitation,\n    workspace_path: str,\n    agent_name: str,\n    round_num: int,\n    claim_id: str,\n) -> LedgerEntry:\n    \"\"\"Verify a single parsed citation and return its ledger entry.\"\"\"\n    if not citation.parseable:\n        return LedgerEntry(\n            agent_name=agent_name,\n            round=round_num,\n            claim_id=claim_id,\n            evidence_path=citation.raw,\n            status=\"unparseable_evidence\",\n            notes=f\"could not parse {citation.raw!r} as file:line, file#section, or bare path\",\n        )\n\n    assert citation.file_path is not None\n    resolved = _resolve_path(workspace_path, citation.file_path)\n    if resolved is None:\n        return LedgerEntry(\n            agent_name=agent_name,\n            round=round_num,\n            claim_id=claim_id,\n            evidence_path=citation.raw,\n            status=\"file_not_found\",\n            file_path=citation.file_path,\n            line_range=citation.line_range,\n            notes=f\"path {citation.file_path!r} does not resolve relative to workspace or absolute\",\n        )\n",
+    "notes": "resolved lines 292-347 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:355-391",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      355,
+      391
+    ],
+    "snippet": "            agent_name=agent_name,\n            round=round_num,\n            claim_id=claim_id,\n            evidence_path=citation.raw,\n            status=\"unresolved_path\",\n            file_path=str(resolved),\n            line_range=citation.line_range,\n            notes=notes,\n        )\n\n    return LedgerEntry(\n        agent_name=agent_name,\n        round=round_num,\n        claim_id=claim_id,\n        evidence_path=citation.raw,\n        status=\"verified\",\n        file_path=str(resolved),\n        line_range=citation.line_range,\n        snippet=snippet,\n        notes=notes,\n    )\n\n\n# ---------------------------------------------------------------------------\n# Position-level verification\n# ---------------------------------------------------------------------------\n\n\ndef verify_position(position: dict[str, Any], workspace_path: str) -> list[LedgerEntry]:\n    \"\"\"Verify every cited ``evidence_path`` in a Position dict.\n\n    Walks ``position[\"claims\"]`` and ``position[\"disagreed_with_peer\"]`` (both\n    carry ``evidence_path`` per the schema). Emits one ledger entry per\n    parsed citation; a multi-citation ``evidence_path`` like\n    ``\"file_a.py:10-20; file_b.py:30\"`` produces two entries with the same\n    ``claim_id`` and ``agent_name``.\n    \"\"\"\n    agent_name = position.get(\"agent_name\", \"?\")\n    round_num = int(position.get(\"round\", 0))\n    entries: list[LedgerEntry] = []\n",
+    "notes": "resolved lines 355-391 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "tests/test_workflow_schema_smoke.py:62-67",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/tests/test_workflow_schema_smoke.py",
+    "line_range": [
+      62,
+      67
+    ],
+    "snippet": "    reviewer_model: str, schema_cls: type\n) -> None:\n    \"\"\"Real LLM round-trip: the JSON schema must be accepted by the provider.\n\n    Trivial prompt asks for ``verdict=pass`` with empty lists. We aren't\n    testing the LLM's reviewing quality here \u2014 only that the schema is\n    structurally valid for the provider's structured-output API.\n    \"\"\"\n    from llm_client.core.client import call_llm_structured\n",
+    "notes": "resolved lines 62-67 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_evidence_semantics",
+    "evidence_path": "tests/test_workflow_schema_smoke.py:101-123",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/tests/test_workflow_schema_smoke.py",
+    "line_range": [
+      101,
+      123
+    ],
+    "snippet": ")\ndef test_deliberation_position_accepted_by_real_llm(reviewer_model: str) -> None:\n    \"\"\"Same idea for the deliberation Position schema \u2014 verifies the\n    deliberation workflow can actually run through real LLMs.\n    \"\"\"\n    from llm_client.core.client import call_llm_structured\n    from llm_client.workflow.deliberate import Position\n\n    instruction = (\n        \"Return a minimal Position with agent_name=\\\"smoke\\\", round=1, \"\n        \"every list empty, confidence=\\\"low\\\", state=\\\"initial\\\", and \"\n        \"reviewer_summary=\\\"smoke ok\\\". Do not add any extra fields.\"\n    )\n    result, _meta = call_llm_structured(\n        reviewer_model,\n        [{\"role\": \"user\", \"content\": instruction}],\n        Position,\n        task=\"schema_smoke\",\n        trace_id=f\"schema_smoke/Position/{reviewer_model}\",\n        max_budget=0.50,\n        timeout=300,\n        cwd=os.getcwd(),\n    )\n    assert result.agent_name == \"smoke\", (\n        f\"Expected agent_name='smoke' from {reviewer_model}, got {result.agent_name!r}\"\n    )\n    assert result.round == 1",
+    "notes": "resolved lines 101-123 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/duet_base.py:68-100",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet_base.py",
+    "line_range": [
+      68,
+      100
+    ],
+    "snippet": "\n\n@dataclass(frozen=True)\nclass TaskFamily:\n    \"\"\"A registered duet profile.\n\n    Profiles let domains plug in their own reviewer schemas, prompt addenda,\n    and context loaders without forking the chassis. Use the registry\n    (``register_task_family`` / ``get_task_family``) to look up by name.\n\n    Attributes:\n        name: Stable identifier the chassis and CLI resolve by.\n        plan_review_schema: Pydantic class for plan reviewer output; must\n            extend ``PlanReviewBase`` so the router can read ``verdict``.\n        implement_review_schema: Same contract for implementation reviewer.\n        plan_prompt_addendum: Extra text appended to the plan-implementer's\n            user message after the chassis's base prompt.\n        plan_review_prompt_addendum: Extra text for the plan reviewer.\n        implement_prompt_addendum: Extra text for the implementer.\n        implement_review_prompt_addendum: Extra text for the impl reviewer.\n        context_loader: Callable that receives the task dict and returns\n            ``{label: rendered_content}`` blocks the chassis renders as\n            ``## <label>`` sections before the addendum.\n    \"\"\"\n\n    name: str\n    plan_review_schema: type[PlanReviewBase]\n    implement_review_schema: type[ImplementReviewBase]\n    plan_prompt_addendum: str = \"\"\n    plan_review_prompt_addendum: str = \"\"\n    implement_prompt_addendum: str = \"\"\n    implement_review_prompt_addendum: str = \"\"\n    context_loader: Callable[[dict[str, Any]], dict[str, str]] = field(\n        default=_empty_context_loader\n    )\n\n",
+    "notes": "resolved lines 68-100 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/duet_registry.py:20-47",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet_registry.py",
+    "line_range": [
+      20,
+      47
+    ],
+    "snippet": "\n\ndef register_task_family(family: TaskFamily) -> None:\n    \"\"\"Register a profile. Raises if ``family.name`` is already taken.\n\n    Duplicate registration is a programmer error (likely a copy-paste or an\n    import ordering problem), not a silent overwrite.\n    \"\"\"\n    if family.name in _REGISTRY:\n        raise ValueError(\n            f\"TaskFamily {family.name!r} already registered. \"\n            f\"Use a distinct name or remove the prior registration.\"\n        )\n    _REGISTRY[family.name] = family\n\n\ndef get_task_family(name: str) -> TaskFamily:\n    \"\"\"Resolve a profile by name. Raises if not registered.\n\n    No silent fallback to ``generic`` \u2014 an unknown name means the caller\n    misspelled the profile or forgot to import the registering module.\n    \"\"\"\n    if name not in _REGISTRY:\n        available = sorted(_REGISTRY) or [\"<none registered yet>\"]\n        raise KeyError(\n            f\"TaskFamily {name!r} is not registered. Available: {available}. \"\n            f\"Built-in profiles are registered via llm_client.workflow.profiles; \"\n            f\"ensure that subpackage is imported before lookup.\"\n        )\n    return _REGISTRY[name]\n\n",
+    "notes": "resolved lines 20-47 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/profiles/plan_doc_review.py:37-77",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/profiles/plan_doc_review.py",
+    "line_range": [
+      37,
+      77
+    ],
+    "snippet": "\n\nclass PlanDocPlanReview(PlanReview):\n    \"\"\"Plan reviewer schema specialized for plan-doc critique.\n\n    Extends ``PlanReview`` so existing chassis behavior (router on ``verdict``,\n    persistence to ``plan_review.json``, etc.) keeps working. Adds three\n    plan-doc-specific findings buckets.\n    \"\"\"\n\n    model_config = ConfigDict(extra=\"forbid\")\n\n    template_section_misses: list[str] = Field(default_factory=list)\n    references_unverified: list[CitationRef] = Field(default_factory=list)\n    acceptance_criteria_unmeasurable: list[str] = Field(default_factory=list)\n\n\n_PLAN_REVIEW_ADDENDUM = (\n    \"\\n\\n## Plan-doc review extension\\n\"\n    \"This is a plan-doc-level review against the repo's docs/plans/TEMPLATE.md \"\n    \"structure. In addition to the generic PlanReview fields:\\n\"\n    \"- template_section_misses: list any of these TEMPLATE.md sections that \"\n    \"the plan omits or empties out: Gap, References Reviewed, Files Affected, \"\n    \"Plan, Required Tests, Acceptance Criteria, Notes.\\n\"\n    \"- references_unverified: list every cited file:line (or file:LL-LL) range \"\n    \"you could not open or whose claimed content you could not confirm. \"\n    \"Use the CitationRef shape {cited_as, reason_unverified}.\\n\"\n    \"- acceptance_criteria_unmeasurable: list any acceptance criterion that \"\n    \"is present but not testable as written (distinct from missing_acceptance_checks \"\n    \"which is about absence).\\n\"\n    \"Blockers still require evidence_path; nits remain free-form.\"\n)\n\n\nPLAN_DOC_REVIEW_PROFILE = TaskFamily(\n    name=\"plan_doc_review\",\n    plan_review_schema=PlanDocPlanReview,\n    implement_review_schema=ImplementReview,  # generic impl review is fine for plan-doc revisions\n    plan_prompt_addendum=\"\",\n    plan_review_prompt_addendum=_PLAN_REVIEW_ADDENDUM,\n    implement_prompt_addendum=\"\",\n    implement_review_prompt_addendum=\"\",\n)\n\n",
+    "notes": "resolved lines 37-77 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/profiles/twin_update.py:149-157",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/profiles/twin_update.py",
+    "line_range": [
+      149,
+      157
+    ],
+    "snippet": "\n\nclass TwinUpdatePlanReview(PlanReview):\n    \"\"\"Plan reviewer schema specialized for twin update tickets.\"\"\"\n\n    model_config = ConfigDict(extra=\"forbid\")\n\n    pcm_layer_findings: list[PcmLayerFinding] = Field(default_factory=list)\n    twin_fidelity_rubric_misses: list[TwinFidelityRubricMiss] = Field(default_factory=list)\n    proof_authority_gaps: list[ProofAuthorityGap] = Field(default_factory=list)\n    scope_violations: list[ScopeViolation] = Field(default_factory=list)\n\n",
+    "notes": "resolved lines 149-157 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/profiles/twin_update.py:193-200",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/profiles/twin_update.py",
+    "line_range": [
+      193,
+      200
+    ],
+    "snippet": "\n\nclass TwinUpdateImplementReview(ImplementReview):\n    \"\"\"Implementation reviewer schema specialized for twin update tickets.\"\"\"\n\n    model_config = ConfigDict(extra=\"forbid\")\n\n    pcm_layer_regressions: list[PcmLayerRegression] = Field(default_factory=list)\n    signoff_axes_claim: SignoffAxesClaim | None = None\n    published_prod_qa_evidence_path: str = \"\"\n\n",
+    "notes": "resolved lines 193-200 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/profiles/twin_update.py:337-349",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/profiles/twin_update.py",
+    "line_range": [
+      337,
+      349
+    ],
+    "snippet": "\n\nTWIN_UPDATE_PROFILE = TaskFamily(\n    name=\"twin_update\",\n    plan_review_schema=TwinUpdatePlanReview,\n    implement_review_schema=TwinUpdateImplementReview,\n    plan_prompt_addendum=\"\",\n    plan_review_prompt_addendum=_PLAN_REVIEW_ADDENDUM,\n    implement_prompt_addendum=\"\",\n    implement_review_prompt_addendum=_IMPLEMENT_REVIEW_ADDENDUM,\n    context_loader=_load_twin_context_pack,\n)\n\n\nregister_task_family(TWIN_UPDATE_PROFILE)\n\n",
+    "notes": "resolved lines 337-349 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/deliberate.py:24-31",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      24,
+      31
+    ],
+    "snippet": "  residual disagreements. Persisted to ``synthesis.json``.\n\nShares chassis with the duet:\n- ``TaskFamily`` registry (Plan #31) \u2014 deliberation can also be specialized\n  by profile when domain-specific Position fields are needed.\n- Grounded schemas \u2014 ``PositionClaim.evidence_path`` and\n  ``DisagreementAtom.evidence_path`` are required (Plan #30 contract).\n- ``WorkflowContext`` for trace/budget/observability.\n- Model alias resolution (Plan #29 followup) + cwd\u2194working_directory alias\n  (Plan #30 followup).\n\nSee ``docs/plans/33_deliberation_workflow.md`` for the design rationale.",
+    "notes": "resolved lines 24-31 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/workflow/deliberate.py:696-740",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      696,
+      740
+    ],
+    "snippet": "    trace_id: str,\n    max_budget: float,\n    agents: list[tuple[str, str]] | None = None,\n    max_rounds: int = 3,\n    task_prefix: str = \"deliberate\",\n    synthesis_model: str | None = None,\n    checkpointer: Any | None = None,\n) -> tuple[Any, dict[str, Any]]:\n    \"\"\"Build a compiled LangGraph app for the symmetric deliberation workflow.\n\n    Args:\n        run_dir: Directory for durable artifacts (created if missing).\n        task: The deliberation task. Accepts ``DeliberationTask`` or a dict.\n        trace_id: Shared trace_id across all LLM calls in the run.\n        max_budget: USD budget for the entire run.\n        agents: List of ``(name, model)`` pairs. Defaults to the\n            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/opus).\n            Two-agent only in v1; N-agent is a future extension.\n        max_rounds: Cap on cycle count. Hitting this with residual\n            disagreement promotes the verdict to ``productive_disagreement``.\n        task_prefix: Task-label prefix for observability.\n        synthesis_model: Model for the synthesis stage. Defaults to\n            ``claude-code/opus`` for structured-output reliability.\n        checkpointer: LangGraph checkpointer. Defaults to ``InMemorySaver``.\n\n    Returns:\n        ``(compiled_app, initial_state)``.\n\n    Raises:\n        ImportError: If ``langgraph`` is not installed.\n        ValueError: If ``agents`` has fewer than 2 entries (v1 requires exactly 2).\n    \"\"\"\n    from llm_client.workflow.builder import build_workflow\n\n    task_obj = task if isinstance(task, DeliberationTask) else DeliberationTask(**task)\n    task_dict = task_obj.model_dump()\n\n    run_dir_path = Path(run_dir)\n    run_dir_path.mkdir(parents=True, exist_ok=True)\n    _persist_json(str(run_dir_path), \"task.json\", task_dict)\n\n    pair = agents if agents is not None else list(DEFAULT_AGENT_PAIR)\n    if len(pair) != 2:\n        raise ValueError(\n            f\"Deliberation v1 requires exactly 2 agents; got {len(pair)}. \"\n            \"N-agent (\u22653) is a future extension; track in Plan #33 notes.\"\n        )\n    agent_a_name, agent_a_model = pair[0]\n    agent_b_name, agent_b_model = pair[1]",
+    "notes": "resolved lines 696-740 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/cli/deliberate.py:32-60",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/cli/deliberate.py",
+    "line_range": [
+      32,
+      60
+    ],
+    "snippet": "\n\ndef _parse_agents(raw: str) -> list[tuple[str, str]]:\n    \"\"\"Parse ``--agents`` flag value into ``[(name, model), ...]``.\n\n    Format: ``\"name1:model1,name2:model2\"``. Whitespace trimmed.\n    Raises ``ValueError`` if any entry is malformed.\n    \"\"\"\n    pairs: list[tuple[str, str]] = []\n    for entry in raw.split(\",\"):\n        entry = entry.strip()\n        if not entry:\n            continue\n        if \":\" not in entry:\n            raise ValueError(\n                f\"Bad --agents entry {entry!r}; expected 'name:model'\"\n            )\n        name, _, model = entry.partition(\":\")\n        name = name.strip()\n        model = model.strip()\n        if not name or not model:\n            raise ValueError(\n                f\"Bad --agents entry {entry!r}; name and model both required\"\n            )\n        pairs.append((name, model))\n    if len(pairs) != 2:\n        raise ValueError(\n            f\"--agents must list exactly 2 entries for v1; got {len(pairs)}. \"\n            \"Format: 'name1:model1,name2:model2'.\"\n        )\n    return pairs\n\n",
+    "notes": "resolved lines 32-60 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_topology_profiles",
+    "evidence_path": "llm_client/cli/deliberate.py:149-188",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/cli/deliberate.py",
+    "line_range": [
+      149,
+      188
+    ],
+    "snippet": "    \"\"\"Register the ``deliberate-task`` subcommand on the CLI.\n\n    Wires the argparse surface for symmetric N-agent debate. Mirrors the\n    shape of the duet's ``register_parser`` so the two subcommands feel\n    consistent at the command line.\n    \"\"\"\n    p = subparsers.add_parser(\n        \"deliberate-task\",\n        help=\"Symmetric N-agent debate: two agents form independent positions and argue to convergence\",\n        description=(\n            \"Runs a symmetric deliberation between two coding agents. Each agent \"\n            \"writes an independent Position on the task, then iteratively reads \"\n            \"the peer's position and revises until convergence (rule-based) or \"\n            \"max_rounds is hit. Writes per-round position artifacts plus a \"\n            \"synthesis to --out. See docs/plans/33_deliberation_workflow.md for \"\n            \"the design rationale and how this differs from `duet-review`.\"\n        ),\n    )\n    p.add_argument(\n        \"--task-file\",\n        required=True,\n        help=\"Path to a JSON or YAML file with task_id, title, question, optionally success_criteria, constraints, extra\",\n    )\n    p.add_argument(\n        \"--workspace\",\n        required=True,\n        help=\"Absolute path the agents treat as cwd (overwrites task.workspace_path)\",\n    )\n    p.add_argument(\"--out\", required=True, help=\"Output directory for run artifacts\")\n    p.add_argument(\n        \"--agents\",\n        help=(\n            \"Comma-separated agent assignments 'name1:model1,name2:model2'. \"\n            \"Default: agent_a:codex/gpt-5.4,agent_b:claude-code/opus\"\n        ),\n    )\n    p.add_argument(\n        \"--max-rounds\",\n        type=int,\n        default=3,\n        help=\"Round cap; hitting this with residual disagreement promotes verdict to productive_disagreement (default: 3)\",\n    )\n    p.add_argument(\n        \"--synthesis-model\",",
+    "notes": "resolved lines 149-188 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/context.py:48-54",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/context.py",
+    "line_range": [
+      48,
+      54
+    ],
+    "snippet": "\n        Args:\n            trace_id: Shared across all nodes -- groups all calls in one trace.\n            max_budget: USD budget for the entire workflow run.\n            task_prefix: Prepended to stage name for per-node task labels.\n            stage: Current stage name (set automatically by build_workflow).\n        \"\"\"\n        self.trace_id = trace_id\n        self.max_budget = max_budget\n        self.task_prefix = task_prefix\n        self.stage = stage",
+    "notes": "resolved lines 48-54 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/context.py:112-147",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/context.py",
+    "line_range": [
+      112,
+      147
+    ],
+    "snippet": "        from llm_client.core.client import call_llm\n\n        kwargs.setdefault(\"task\", self.task)\n        kwargs.setdefault(\"trace_id\", self.trace_id)\n        kwargs.setdefault(\"max_budget\", self.max_budget)\n        return call_llm(model, messages, **kwargs)\n\n    async def acall_llm(\n        self,\n        model: str,\n        messages: list[dict[str, Any]],\n        **kwargs: Any,\n    ) -> Any:\n        \"\"\"Async version of call_llm with auto-injected workflow contracts.\"\"\"\n        from llm_client.core.client import acall_llm\n\n        kwargs.setdefault(\"task\", self.task)\n        kwargs.setdefault(\"trace_id\", self.trace_id)\n        kwargs.setdefault(\"max_budget\", self.max_budget)\n        return await acall_llm(model, messages, **kwargs)\n\n    def call_llm_structured(\n        self,\n        model: str,\n        messages: list[dict[str, Any]],\n        response_model: type[T],\n        **kwargs: Any,\n    ) -> tuple[T, Any]:\n        \"\"\"Call llm_client.call_llm_structured with auto-injected contracts.\n\n        Returns (parsed_model, LLMCallResult) tuple.\n        \"\"\"\n        from llm_client.core.client import call_llm_structured\n\n        kwargs.setdefault(\"task\", self.task)\n        kwargs.setdefault(\"trace_id\", self.trace_id)\n        kwargs.setdefault(\"max_budget\", self.max_budget)\n        return call_llm_structured(model, messages, response_model, **kwargs)\n\n    async def acall_llm_structured(",
+    "notes": "resolved lines 112-147 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/execution/call_contracts.py:136-145",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/execution/call_contracts.py",
+    "line_range": [
+      136,
+      145
+    ],
+    "snippet": "\n\ndef check_budget(trace_id: str, max_budget: float) -> None:\n    \"\"\"Raise before dispatch if a trace has already spent its budget.\"\"\"\n    if max_budget <= 0:\n        return\n    spent = _io_log.get_cost(trace_id=trace_id)\n    if spent >= max_budget:\n        raise LLMBudgetExceededError(\n            f\"Budget exceeded for trace {trace_id}: \"\n            f\"${spent:.4f} spent >= ${max_budget:.4f} limit\"\n        )\n\n",
+    "notes": "resolved lines 136-145 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:364-397",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      364,
+      397
+    ],
+    "snippet": "    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",\n            \"## Your prior position (last round)\",\n            \"Revise where your view changed after seeing the peer's input. Keep claims you still hold.\",\n            \"\",\n            json.dumps(own_prior, indent=2),\n        ])\n\n    user_parts.extend([\n        \"\",\n        \"## Schema for your response (Position)\",\n        json.dumps(Position.model_json_schema(), indent=2),\n        \"\",\n        f\"Return a Position JSON object with agent_name='{agent_name}' and round={round_num}. \"\n        \"Use 'initial' state on round 1, 'revised' when you changed your view, 'stable' when \"\n        \"your view didn't change but you acknowledge peer claims.\",\n    ])\n\n    return [",
+    "notes": "resolved lines 364-397 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:405-435",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      405,
+      435
+    ],
+    "snippet": "\n\ndef _synthesis_prompt(\n    task: dict[str, Any],\n    positions: list[dict[str, Any]],\n    verdict: DeliberationVerdict,\n) -> list[dict[str, Any]]:\n    \"\"\"Build the prompt for the synthesis stage.\"\"\"\n    system = (\n        \"You are synthesizing a structured deliberation between two agents. \"\n        \"Produce a final synthesis that merges what the agents agreed on and \"\n        \"explicitly lists what they could not agree on. Do not pick a winner \"\n        \"unless the residual disagreements are entirely ungrounded \u2014 surface \"\n        \"real disagreements rather than papering over them.\"\n    )\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        \"\",\n        f\"## Final verdict: {verdict}\",\n        \"\",\n        \"## Position history (chronological)\",\n        json.dumps(positions, indent=2),\n        \"\",\n        \"Return a synthesis with:\",\n        \"- A short merged-findings narrative.\",\n        \"- An explicit list of residual_disagreements (peer_claim_id, my_counterclaim, evidence_path).\",\n        \"- Any open_questions that neither agent resolved.\",\n    ]\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 405-435 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:471-480",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      471,
+      480
+    ],
+    "snippet": "        round_num = state[\"round\"]\n        latest = state.get(\"latest_positions\") or {}\n        own_prior = latest.get(agent.name)\n        peer_latest = latest.get(peer_name)\n\n        messages = _position_prompt(\n            task,\n            agent.name,\n            round_num,\n            own_prior=own_prior,\n            peer_latest=peer_latest,\n        )\n        position, _meta = ctx.call_llm_structured(\n            agent.model,",
+    "notes": "resolved lines 471-480 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:506-507",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      506,
+      507
+    ],
+    "snippet": "        new_latest = dict(latest)\n        new_latest[agent.name] = payload\n        new_history = list(state.get(\"position_history\") or [])\n        new_history.append(payload)\n        return {\n            \"latest_positions\": new_latest,",
+    "notes": "resolved lines 506-507 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:712-717",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      712,
+      717
+    ],
+    "snippet": "            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/opus).\n            Two-agent only in v1; N-agent is a future extension.\n        max_rounds: Cap on cycle count. Hitting this with residual\n            disagreement promotes the verdict to ``productive_disagreement``.\n        task_prefix: Task-label prefix for observability.\n        synthesis_model: Model for the synthesis stage. Defaults to\n            ``claude-code/opus`` for structured-output reliability.\n        checkpointer: LangGraph checkpointer. Defaults to ``InMemorySaver``.\n\n    Returns:",
+    "notes": "resolved lines 712-717 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:409-441",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      409,
+      441
+    ],
+    "snippet": "        peer_claim_id = disagreement.get(\"peer_claim_id\", \"?\")\n        synthetic_id = f\"disagreement_against_{peer_claim_id}\"\n        evidence_path = disagreement.get(\"evidence_path\", \"\")\n        for citation in parse_evidence_path(evidence_path):\n            entries.append(\n                _verify_one_citation(\n                    citation, workspace_path, agent_name, round_num, synthetic_id\n                )\n            )\n\n    return entries\n\n\n# ---------------------------------------------------------------------------\n# Cross-round lineage tracking\n# ---------------------------------------------------------------------------\n\n\ndef _claims_by_id(position: dict[str, Any]) -> dict[str, dict[str, Any]]:\n    return {c.get(\"claim_id\", \"?\"): c for c in (position.get(\"claims\") or [])}\n\n\ndef _detect_silent_rename(\n    prior: dict[str, dict[str, Any]],\n    current: dict[str, dict[str, Any]],\n) -> list[tuple[str, str, str]]:\n    \"\"\"Return list of ``(old_id, new_id, claim_text_excerpt)`` tuples.\n\n    A silent rename = same claim text in a different ``claim_id``. We compare\n    the first 80 chars of ``claim`` text as the equivalence key; trailing\n    edits to a claim wouldn't get flagged as renames (intentional \u2014 the\n    point is to catch IDs swapped wholesale).\n    \"\"\"\n    prior_text_to_id = {\n        (c.get(\"claim\") or \"\")[:80]: cid for cid, c in prior.items()\n    }\n    renames: list[tuple[str, str, str]] = []",
+    "notes": "resolved lines 409-441 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/duet.py:471-499",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet.py",
+    "line_range": [
+      471,
+      499
+    ],
+    "snippet": "    family: TaskFamily | None = None,\n) -> list[dict[str, Any]]:\n    system = (\n        \"You are the reviewer in an implementer/reviewer duet. Your output is \"\n        \"consumed by an automatic router, so the verdict must be one of: pass, \"\n        \"revise, block. Use 'block' only when the plan should not proceed without \"\n        \"human re-scoping. Do not edit any files.\"\n    )\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        *_family_context_blocks(family, task),\n        \"\",\n        \"## Plan narrative\",\n        plan_md,\n        \"\",\n        \"## Plan sidecar (JSON)\",\n        json.dumps(plan_sidecar, indent=2),\n        \"\",\n        \"Return a PlanReview JSON object. Groundedness rules: every blocker \"\n        \"MUST include an evidence_path (e.g. 'docs/plans/...md#section' or \"\n        \"'file.py:LL-LL') \u2014 a blocker without a citation is opinion, not \"\n        \"evidence, and the router treats it as a process error. If you \"\n        \"cannot cite a source, downgrade to a nit or an unverified_claim. \"\n        \"Field shapes (all object lists are typed Pydantic models \u2014 see \"\n        \"the schema for required fields): blockers[] take PlanReviewBlocker \"\n        \"(claim + evidence_path + suggested_fix); nits[] take Nit \"\n        \"(claim + optional location + optional suggested_fix; non-blocking \"\n        \"reviewer observations); unverified_claims[] take UnverifiedClaim \"\n        \"(claim + reason_unverified; things the plan asserts that you \"\n        \"could not check from the available artifacts).\",\n    ]\n    if family and family.plan_review_prompt_addendum:",
+    "notes": "resolved lines 471-499 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/duet.py:559-591",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet.py",
+    "line_range": [
+      559,
+      591
+    ],
+    "snippet": "    family: TaskFamily | None = None,\n) -> list[dict[str, Any]]:\n    system = (\n        \"You are the reviewer in an implementer/reviewer duet. Your output is \"\n        \"consumed by an automatic router; verdict must be one of: pass, revise, \"\n        \"block. Inspect the workspace via your file-reading tools to verify the \"\n        \"diff matches the narrative. Do not edit any files.\"\n    )\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        *_family_context_blocks(family, task),\n        \"\",\n        \"## Approved plan\",\n        plan_md,\n        \"\",\n        \"## Implementer narrative\",\n        implement_md,\n        \"\",\n        \"## Implementer sidecar (JSON)\",\n        json.dumps(implement_sidecar, indent=2),\n        \"\",\n        \"Return an ImplementReview JSON object. Groundedness rules: every \"\n        \"correctness_findings entry MUST have file_path (str) and line (int) \u2014 \"\n        \"the schema enforces this and ungrounded findings will fail \"\n        \"validation. If you cannot cite a specific line, use \"\n        \"unverified_test_claims (list[str]) or scope_drift_findings \"\n        \"(list[str]) instead. Field shapes (typed Pydantic models \u2014 see \"\n        \"the schema for required fields): correctness_findings[] take \"\n        \"CorrectnessFinding (file_path + line + claim + severity); \"\n        \"contract_violations[] take ContractViolation (constraint + \"\n        \"violation + evidence_path; reference one of the task's stated \"\n        \"constraints by name in 'constraint'). Severity defaults to \"\n        \"'warn'; use 'high' only when the finding would break correctness \"\n        \"or a stated contract.\",\n    ]\n    if family and family.implement_review_prompt_addendum:",
+    "notes": "resolved lines 559-591 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/duet.py:797-823",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet.py",
+    "line_range": [
+      797,
+      823
+    ],
+    "snippet": "\n\ndef _make_plan_review_router(max_revise_cycles: int) -> Callable[[dict[str, Any]], str]:\n    def plan_review_router(state: dict[str, Any]) -> str:\n        review = state.get(\"plan_review\") or {}\n        verdict = review.get(\"verdict\", \"block\")\n        if verdict == \"pass\":\n            return \"implement\"\n        if verdict == \"revise\":\n            # plan_cycle has already been incremented in the review node\n            if state.get(\"plan_cycle\", 0) > max_revise_cycles:\n                return \"signoff_block\"\n            return \"plan\"\n        return \"signoff_block\"\n\n    return plan_review_router\n\n\ndef _make_implement_review_router(max_revise_cycles: int) -> Callable[[dict[str, Any]], str]:\n    def implement_review_router(state: dict[str, Any]) -> str:\n        review = state.get(\"implement_review\") or {}\n        verdict = review.get(\"verdict\", \"block\")\n        if verdict == \"pass\":\n            return \"signoff_pass\"\n        if verdict == \"revise\":\n            if state.get(\"implement_cycle\", 0) > max_revise_cycles:\n                return \"signoff_block\"\n            return \"implement\"\n        return \"signoff_block\"\n\n    return implement_review_router",
+    "notes": "resolved lines 797-823 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/duet.py:833-858",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet.py",
+    "line_range": [
+      833,
+      858
+    ],
+    "snippet": "\n\ndef build_duet_workflow(\n    *,\n    run_dir: str | Path,\n    task: DuetTask | dict[str, Any],\n    trace_id: str,\n    max_budget: float,\n    roles: DuetRoles | None = None,\n    max_revise_cycles: int = 1,\n    task_prefix: str = \"duet\",\n    task_family: str = \"generic\",\n    checkpointer: Any | None = None,\n) -> tuple[Any, dict[str, Any]]:\n    \"\"\"Build a compiled LangGraph app for the implementer/reviewer duet.\n\n    Args:\n        run_dir: Directory for durable artifacts (created if missing).\n        task: The duet task. Accepts either a DuetTask or a plain dict.\n        trace_id: Shared trace_id across all LLM calls in the run.\n        max_budget: USD budget for the entire run (passed through WorkflowContext).\n        roles: Per-stage model assignment. Defaults applied if None.\n        max_revise_cycles: How many ``revise`` verdicts each gate allows before\n            promoting to ``block``. Defaults to 1 (i.e. one retry).\n        task_prefix: Task-label prefix for observability. Defaults to ``\"duet\"``.\n        task_family: Registered profile name. Defaults to ``\"generic\"``. Lookup\n            via ``llm_client.workflow.duet_registry.get_task_family``; unknown\n            names raise ``KeyError``.\n        checkpointer: LangGraph checkpointer. Defaults to InMemorySaver.\n",
+    "notes": "resolved lines 833-858 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/duet_base.py:8-12",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet_base.py",
+    "line_range": [
+      8,
+      12
+    ],
+    "snippet": "captures everything a domain owns; the chassis owns the rest.\n\n``PlanReviewBase`` / ``ImplementReviewBase`` declare the minimum contract that\nany reviewer schema must honor: a router-grade ``verdict`` plus the\n``reviewer_summary`` / ``reviewer_model`` fields used by observability and the\nsignoff artifact. Domain profiles subclass these and add fields; the router\nonly branches on ``verdict``, so subclass additions don't break control flow.\n\"\"\"\n",
+    "notes": "resolved lines 8-12 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/duet_base.py:68-100",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet_base.py",
+    "line_range": [
+      68,
+      100
+    ],
+    "snippet": "\n\n@dataclass(frozen=True)\nclass TaskFamily:\n    \"\"\"A registered duet profile.\n\n    Profiles let domains plug in their own reviewer schemas, prompt addenda,\n    and context loaders without forking the chassis. Use the registry\n    (``register_task_family`` / ``get_task_family``) to look up by name.\n\n    Attributes:\n        name: Stable identifier the chassis and CLI resolve by.\n        plan_review_schema: Pydantic class for plan reviewer output; must\n            extend ``PlanReviewBase`` so the router can read ``verdict``.\n        implement_review_schema: Same contract for implementation reviewer.\n        plan_prompt_addendum: Extra text appended to the plan-implementer's\n            user message after the chassis's base prompt.\n        plan_review_prompt_addendum: Extra text for the plan reviewer.\n        implement_prompt_addendum: Extra text for the implementer.\n        implement_review_prompt_addendum: Extra text for the impl reviewer.\n        context_loader: Callable that receives the task dict and returns\n            ``{label: rendered_content}`` blocks the chassis renders as\n            ``## <label>`` sections before the addendum.\n    \"\"\"\n\n    name: str\n    plan_review_schema: type[PlanReviewBase]\n    implement_review_schema: type[ImplementReviewBase]\n    plan_prompt_addendum: str = \"\"\n    plan_review_prompt_addendum: str = \"\"\n    implement_prompt_addendum: str = \"\"\n    implement_review_prompt_addendum: str = \"\"\n    context_loader: Callable[[dict[str, Any]], dict[str, str]] = field(\n        default=_empty_context_loader\n    )\n\n",
+    "notes": "resolved lines 68-100 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate.py:4-7",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      4,
+      7
+    ],
+    "snippet": "\nWhere the duet is asymmetric (one implementer + one gating reviewer + 1 revise\ncycle), deliberation is symmetric: both agents get the same task brief and\nworkspace, each writes its own ``Position`` (claims + evidence + open\nquestions), they exchange positions, and they iterate until a rule-based\nconvergence detector fires or the round cap is hit.\n\nTopology (two-agent v1):",
+    "notes": "resolved lines 4-7 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate.py:9-21",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      9,
+      21
+    ],
+    "snippet": "convergence detector fires or the round cap is hit.\n\nTopology (two-agent v1):\n  round 1: agent_a writes initial position \u2192 agent_b writes initial position\n  round 2: agent_a reads agent_b's prior + own prior, writes revised position\n           \u2192 agent_b reads agent_a's latest + own prior, writes revised\n  ...\n  convergence_check after each round:\n    - converged: both latest positions have empty ``disagreed_with_peer``\n      AND ``round >= 2`` AND each agent's ``agreed_with_peer`` covers the\n      peer's claim IDs.\n    - productive_disagreement: round cap reached with residual\n      ``disagreed_with_peer`` on either side.\n    - stalled: both agents emit empty positions.\n  synthesis: third LLM call (or one of the agents) merges findings + lists\n  residual disagreements. Persisted to ``synthesis.json``.\n",
+    "notes": "resolved lines 9-21 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate.py:364-380",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      364,
+      380
+    ],
+    "snippet": "    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",",
+    "notes": "resolved lines 364-380 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_a",
+    "round": 1,
+    "claim_id": "a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate.py:690-740",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      690,
+      740
+    ],
+    "snippet": "\n\ndef build_deliberation_workflow(\n    *,\n    run_dir: str | Path,\n    task: DeliberationTask | dict[str, Any],\n    trace_id: str,\n    max_budget: float,\n    agents: list[tuple[str, str]] | None = None,\n    max_rounds: int = 3,\n    task_prefix: str = \"deliberate\",\n    synthesis_model: str | None = None,\n    checkpointer: Any | None = None,\n) -> tuple[Any, dict[str, Any]]:\n    \"\"\"Build a compiled LangGraph app for the symmetric deliberation workflow.\n\n    Args:\n        run_dir: Directory for durable artifacts (created if missing).\n        task: The deliberation task. Accepts ``DeliberationTask`` or a dict.\n        trace_id: Shared trace_id across all LLM calls in the run.\n        max_budget: USD budget for the entire run.\n        agents: List of ``(name, model)`` pairs. Defaults to the\n            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/opus).\n            Two-agent only in v1; N-agent is a future extension.\n        max_rounds: Cap on cycle count. Hitting this with residual\n            disagreement promotes the verdict to ``productive_disagreement``.\n        task_prefix: Task-label prefix for observability.\n        synthesis_model: Model for the synthesis stage. Defaults to\n            ``claude-code/opus`` for structured-output reliability.\n        checkpointer: LangGraph checkpointer. Defaults to ``InMemorySaver``.\n\n    Returns:\n        ``(compiled_app, initial_state)``.\n\n    Raises:\n        ImportError: If ``langgraph`` is not installed.\n        ValueError: If ``agents`` has fewer than 2 entries (v1 requires exactly 2).\n    \"\"\"\n    from llm_client.workflow.builder import build_workflow\n\n    task_obj = task if isinstance(task, DeliberationTask) else DeliberationTask(**task)\n    task_dict = task_obj.model_dump()\n\n    run_dir_path = Path(run_dir)\n    run_dir_path.mkdir(parents=True, exist_ok=True)\n    _persist_json(str(run_dir_path), \"task.json\", task_dict)\n\n    pair = agents if agents is not None else list(DEFAULT_AGENT_PAIR)\n    if len(pair) != 2:\n        raise ValueError(\n            f\"Deliberation v1 requires exactly 2 agents; got {len(pair)}. \"\n            \"N-agent (\u22653) is a future extension; track in Plan #33 notes.\"\n        )\n    agent_a_name, agent_a_model = pair[0]\n    agent_b_name, agent_b_model = pair[1]",
+    "notes": "resolved lines 690-740 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_verifier_writeonly",
+    "evidence_path": "llm_client/workflow/deliberate.py:339-402",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      339,
+      402
+    ],
+    "snippet": "\n\ndef _position_prompt(\n    task: dict[str, Any],\n    agent_name: str,\n    round_num: int,\n    own_prior: dict[str, Any] | None,\n    peer_latest: dict[str, Any] | None,\n) -> list[dict[str, Any]]:\n    \"\"\"Build the prompt for one agent's turn at one round.\"\"\"\n    system = (\n        \"You are one of two coding agents in a structured deliberation. The other \"\n        \"agent is investigating the same question independently. Your output is \"\n        \"consumed by an automatic convergence detector, so it MUST validate against \"\n        \"the Position schema. Groundedness rule: every claim and every \"\n        \"disagreement must include an evidence_path citation (file:line, file path, \"\n        \"or doc#section). If you cannot cite a source, downgrade to an \"\n        \"open_question instead of asserting a claim.\"\n    )\n\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        \"\",\n        f\"## Your role: {agent_name} (round {round_num})\",\n    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",\n            \"## Your prior position (last round)\",\n            \"Revise where your view changed after seeing the peer's input. Keep claims you still hold.\",\n            \"\",\n            json.dumps(own_prior, indent=2),\n        ])\n\n    user_parts.extend([\n        \"\",\n        \"## Schema for your response (Position)\",\n        json.dumps(Position.model_json_schema(), indent=2),\n        \"\",\n        f\"Return a Position JSON object with agent_name='{agent_name}' and round={round_num}. \"\n        \"Use 'initial' state on round 1, 'revised' when you changed your view, 'stable' when \"\n        \"your view didn't change but you acknowledge peer claims.\",\n    ])\n\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 339-402 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_verifier_writeonly",
+    "evidence_path": "llm_client/workflow/deliberate.py:405-435",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      405,
+      435
+    ],
+    "snippet": "\n\ndef _synthesis_prompt(\n    task: dict[str, Any],\n    positions: list[dict[str, Any]],\n    verdict: DeliberationVerdict,\n) -> list[dict[str, Any]]:\n    \"\"\"Build the prompt for the synthesis stage.\"\"\"\n    system = (\n        \"You are synthesizing a structured deliberation between two agents. \"\n        \"Produce a final synthesis that merges what the agents agreed on and \"\n        \"explicitly lists what they could not agree on. Do not pick a winner \"\n        \"unless the residual disagreements are entirely ungrounded \u2014 surface \"\n        \"real disagreements rather than papering over them.\"\n    )\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        \"\",\n        f\"## Final verdict: {verdict}\",\n        \"\",\n        \"## Position history (chronological)\",\n        json.dumps(positions, indent=2),\n        \"\",\n        \"Return a synthesis with:\",\n        \"- A short merged-findings narrative.\",\n        \"- An explicit list of residual_disagreements (peer_claim_id, my_counterclaim, evidence_path).\",\n        \"- Any open_questions that neither agent resolved.\",\n    ]\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 405-435 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_verifier_writeonly",
+    "evidence_path": "llm_client/workflow/deliberate.py:585-606",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      585,
+      606
+    ],
+    "snippet": "    \"\"\"Build the synthesis node: one LLM call to merge findings + residuals.\"\"\"\n\n    def synthesis_node(state: dict[str, Any]) -> dict[str, Any]:\n        ctx = WorkflowContext.current(state, stage=\"deliberate.synthesis\")\n        task = state[\"task\"]\n        history = state.get(\"position_history\") or []\n        messages = _synthesis_prompt(task, history, verdict)\n        # Synthesis schema is intentionally loose v1 \u2014 a Position with\n        # ``disagreed_with_peer`` populated captures everything we need.\n        # Future refinement: a SynthesisArtifact schema.\n        synthesis_position, _meta = ctx.call_llm_structured(\n            synthesis_model,\n            messages,\n            Position,\n            timeout=DEFAULT_DELIBERATION_STAGE_TIMEOUT_S,\n            codex_transport=DEFAULT_DELIBERATION_CODEX_TRANSPORT,\n            cwd=task[\"workspace_path\"],\n        )\n        payload = synthesis_position.model_dump()\n        payload[\"agent_name\"] = \"synthesis\"\n        payload[\"round\"] = state.get(\"round\", 0)\n        payload[\"reviewer_model\"] = synthesis_model\n        _persist_json(state[\"run_dir\"], \"synthesis.json\", payload)\n        return {\"final_verdict\": verdict}\n\n    return synthesis_node",
+    "notes": "resolved lines 585-606 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_verifier_writeonly",
+    "evidence_path": "llm_client/workflow/deliberate.py:655-682",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      655,
+      682
+    ],
+    "snippet": "\n\ndef _make_post_round_router() -> Callable[[dict[str, Any]], str]:\n    \"\"\"After each round, decide whether to continue or terminate.\n\n    Returns the next node name.\n    \"\"\"\n\n    def router(state: dict[str, Any]) -> str:\n        latest = state.get(\"latest_positions\") or {}\n        round_num = state.get(\"round\", 0)\n        max_rounds = state.get(\"max_rounds\", 3)\n        # Plan #34: thread the verifier ledger into the convergence check.\n        ledger_entries = state.get(\"verifier_ledger\") or []\n        ledger: VerifierLedger | None = None\n        if ledger_entries:\n            ledger = VerifierLedger(\n                entries=[LedgerEntry(**e) for e in ledger_entries],\n            )\n        verdict = detect_convergence(latest, round_num, max_rounds, ledger=ledger)\n        if verdict is None:\n            return \"agent_a\"  # continue to next round\n        if verdict == \"converged\":\n            return \"synthesis_converged\"\n        if verdict == \"stalled\":\n            return \"signoff_stalled\"\n        # productive_disagreement\n        return \"synthesis_productive_disagreement\"\n\n    return router\n\n",
+    "notes": "resolved lines 655-682 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_polite_asymmetric_claim_count",
+    "evidence_path": "llm_client/workflow/deliberate.py:260-294",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      260,
+      294
+    ],
+    "snippet": "        return None\n\n    # Stalled: every agent emitted zero claims.\n    if all(not pos.get(\"claims\") for pos in latest_positions.values()):\n        return \"stalled\"\n\n    if round_num < 2:\n        # Need at least one cross-agent exchange before convergence can fire.\n        # Don't terminate yet unless we already detected stalled above.\n        return None\n\n    # Build a quick map of {agent_name: position} for cross-referencing.\n    names = list(latest_positions)\n    if len(names) < 2:\n        # Single-agent deliberation makes no sense; treat as stalled.\n        return \"stalled\"\n\n    converged_signal = True\n    for agent_name, pos in latest_positions.items():\n        if pos.get(\"disagreed_with_peer\"):\n            converged_signal = False\n            break\n        # Check that this agent acknowledged each peer's claims.\n        agreed_set = set(pos.get(\"agreed_with_peer\") or [])\n        for other_name, other_pos in latest_positions.items():\n            if other_name == agent_name:\n                continue\n            other_claim_ids = {\n                c.get(\"claim_id\") for c in (other_pos.get(\"claims\") or []) if c.get(\"claim_id\")\n            }\n            if not other_claim_ids.issubset(agreed_set):\n                converged_signal = False\n                break\n        if not converged_signal:\n            break\n\n    if converged_signal:\n        # Plan #34: when a ledger is provided, also require that the latest\n        # round in the ledger has no unverified citations or lineage flags.",
+    "notes": "resolved lines 260-294 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_synthesis_schema_misfit",
+    "evidence_path": "llm_client/workflow/deliberate.py:132-143",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      132,
+      143
+    ],
+    "snippet": "\n\nclass DisagreementAtom(BaseModel):\n    \"\"\"A specific disagreement with one of the peer's claims.\n\n    Required ``evidence_path`` keeps disagreement falsifiable \u2014 an agent\n    can't just say \"I disagree\" without citing why.\n    \"\"\"\n\n    model_config = ConfigDict(extra=\"forbid\")\n\n    peer_claim_id: str\n    my_counterclaim: str\n    evidence_path: str\n\n",
+    "notes": "resolved lines 132-143 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_synthesis_schema_misfit",
+    "evidence_path": "llm_client/workflow/deliberate.py:585-606",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      585,
+      606
+    ],
+    "snippet": "    \"\"\"Build the synthesis node: one LLM call to merge findings + residuals.\"\"\"\n\n    def synthesis_node(state: dict[str, Any]) -> dict[str, Any]:\n        ctx = WorkflowContext.current(state, stage=\"deliberate.synthesis\")\n        task = state[\"task\"]\n        history = state.get(\"position_history\") or []\n        messages = _synthesis_prompt(task, history, verdict)\n        # Synthesis schema is intentionally loose v1 \u2014 a Position with\n        # ``disagreed_with_peer`` populated captures everything we need.\n        # Future refinement: a SynthesisArtifact schema.\n        synthesis_position, _meta = ctx.call_llm_structured(\n            synthesis_model,\n            messages,\n            Position,\n            timeout=DEFAULT_DELIBERATION_STAGE_TIMEOUT_S,\n            codex_transport=DEFAULT_DELIBERATION_CODEX_TRANSPORT,\n            cwd=task[\"workspace_path\"],\n        )\n        payload = synthesis_position.model_dump()\n        payload[\"agent_name\"] = \"synthesis\"\n        payload[\"round\"] = state.get(\"round\", 0)\n        payload[\"reviewer_model\"] = synthesis_model\n        _persist_json(state[\"run_dir\"], \"synthesis.json\", payload)\n        return {\"final_verdict\": verdict}\n\n    return synthesis_node",
+    "notes": "resolved lines 585-606 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_synthesis_schema_misfit",
+    "evidence_path": "llm_client/workflow/deliberate.py:611-647",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      611,
+      647
+    ],
+    "snippet": "\n\ndef _make_signoff_node(verdict: DeliberationVerdict) -> Callable[[dict[str, Any]], dict[str, Any]]:\n    \"\"\"Build the terminal signoff node.\"\"\"\n\n    def signoff_node(state: dict[str, Any]) -> dict[str, Any]:\n        task = state[\"task\"]\n        run_dir = state[\"run_dir\"]\n        agents = state.get(\"agents\") or []\n        agent_names = [a[\"name\"] for a in agents]\n        history = state.get(\"position_history\") or []\n        residual: list[dict[str, Any]] = []\n        for pos in (state.get(\"latest_positions\") or {}).values():\n            for dis in pos.get(\"disagreed_with_peer\") or []:\n                residual.append(dis)\n\n        artifacts = {\"task\": \"task.json\", \"synthesis\": \"synthesis.json\"}\n        if state.get(\"verifier_ledger\"):\n            artifacts[\"verifier_ledger\"] = \"verifier_ledger.json\"\n        for i, pos in enumerate(history):\n            agent_name = pos.get(\"agent_name\", f\"unknown_{i}\")\n            round_num = pos.get(\"round\", 0)\n            artifacts[f\"position_{agent_name}_round_{round_num}\"] = (\n                f\"position_{agent_name}_round_{round_num}.json\"\n            )\n\n        signoff = DeliberationSignoff(\n            task_id=task.get(\"task_id\", \"?\"),\n            final_verdict=verdict,\n            total_rounds=state.get(\"round\", 0),\n            agents=agent_names,\n            residual_disagreements=[DisagreementAtom(**d) for d in residual],\n            trace_id=state.get(\"_wf_trace_id\", \"\"),\n            artifacts_index=artifacts,\n        )\n        _persist_json(run_dir, \"signoff.json\", signoff.model_dump())\n        return {\"final_verdict\": verdict}\n\n    return signoff_node\n\n",
+    "notes": "resolved lines 611-647 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_round1_asymmetry_factual",
+    "evidence_path": "llm_client/workflow/deliberate.py:364-371",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      364,
+      371
+    ],
+    "snippet": "    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([",
+    "notes": "resolved lines 364-371 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_round1_asymmetry_factual",
+    "evidence_path": "llm_client/workflow/deliberate.py:466-480",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      466,
+      480
+    ],
+    "snippet": "    \"\"\"\n\n    def position_node(state: dict[str, Any]) -> dict[str, Any]:\n        ctx = WorkflowContext.current(state, stage=f\"deliberate.{agent.name}\")\n        task = state[\"task\"]\n        round_num = state[\"round\"]\n        latest = state.get(\"latest_positions\") or {}\n        own_prior = latest.get(agent.name)\n        peer_latest = latest.get(peer_name)\n\n        messages = _position_prompt(\n            task,\n            agent.name,\n            round_num,\n            own_prior=own_prior,\n            peer_latest=peer_latest,\n        )\n        position, _meta = ctx.call_llm_structured(\n            agent.model,",
+    "notes": "resolved lines 466-480 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_round1_asymmetry_factual",
+    "evidence_path": "llm_client/workflow/deliberate.py:784-795",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      784,
+      795
+    ],
+    "snippet": "            \"signoff_stalled\": signoff_stalled_node,\n        },\n        edges=[\n            (\"agent_a\", \"agent_b\"),\n            (\"agent_b\", \"verifier\"),\n            (\"verifier\", \"round_increment\"),\n            (\"synthesis_converged\", \"signoff_pass\"),\n            (\"synthesis_productive_disagreement\", \"signoff_pd\"),\n        ],\n        conditional_edges={\n            \"round_increment\": post_round_router,\n        },\n        entry_point=\"agent_a\",\n        finish_points=[\"signoff_pass\", \"signoff_pd\", \"signoff_stalled\"],\n        checkpointer=checkpointer,\n    )",
+    "notes": "resolved lines 784-795 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_no_task_family_hook",
+    "evidence_path": "llm_client/workflow/deliberate.py:24-31",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      24,
+      31
+    ],
+    "snippet": "  residual disagreements. Persisted to ``synthesis.json``.\n\nShares chassis with the duet:\n- ``TaskFamily`` registry (Plan #31) \u2014 deliberation can also be specialized\n  by profile when domain-specific Position fields are needed.\n- Grounded schemas \u2014 ``PositionClaim.evidence_path`` and\n  ``DisagreementAtom.evidence_path`` are required (Plan #30 contract).\n- ``WorkflowContext`` for trace/budget/observability.\n- Model alias resolution (Plan #29 followup) + cwd\u2194working_directory alias\n  (Plan #30 followup).\n\nSee ``docs/plans/33_deliberation_workflow.md`` for the design rationale.",
+    "notes": "resolved lines 24-31 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_no_task_family_hook",
+    "evidence_path": "llm_client/workflow/deliberate.py:339-402",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      339,
+      402
+    ],
+    "snippet": "\n\ndef _position_prompt(\n    task: dict[str, Any],\n    agent_name: str,\n    round_num: int,\n    own_prior: dict[str, Any] | None,\n    peer_latest: dict[str, Any] | None,\n) -> list[dict[str, Any]]:\n    \"\"\"Build the prompt for one agent's turn at one round.\"\"\"\n    system = (\n        \"You are one of two coding agents in a structured deliberation. The other \"\n        \"agent is investigating the same question independently. Your output is \"\n        \"consumed by an automatic convergence detector, so it MUST validate against \"\n        \"the Position schema. Groundedness rule: every claim and every \"\n        \"disagreement must include an evidence_path citation (file:line, file path, \"\n        \"or doc#section). If you cannot cite a source, downgrade to an \"\n        \"open_question instead of asserting a claim.\"\n    )\n\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        \"\",\n        f\"## Your role: {agent_name} (round {round_num})\",\n    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",\n            \"## Your prior position (last round)\",\n            \"Revise where your view changed after seeing the peer's input. Keep claims you still hold.\",\n            \"\",\n            json.dumps(own_prior, indent=2),\n        ])\n\n    user_parts.extend([\n        \"\",\n        \"## Schema for your response (Position)\",\n        json.dumps(Position.model_json_schema(), indent=2),\n        \"\",\n        f\"Return a Position JSON object with agent_name='{agent_name}' and round={round_num}. \"\n        \"Use 'initial' state on round 1, 'revised' when you changed your view, 'stable' when \"\n        \"your view didn't change but you acknowledge peer claims.\",\n    ])\n\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 339-402 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_no_task_family_hook",
+    "evidence_path": "llm_client/workflow/deliberate.py:690-740",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      690,
+      740
+    ],
+    "snippet": "\n\ndef build_deliberation_workflow(\n    *,\n    run_dir: str | Path,\n    task: DeliberationTask | dict[str, Any],\n    trace_id: str,\n    max_budget: float,\n    agents: list[tuple[str, str]] | None = None,\n    max_rounds: int = 3,\n    task_prefix: str = \"deliberate\",\n    synthesis_model: str | None = None,\n    checkpointer: Any | None = None,\n) -> tuple[Any, dict[str, Any]]:\n    \"\"\"Build a compiled LangGraph app for the symmetric deliberation workflow.\n\n    Args:\n        run_dir: Directory for durable artifacts (created if missing).\n        task: The deliberation task. Accepts ``DeliberationTask`` or a dict.\n        trace_id: Shared trace_id across all LLM calls in the run.\n        max_budget: USD budget for the entire run.\n        agents: List of ``(name, model)`` pairs. Defaults to the\n            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/opus).\n            Two-agent only in v1; N-agent is a future extension.\n        max_rounds: Cap on cycle count. Hitting this with residual\n            disagreement promotes the verdict to ``productive_disagreement``.\n        task_prefix: Task-label prefix for observability.\n        synthesis_model: Model for the synthesis stage. Defaults to\n            ``claude-code/opus`` for structured-output reliability.\n        checkpointer: LangGraph checkpointer. Defaults to ``InMemorySaver``.\n\n    Returns:\n        ``(compiled_app, initial_state)``.\n\n    Raises:\n        ImportError: If ``langgraph`` is not installed.\n        ValueError: If ``agents`` has fewer than 2 entries (v1 requires exactly 2).\n    \"\"\"\n    from llm_client.workflow.builder import build_workflow\n\n    task_obj = task if isinstance(task, DeliberationTask) else DeliberationTask(**task)\n    task_dict = task_obj.model_dump()\n\n    run_dir_path = Path(run_dir)\n    run_dir_path.mkdir(parents=True, exist_ok=True)\n    _persist_json(str(run_dir_path), \"task.json\", task_dict)\n\n    pair = agents if agents is not None else list(DEFAULT_AGENT_PAIR)\n    if len(pair) != 2:\n        raise ValueError(\n            f\"Deliberation v1 requires exactly 2 agents; got {len(pair)}. \"\n            \"N-agent (\u22653) is a future extension; track in Plan #33 notes.\"\n        )\n    agent_a_name, agent_a_model = pair[0]\n    agent_b_name, agent_b_model = pair[1]",
+    "notes": "resolved lines 690-740 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_no_task_family_hook",
+    "evidence_path": "llm_client/workflow/duet.py:465-506",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet.py",
+    "line_range": [
+      465,
+      506
+    ],
+    "snippet": "\n\ndef _plan_review_prompt(\n    task: dict[str, Any],\n    plan_md: str,\n    plan_sidecar: dict[str, Any],\n    family: TaskFamily | None = None,\n) -> list[dict[str, Any]]:\n    system = (\n        \"You are the reviewer in an implementer/reviewer duet. Your output is \"\n        \"consumed by an automatic router, so the verdict must be one of: pass, \"\n        \"revise, block. Use 'block' only when the plan should not proceed without \"\n        \"human re-scoping. Do not edit any files.\"\n    )\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        *_family_context_blocks(family, task),\n        \"\",\n        \"## Plan narrative\",\n        plan_md,\n        \"\",\n        \"## Plan sidecar (JSON)\",\n        json.dumps(plan_sidecar, indent=2),\n        \"\",\n        \"Return a PlanReview JSON object. Groundedness rules: every blocker \"\n        \"MUST include an evidence_path (e.g. 'docs/plans/...md#section' or \"\n        \"'file.py:LL-LL') \u2014 a blocker without a citation is opinion, not \"\n        \"evidence, and the router treats it as a process error. If you \"\n        \"cannot cite a source, downgrade to a nit or an unverified_claim. \"\n        \"Field shapes (all object lists are typed Pydantic models \u2014 see \"\n        \"the schema for required fields): blockers[] take PlanReviewBlocker \"\n        \"(claim + evidence_path + suggested_fix); nits[] take Nit \"\n        \"(claim + optional location + optional suggested_fix; non-blocking \"\n        \"reviewer observations); unverified_claims[] take UnverifiedClaim \"\n        \"(claim + reason_unverified; things the plan asserts that you \"\n        \"could not check from the available artifacts).\",\n    ]\n    if family and family.plan_review_prompt_addendum:\n        user_parts.append(family.plan_review_prompt_addendum)\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 465-506 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_no_task_family_hook",
+    "evidence_path": "llm_client/workflow/duet_base.py:68-100",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet_base.py",
+    "line_range": [
+      68,
+      100
+    ],
+    "snippet": "\n\n@dataclass(frozen=True)\nclass TaskFamily:\n    \"\"\"A registered duet profile.\n\n    Profiles let domains plug in their own reviewer schemas, prompt addenda,\n    and context loaders without forking the chassis. Use the registry\n    (``register_task_family`` / ``get_task_family``) to look up by name.\n\n    Attributes:\n        name: Stable identifier the chassis and CLI resolve by.\n        plan_review_schema: Pydantic class for plan reviewer output; must\n            extend ``PlanReviewBase`` so the router can read ``verdict``.\n        implement_review_schema: Same contract for implementation reviewer.\n        plan_prompt_addendum: Extra text appended to the plan-implementer's\n            user message after the chassis's base prompt.\n        plan_review_prompt_addendum: Extra text for the plan reviewer.\n        implement_prompt_addendum: Extra text for the implementer.\n        implement_review_prompt_addendum: Extra text for the impl reviewer.\n        context_loader: Callable that receives the task dict and returns\n            ``{label: rendered_content}`` blocks the chassis renders as\n            ``## <label>`` sections before the addendum.\n    \"\"\"\n\n    name: str\n    plan_review_schema: type[PlanReviewBase]\n    implement_review_schema: type[ImplementReviewBase]\n    plan_prompt_addendum: str = \"\"\n    plan_review_prompt_addendum: str = \"\"\n    implement_prompt_addendum: str = \"\"\n    implement_review_prompt_addendum: str = \"\"\n    context_loader: Callable[[dict[str, Any]], dict[str, str]] = field(\n        default=_empty_context_loader\n    )\n\n",
+    "notes": "resolved lines 68-100 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_no_task_family_hook",
+    "evidence_path": "llm_client/workflow/duet_registry.py:20-47",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/duet_registry.py",
+    "line_range": [
+      20,
+      47
+    ],
+    "snippet": "\n\ndef register_task_family(family: TaskFamily) -> None:\n    \"\"\"Register a profile. Raises if ``family.name`` is already taken.\n\n    Duplicate registration is a programmer error (likely a copy-paste or an\n    import ordering problem), not a silent overwrite.\n    \"\"\"\n    if family.name in _REGISTRY:\n        raise ValueError(\n            f\"TaskFamily {family.name!r} already registered. \"\n            f\"Use a distinct name or remove the prior registration.\"\n        )\n    _REGISTRY[family.name] = family\n\n\ndef get_task_family(name: str) -> TaskFamily:\n    \"\"\"Resolve a profile by name. Raises if not registered.\n\n    No silent fallback to ``generic`` \u2014 an unknown name means the caller\n    misspelled the profile or forgot to import the registering module.\n    \"\"\"\n    if name not in _REGISTRY:\n        available = sorted(_REGISTRY) or [\"<none registered yet>\"]\n        raise KeyError(\n            f\"TaskFamily {name!r} is not registered. Available: {available}. \"\n            f\"Built-in profiles are registered via llm_client.workflow.profiles; \"\n            f\"ensure that subpackage is imported before lookup.\"\n        )\n    return _REGISTRY[name]\n\n",
+    "notes": "resolved lines 20-47 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_max_rounds_failure_mode",
+    "evidence_path": "llm_client/workflow/deliberate.py:73",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      73,
+      73
+    ],
+    "snippet": "# Stage timeouts mirror the duet defaults \u2014 agent calls take minutes when\n# they explore the workspace.\nDEFAULT_DELIBERATION_STAGE_TIMEOUT_S = 300\nDEFAULT_DELIBERATION_CODEX_TRANSPORT = \"auto\"\n",
+    "notes": "resolved lines 73-73 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_max_rounds_failure_mode",
+    "evidence_path": "llm_client/workflow/deliberate.py:466-511",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      466,
+      511
+    ],
+    "snippet": "    \"\"\"\n\n    def position_node(state: dict[str, Any]) -> dict[str, Any]:\n        ctx = WorkflowContext.current(state, stage=f\"deliberate.{agent.name}\")\n        task = state[\"task\"]\n        round_num = state[\"round\"]\n        latest = state.get(\"latest_positions\") or {}\n        own_prior = latest.get(agent.name)\n        peer_latest = latest.get(peer_name)\n\n        messages = _position_prompt(\n            task,\n            agent.name,\n            round_num,\n            own_prior=own_prior,\n            peer_latest=peer_latest,\n        )\n        position, _meta = ctx.call_llm_structured(\n            agent.model,\n            messages,\n            Position,\n            timeout=DEFAULT_DELIBERATION_STAGE_TIMEOUT_S,\n            codex_transport=DEFAULT_DELIBERATION_CODEX_TRANSPORT,\n            cwd=task[\"workspace_path\"],\n        )\n        payload = position.model_dump()\n        # Overwrite reviewer_model with the requested model \u2014 the LLM\n        # sometimes self-reports a free-text vibe (caught in duet runs).\n        payload[\"reviewer_model\"] = agent.model\n        # Force agent_name and round to match what the chassis asked for\n        # rather than trusting the LLM's self-report.\n        payload[\"agent_name\"] = agent.name\n        payload[\"round\"] = round_num\n\n        _persist_json(\n            state[\"run_dir\"],\n            f\"position_{agent.name}_round_{round_num}.json\",\n            payload,\n        )\n\n        new_latest = dict(latest)\n        new_latest[agent.name] = payload\n        new_history = list(state.get(\"position_history\") or [])\n        new_history.append(payload)\n        return {\n            \"latest_positions\": new_latest,\n            \"position_history\": new_history,\n        }\n\n    return position_node",
+    "notes": "resolved lines 466-511 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_max_rounds_failure_mode",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:533-580",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      533,
+      580
+    ],
+    "snippet": "                    lineage_flag=\"silent_retire\",\n                    lineage_detail=(\n                        f\"claim_id {retired_id!r} was present in round \"\n                        f\"{own_prior.get('round','?')} but absent in this round \"\n                        \"with no rename match \u2014 silently retired\"\n                    ),\n                )\n            )\n\n    for ref_type, fabricated_id in _detect_fabricated_peer_refs(own_current, peer_prior):\n        entries.append(\n            LedgerEntry(\n                agent_name=agent_name,\n                round=round_num,\n                claim_id=fabricated_id,\n                evidence_path=\"\",\n                status=\"content_mismatch_warning\",\n                lineage_flag=\"fabricated_peer_ref\",\n                lineage_detail=(\n                    f\"{ref_type} references peer claim_id {fabricated_id!r} \"\n                    f\"but peer's latest position has no such claim_id\"\n                ),\n            )\n        )\n\n    return entries\n\n\ndef verify_round(\n    latest_positions: dict[str, dict[str, Any]],\n    prior_positions_by_agent: dict[str, dict[str, Any]],\n    prior_ledger: VerifierLedger,\n    round_num: int,\n    workspace_path: str,\n) -> VerifierLedger:\n    \"\"\"Verify a full round's worth of positions and extend the ledger.\n\n    Args:\n        latest_positions: ``{agent_name: position_dict}`` for the current round.\n        prior_positions_by_agent: ``{agent_name: position_dict}`` for the\n            previous round (or empty when round_num == 1).\n        prior_ledger: ledger entries from rounds 1..round_num-1.\n        round_num: 1-indexed current round.\n        workspace_path: absolute path used for resolving citations.\n    \"\"\"\n    new_entries: list[LedgerEntry] = []\n\n    # Per-citation verification.\n    for position in latest_positions.values():\n        new_entries.extend(verify_position(position, workspace_path))\n\n    # Cross-round lineage tracking. Build a quick map of agent \u2192 peer name",
+    "notes": "resolved lines 533-580 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_third_pattern_is_feedback_not_fanout",
+    "evidence_path": "llm_client/workflow/deliberate.py:525-576",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      525,
+      576
+    ],
+    "snippet": "\n\ndef _make_verifier_node() -> Callable[[dict[str, Any]], dict[str, Any]]:\n    \"\"\"Build the Plan #34 verifier node.\n\n    Runs after both agents have spoken in a round (between ``agent_b`` and\n    ``round_increment``). Resolves every cited ``evidence_path`` in\n    ``latest_positions``, tracks claim lineage against the prior round's\n    positions, and appends entries to ``state[\"verifier_ledger\"]``.\n\n    Snapshots ``latest_positions`` into ``prior_positions_by_agent`` so the\n    NEXT round's verifier can detect silent rename / silent retire.\n    \"\"\"\n\n    def verifier_node(state: dict[str, Any]) -> dict[str, Any]:\n        latest = state.get(\"latest_positions\") or {}\n        if not latest:\n            return {}\n        prior_by_agent = state.get(\"prior_positions_by_agent\") or {}\n        prior_ledger_entries = state.get(\"verifier_ledger\") or []\n        prior_ledger = VerifierLedger(\n            entries=[LedgerEntry(**e) for e in prior_ledger_entries],\n        )\n        # Use the position's own round number \u2014 that's the round these\n        # positions came FROM, regardless of where the router's state.round\n        # has been incremented to.\n        sample_round = next(iter(latest.values())).get(\"round\", 0)\n        workspace_path = state.get(\"task\", {}).get(\"workspace_path\", \"\")\n\n        new_ledger = verify_round(\n            latest_positions=latest,\n            prior_positions_by_agent=prior_by_agent,\n            prior_ledger=prior_ledger,\n            round_num=int(sample_round),\n            workspace_path=workspace_path,\n        )\n\n        # Persist after every round so a killed run still has the partial\n        # ledger on disk.\n        _persist_json(\n            state[\"run_dir\"],\n            \"verifier_ledger.json\",\n            new_ledger.to_dict(),\n        )\n\n        # Snapshot current \u2192 prior for next round's lineage checks.\n        next_prior = {name: dict(pos) for name, pos in latest.items()}\n\n        return {\n            \"verifier_ledger\": [e.to_dict() for e in new_ledger.entries],\n            \"prior_positions_by_agent\": next_prior,\n        }\n\n    return verifier_node\n\n",
+    "notes": "resolved lines 525-576 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_third_pattern_is_feedback_not_fanout",
+    "evidence_path": "llm_client/workflow/deliberate.py:655-682",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      655,
+      682
+    ],
+    "snippet": "\n\ndef _make_post_round_router() -> Callable[[dict[str, Any]], str]:\n    \"\"\"After each round, decide whether to continue or terminate.\n\n    Returns the next node name.\n    \"\"\"\n\n    def router(state: dict[str, Any]) -> str:\n        latest = state.get(\"latest_positions\") or {}\n        round_num = state.get(\"round\", 0)\n        max_rounds = state.get(\"max_rounds\", 3)\n        # Plan #34: thread the verifier ledger into the convergence check.\n        ledger_entries = state.get(\"verifier_ledger\") or []\n        ledger: VerifierLedger | None = None\n        if ledger_entries:\n            ledger = VerifierLedger(\n                entries=[LedgerEntry(**e) for e in ledger_entries],\n            )\n        verdict = detect_convergence(latest, round_num, max_rounds, ledger=ledger)\n        if verdict is None:\n            return \"agent_a\"  # continue to next round\n        if verdict == \"converged\":\n            return \"synthesis_converged\"\n        if verdict == \"stalled\":\n            return \"signoff_stalled\"\n        # productive_disagreement\n        return \"synthesis_productive_disagreement\"\n\n    return router\n\n",
+    "notes": "resolved lines 655-682 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_third_pattern_is_feedback_not_fanout",
+    "evidence_path": "llm_client/workflow/deliberate.py:765-797",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      765,
+      797
+    ],
+    "snippet": "    })\n\n    # Round topology: agent_a \u2192 agent_b \u2192 verifier \u2192 round_increment \u2192 router\n    #   verifier resolves cited evidence + tracks claim lineage (Plan #34).\n    #   router \u2192 agent_a (continue) | synthesis_converged | synthesis_productive_disagreement | signoff_stalled\n    #   synthesis_converged \u2192 signoff_pass\n    #   synthesis_productive_disagreement \u2192 signoff_pd\n    app = build_workflow(\n        state_schema=DeliberationState,\n        config=config,\n        nodes={\n            \"agent_a\": agent_a_node,\n            \"agent_b\": agent_b_node,\n            \"verifier\": verifier_node,\n            \"round_increment\": increment_node,\n            \"synthesis_converged\": synthesis_converged_node,\n            \"synthesis_productive_disagreement\": synthesis_pd_node,\n            \"signoff_pass\": signoff_pass_node,\n            \"signoff_pd\": signoff_pd_node,\n            \"signoff_stalled\": signoff_stalled_node,\n        },\n        edges=[\n            (\"agent_a\", \"agent_b\"),\n            (\"agent_b\", \"verifier\"),\n            (\"verifier\", \"round_increment\"),\n            (\"synthesis_converged\", \"signoff_pass\"),\n            (\"synthesis_productive_disagreement\", \"signoff_pd\"),\n        ],\n        conditional_edges={\n            \"round_increment\": post_round_router,\n        },\n        entry_point=\"agent_a\",\n        finish_points=[\"signoff_pass\", \"signoff_pd\", \"signoff_stalled\"],\n        checkpointer=checkpointer,\n    )\n\n    ctx = WorkflowContext(",
+    "notes": "resolved lines 765-797 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_third_pattern_is_feedback_not_fanout",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:96-139",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      96,
+      139
+    ],
+    "snippet": "\n\n@dataclass\nclass VerifierLedger:\n    \"\"\"Append-only collection of ``LedgerEntry`` items across all rounds.\n\n    Used as both the in-state representation (carried by the LangGraph\n    state dict) and the persisted ``verifier_ledger.json`` shape.\n    \"\"\"\n\n    entries: list[LedgerEntry] = field(default_factory=list)\n\n    def extend(self, more: list[LedgerEntry]) -> None:\n        self.entries.extend(more)\n\n    def entries_for_claim(self, claim_id: str, agent_name: str) -> list[LedgerEntry]:\n        return [e for e in self.entries if e.claim_id == claim_id and e.agent_name == agent_name]\n\n    def latest_round_entries(self, round_num: int) -> list[LedgerEntry]:\n        return [e for e in self.entries if e.round == round_num]\n\n    def latest_round(self) -> int | None:\n        \"\"\"Return the highest round number present in the ledger, or None\n        when the ledger is empty.\n        \"\"\"\n        if not self.entries:\n            return None\n        return max(e.round for e in self.entries)\n\n    def has_unverified_in_round(self, round_num: int) -> bool:\n        \"\"\"True if any non-lineage entry in this round failed verification.\n\n        Lineage flags are checked separately by ``has_lineage_flag_in_round``.\n        \"\"\"\n        for e in self.latest_round_entries(round_num):\n            if e.lineage_flag is not None:\n                continue\n            if e.status != \"verified\":\n                return True\n        return False\n\n    def has_lineage_flag_in_round(self, round_num: int) -> bool:\n        return any(e.lineage_flag is not None for e in self.latest_round_entries(round_num))\n\n    def to_dict(self) -> dict[str, Any]:\n        return {\"entries\": [e.to_dict() for e in self.entries]}\n\n",
+    "notes": "resolved lines 96-139 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "b_third_pattern_is_feedback_not_fanout",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:468-530",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      468,
+      530
+    ],
+    "snippet": "    renamed_old = {old for old, _new, _text in renames}\n    return [cid for cid in prior if cid not in current and cid not in renamed_old]\n\n\ndef _detect_fabricated_peer_refs(\n    own_position: dict[str, Any],\n    peer_position: dict[str, Any] | None,\n) -> list[tuple[str, str]]:\n    \"\"\"Return list of ``(reference_type, fabricated_id)`` tuples.\n\n    A fabricated peer reference is one of:\n    - ``agreed_with_peer`` entry whose ID doesn't match any peer claim_id\n    - ``disagreed_with_peer[*].peer_claim_id`` that doesn't match any peer claim_id\n    \"\"\"\n    if peer_position is None:\n        return []\n    peer_ids = {c.get(\"claim_id\", \"?\") for c in (peer_position.get(\"claims\") or [])}\n    fabricated: list[tuple[str, str]] = []\n    for ref in own_position.get(\"agreed_with_peer\") or []:\n        if ref not in peer_ids:\n            fabricated.append((\"agreed_with_peer\", ref))\n    for dis in own_position.get(\"disagreed_with_peer\") or []:\n        peer_id = dis.get(\"peer_claim_id\", \"?\")\n        if peer_id not in peer_ids:\n            fabricated.append((\"disagreed_with_peer\", peer_id))\n    return fabricated\n\n\ndef _lineage_entries(\n    agent_name: str,\n    round_num: int,\n    own_prior: dict[str, Any] | None,\n    own_current: dict[str, Any],\n    peer_prior: dict[str, Any] | None,\n) -> list[LedgerEntry]:\n    \"\"\"Emit lineage ledger entries for one agent at one round.\"\"\"\n    entries: list[LedgerEntry] = []\n\n    if own_prior is not None:\n        prior_claims = _claims_by_id(own_prior)\n        current_claims = _claims_by_id(own_current)\n        renames = _detect_silent_rename(prior_claims, current_claims)\n        for old_id, new_id, text in renames:\n            entries.append(\n                LedgerEntry(\n                    agent_name=agent_name,\n                    round=round_num,\n                    claim_id=new_id,\n                    evidence_path=\"\",\n                    status=\"content_mismatch_warning\",\n                    lineage_flag=\"silent_rename\",\n                    lineage_detail=(\n                        f\"claim_id {old_id!r} (round {own_prior.get('round','?')}) \"\n                        f\"appears to be renamed to {new_id!r} (same text prefix: {text!r})\"\n                    ),\n                )\n            )\n        for retired_id in _detect_silent_retire(prior_claims, current_claims, renames):\n            entries.append(\n                LedgerEntry(\n                    agent_name=agent_name,\n                    round=round_num,\n                    claim_id=retired_id,\n                    evidence_path=\"\",\n                    status=\"content_mismatch_warning\",\n                    lineage_flag=\"silent_retire\",\n                    lineage_detail=(",
+    "notes": "resolved lines 468-530 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_round1_anchor",
+    "evidence_path": "llm_client/workflow/deliberate.py:339-402",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      339,
+      402
+    ],
+    "snippet": "\n\ndef _position_prompt(\n    task: dict[str, Any],\n    agent_name: str,\n    round_num: int,\n    own_prior: dict[str, Any] | None,\n    peer_latest: dict[str, Any] | None,\n) -> list[dict[str, Any]]:\n    \"\"\"Build the prompt for one agent's turn at one round.\"\"\"\n    system = (\n        \"You are one of two coding agents in a structured deliberation. The other \"\n        \"agent is investigating the same question independently. Your output is \"\n        \"consumed by an automatic convergence detector, so it MUST validate against \"\n        \"the Position schema. Groundedness rule: every claim and every \"\n        \"disagreement must include an evidence_path citation (file:line, file path, \"\n        \"or doc#section). If you cannot cite a source, downgrade to an \"\n        \"open_question instead of asserting a claim.\"\n    )\n\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        \"\",\n        f\"## Your role: {agent_name} (round {round_num})\",\n    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",\n            \"## Your prior position (last round)\",\n            \"Revise where your view changed after seeing the peer's input. Keep claims you still hold.\",\n            \"\",\n            json.dumps(own_prior, indent=2),\n        ])\n\n    user_parts.extend([\n        \"\",\n        \"## Schema for your response (Position)\",\n        json.dumps(Position.model_json_schema(), indent=2),\n        \"\",\n        f\"Return a Position JSON object with agent_name='{agent_name}' and round={round_num}. \"\n        \"Use 'initial' state on round 1, 'revised' when you changed your view, 'stable' when \"\n        \"your view didn't change but you acknowledge peer claims.\",\n    ])\n\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 339-402 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_round1_anchor",
+    "evidence_path": "llm_client/workflow/deliberate.py:405-435",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      405,
+      435
+    ],
+    "snippet": "\n\ndef _synthesis_prompt(\n    task: dict[str, Any],\n    positions: list[dict[str, Any]],\n    verdict: DeliberationVerdict,\n) -> list[dict[str, Any]]:\n    \"\"\"Build the prompt for the synthesis stage.\"\"\"\n    system = (\n        \"You are synthesizing a structured deliberation between two agents. \"\n        \"Produce a final synthesis that merges what the agents agreed on and \"\n        \"explicitly lists what they could not agree on. Do not pick a winner \"\n        \"unless the residual disagreements are entirely ungrounded \u2014 surface \"\n        \"real disagreements rather than papering over them.\"\n    )\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        \"\",\n        f\"## Final verdict: {verdict}\",\n        \"\",\n        \"## Position history (chronological)\",\n        json.dumps(positions, indent=2),\n        \"\",\n        \"Return a synthesis with:\",\n        \"- A short merged-findings narrative.\",\n        \"- An explicit list of residual_disagreements (peer_claim_id, my_counterclaim, evidence_path).\",\n        \"- Any open_questions that neither agent resolved.\",\n    ]\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 405-435 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_round1_anchor",
+    "evidence_path": "llm_client/workflow/deliberate.py:655-682",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      655,
+      682
+    ],
+    "snippet": "\n\ndef _make_post_round_router() -> Callable[[dict[str, Any]], str]:\n    \"\"\"After each round, decide whether to continue or terminate.\n\n    Returns the next node name.\n    \"\"\"\n\n    def router(state: dict[str, Any]) -> str:\n        latest = state.get(\"latest_positions\") or {}\n        round_num = state.get(\"round\", 0)\n        max_rounds = state.get(\"max_rounds\", 3)\n        # Plan #34: thread the verifier ledger into the convergence check.\n        ledger_entries = state.get(\"verifier_ledger\") or []\n        ledger: VerifierLedger | None = None\n        if ledger_entries:\n            ledger = VerifierLedger(\n                entries=[LedgerEntry(**e) for e in ledger_entries],\n            )\n        verdict = detect_convergence(latest, round_num, max_rounds, ledger=ledger)\n        if verdict is None:\n            return \"agent_a\"  # continue to next round\n        if verdict == \"converged\":\n            return \"synthesis_converged\"\n        if verdict == \"stalled\":\n            return \"signoff_stalled\"\n        # productive_disagreement\n        return \"synthesis_productive_disagreement\"\n\n    return router\n\n",
+    "notes": "resolved lines 655-682 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:468-530",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      468,
+      530
+    ],
+    "snippet": "    renamed_old = {old for old, _new, _text in renames}\n    return [cid for cid in prior if cid not in current and cid not in renamed_old]\n\n\ndef _detect_fabricated_peer_refs(\n    own_position: dict[str, Any],\n    peer_position: dict[str, Any] | None,\n) -> list[tuple[str, str]]:\n    \"\"\"Return list of ``(reference_type, fabricated_id)`` tuples.\n\n    A fabricated peer reference is one of:\n    - ``agreed_with_peer`` entry whose ID doesn't match any peer claim_id\n    - ``disagreed_with_peer[*].peer_claim_id`` that doesn't match any peer claim_id\n    \"\"\"\n    if peer_position is None:\n        return []\n    peer_ids = {c.get(\"claim_id\", \"?\") for c in (peer_position.get(\"claims\") or [])}\n    fabricated: list[tuple[str, str]] = []\n    for ref in own_position.get(\"agreed_with_peer\") or []:\n        if ref not in peer_ids:\n            fabricated.append((\"agreed_with_peer\", ref))\n    for dis in own_position.get(\"disagreed_with_peer\") or []:\n        peer_id = dis.get(\"peer_claim_id\", \"?\")\n        if peer_id not in peer_ids:\n            fabricated.append((\"disagreed_with_peer\", peer_id))\n    return fabricated\n\n\ndef _lineage_entries(\n    agent_name: str,\n    round_num: int,\n    own_prior: dict[str, Any] | None,\n    own_current: dict[str, Any],\n    peer_prior: dict[str, Any] | None,\n) -> list[LedgerEntry]:\n    \"\"\"Emit lineage ledger entries for one agent at one round.\"\"\"\n    entries: list[LedgerEntry] = []\n\n    if own_prior is not None:\n        prior_claims = _claims_by_id(own_prior)\n        current_claims = _claims_by_id(own_current)\n        renames = _detect_silent_rename(prior_claims, current_claims)\n        for old_id, new_id, text in renames:\n            entries.append(\n                LedgerEntry(\n                    agent_name=agent_name,\n                    round=round_num,\n                    claim_id=new_id,\n                    evidence_path=\"\",\n                    status=\"content_mismatch_warning\",\n                    lineage_flag=\"silent_rename\",\n                    lineage_detail=(\n                        f\"claim_id {old_id!r} (round {own_prior.get('round','?')}) \"\n                        f\"appears to be renamed to {new_id!r} (same text prefix: {text!r})\"\n                    ),\n                )\n            )\n        for retired_id in _detect_silent_retire(prior_claims, current_claims, renames):\n            entries.append(\n                LedgerEntry(\n                    agent_name=agent_name,\n                    round=round_num,\n                    claim_id=retired_id,\n                    evidence_path=\"\",\n                    status=\"content_mismatch_warning\",\n                    lineage_flag=\"silent_retire\",\n                    lineage_detail=(",
+    "notes": "resolved lines 468-530 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:533-580",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      533,
+      580
+    ],
+    "snippet": "                    lineage_flag=\"silent_retire\",\n                    lineage_detail=(\n                        f\"claim_id {retired_id!r} was present in round \"\n                        f\"{own_prior.get('round','?')} but absent in this round \"\n                        \"with no rename match \u2014 silently retired\"\n                    ),\n                )\n            )\n\n    for ref_type, fabricated_id in _detect_fabricated_peer_refs(own_current, peer_prior):\n        entries.append(\n            LedgerEntry(\n                agent_name=agent_name,\n                round=round_num,\n                claim_id=fabricated_id,\n                evidence_path=\"\",\n                status=\"content_mismatch_warning\",\n                lineage_flag=\"fabricated_peer_ref\",\n                lineage_detail=(\n                    f\"{ref_type} references peer claim_id {fabricated_id!r} \"\n                    f\"but peer's latest position has no such claim_id\"\n                ),\n            )\n        )\n\n    return entries\n\n\ndef verify_round(\n    latest_positions: dict[str, dict[str, Any]],\n    prior_positions_by_agent: dict[str, dict[str, Any]],\n    prior_ledger: VerifierLedger,\n    round_num: int,\n    workspace_path: str,\n) -> VerifierLedger:\n    \"\"\"Verify a full round's worth of positions and extend the ledger.\n\n    Args:\n        latest_positions: ``{agent_name: position_dict}`` for the current round.\n        prior_positions_by_agent: ``{agent_name: position_dict}`` for the\n            previous round (or empty when round_num == 1).\n        prior_ledger: ledger entries from rounds 1..round_num-1.\n        round_num: 1-indexed current round.\n        workspace_path: absolute path used for resolving citations.\n    \"\"\"\n    new_entries: list[LedgerEntry] = []\n\n    # Per-citation verification.\n    for position in latest_positions.values():\n        new_entries.extend(verify_position(position, workspace_path))\n\n    # Cross-round lineage tracking. Build a quick map of agent \u2192 peer name",
+    "notes": "resolved lines 533-580 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate.py:339-402",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      339,
+      402
+    ],
+    "snippet": "\n\ndef _position_prompt(\n    task: dict[str, Any],\n    agent_name: str,\n    round_num: int,\n    own_prior: dict[str, Any] | None,\n    peer_latest: dict[str, Any] | None,\n) -> list[dict[str, Any]]:\n    \"\"\"Build the prompt for one agent's turn at one round.\"\"\"\n    system = (\n        \"You are one of two coding agents in a structured deliberation. The other \"\n        \"agent is investigating the same question independently. Your output is \"\n        \"consumed by an automatic convergence detector, so it MUST validate against \"\n        \"the Position schema. Groundedness rule: every claim and every \"\n        \"disagreement must include an evidence_path citation (file:line, file path, \"\n        \"or doc#section). If you cannot cite a source, downgrade to an \"\n        \"open_question instead of asserting a claim.\"\n    )\n\n    user_parts = [\n        \"## Task\",\n        _task_brief(task),\n        \"\",\n        f\"## Your role: {agent_name} (round {round_num})\",\n    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",\n            \"## Your prior position (last round)\",\n            \"Revise where your view changed after seeing the peer's input. Keep claims you still hold.\",\n            \"\",\n            json.dumps(own_prior, indent=2),\n        ])\n\n    user_parts.extend([\n        \"\",\n        \"## Schema for your response (Position)\",\n        json.dumps(Position.model_json_schema(), indent=2),\n        \"\",\n        f\"Return a Position JSON object with agent_name='{agent_name}' and round={round_num}. \"\n        \"Use 'initial' state on round 1, 'revised' when you changed your view, 'stable' when \"\n        \"your view didn't change but you acknowledge peer claims.\",\n    ])\n\n    return [\n        {\"role\": \"system\", \"content\": system},\n        {\"role\": \"user\", \"content\": \"\\n\".join(user_parts)},\n    ]\n\n",
+    "notes": "resolved lines 339-402 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_partition_third_pattern",
+    "evidence_path": "llm_client/workflow/deliberate.py:585-606",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      585,
+      606
+    ],
+    "snippet": "    \"\"\"Build the synthesis node: one LLM call to merge findings + residuals.\"\"\"\n\n    def synthesis_node(state: dict[str, Any]) -> dict[str, Any]:\n        ctx = WorkflowContext.current(state, stage=\"deliberate.synthesis\")\n        task = state[\"task\"]\n        history = state.get(\"position_history\") or []\n        messages = _synthesis_prompt(task, history, verdict)\n        # Synthesis schema is intentionally loose v1 \u2014 a Position with\n        # ``disagreed_with_peer`` populated captures everything we need.\n        # Future refinement: a SynthesisArtifact schema.\n        synthesis_position, _meta = ctx.call_llm_structured(\n            synthesis_model,\n            messages,\n            Position,\n            timeout=DEFAULT_DELIBERATION_STAGE_TIMEOUT_S,\n            codex_transport=DEFAULT_DELIBERATION_CODEX_TRANSPORT,\n            cwd=task[\"workspace_path\"],\n        )\n        payload = synthesis_position.model_dump()\n        payload[\"agent_name\"] = \"synthesis\"\n        payload[\"round\"] = state.get(\"round\", 0)\n        payload[\"reviewer_model\"] = synthesis_model\n        _persist_json(state[\"run_dir\"], \"synthesis.json\", payload)\n        return {\"final_verdict\": verdict}\n\n    return synthesis_node",
+    "notes": "resolved lines 585-606 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:73",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      73,
+      73
+    ],
+    "snippet": "# Stage timeouts mirror the duet defaults \u2014 agent calls take minutes when\n# they explore the workspace.\nDEFAULT_DELIBERATION_STAGE_TIMEOUT_S = 300\nDEFAULT_DELIBERATION_CODEX_TRANSPORT = \"auto\"\n",
+    "notes": "resolved lines 73-73 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:364-388",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      364,
+      388
+    ],
+    "snippet": "    ]\n\n    if peer_latest:\n        user_parts.extend([\n            \"\",\n            \"## Peer's most-recent position\",\n            \"Reference peer claims by their claim_id when acknowledging or disagreeing.\",\n            \"\",\n            json.dumps(peer_latest, indent=2),\n        ])\n    else:\n        user_parts.extend([\n            \"\",\n            \"## Peer position\",\n            \"None yet \u2014 this is round 1. Investigate the task independently. \"\n            \"Do not speculate about what the other agent will say.\",\n        ])\n\n    if own_prior:\n        user_parts.extend([\n            \"\",\n            \"## Your prior position (last round)\",\n            \"Revise where your view changed after seeing the peer's input. Keep claims you still hold.\",\n            \"\",\n            json.dumps(own_prior, indent=2),\n        ])\n\n    user_parts.extend([\n        \"\",",
+    "notes": "resolved lines 364-388 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate.py:466-511",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate.py",
+    "line_range": [
+      466,
+      511
+    ],
+    "snippet": "    \"\"\"\n\n    def position_node(state: dict[str, Any]) -> dict[str, Any]:\n        ctx = WorkflowContext.current(state, stage=f\"deliberate.{agent.name}\")\n        task = state[\"task\"]\n        round_num = state[\"round\"]\n        latest = state.get(\"latest_positions\") or {}\n        own_prior = latest.get(agent.name)\n        peer_latest = latest.get(peer_name)\n\n        messages = _position_prompt(\n            task,\n            agent.name,\n            round_num,\n            own_prior=own_prior,\n            peer_latest=peer_latest,\n        )\n        position, _meta = ctx.call_llm_structured(\n            agent.model,\n            messages,\n            Position,\n            timeout=DEFAULT_DELIBERATION_STAGE_TIMEOUT_S,\n            codex_transport=DEFAULT_DELIBERATION_CODEX_TRANSPORT,\n            cwd=task[\"workspace_path\"],\n        )\n        payload = position.model_dump()\n        # Overwrite reviewer_model with the requested model \u2014 the LLM\n        # sometimes self-reports a free-text vibe (caught in duet runs).\n        payload[\"reviewer_model\"] = agent.model\n        # Force agent_name and round to match what the chassis asked for\n        # rather than trusting the LLM's self-report.\n        payload[\"agent_name\"] = agent.name\n        payload[\"round\"] = round_num\n\n        _persist_json(\n            state[\"run_dir\"],\n            f\"position_{agent.name}_round_{round_num}.json\",\n            payload,\n        )\n\n        new_latest = dict(latest)\n        new_latest[agent.name] = payload\n        new_history = list(state.get(\"position_history\") or [])\n        new_history.append(payload)\n        return {\n            \"latest_positions\": new_latest,\n            \"position_history\": new_history,\n        }\n\n    return position_node",
+    "notes": "resolved lines 466-511 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  },
+  {
+    "agent_name": "agent_b",
+    "round": 1,
+    "claim_id": "disagreement_against_a_rounds_drift",
+    "evidence_path": "llm_client/workflow/deliberate_verifier.py:533-580",
+    "status": "verified",
+    "file_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet/llm_client/workflow/deliberate_verifier.py",
+    "line_range": [
+      533,
+      580
+    ],
+    "snippet": "                    lineage_flag=\"silent_retire\",\n                    lineage_detail=(\n                        f\"claim_id {retired_id!r} was present in round \"\n                        f\"{own_prior.get('round','?')} but absent in this round \"\n                        \"with no rename match \u2014 silently retired\"\n                    ),\n                )\n            )\n\n    for ref_type, fabricated_id in _detect_fabricated_peer_refs(own_current, peer_prior):\n        entries.append(\n            LedgerEntry(\n                agent_name=agent_name,\n                round=round_num,\n                claim_id=fabricated_id,\n                evidence_path=\"\",\n                status=\"content_mismatch_warning\",\n                lineage_flag=\"fabricated_peer_ref\",\n                lineage_detail=(\n                    f\"{ref_type} references peer claim_id {fabricated_id!r} \"\n                    f\"but peer's latest position has no such claim_id\"\n                ),\n            )\n        )\n\n    return entries\n\n\ndef verify_round(\n    latest_positions: dict[str, dict[str, Any]],\n    prior_positions_by_agent: dict[str, dict[str, Any]],\n    prior_ledger: VerifierLedger,\n    round_num: int,\n    workspace_path: str,\n) -> VerifierLedger:\n    \"\"\"Verify a full round's worth of positions and extend the ledger.\n\n    Args:\n        latest_positions: ``{agent_name: position_dict}`` for the current round.\n        prior_positions_by_agent: ``{agent_name: position_dict}`` for the\n            previous round (or empty when round_num == 1).\n        prior_ledger: ledger entries from rounds 1..round_num-1.\n        round_num: 1-indexed current round.\n        workspace_path: absolute path used for resolving citations.\n    \"\"\"\n    new_entries: list[LedgerEntry] = []\n\n    # Per-citation verification.\n    for position in latest_positions.values():\n        new_entries.extend(verify_position(position, workspace_path))\n\n    # Cross-round lineage tracking. Build a quick map of agent \u2192 peer name",
+    "notes": "resolved lines 533-580 with \u00b12 context",
+    "lineage_flag": null,
+    "lineage_detail": ""
+  }
+]
