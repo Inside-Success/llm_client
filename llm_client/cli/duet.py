@@ -83,6 +83,7 @@ def _build_implement_sidecar(workspace: str, base_ref: str, head_ref: str, plan_
 def _build_task(args: argparse.Namespace, workspace: str) -> dict[str, Any]:
     success_criteria = [s for s in (args.success_criteria or "").split(";") if s.strip()]
     constraints = [s for s in (args.constraints or "").split(";") if s.strip()]
+    extra = _build_task_extras(args)
     return {
         "task_id": args.task_id or "duet-review",
         "title": args.task_title,
@@ -93,7 +94,37 @@ def _build_task(args: argparse.Namespace, workspace: str) -> dict[str, Any]:
             "Do not edit any files.",
             "Verdict must be pass, revise, or block.",
         ],
+        "extra": extra,
     }
+
+
+def _build_task_extras(args: argparse.Namespace) -> dict[str, Any]:
+    """Collect optional twin-update params into ``task["extra"]``.
+
+    The ``twin_update`` profile's ``context_loader`` reads these keys. Keys
+    absent from args produce no entry (the loader is robust to missing keys).
+    Other profiles ignore ``extra`` entirely.
+    """
+    extra: dict[str, Any] = {}
+    if getattr(args, "customer", None):
+        extra["customer"] = args.customer
+    if getattr(args, "ai", None):
+        extra["ai"] = args.ai
+    if getattr(args, "ticket_id", None):
+        extra["ticket_id"] = args.ticket_id
+    if complaint_file := getattr(args, "complaint_file", None):
+        complaint_path = Path(complaint_file).resolve()
+        if not complaint_path.is_file():
+            print(f"error: --complaint-file not found: {complaint_path}", file=sys.stderr)
+            sys.exit(2)
+        extra["complaint_text"] = complaint_path.read_text(encoding="utf-8")
+    if customer_constraints := getattr(args, "customer_constraints", None):
+        extra["customer_constraints"] = [
+            c.strip() for c in customer_constraints.split(";") if c.strip()
+        ]
+    if qa_artifact := getattr(args, "published_prod_qa_artifact", None):
+        extra["published_prod_qa_artifact_path"] = qa_artifact
+    return extra
 
 
 def cmd_duet_review(args: argparse.Namespace) -> None:
@@ -220,9 +251,44 @@ def register_parser(subparsers: Any) -> None:
         "--task-family",
         default="generic",
         help=(
-            "Registered duet profile (default: generic). Built-ins: generic, plan_doc_review. "
-            "Use plan_doc_review when reviewing a plan document against the repo's TEMPLATE.md "
-            "structure for richer findings (template_section_misses, references_unverified)."
+            "Registered duet profile (default: generic). Built-ins: generic, plan_doc_review, "
+            "twin_update. Use plan_doc_review when reviewing a plan document; twin_update "
+            "when reviewing a customer-twin prompt/KB update."
+        ),
+    )
+    # Twin-update specific flags. All optional; only consumed by the
+    # twin_update profile's context_loader.
+    p.add_argument(
+        "--customer",
+        help="Customer slug (twin_update profile). Routed to task.extra.customer.",
+    )
+    p.add_argument(
+        "--ai",
+        help="AI slug (twin_update profile). Routed to task.extra.ai.",
+    )
+    p.add_argument(
+        "--ticket-id",
+        help="Linear ticket ID (twin_update profile). Routed to task.extra.ticket_id.",
+    )
+    p.add_argument(
+        "--complaint-file",
+        help=(
+            "Path to a file whose contents become task.extra.complaint_text "
+            "(twin_update profile). Useful for multi-line complaint pastes."
+        ),
+    )
+    p.add_argument(
+        "--customer-constraints",
+        help=(
+            "Semicolon-separated customer-specific constraints "
+            "(twin_update profile). Routed to task.extra.customer_constraints."
+        ),
+    )
+    p.add_argument(
+        "--published-prod-qa-artifact",
+        help=(
+            "Path to a published-prod QA artifact (twin_update profile). "
+            "Routed to task.extra.published_prod_qa_artifact_path."
         ),
     )
     p.add_argument(

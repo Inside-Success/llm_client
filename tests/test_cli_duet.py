@@ -25,6 +25,12 @@ def _make_cli_args(
     out: Path,
     *,
     task_family: str = "generic",
+    customer: str | None = None,
+    ai: str | None = None,
+    ticket_id: str | None = None,
+    complaint_file: str | None = None,
+    customer_constraints: str | None = None,
+    published_prod_qa_artifact: str | None = None,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         plan_doc=str(plan_doc),
@@ -43,6 +49,12 @@ def _make_cli_args(
         impl_files=None,
         max_budget=1.0,
         timeout=30,
+        customer=customer,
+        ai=ai,
+        ticket_id=ticket_id,
+        complaint_file=complaint_file,
+        customer_constraints=customer_constraints,
+        published_prod_qa_artifact=published_prod_qa_artifact,
     )
 
 
@@ -139,6 +151,98 @@ def test_cli_plan_doc_review_threads_specialized_schema(
     # cwd must equal the resolved workspace (Plan #30 hardening contract).
     # Compare with both sides resolved to handle pytest tmp_path symlink quirks.
     assert Path(captured["cwd"]).resolve() == workspace.resolve()
+
+
+def test_cli_twin_update_flags_route_to_task_extra(
+    cli_setup, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``--customer / --ai / --ticket-id / --complaint-file / --customer-constraints
+    / --published-prod-qa-artifact`` must flow into ``task.extra`` where the
+    twin_update profile's context_loader consumes them.
+    """
+    from llm_client.cli.duet import cmd_duet_review
+
+    plan_doc, workspace, out_root = cli_setup
+    complaint_file = tmp_path / "complaint.txt"
+    complaint_file.write_text("Twin says 'um' every other sentence.\n", encoding="utf-8")
+
+    captured_task: dict = {}
+
+    def fake_call_llm_structured(model, messages, response_model, **kwargs):
+        # The CLI persists the task before calling; re-read it from disk so
+        # we can inspect the actual JSON shape.
+        return _StubReview(), _StubReview()
+
+    monkeypatch.setattr("llm_client.call_llm_structured", fake_call_llm_structured)
+
+    args = _make_cli_args(
+        plan_doc,
+        workspace,
+        out_root / "twin",
+        task_family="twin_update",
+        customer="tony",
+        ai="genius",
+        ticket_id="STENO-1234",
+        complaint_file=str(complaint_file),
+        customer_constraints="no medical advice; no political takes",
+        published_prod_qa_artifact="customer_files/tony/QA.yaml",
+    )
+    cmd_duet_review(args)
+
+    import json
+    task_path = out_root / "twin" / "task.json"
+    captured_task = json.loads(task_path.read_text(encoding="utf-8"))
+    extra = captured_task["extra"]
+    assert extra["customer"] == "tony"
+    assert extra["ai"] == "genius"
+    assert extra["ticket_id"] == "STENO-1234"
+    assert "um" in extra["complaint_text"]
+    assert extra["customer_constraints"] == ["no medical advice", "no political takes"]
+    assert extra["published_prod_qa_artifact_path"] == "customer_files/tony/QA.yaml"
+
+
+def test_cli_complaint_file_missing_exits_with_clear_error(
+    cli_setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing --complaint-file path must surface a clear sys.exit(2)
+    instead of crashing inside the context loader.
+    """
+    from llm_client.cli.duet import cmd_duet_review
+
+    plan_doc, workspace, out_root = cli_setup
+    args = _make_cli_args(
+        plan_doc,
+        workspace,
+        out_root / "missing",
+        task_family="twin_update",
+        complaint_file="/tmp/this_file_does_not_exist_xyz.txt",
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        cmd_duet_review(args)
+    assert exc_info.value.code == 2
+
+
+def test_cli_no_twin_update_flags_leaves_extra_empty(
+    cli_setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generic profile calls (no twin-update flags) must produce an empty extra,
+    so non-twin tasks aren't burdened with an unrelated dict.
+    """
+    from llm_client.cli.duet import cmd_duet_review
+
+    plan_doc, workspace, out_root = cli_setup
+
+    def fake_call_llm_structured(model, messages, response_model, **kwargs):
+        return _StubReview(), _StubReview()
+
+    monkeypatch.setattr("llm_client.call_llm_structured", fake_call_llm_structured)
+
+    args = _make_cli_args(plan_doc, workspace, out_root / "bare")
+    cmd_duet_review(args)
+
+    import json
+    task = json.loads((out_root / "bare" / "task.json").read_text(encoding="utf-8"))
+    assert task["extra"] == {}
 
 
 def test_cli_unknown_task_family_raises(cli_setup) -> None:
