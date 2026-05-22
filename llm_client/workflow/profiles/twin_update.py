@@ -28,7 +28,7 @@ Authority sources encoded here:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -280,7 +280,7 @@ must:
 # ---------------------------------------------------------------------------
 
 
-def _load_twin_context_pack(task: dict) -> dict[str, str]:
+def _load_twin_context_pack(task: dict[str, Any]) -> dict[str, str]:
     """Render twin-update context blocks from ``task["extra"]``.
 
     Reads optional keys ``customer``, ``ai``, ``ticket_id``, ``complaint_text``,

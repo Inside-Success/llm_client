@@ -23,7 +23,7 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not HAS_LANGGRAPH, reason="langgraph not installed")
 
-from llm_client.workflow.duet import (
+from llm_client.workflow.duet import (  # noqa: E402
     CorrectnessFinding,
     DuetRoles,
     DuetTask,
@@ -33,7 +33,7 @@ from llm_client.workflow.duet import (
     _parse_implementer_response,
     build_duet_workflow,
 )
-from llm_client.workflow.duet_base import ImplementReviewBase, PlanReviewBase
+from llm_client.workflow.duet_base import ImplementReviewBase, PlanReviewBase  # noqa: E402
 
 
 @dataclass

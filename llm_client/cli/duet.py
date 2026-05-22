@@ -128,7 +128,7 @@ def _build_task_extras(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_duet_review(args: argparse.Namespace) -> None:
-    from llm_client import call_llm_structured
+    from llm_client import call_llm_structured  # type: ignore[attr-defined]
     from llm_client.workflow.duet import (
         _implement_review_prompt,
         _plan_review_prompt,

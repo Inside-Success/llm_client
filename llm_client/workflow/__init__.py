@@ -22,7 +22,6 @@ Usage::
 from llm_client.workflow.config import StageConfig, StageRetryConfig, WorkflowConfig
 from llm_client.workflow.context import WorkflowContext
 from llm_client.workflow.duet_base import (
-    DuetVerdict as _DuetVerdictBase,
     ImplementReviewBase,
     PlanReviewBase,
     TaskFamily,
@@ -59,7 +58,9 @@ except ImportError:
 
 # Duet schemas are pure-Pydantic so they import without langgraph. The
 # build_duet_workflow() entrypoint itself imports build_workflow lazily.
-from llm_client.workflow.duet import (
+# noqa block: ruff doesn't see __all__.extend() below, but every name here
+# is part of the documented public API surface.
+from llm_client.workflow.duet import (  # noqa: F401
     CorrectnessFinding,
     DuetRoles,
     DuetSignoff,
@@ -98,7 +99,7 @@ __all__.extend([
 ])
 
 try:
-    from llm_client.workflow.duet import build_duet_workflow
+    from llm_client.workflow.duet import build_duet_workflow  # noqa: F401
     __all__.append("build_duet_workflow")
 except ImportError:
     pass

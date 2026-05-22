@@ -124,7 +124,7 @@ class DuetRoles(BaseModel):
     def for_stage(self, stage: str) -> str:
         if stage not in STAGES:
             raise ValueError(f"Unknown duet stage: {stage!r}. Valid: {STAGES}")
-        return getattr(self, stage)
+        return str(getattr(self, stage))
 
 
 class PlanStepAtom(BaseModel):
