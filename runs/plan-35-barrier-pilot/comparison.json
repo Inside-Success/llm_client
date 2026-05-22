@@ -1,0 +1,122 @@
+{
+  "v1 cascade no-verifier": {
+    "label": "v1 cascade no-verifier",
+    "run_dir": "runs/plan-33-self-deliberation",
+    "rounds": [
+      {
+        "round": 1,
+        "agent_a_n_claims": 5,
+        "agent_a_agreed_with_peer_n": 0,
+        "agent_a_disagreed_n": 0,
+        "agent_a_state": "initial",
+        "agent_b_n_claims": 6,
+        "agent_b_agreed_with_peer_n": 2,
+        "agent_b_disagreed_n": 3,
+        "agent_b_state": "initial",
+        "round_1_b_referenced_a_claims": [
+          "a1",
+          "a3",
+          "a4",
+          "a5"
+        ],
+        "round_1_b_cross_leak_count": 4
+      },
+      {
+        "round": 2,
+        "agent_a_n_claims": 5,
+        "agent_a_agreed_with_peer_n": 4,
+        "agent_a_disagreed_n": 2,
+        "agent_a_state": "revised",
+        "agent_b_n_claims": 6,
+        "agent_b_agreed_with_peer_n": 4,
+        "agent_b_disagreed_n": 2,
+        "agent_b_state": "revised"
+      },
+      {
+        "round": 3,
+        "agent_a_n_claims": 5,
+        "agent_a_agreed_with_peer_n": 4,
+        "agent_a_disagreed_n": 2,
+        "agent_a_state": "revised",
+        "agent_b_n_claims": 6,
+        "agent_b_agreed_with_peer_n": 5,
+        "agent_b_disagreed_n": 2,
+        "agent_b_state": "revised"
+      }
+    ]
+  },
+  "v2 cascade verifier": {
+    "label": "v2 cascade verifier",
+    "run_dir": "runs/plan-33-self-deliberation-v2",
+    "verdict": "productive_disagreement",
+    "total_rounds": 3,
+    "rounds": [
+      {
+        "round": 1,
+        "agent_a_n_claims": 6,
+        "agent_a_agreed_with_peer_n": 0,
+        "agent_a_disagreed_n": 0,
+        "agent_a_state": "initial",
+        "agent_b_n_claims": 7,
+        "agent_b_agreed_with_peer_n": 5,
+        "agent_b_disagreed_n": 3,
+        "agent_b_state": "initial",
+        "round_1_b_referenced_a_claims": [
+          "a_convergence_syntax",
+          "a_evidence_semantics",
+          "a_partition_third_pattern",
+          "a_round1_anchor",
+          "a_rounds_drift",
+          "a_topology_profiles"
+        ],
+        "round_1_b_cross_leak_count": 6
+      },
+      {
+        "round": 2,
+        "agent_a_n_claims": 6,
+        "agent_a_agreed_with_peer_n": 3,
+        "agent_a_disagreed_n": 3,
+        "agent_a_state": "revised",
+        "agent_b_n_claims": 8,
+        "agent_b_agreed_with_peer_n": 6,
+        "agent_b_disagreed_n": 3,
+        "agent_b_state": "revised"
+      }
+    ],
+    "ledger_path": "runs/plan-33-self-deliberation-v2/retro_verifier_ledger_with_parser_fix.json",
+    "ledger_total": 193,
+    "ledger_by_status": {
+      "verified": 185,
+      "content_mismatch_warning": 8
+    },
+    "ledger_by_lineage": {
+      "silent_retire": 7,
+      "fabricated_peer_ref": 1
+    },
+    "ledger_per_round": {
+      "1": {
+        "n": 88,
+        "by_status": {
+          "verified": 88
+        },
+        "lineage_flags": {}
+      },
+      "2": {
+        "n": 105,
+        "by_status": {
+          "verified": 97,
+          "content_mismatch_warning": 8
+        },
+        "lineage_flags": {
+          "silent_retire": 7,
+          "fabricated_peer_ref": 1
+        }
+      }
+    }
+  },
+  "v3 barrier+anon": {
+    "label": "v3 barrier+anon",
+    "run_dir": "runs/plan-35-barrier-pilot/v3",
+    "rounds": []
+  }
+}
