@@ -11,3 +11,4 @@ always available before specialized profiles attempt to register.
 
 from llm_client.workflow.profiles import generic  # noqa: F401  (registers on import)
 from llm_client.workflow.profiles import plan_doc_review  # noqa: F401
+from llm_client.workflow.profiles import twin_update  # noqa: F401

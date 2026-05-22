@@ -37,6 +37,7 @@ Track all implementation work here.
 | 29 | [Implementer/Reviewer Duet Workflow](29_implementer_reviewer_duet.md) | Medium | 📋 In Progress | - |
 | 30 | [Duet Autonomous Hardening](30_duet_autonomous_hardening.md) | High | 📋 In Progress | 29 |
 | 31 | [TaskFamily Abstraction for the Duet Chassis](31_task_family_abstraction.md) | High | 📋 In Progress | 30 |
+| 32 | [twin_update Profile](32_twin_update_profile.md) | High | 📋 In Progress | 31 |
 
 
 ## Status Key

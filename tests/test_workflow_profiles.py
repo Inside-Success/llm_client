@@ -28,12 +28,14 @@ def empty_registry():
     """
     from llm_client.workflow.profiles.generic import GENERIC_PROFILE
     from llm_client.workflow.profiles.plan_doc_review import PLAN_DOC_REVIEW_PROFILE
+    from llm_client.workflow.profiles.twin_update import TWIN_UPDATE_PROFILE
 
     _reset_for_tests()
     yield
     _reset_for_tests()
     register_task_family(GENERIC_PROFILE)
     register_task_family(PLAN_DOC_REVIEW_PROFILE)
+    register_task_family(TWIN_UPDATE_PROFILE)
 
 
 class _MinimalPlanReview(PlanReviewBase):
@@ -144,3 +146,165 @@ def test_planreview_is_subclass_of_base() -> None:
     """
     assert issubclass(PlanReview, PlanReviewBase)
     assert issubclass(ImplementReview, ImplementReviewBase)
+
+
+# ---------------------------------------------------------------------------
+# twin_update profile
+# ---------------------------------------------------------------------------
+
+
+def test_twin_update_profile_is_registered_at_import() -> None:
+    """Importing ``llm_client.workflow.profiles`` must register ``twin_update``."""
+    import llm_client.workflow.profiles  # noqa: F401
+
+    assert "twin_update" in list_task_families()
+
+
+def test_twin_update_plan_review_has_pcm_and_rubric_fields() -> None:
+    """The plan-review schema must surface all four specialized lists."""
+    from llm_client.workflow.profiles.twin_update import (
+        PcmLayerFinding,
+        ProofAuthorityGap,
+        ScopeViolation,
+        TwinFidelityRubricMiss,
+        TwinUpdatePlanReview,
+    )
+
+    review = TwinUpdatePlanReview(
+        verdict="revise",
+        pcm_layer_findings=[
+            PcmLayerFinding(
+                layer="Voice",
+                finding="signature phrase removed",
+                severity="high",
+                evidence_path="prompts/foo.md:42",
+            )
+        ],
+        twin_fidelity_rubric_misses=[
+            TwinFidelityRubricMiss(
+                axis="axis_b_proof_depth",
+                item="qa_ready",
+                why_missed="no surface authority matrix",
+                suggested_remediation="generate matrix and rerun",
+            )
+        ],
+        proof_authority_gaps=[
+            ProofAuthorityGap(
+                claim="bug is fixed in prod",
+                missing_artifact="published-prod replay",
+                why_blocking="claim is current-behavior",
+                narrower_claim_still_safe="dev surface improved",
+            )
+        ],
+        scope_violations=[
+            ScopeViolation(
+                proposed_change="add medical advice template",
+                customer_constraint_violated="no medical advice",
+                evidence_path="customer_files/foo/constraints.yaml",
+            )
+        ],
+    )
+    assert review.pcm_layer_findings[0].layer == "Voice"
+    assert review.twin_fidelity_rubric_misses[0].axis == "axis_b_proof_depth"
+    assert review.proof_authority_gaps[0].missing_artifact == "published-prod replay"
+    assert review.scope_violations[0].customer_constraint_violated == "no medical advice"
+
+    # Minimal verdict-only payload still validates.
+    minimal = TwinUpdatePlanReview(verdict="pass")
+    assert minimal.pcm_layer_findings == []
+
+
+def test_twin_update_implement_review_has_signoff_axes_claim() -> None:
+    """The implement-review schema must surface the signoff axes claim and
+    PCM-layer regression list.
+    """
+    from llm_client.workflow.profiles.twin_update import (
+        PcmLayerRegression,
+        SignoffAxesClaim,
+        TwinUpdateImplementReview,
+    )
+
+    review = TwinUpdateImplementReview(
+        verdict="revise",
+        pcm_layer_regressions=[
+            PcmLayerRegression(
+                layer="Reasoning",
+                regression="answer depth shortened across topics",
+                severity="warn",
+                evidence_path="diff:llm_client/foo.py:1",
+            )
+        ],
+        signoff_axes_claim=SignoffAxesClaim(
+            axis_b="not_claimed",
+            axis_b_prompt="prompt_dev_smoke_only",
+            axis_c="candidate_fix",
+            overclaim_risk=True,
+            reason="evals passed but no published-prod replay",
+        ),
+        published_prod_qa_evidence_path="",
+    )
+    assert review.pcm_layer_regressions[0].layer == "Reasoning"
+    assert review.signoff_axes_claim is not None
+    assert review.signoff_axes_claim.overclaim_risk is True
+
+
+def test_pcm_layer_finding_requires_evidence_path() -> None:
+    """Groundedness rule: no ungrounded PCM findings."""
+    import pydantic
+    from llm_client.workflow.profiles.twin_update import PcmLayerFinding
+
+    with pytest.raises(pydantic.ValidationError, match="evidence_path"):
+        PcmLayerFinding(layer="Voice", finding="x")  # type: ignore[call-arg]
+
+
+def test_twin_update_addendum_mentions_pcm_layers_and_rubric() -> None:
+    """Reviewer prompt addendum must surface PCM layer names and the three
+    rubric axis vocabularies so the structured-output model knows what to
+    populate.
+    """
+    family = get_task_family("twin_update")
+    addendum = family.plan_review_prompt_addendum
+
+    # All 5 PCM layer names appear.
+    for layer in ("Knowledge", "Voice", "Reasoning", "Values and Boundaries", "Emotional"):
+        assert layer in addendum, f"PCM layer {layer!r} missing from plan addendum"
+
+    # Axis vocabularies appear.
+    for axis_value in ("regression_signal_only", "prod_verified", "prompt_prod_cleared", "candidate_fix"):
+        assert axis_value in addendum, f"rubric value {axis_value!r} missing from plan addendum"
+
+    impl_addendum = family.implement_review_prompt_addendum
+    assert "signoff_axes_claim" in impl_addendum
+    assert "Reasoning" in impl_addendum  # PCM layer mention in impl too
+
+
+def test_twin_update_context_loader_reads_task_extras() -> None:
+    """The context loader must render the documented task['extra'] keys
+    as labeled blocks.
+    """
+    from llm_client.workflow.profiles.twin_update import _load_twin_context_pack
+
+    task = {
+        "extra": {
+            "customer": "tony",
+            "ai": "genius",
+            "ticket_id": "STENO-1234",
+            "complaint_text": "Voice feels flat",
+            "customer_constraints": ["no medical advice", "no political takes"],
+            "published_prod_qa_artifact_path": "customer_files/tony/QA.yaml",
+        }
+    }
+    blocks = _load_twin_context_pack(task)
+    assert blocks["Customer twin"] == "customer=tony ai=genius"
+    assert blocks["Linear ticket"] == "STENO-1234"
+    assert blocks["Customer complaint"] == "Voice feels flat"
+    assert "no medical advice" in blocks["Customer constraints"]
+    assert blocks["Published-prod QA artifact"] == "customer_files/tony/QA.yaml"
+
+
+def test_twin_update_context_loader_handles_empty_extras() -> None:
+    """No ``extra`` dict (or empty one) should not raise; just return empty."""
+    from llm_client.workflow.profiles.twin_update import _load_twin_context_pack
+
+    assert _load_twin_context_pack({}) == {}
+    assert _load_twin_context_pack({"extra": {}}) == {}

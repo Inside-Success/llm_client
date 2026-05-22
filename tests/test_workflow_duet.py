@@ -339,6 +339,26 @@ def test_duet_threads_workspace_path_as_cwd(harness: _DuetHarness, tmp_path: Pat
     }
 
 
+def test_duet_task_accepts_extra_field() -> None:
+    """DuetTask.extra is the profile-extension hook that domain profiles
+    (twin_update, eval_audit) use for per-task params like customer/ai/ticket.
+    Verify it round-trips through model_dump() without losing data.
+    """
+    task = DuetTask(
+        task_id="t",
+        title="t",
+        goal="t",
+        workspace_path="/ws",
+        extra={"customer": "tony", "ai": "genius", "ticket_id": "STENO-1"},
+    )
+    dumped = task.model_dump()
+    assert dumped["extra"] == {"customer": "tony", "ai": "genius", "ticket_id": "STENO-1"}
+
+    # Default is empty dict; chassis code can rely on `.get("extra") or {}`.
+    bare = DuetTask(task_id="t", title="t", goal="t", workspace_path="/ws")
+    assert bare.extra == {}
+
+
 def test_duet_default_task_family_is_generic(harness: _DuetHarness, tmp_path: Path) -> None:
     """When task_family is unspecified, ``build_duet_workflow`` must resolve to
     ``generic`` and produce the same behavior as before Plan #31. Verified by

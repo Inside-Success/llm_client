@@ -67,6 +67,12 @@ class DuetTask(BaseModel):
     """The task the duet is asked to plan, implement, and review.
 
     Persisted to ``<run_dir>/task.json`` at the start of a run.
+
+    The ``extra`` dict is the profile-extension hook: domain profiles (e.g.
+    ``twin_update``) stash per-task params (``customer``, ``ai``, ``ticket_id``,
+    ``complaint_text``, ``customer_constraints``, etc.) here without forking
+    the chassis task schema. Chassis code ignores ``extra``; profile
+    ``context_loader`` callables consume it.
     """
 
     task_id: str
@@ -78,6 +84,7 @@ class DuetTask(BaseModel):
     base_commit_sha: str | None = None
     allowed_paths: list[str] = Field(default_factory=list)
     forbidden_paths: list[str] = Field(default_factory=list)
+    extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class DuetRoles(BaseModel):
