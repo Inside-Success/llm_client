@@ -60,7 +60,7 @@ minds chew on a problem independently and argue until they converge."
 | 32 | [twin_update Profile](32_twin_update_profile.md) | High | ✅ Complete | 31 |
 | 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | 📋 In Progress | 31 |
 | 34 | [Deliberation Verifier / Adjudicator Stage](34_deliberation_verifier_adjudicator.md) | High | ✅ Complete | 33 |
-| 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | 📋 In Progress (Phases 1-3 shipped; Phase 4 A/B running) | 34 |
+| 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | 📋 In Progress (Phases 1-4 shipped; Phase 5 skipped per plan; Phase 6 awaiting Brian decision) | 34 |
 
 
 ## Status Key
