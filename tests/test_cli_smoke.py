@@ -14,6 +14,7 @@ CLI_CMDS = [
     ["backfill", "--help"],
     ["tool-lint", "--help"],
     ["duet-review", "--help"],
+    ["deliberate-task", "--help"],
 ]
 
 

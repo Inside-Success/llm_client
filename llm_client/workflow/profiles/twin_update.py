@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.workflow.duet import ImplementReview, PlanReview
 from llm_client.workflow.duet_base import TaskFamily
@@ -90,6 +90,8 @@ class PcmLayerFinding(BaseModel):
     saying "Layer 3 reasoning will regress" without a citation is opinion.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     layer: PcmLayer
     finding: str
     severity: Severity = "warn"
@@ -103,6 +105,8 @@ class TwinFidelityRubricMiss(BaseModel):
     ``axis="axis_b_proof_depth"``, ``item="qa_ready"``). Reviewers should
     use this when the plan claims a level it hasn't actually earned.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     axis: Literal[
         "axis_b_proof_depth",
@@ -124,6 +128,8 @@ class ProofAuthorityGap(BaseModel):
     blocking by default.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     claim: str
     missing_artifact: str
     why_blocking: str
@@ -133,6 +139,8 @@ class ProofAuthorityGap(BaseModel):
 class ScopeViolation(BaseModel):
     """A proposed change that violates an explicit customer constraint."""
 
+    model_config = ConfigDict(extra="forbid")
+
     proposed_change: str
     customer_constraint_violated: str
     evidence_path: str
@@ -140,6 +148,8 @@ class ScopeViolation(BaseModel):
 
 class TwinUpdatePlanReview(PlanReview):
     """Plan reviewer schema specialized for twin update tickets."""
+
+    model_config = ConfigDict(extra="forbid")
 
     pcm_layer_findings: list[PcmLayerFinding] = Field(default_factory=list)
     twin_fidelity_rubric_misses: list[TwinFidelityRubricMiss] = Field(default_factory=list)
@@ -155,6 +165,8 @@ class TwinUpdatePlanReview(PlanReview):
 class PcmLayerRegression(BaseModel):
     """A PCM v2 layer that the implementation regresses against."""
 
+    model_config = ConfigDict(extra="forbid")
+
     layer: PcmLayer
     regression: str
     severity: Severity = "warn"
@@ -169,6 +181,8 @@ class SignoffAxesClaim(BaseModel):
     passed but no published-prod replay; do not call prod_verified").
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     axis_b: AxisB | Literal["not_claimed"] = "not_claimed"
     axis_b_prompt: AxisBPrompt | Literal["not_claimed"] = "not_claimed"
     axis_c: AxisC | Literal["not_claimed"] = "not_claimed"
@@ -178,6 +192,8 @@ class SignoffAxesClaim(BaseModel):
 
 class TwinUpdateImplementReview(ImplementReview):
     """Implementation reviewer schema specialized for twin update tickets."""
+
+    model_config = ConfigDict(extra="forbid")
 
     pcm_layer_regressions: list[PcmLayerRegression] = Field(default_factory=list)
     signoff_axes_claim: SignoffAxesClaim | None = None

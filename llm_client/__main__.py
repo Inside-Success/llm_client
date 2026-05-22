@@ -20,6 +20,7 @@ import sys
 from llm_client.cli.adoption import register_parser as register_adoption_parser
 from llm_client.cli.backfill import register_parser as register_backfill_parser
 from llm_client.cli.cost import register_parser as register_cost_parser
+from llm_client.cli.deliberate import register_parser as register_deliberate_parser
 from llm_client.cli.duet import register_parser as register_duet_parser
 from llm_client.cli.experiments import register_parser as register_experiments_parser
 from llm_client.cli.models import register_parser as register_models_parser
@@ -38,6 +39,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     register_cost_parser(subparsers)
+    register_deliberate_parser(subparsers)
     register_duet_parser(subparsers)
     register_models_parser(subparsers)
     register_replay_parser(subparsers)

@@ -18,7 +18,7 @@ layer.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.workflow.duet import ImplementReview, PlanReview
 from llm_client.workflow.duet_base import TaskFamily
@@ -27,6 +27,8 @@ from llm_client.workflow.duet_registry import register_task_family
 
 class CitationRef(BaseModel):
     """A ``file:line`` (or ``file:LL-LL``) citation that the reviewer could not verify."""
+
+    model_config = ConfigDict(extra="forbid")
 
     cited_as: str
     reason_unverified: str = ""
@@ -39,6 +41,8 @@ class PlanDocPlanReview(PlanReview):
     persistence to ``plan_review.json``, etc.) keeps working. Adds three
     plan-doc-specific findings buckets.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     template_section_misses: list[str] = Field(default_factory=list)
     references_unverified: list[CitationRef] = Field(default_factory=list)

@@ -42,7 +42,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Literal, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.workflow.config import WorkflowConfig
 from llm_client.workflow.context import WorkflowContext
@@ -172,6 +172,8 @@ class PlanReviewBlocker(BaseModel):
     ``unverified_claim`` instead of emitting a blocker.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     step_id: str | None = None
     claim: str
     evidence_path: str
@@ -185,6 +187,8 @@ class PlanReview(PlanReviewBase):
     branches on ``verdict`` (inherited from ``PlanReviewBase``), so subclass
     additions don't break control flow.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     blockers: list[PlanReviewBlocker] = Field(default_factory=list)
     nits: list[dict[str, str]] = Field(default_factory=list)
@@ -262,6 +266,8 @@ class CorrectnessFinding(BaseModel):
     ``scope_drift_findings`` entry instead.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     file_path: str
     line: int
     claim: str
@@ -270,6 +276,8 @@ class CorrectnessFinding(BaseModel):
 
 class ImplementReview(ImplementReviewBase):
     """Generic implementation-review schema; the default for the duet chassis."""
+
+    model_config = ConfigDict(extra="forbid")
 
     correctness_findings: list[CorrectnessFinding] = Field(default_factory=list)
     contract_violations: list[dict[str, str]] = Field(default_factory=list)

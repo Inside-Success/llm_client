@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 DuetVerdict = Literal["pass", "revise", "block"]
 
@@ -28,7 +28,15 @@ class PlanReviewBase(BaseModel):
     Subclasses can add domain-specific fields (e.g. ``template_section_misses``
     for plan-doc review, ``pcm_layer_findings`` for twin-update review). The
     chassis router only consumes ``verdict``, so subclass additions are safe.
+
+    ``extra="forbid"`` is required so the generated JSON schema includes
+    ``additionalProperties: false`` — OpenAI strict-mode structured outputs
+    (used by codex) reject schemas without it. The Claude Agent SDK is more
+    tolerant but silently fails on larger schemas missing it. Subclasses
+    inherit this config.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     verdict: DuetVerdict
     reviewer_summary: str = ""
@@ -41,7 +49,11 @@ class ImplementReviewBase(BaseModel):
     Same router-grade ``verdict`` contract as ``PlanReviewBase``. Domain
     profiles add fields like ``contract_violations`` against domain-specific
     constraints, or ``test_coverage_findings`` for code-heavy reviews.
+
+    See ``PlanReviewBase`` for the rationale on ``extra="forbid"``.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     verdict: DuetVerdict
     reviewer_summary: str = ""
