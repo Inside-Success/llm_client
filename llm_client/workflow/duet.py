@@ -163,6 +163,49 @@ class PlanArtifact(BaseModel):
     estimated_files_changed: int | None = None
 
 
+class Nit(BaseModel):
+    """A non-blocking finding the reviewer noticed but doesn't block on.
+
+    Typed (not a free-form dict) so the schema is OpenAI strict-mode
+    compatible. ``location`` should be a file path, line range, or section
+    name; empty when the nit is general.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    claim: str
+    location: str = ""
+    suggested_fix: str = ""
+
+
+class UnverifiedClaim(BaseModel):
+    """A claim from the plan that the reviewer could not verify.
+
+    Distinct from ``Nit`` (which is the reviewer's own observation) and from
+    ``PlanReviewBlocker`` (which has a citation). Use when the reviewer
+    cannot confirm or refute a planner assertion from the available evidence.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    claim: str
+    reason_unverified: str = ""
+
+
+class ContractViolation(BaseModel):
+    """A way the implementation breaks one of the task's stated constraints.
+
+    ``evidence_path`` is required so contract violations are falsifiable.
+    Free-text scope-drift goes into ``scope_drift_findings`` instead.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    constraint: str
+    violation: str
+    evidence_path: str
+
+
 class PlanReviewBlocker(BaseModel):
     """A blocker flagged in plan review.
 
@@ -191,8 +234,8 @@ class PlanReview(PlanReviewBase):
     model_config = ConfigDict(extra="forbid")
 
     blockers: list[PlanReviewBlocker] = Field(default_factory=list)
-    nits: list[dict[str, str]] = Field(default_factory=list)
-    unverified_claims: list[dict[str, str]] = Field(default_factory=list)
+    nits: list[Nit] = Field(default_factory=list)
+    unverified_claims: list[UnverifiedClaim] = Field(default_factory=list)
     missing_acceptance_checks: list[str] = Field(default_factory=list)
     scope_creep_findings: list[str] = Field(default_factory=list)
 
@@ -280,7 +323,7 @@ class ImplementReview(ImplementReviewBase):
     model_config = ConfigDict(extra="forbid")
 
     correctness_findings: list[CorrectnessFinding] = Field(default_factory=list)
-    contract_violations: list[dict[str, str]] = Field(default_factory=list)
+    contract_violations: list[ContractViolation] = Field(default_factory=list)
     unverified_test_claims: list[str] = Field(default_factory=list)
     missing_followups_from_plan: list[str] = Field(default_factory=list)
     scope_drift_findings: list[str] = Field(default_factory=list)
@@ -883,6 +926,9 @@ def build_duet_workflow(
 
 
 __all__ = [
+    "ContractViolation",
+    "Nit",
+    "UnverifiedClaim",
     "DuetVerdict",
     "DuetTask",
     "DuetRoles",
