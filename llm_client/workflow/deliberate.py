@@ -45,6 +45,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.workflow.config import WorkflowConfig
 from llm_client.workflow.context import WorkflowContext
+from llm_client.workflow.deliberate_verifier import (
+    LedgerEntry,
+    VerifierLedger,
+    verify_round,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -198,8 +203,12 @@ class DeliberationState(TypedDict, total=False):
     agents: list[dict[str, str]]  # serialized DeliberationAgent records
     # Latest position per agent, keyed by agent name.
     latest_positions: dict[str, dict[str, Any]]
+    # Previous round's positions per agent, used by the verifier for lineage.
+    prior_positions_by_agent: dict[str, dict[str, Any]]
     # Full history: list of position dicts in chronological order.
     position_history: list[dict[str, Any]]
+    # Per-round verifier ledger (Plan #34). Serialized form: list of entry dicts.
+    verifier_ledger: list[dict[str, Any]]
     final_verdict: DeliberationVerdict
     error: str
     # WorkflowContext fields
@@ -218,13 +227,24 @@ def detect_convergence(
     latest_positions: dict[str, dict[str, Any]],
     round_num: int,
     max_rounds: int,
+    ledger: VerifierLedger | None = None,
 ) -> DeliberationVerdict | None:
     """Decide whether deliberation has reached a terminal state.
+
+    When ``ledger`` is provided (Plan #34): refuse to fire ``"converged"`` if
+    the latest round has any unverified ledger entry OR any lineage flag
+    (silent rename / silent retire / fabricated peer reference). This makes
+    the convergence verdict depend on resolved evidence rather than
+    agents' self-reported ``agreed_with_peer`` / ``disagreed_with_peer``.
+
+    When ``ledger`` is ``None``: preserves the pre-Plan-#34 behavior so
+    callers that haven't migrated still work.
 
     Returns:
         ``"converged"`` if round >= 2 and every agent's latest position has
         an empty ``disagreed_with_peer`` AND covers every claim ID the peer
-        last emitted in ``agreed_with_peer``.
+        last emitted in ``agreed_with_peer`` AND (when ledger supplied) the
+        latest round has no unverified entries or lineage flags.
 
         ``"stalled"`` if every agent's latest position has zero claims (i.e.
         both agents failed to engage).
@@ -270,6 +290,21 @@ def detect_convergence(
                 break
         if not converged_signal:
             break
+
+    if converged_signal:
+        # Plan #34: when a ledger is provided, also require that the latest
+        # round in the ledger has no unverified citations or lineage flags.
+        # The ledger's round numbers track position.round (not the router's
+        # state["round"] which is one ahead of the latest position), so look
+        # up the latest round from the ledger itself.
+        if ledger is not None:
+            latest_round = ledger.latest_round()
+            if latest_round is not None:
+                if (
+                    ledger.has_unverified_in_round(latest_round)
+                    or ledger.has_lineage_flag_in_round(latest_round)
+                ):
+                    converged_signal = False
 
     if converged_signal:
         return "converged"
@@ -487,6 +522,60 @@ def _make_round_increment_node() -> Callable[[dict[str, Any]], dict[str, Any]]:
     return increment_node
 
 
+def _make_verifier_node() -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Build the Plan #34 verifier node.
+
+    Runs after both agents have spoken in a round (between ``agent_b`` and
+    ``round_increment``). Resolves every cited ``evidence_path`` in
+    ``latest_positions``, tracks claim lineage against the prior round's
+    positions, and appends entries to ``state["verifier_ledger"]``.
+
+    Snapshots ``latest_positions`` into ``prior_positions_by_agent`` so the
+    NEXT round's verifier can detect silent rename / silent retire.
+    """
+
+    def verifier_node(state: dict[str, Any]) -> dict[str, Any]:
+        latest = state.get("latest_positions") or {}
+        if not latest:
+            return {}
+        prior_by_agent = state.get("prior_positions_by_agent") or {}
+        prior_ledger_entries = state.get("verifier_ledger") or []
+        prior_ledger = VerifierLedger(
+            entries=[LedgerEntry(**e) for e in prior_ledger_entries],
+        )
+        # Use the position's own round number — that's the round these
+        # positions came FROM, regardless of where the router's state.round
+        # has been incremented to.
+        sample_round = next(iter(latest.values())).get("round", 0)
+        workspace_path = state.get("task", {}).get("workspace_path", "")
+
+        new_ledger = verify_round(
+            latest_positions=latest,
+            prior_positions_by_agent=prior_by_agent,
+            prior_ledger=prior_ledger,
+            round_num=int(sample_round),
+            workspace_path=workspace_path,
+        )
+
+        # Persist after every round so a killed run still has the partial
+        # ledger on disk.
+        _persist_json(
+            state["run_dir"],
+            "verifier_ledger.json",
+            new_ledger.to_dict(),
+        )
+
+        # Snapshot current → prior for next round's lineage checks.
+        next_prior = {name: dict(pos) for name, pos in latest.items()}
+
+        return {
+            "verifier_ledger": [e.to_dict() for e in new_ledger.entries],
+            "prior_positions_by_agent": next_prior,
+        }
+
+    return verifier_node
+
+
 def _make_synthesis_node(
     synthesis_model: str,
     verdict: DeliberationVerdict,
@@ -534,6 +623,8 @@ def _make_signoff_node(verdict: DeliberationVerdict) -> Callable[[dict[str, Any]
                 residual.append(dis)
 
         artifacts = {"task": "task.json", "synthesis": "synthesis.json"}
+        if state.get("verifier_ledger"):
+            artifacts["verifier_ledger"] = "verifier_ledger.json"
         for i, pos in enumerate(history):
             agent_name = pos.get("agent_name", f"unknown_{i}")
             round_num = pos.get("round", 0)
@@ -571,7 +662,14 @@ def _make_post_round_router() -> Callable[[dict[str, Any]], str]:
         latest = state.get("latest_positions") or {}
         round_num = state.get("round", 0)
         max_rounds = state.get("max_rounds", 3)
-        verdict = detect_convergence(latest, round_num, max_rounds)
+        # Plan #34: thread the verifier ledger into the convergence check.
+        ledger_entries = state.get("verifier_ledger") or []
+        ledger: VerifierLedger | None = None
+        if ledger_entries:
+            ledger = VerifierLedger(
+                entries=[LedgerEntry(**e) for e in ledger_entries],
+            )
+        verdict = detect_convergence(latest, round_num, max_rounds, ledger=ledger)
         if verdict is None:
             return "agent_a"  # continue to next round
         if verdict == "converged":
@@ -649,6 +747,7 @@ def build_deliberation_workflow(
 
     agent_a_node = _make_agent_position_node(agent_a, peer_name=agent_b_name)
     agent_b_node = _make_agent_position_node(agent_b, peer_name=agent_a_name)
+    verifier_node = _make_verifier_node()
     increment_node = _make_round_increment_node()
     synthesis_converged_node = _make_synthesis_node(resolved_synthesis, "converged")
     synthesis_pd_node = _make_synthesis_node(resolved_synthesis, "productive_disagreement")
@@ -663,7 +762,8 @@ def build_deliberation_workflow(
         "max_budget": max_budget,
     })
 
-    # Round topology: agent_a → agent_b → round_increment → router
+    # Round topology: agent_a → agent_b → verifier → round_increment → router
+    #   verifier resolves cited evidence + tracks claim lineage (Plan #34).
     #   router → agent_a (continue) | synthesis_converged | synthesis_productive_disagreement | signoff_stalled
     #   synthesis_converged → signoff_pass
     #   synthesis_productive_disagreement → signoff_pd
@@ -673,6 +773,7 @@ def build_deliberation_workflow(
         nodes={
             "agent_a": agent_a_node,
             "agent_b": agent_b_node,
+            "verifier": verifier_node,
             "round_increment": increment_node,
             "synthesis_converged": synthesis_converged_node,
             "synthesis_productive_disagreement": synthesis_pd_node,
@@ -682,7 +783,8 @@ def build_deliberation_workflow(
         },
         edges=[
             ("agent_a", "agent_b"),
-            ("agent_b", "round_increment"),
+            ("agent_b", "verifier"),
+            ("verifier", "round_increment"),
             ("synthesis_converged", "signoff_pass"),
             ("synthesis_productive_disagreement", "signoff_pd"),
         ],
@@ -707,13 +809,17 @@ def build_deliberation_workflow(
         "agents": [{"name": agent_a_name, "model": agent_a_model},
                    {"name": agent_b_name, "model": agent_b_model}],
         "latest_positions": {},
+        "prior_positions_by_agent": {},
         "position_history": [],
+        "verifier_ledger": [],
     })
 
     return app, initial_state
 
 
 __all__ = [
+    "LedgerEntry",
+    "VerifierLedger",
     "DeliberationVerdict",
     "PositionState",
     "Confidence",

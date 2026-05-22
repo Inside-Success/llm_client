@@ -210,6 +210,11 @@ def test_round_1_produces_independent_positions(harness: _DeliberationHarness, t
     run_dir = tmp_path / "run"
     workspace = tmp_path / "ws"
     workspace.mkdir()
+    # Plan #34 verifier resolves cited evidence_path; ``_claim`` defaults to
+    # ``foo.py:1`` so make sure that file exists in the workspace, otherwise
+    # the verifier marks every claim as ``file_not_found`` and blocks
+    # converged.
+    (workspace / "foo.py").write_text("line 1\n")
 
     # Agent A converges immediately (round 1 + nothing to disagree on).
     harness.push("agent_a", Position(
@@ -402,9 +407,122 @@ def test_position_artifacts_persisted_to_run_dir(
         "position_agent_b_round_2.json",
         "synthesis.json",
         "signoff.json",
+        "verifier_ledger.json",  # Plan #34
     }
     actual = {p.name for p in run_dir.iterdir() if p.is_file()}
     assert expected.issubset(actual), f"missing: {expected - actual}"
+
+
+# ---------------------------------------------------------------------------
+# Plan #34: verifier-gated convergence
+# ---------------------------------------------------------------------------
+
+
+def test_detect_convergence_backward_compat_without_ledger() -> None:
+    """detect_convergence(latest, round, max, ledger=None) preserves Plan-#33 behavior."""
+    from llm_client.workflow.deliberate import detect_convergence
+
+    positions = {
+        "agent_a": Position(
+            agent_name="agent_a", round=2, claims=[_claim("a1", "X")],
+            agreed_with_peer=["b1"], disagreed_with_peer=[],
+        ).model_dump(),
+        "agent_b": Position(
+            agent_name="agent_b", round=2, claims=[_claim("b1", "Y")],
+            agreed_with_peer=["a1"], disagreed_with_peer=[],
+        ).model_dump(),
+    }
+    # No ledger arg → backward compat → converged.
+    assert detect_convergence(positions, round_num=2, max_rounds=3) == "converged"
+
+
+def test_detect_convergence_refused_when_ledger_has_unverified_in_latest_round() -> None:
+    """Even with agreement metadata complete, an unverified ledger entry in the
+    latest round blocks the converged verdict.
+    """
+    from llm_client.workflow.deliberate import detect_convergence
+    from llm_client.workflow.deliberate_verifier import LedgerEntry, VerifierLedger
+
+    positions = {
+        "agent_a": Position(
+            agent_name="agent_a", round=2, claims=[_claim("a1", "X")],
+            agreed_with_peer=["b1"], disagreed_with_peer=[],
+        ).model_dump(),
+        "agent_b": Position(
+            agent_name="agent_b", round=2, claims=[_claim("b1", "Y")],
+            agreed_with_peer=["a1"], disagreed_with_peer=[],
+        ).model_dump(),
+    }
+    ledger = VerifierLedger()
+    ledger.extend([
+        LedgerEntry(
+            agent_name="agent_a", round=2, claim_id="a1",
+            evidence_path="bogus.py:1", status="file_not_found",
+        ),
+    ])
+    # Ledger has an unverified citation in round 2 → refuses converged.
+    assert detect_convergence(positions, round_num=2, max_rounds=3, ledger=ledger) is None
+
+
+def test_detect_convergence_refused_when_lineage_flag_in_latest_round() -> None:
+    """A silent_rename flag in the latest round blocks converged."""
+    from llm_client.workflow.deliberate import detect_convergence
+    from llm_client.workflow.deliberate_verifier import LedgerEntry, VerifierLedger
+
+    positions = {
+        "agent_a": Position(
+            agent_name="agent_a", round=2, claims=[_claim("a1", "X")],
+            agreed_with_peer=["b1"], disagreed_with_peer=[],
+        ).model_dump(),
+        "agent_b": Position(
+            agent_name="agent_b", round=2, claims=[_claim("b1", "Y")],
+            agreed_with_peer=["a1"], disagreed_with_peer=[],
+        ).model_dump(),
+    }
+    ledger = VerifierLedger()
+    ledger.extend([
+        LedgerEntry(
+            agent_name="agent_a", round=2, claim_id="a1",
+            evidence_path="foo.py:1", status="verified",
+        ),
+        LedgerEntry(
+            agent_name="agent_a", round=2, claim_id="a1_renamed",
+            evidence_path="", status="content_mismatch_warning",
+            lineage_flag="silent_rename",
+        ),
+    ])
+    assert detect_convergence(positions, round_num=2, max_rounds=3, ledger=ledger) is None
+
+
+def test_detect_convergence_fires_when_ledger_is_clean() -> None:
+    """When agents agree AND the ledger has only verified entries in the
+    latest round, converged still fires.
+    """
+    from llm_client.workflow.deliberate import detect_convergence
+    from llm_client.workflow.deliberate_verifier import LedgerEntry, VerifierLedger
+
+    positions = {
+        "agent_a": Position(
+            agent_name="agent_a", round=2, claims=[_claim("a1", "X")],
+            agreed_with_peer=["b1"], disagreed_with_peer=[],
+        ).model_dump(),
+        "agent_b": Position(
+            agent_name="agent_b", round=2, claims=[_claim("b1", "Y")],
+            agreed_with_peer=["a1"], disagreed_with_peer=[],
+        ).model_dump(),
+    }
+    ledger = VerifierLedger()
+    ledger.extend([
+        LedgerEntry(
+            agent_name="agent_a", round=2, claim_id="a1",
+            evidence_path="x.py:1", status="verified",
+        ),
+        LedgerEntry(
+            agent_name="agent_b", round=2, claim_id="b1",
+            evidence_path="y.py:2", status="verified",
+        ),
+    ])
+    assert detect_convergence(positions, round_num=2, max_rounds=3, ledger=ledger) == "converged"
 
 
 def test_wrong_agent_count_raises_at_build_time(tmp_path: Path) -> None:

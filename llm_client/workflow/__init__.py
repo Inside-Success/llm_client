@@ -51,7 +51,7 @@ __all__ = [
 # build_workflow is imported lazily to avoid requiring langgraph at import time
 # when only config/context is needed
 try:
-    from llm_client.workflow.builder import build_workflow
+    from llm_client.workflow.builder import build_workflow  # noqa: F401
     __all__.append("build_workflow")
 except ImportError:
     pass
