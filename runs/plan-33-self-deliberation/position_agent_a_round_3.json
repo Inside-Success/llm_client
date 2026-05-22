@@ -1,0 +1,105 @@
+{
+  "agent_name": "agent_a",
+  "agreed_with_peer": [
+    "b1_revised",
+    "b2",
+    "b3",
+    "b5"
+  ],
+  "claims": [
+    {
+      "claim": "The single highest-priority next improvement is still a chassis-owned adjudication stage that converts cited evidence into a per-claim ledger and drives convergence from that ledger instead of from agent-authored agreement metadata. The shipped detector only inspects `latest_positions`, trusts self-reported `agreed_with_peer` / `disagreed_with_peer`, and synthesis consumes the same unaudited history, so the same agents currently make claims and certify their own resolution.",
+      "claim_id": "a1",
+      "evidence_path": "llm_client/workflow/deliberate.py:217-280; llm_client/workflow/deliberate.py:304-367; llm_client/workflow/deliberate.py:370-400; llm_client/workflow/deliberate.py:490-519; tests/test_workflow_deliberate.py:124-151",
+      "severity": "high"
+    },
+    {
+      "claim": "Required `evidence_path` fields improve schema completeness but do not make findings falsifiable in the shipped design. `evidence_path` is an unconstrained `str` on both claims and disagreements, there is no chassis-level existence or content check, and the live schema-smoke tests only prove provider acceptance of the schema shape, not citation truth.",
+      "claim_id": "a2",
+      "evidence_path": "llm_client/workflow/deliberate.py:95-109; llm_client/workflow/deliberate.py:127-138; tests/test_workflow_schema_smoke.py:14-17; tests/test_workflow_schema_smoke.py:100-125",
+      "severity": "high"
+    },
+    {
+      "claim": "A third symmetric debater is not the first blind-spot fix. V1 hard-codes exactly two agents and serializes round 1 as `agent_a -> agent_b`, so independence is already compromised before any N-agent extension. The next topology change should be either true parallel first-pass generation or a role-differentiated verifier, not just another self-reporting agent.",
+      "claim_id": "a3",
+      "evidence_path": "llm_client/workflow/deliberate.py:9-17; llm_client/workflow/deliberate.py:431-445; llm_client/workflow/deliberate.py:637-642; llm_client/workflow/deliberate.py:666-693; llm_client/cli/deliberate.py:32-60; tests/test_workflow_deliberate.py:205-255",
+      "severity": "warn"
+    },
+    {
+      "claim": "At `max_rounds > 5`, the first scaling-specific failure is synthesis context growth, not per-round prompt explosion: per-round agent prompts only include `peer_latest` plus `own_prior`, but the workflow stores full `position_history` and dumps the entire chronology into synthesis. That matters, but it is still lower priority than adjudication because convergence correctness is already weak at round 2, not only at long horizons.",
+      "claim_id": "a4_revised",
+      "evidence_path": "llm_client/workflow/deliberate.py:201-202; llm_client/workflow/deliberate.py:329-352; llm_client/workflow/deliberate.py:370-400; llm_client/workflow/deliberate.py:499-500",
+      "severity": "warn"
+    },
+    {
+      "claim": "Asymmetric duet plus symmetric deliberation remains the right top-level partition; the missing capability is not a third user-facing workflow but an independent verifier/gate inside deliberation, followed later by profile-extension parity with duet. Duet already exposes a registry-backed profile surface, while deliberation's docstring promises specialization but its builder and CLI ship only the generic two-agent path.",
+      "claim_id": "a5",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:1-47; llm_client/workflow/duet.py:833-883; llm_client/cli/deliberate.py:146-203; llm_client/cli/duet.py:130-149; llm_client/cli/duet.py:266-273",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:217-280; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:1-47",
+      "my_counterclaim": "The missing deliberation registry is real debt, but I still do not think the adjudicator must ship first as a `DeliberationFamily` hook. The broken behavior today is generic chassis logic: self-certified convergence and unaudited citations. A generic chassis verifier that opens cited evidence and tracks claim lineage is the shortest path to restoring trust; family hooks can extend that verifier afterward without blocking the first correctness fix.",
+      "peer_claim_id": "b4"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:95-124; llm_client/workflow/profiles/plan_doc_review.py:59-61; tests/test_workflow_schema_smoke.py:14-17",
+      "my_counterclaim": "I disagree that a syntactic+filesystem-only verifier is enough for v1. It catches fake paths, but it does not make claims falsifiable because an agent can still cite a real file:line and misstate what it says. The repo's own plan-doc review profile defines 'unverified' as either 'could not open' or 'could not confirm claimed content', so the minimum useful adjudicator has to open cited ranges and compare content, not just parse the citation.",
+      "peer_claim_id": "b6"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:255-275",
+      "content_snippet": "`detect_convergence` sets `agreed_set = set(pos.get(\"agreed_with_peer\") or [])` and returns `\"converged\"` when every peer's current `claim_id` set is a subset and `disagreed_with_peer` is empty.",
+      "label": "Convergence is self-reported latest-state set inclusion"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:329-352; llm_client/workflow/deliberate.py:431-445",
+      "content_snippet": "Round-1 gets `None yet \u2014 this is round 1`, later turns serialize `peer_latest` and `own_prior` into the prompt; the node reads both from `latest_positions` before each call.",
+      "label": "Round-1 and per-round prompt threading"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:389-390; llm_client/workflow/deliberate.py:499-500",
+      "content_snippet": "The synthesis prompt includes `## Position history (chronological)` followed by `json.dumps(positions, indent=2)`, and the synthesis node passes `history = state.get(\"position_history\") or []`.",
+      "label": "Synthesis receives full chronology"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:104-109; llm_client/workflow/deliberate.py:136-138",
+      "content_snippet": "`PositionClaim` defines `evidence_path: str`; `DisagreementAtom` also defines `evidence_path: str`, with no pattern, parser, or validator.",
+      "label": "Evidence fields are bare strings"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:14-17; tests/test_workflow_schema_smoke.py:101-103",
+      "content_snippet": "The smoke tests are the `minimum live-LLM round-trip` and assert the call returns `without a schema-validation error`; the deliberation test says it verifies the `Position` schema can run through real LLMs.",
+      "label": "Schema-smoke scope is provider schema acceptance only"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:637-642; llm_client/workflow/deliberate.py:683-693; llm_client/cli/deliberate.py:55-59",
+      "content_snippet": "`build_deliberation_workflow` raises unless `len(pair) == 2`, and the graph edges are `agent_a -> agent_b -> round_increment` with `entry_point=\"agent_a\"`; CLI parsing also requires exactly 2 agents.",
+      "label": "Two-agent v1 is hard-coded and serialized"
+    },
+    {
+      "citation": "llm_client/workflow/duet.py:842-883; llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:592-643",
+      "content_snippet": "Duet resolves `task_family` via `get_task_family(task_family)`, while deliberation's docstring says it can be specialized by profile but the builder exposes no analogous parameter.",
+      "label": "Duet has a real registry-backed extension surface; deliberation does not"
+    },
+    {
+      "citation": "llm_client/workflow/profiles/plan_doc_review.py:59-61",
+      "content_snippet": "`references_unverified` should list every cited range the reviewer `could not open or whose claimed content you could not confirm`.",
+      "label": "Plan-doc profile already treats citation confirmation as content verification, not mere syntax"
+    }
+  ],
+  "open_questions": [
+    "What is the least-fragile lineage mechanism for the adjudication ledger: chassis-issued stable claim IDs, explicit `supersedes_claim_ids`, or normalized-claim matching across rounds?",
+    "Should the verifier stage become a shared primitive that duet can also invoke after reviewer disagreement, or stay deliberation-only until its contract settles?",
+    "If round-1 independence is fixed, should convergence remain rule-based over verified claim statuses, or should the verifier also own the final synthesis schema?"
+  ],
+  "reviewer_model": "codex/gpt-5.4",
+  "reviewer_summary": "My ranking changed slightly after peer b5/b6: the top issue is still adjudication correctness, but I now separate long-horizon scaling more cleanly. Ranked by leverage: (1) add a chassis-owned verifier/adjudicator that opens cited evidence, records per-claim statuses plus lineage, and drives convergence from that ledger rather than from `agreed_with_peer`; (2) restore true round-1 independence, because the current serialized first pass contaminates any future N-agent debate; (3) compress or summarize synthesis history, because only synthesis currently eats the full chronology; (4) add deliberation profile/registry parity with duet after the control logic is trustworthy. The single highest-priority next improvement is the verifier/adjudicator stage because it fixes the root structural flaw: the workflow currently lets the same agents both assert findings and certify that disagreement is resolved, while `evidence_path` is only a required string. Until the chassis independently checks cited evidence and preserves claim lineage across rounds, both convergence and synthesis remain easy to game even when strict-mode schema validation passes.",
+  "round": 3,
+  "state": "revised"
+}

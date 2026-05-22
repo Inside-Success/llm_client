@@ -59,6 +59,7 @@ minds chew on a problem independently and argue until they converge."
 | 31 | [TaskFamily Abstraction for the Duet Chassis](31_task_family_abstraction.md) | High | ✅ Complete | 30 |
 | 32 | [twin_update Profile](32_twin_update_profile.md) | High | ✅ Complete | 31 |
 | 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | 📋 In Progress | 31 |
+| 34 | [Deliberation Verifier / Adjudicator Stage](34_deliberation_verifier_adjudicator.md) | High | 📋 Planned | 33 |
 
 
 ## Status Key

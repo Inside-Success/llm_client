@@ -1,0 +1,107 @@
+{
+  "agent_name": "agent_b",
+  "agreed_with_peer": [
+    "a1",
+    "a2",
+    "a3",
+    "a4_revised",
+    "a5"
+  ],
+  "claims": [
+    {
+      "claim": "Budget cap IS cumulative-per-trace_id at the kernel and WorkflowContext reuses one trace_id across every agent/synthesis call, so my round-1 'highest-priority' framing of budget leakage was wrong. Residual risk is bounded single-call overshoot because _check_budget runs pre-dispatch, which is info-level cost-safety hygiene, not a chassis-correctness defect. Holding this retraction stable.",
+      "claim_id": "b1_revised",
+      "evidence_path": "llm_client/execution/call_contracts.py:136-145; llm_client/execution/structured_runtime.py:219-233; llm_client/workflow/context.py:131-147",
+      "severity": "info"
+    },
+    {
+      "claim": "Convergence is structurally weaker than 'polite agents'. detect_convergence treats agreed_with_peer as a set of free-text strings (no validator that they are real peer claim_ids), and the subset check is against the PEER'S CURRENT-ROUND claim_ids only \u2014 so an agent who silently drops a previously-disputed claim in round N+1 trivially satisfies the subset and wins convergence. The detector has no claim-lineage memory across rounds; 'stalled' only fires when ALL agents emit zero claims, never on partial retirement. Both attacks fire without any politeness on the agent's part.",
+      "claim_id": "b2",
+      "evidence_path": "llm_client/workflow/deliberate.py:241-247; llm_client/workflow/deliberate.py:255-275; llm_client/workflow/deliberate.py:152-156",
+      "severity": "high"
+    },
+    {
+      "claim": "Round-1 non-independence is graph-deterministic. Edges are agent_a -> agent_b -> round_increment with entry_point='agent_a'; agent_a's round-1 position is written into latest_positions before agent_b's node fires, so agent_b's round-1 peer_latest IS agent_a's just-written round-1 output, not a true independent first pass. Fixing this via parallel round-1 fan-out is strictly higher leverage than adding a third symmetric debater (converges with peer a3).",
+      "claim_id": "b3",
+      "evidence_path": "llm_client/workflow/deliberate.py:683-693; llm_client/workflow/deliberate.py:431-476; llm_client/workflow/deliberate.py:9-13",
+      "severity": "warn"
+    },
+    {
+      "claim": "Narrowing my round-2 b4. I no longer claim a full DeliberationFamily registry must ship in the same change as the adjudicator. I DO still claim the verifier MUST land with an overridable hook signature (a typed callable on the workflow builder, default = generic) so that plan_doc_review and twin_update can later plug in domain verifiers without a chassis retrofit. The registry shell can come later; the hook seam cannot. Deliberation's docstring at lines 24-32 already promises profile specialization, and duet shows the precedent (build_duet_workflow accepts task_family resolved via get_task_family).",
+      "claim_id": "b4_revised",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/duet.py:842-883; llm_client/workflow/duet_registry.py:1-65",
+      "severity": "warn"
+    },
+    {
+      "claim": "Synthesis is a distinct context-bloat failure mode from convergence drift. The synthesis prompt dumps the full position_history via json.dumps(positions, indent=2) into one LLM call; per-round agent prompts correctly bound to peer_latest + own_prior. So 'context bloat at max_rounds > 5' lives in synthesis, not in per-round nodes. Fix is synthesis-side compression/summarization, not round-prompt restructuring. Aligned with peer a4_revised.",
+      "claim_id": "b5",
+      "evidence_path": "llm_client/workflow/deliberate.py:370-400; llm_client/workflow/deliberate.py:389-390; llm_client/workflow/deliberate.py:490-519",
+      "severity": "warn"
+    },
+    {
+      "claim": "Revising my round-2 b6 after peer pushback. Syntactic+filesystem-only verification (file resolves, line range parses, range within file length) is NOT sufficient for v1. The repo's OWN definition of 'unverified' at plan_doc_review.py:59-61 includes both 'could not open' AND 'could not confirm claimed content' \u2014 an agent citing a real file:line and misstating what it says is exactly the gaming case syntactic-only verification misses. Minimum useful v1 must (a) open the cited range, (b) attach the actual file content snippet to the ledger entry alongside the agent's claimed content, and (c) mark claims whose snippet diverges from the agent's characterization as 'unverified' for the convergence detector. LLM-semantic content matching remains v2; but content-readback is v1, not v2.",
+      "claim_id": "b6_revised",
+      "evidence_path": "llm_client/workflow/profiles/plan_doc_review.py:59-61; llm_client/workflow/deliberate.py:104-109; llm_client/workflow/deliberate.py:127-138; tests/test_workflow_schema_smoke.py:100-125",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/duet.py:842-883; llm_client/workflow/profiles/plan_doc_review.py:59-61",
+      "my_counterclaim": "Residual but narrowed disagreement on build order. I now accept that the chassis-owned verifier ships before a full DeliberationFamily registry. What I still claim is non-negotiable: the verifier MUST be introduced with an overridable hook signature on build_deliberation_workflow (a callable defaulted to the generic content-readback verifier), NOT as a hard-coded chassis node, because the docstring promise at deliberate.py:24-32 of profile specialization is concrete (plan_doc_review needs open-and-confirm semantics per profiles/plan_doc_review.py:59-61; twin_update needs cross-repo identifier presence). Wiring the hook on day one costs ~10 lines; retrofitting a hard-coded verifier later costs a chassis migration and breaks any callsite that depends on the v1 signature.",
+      "peer_claim_id": "a5"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:217-280; llm_client/workflow/deliberate.py:241-242; llm_client/workflow/deliberate.py:255-275; llm_client/workflow/profiles/plan_doc_review.py:59-61",
+      "my_counterclaim": "Agreement-with-extension, preserved from round 2 and reinforced. Peer a1 correctly names the root defect (same agents make claims AND certify resolution) and correctly names 'lineage' as a requirement. What peer a1 leaves implicit and I am making explicit: (i) lineage tracking must produce a 'silent retirement -> stalling/forced-relitigation' signal in the detector \u2014 recording lineage without acting on it leaves the round N+1 drop-and-win attack open (b2 + deliberate.py:241-242 'stalled' is all-or-nothing); (ii) v1 verifier content-checking must do open-and-snippet, not just syntactic+filesystem (revised b6 + profiles/plan_doc_review.py:59-61). These two are not cosmetic extensions of a1; they are load-bearing for whether the adjudicator actually closes the gaming surface.",
+      "peer_claim_id": "a1"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/profiles/plan_doc_review.py:59-61",
+      "content_snippet": "'references_unverified: list every cited file:line (or file:LL-LL) range you could not open or whose claimed content you could not confirm.'",
+      "label": "plan_doc_review defines 'unverified' as open-failure OR content-confirmation-failure (peer a's point lands)"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:255-275",
+      "content_snippet": "agreed_set = set(pos.get('agreed_with_peer') or []); other_claim_ids = {c.get('claim_id') for c in (other_pos.get('claims') or [])}; if not other_claim_ids.issubset(agreed_set): converged_signal=False \u2014 subset is against PEER'S CURRENT-ROUND claims only; dropped claims silently disappear from the check.",
+      "label": "Convergence detector ignores claim lineage entirely"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:241-242",
+      "content_snippet": "if all(not pos.get('claims') for pos in latest_positions.values()): return 'stalled' \u2014 fires only when EVERY agent emits zero claims; a partial drop is invisible.",
+      "label": "'stalled' is all-or-nothing, never partial retirement"
+    },
+    {
+      "citation": "llm_client/workflow/duet.py:842-883",
+      "content_snippet": "build_duet_workflow(..., task_family='generic', ...): family = get_task_family(task_family) \u2014 registry-resolved family object passed to graph nodes. build_deliberation_workflow has no analogous parameter.",
+      "label": "Duet has a builder-level task_family hook; deliberation does not"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:592-643",
+      "content_snippet": "build_deliberation_workflow signature takes (agents, max_rounds, llm_caller, run_dir) only \u2014 no task_family / no verifier / no Position subclass parameter.",
+      "label": "Deliberation builder hard-codes generic Position with no specialization seam"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:104-109",
+      "content_snippet": "PositionClaim: claim_id: str; claim: str; severity; evidence_path: str \u2014 no Field(pattern=...), no validator, no parser. DisagreementAtom same shape at 127-138.",
+      "label": "evidence_path is bare str on both claim and disagreement schemas"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:389-390",
+      "content_snippet": "'## Position history (chronological)' followed by json.dumps(positions, indent=2) \u2014 no truncation, no per-round summarization, no claim-level deduplication.",
+      "label": "Synthesis dumps full chronology unmodified"
+    }
+  ],
+  "open_questions": [
+    "Should the verifier's 'unverified' status block convergence (treat 'unverified' as equivalent to outstanding disagreement) or merely annotate the ledger? Blocking is safer but raises the false-non-convergence rate when an agent cites a path the verifier genuinely cannot resolve in the workspace.",
+    "Claim lineage matching: chassis-issued stable IDs (peer a's option), explicit supersedes_claim_ids on PositionClaim (cheaper, agent-authored \u2014 but agents can lie), or normalized-claim text matching across rounds (most robust, most expensive)?",
+    "Does true round-1 parallelism interact with budget enforcement? Two concurrent calls share one trace_id and _check_budget is pre-dispatch only, so worst-case overshoot in parallel mode is 2x single-call cost, not 1x \u2014 small but worth noting before shipping the parallel fan-out."
+  ],
+  "reviewer_model": "claude-code/opus",
+  "reviewer_summary": "Round 3 revisions: (a) CONCEDED to peer on b6 \u2014 syntactic+filesystem-only verification is insufficient; v1 must open the cited range and attach the actual snippet to the ledger so 'real-file-misstate-content' gaming is caught (peer's plan_doc_review.py:59-61 citation lands). LLM-semantic content match remains v2. (b) NARROWED b4 to b4_revised \u2014 I no longer demand a full DeliberationFamily registry in the same change as the adjudicator, but I DO still demand the verifier ship as an overridable hook on build_deliberation_workflow rather than a hardcoded node, because plan_doc_review and twin_update have known domain-verifier needs and the docstring already promises specialization. (c) STABLE on b1_revised, b2, b3, b5 \u2014 peer agreed with all four. Final ranking by leverage: (1) Chassis-owned adjudicator/verifier that opens cited ranges, attaches the actual content snippet, tracks claim lineage across rounds (so silent retirement triggers a stalling signal rather than satisfying the subset check), and drives `converged` from the verified ledger instead of from `agreed_with_peer` set inclusion \u2014 landing with an overridable verifier-hook signature on the builder. (2) True round-1 parallel fan-out so agent_b's first-pass position is not contaminated by agent_a's just-written round-1 output. (3) Synthesis history compression/summarization for max_rounds > 5. (4) Deliberation registry parity with duet once the adjudicator's contract has settled. SINGLE HIGHEST-PRIORITY NEXT IMPROVEMENT: a chassis-owned verifier/adjudicator stage that (a) opens each cited file:line and attaches the real content snippet alongside the agent's characterization in a per-claim ledger, (b) tracks claim lineage across rounds so silent retirement of a disputed claim is treated as a stalling signal rather than satisfying the trivial subset check at deliberate.py:265-268, (c) drives the converged verdict from ledger status rather than from agent-authored agreed_with_peer strings, and (d) is wired in as an overridable hook (not a hardcoded node) so plan_doc_review and twin_update can later supply domain-specific verifiers without a chassis retrofit. This attacks the single root defect \u2014 the same agents currently both make findings AND certify their resolution while evidence_path is only a required string \u2014 and subsumes b2, b6_revised, and the load-bearing parts of a1/a2 in one focused change. Residual disagreement with peer a5 narrowed but preserved: the verifier ships with a hook seam from day 1, even if the full registry comes later.",
+  "round": 3,
+  "state": "revised"
+}
