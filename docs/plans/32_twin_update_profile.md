@@ -1,10 +1,11 @@
 # Plan #32: twin_update Profile
 
-**Status:** In Progress
+**Status:** ✅ Complete (2026-05-22)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** Plan #31 (TaskFamily abstraction)
-**Blocks:** eval_audit profile (Plan #33); future system-improvement meta-duet
+**Blocks:** Real customer dry-run (gated on Brian choosing a closed Maya CLI ticket)
+**Note:** The previously planned "Plan #33: eval_audit" has been pivoted. After Plan #32 landed, Brian clarified that the duet's asymmetric implementer/reviewer + 1-cycle gating shape is narrower than the desired general-purpose multi-agent deliberation pattern. A future Plan #33 will introduce a **deliberation** workflow (symmetric N-agent debate with convergence detection) as a sibling to the duet. eval_audit may land later as either a duet profile or a deliberation profile, depending on shape fit.
 
 ---
 
@@ -53,7 +54,7 @@ Out of scope (deliberately):
 - Rich PCM v2 atom catalogue (per-layer signal-density tables, content-bucket weights). The Literal layer names are enough for a reviewer to score against; atom-level detail can land when the profile is proving out on real tickets.
 - Live customer-prompt loader implementation. The `context_loader` is a stub that reads `task["extra"]` keys; the actual filesystem walk against a clone is a follow-up once the schema is validated.
 - Auto-detection of which Axis B level a change has earned. The reviewer declares; chassis doesn't infer.
-- `eval_audit` profile. Separate Plan #33 once twin_update is dry-run-validated.
+- `eval_audit` capability. Pivoted: a future Plan #33 will introduce a **deliberation** workflow (symmetric N-agent debate, multi-round, convergence-driven) as a sibling to the duet. eval_audit may eventually land as a duet profile, a deliberation profile, or split across both — depends on whether the audit step is more "ship a fix and review it" (duet) or "two minds investigate independently and argue" (deliberation).
 
 ---
 
@@ -111,6 +112,20 @@ Out of scope (deliberately):
 
 ---
 
+## Completion Log
+
+| Commit | What |
+|--------|------|
+| `2913890` | Plan #32: `profiles/twin_update.py` with PCM v2 layer Literal, three Axis Literals from the rubric authority, `PcmLayerFinding` / `TwinFidelityRubricMiss` / `ProofAuthorityGap` / `ScopeViolation` / `PcmLayerRegression` / `SignoffAxesClaim` schemas, reviewer addenda surfacing the layer + axis + overclaim vocabulary, stub `context_loader` reading `task["extra"]`. `DuetTask.extra: dict[str, Any]` chassis addition. 7 new tests; 73/73 in regression sweep. |
+| `5753245` | **Followup**: CLI flags `--customer`, `--ai`, `--ticket-id`, `--complaint-file`, `--customer-constraints`, `--published-prod-qa-artifact` route into `task["extra"]`. 4 new tests. |
+| `baafc55` | **Followup**: added the 5th hard-stop overclaim rule (`"never rely on one long generalized persona scenario as the only signoff proof"`) to the addendum — was missing despite the rubric authority listing it. Caught by Plan #32 self-review. Test tightened to iterate every Literal value via `typing.get_args` so future authority drift fails the test automatically rather than waiting for another self-review. |
+
+Dogfood verdict v1 (`runs/plan-32-review/plan_review.json`): `revise` — 1 blocker (the missing 5th rule), 6 nits, 2 unverified. Followup `baafc55` closes the blocker. Verdict v1 stands as the dogfood evidence; no v2 run yet (the followup tests assert the same property the v2 reviewer would have re-checked).
+
+Real-customer dry-run: **not yet run.** Gated on Brian choosing a closed Maya CLI ticket. The CLI invocation surface is fully wired (see "Invocation example" below in this doc — added in the Plan #32 followup commit batch).
+
+---
+
 ## Notes
 
 **Design decisions**
@@ -135,4 +150,4 @@ Out of scope (deliberately):
 - Per-layer PCM atom catalogue (signal-density tables, etc.).
 - Linear-ticket integration in the context loader.
 - `eval_audit` profile.
-- System-improvement meta-duet that consumes a corpus of `signoff.json` from prior runs.
+- System-improvement meta-workflow (duet or deliberation, TBD) that consumes a corpus of `signoff.json` from prior runs. Premature until enough real-customer runs exist.

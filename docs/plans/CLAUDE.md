@@ -2,6 +2,26 @@
 
 Track all implementation work here.
 
+## Duet stack (Plans #29-32, all complete 2026-05-22)
+
+The implementer/reviewer duet shipped across four plans plus six followup
+commits, with each plan dogfooded against the prior one's outputs (the
+artifacts live in `runs/`):
+
+- **Plan #29** — chassis: LangGraph stages, schemas, routers, persistence.
+- **Plan #30** — hardening: cwd threading, grounded schemas, `duet-review` CLI.
+- **Plan #31** — `TaskFamily` abstraction: chassis split from profiles; `generic` + `plan_doc_review` profiles.
+- **Plan #32** — `twin_update` profile: PCM v2 layers + Twin Fidelity rubric axes + proof authority contract.
+
+Entry point for callers: `python -m llm_client duet-review --help`.
+Module docstring at `llm_client/workflow/duet.py` summarizes the full
+architecture and points to each plan's design rationale.
+
+**Plan #33 (proposed, not yet written)** — a sibling `deliberation`
+workflow: symmetric N-agent debate, multi-round, convergence-driven. The
+existing duet remains for ship-the-code work; deliberation is for "two
+minds chew on a problem independently and argue until they converge."
+
 ## Gap Summary
 
 | # | Name | Priority | Status | Blocks |
@@ -34,10 +54,10 @@ Track all implementation work here.
 | 26 | [Gemini Strict-Schema Behavior Study](26_gemini-strict-schema-behavior-study.md) | High | ✅ Complete | - |
 | 27 | [Direct Gemini Thinking Budget Policy](27_direct-gemini-thinking-budget-policy.md) | High | ✅ Complete | 26 |
 | 28 | [OpenRouter Gemini 3.1 Pro Registry And Tyler Validation](28_openrouter-gemini31-pro-registry-and-tyler-validation.md) | High | ✅ Complete | 26, 27 |
-| 29 | [Implementer/Reviewer Duet Workflow](29_implementer_reviewer_duet.md) | Medium | 📋 In Progress | - |
-| 30 | [Duet Autonomous Hardening](30_duet_autonomous_hardening.md) | High | 📋 In Progress | 29 |
-| 31 | [TaskFamily Abstraction for the Duet Chassis](31_task_family_abstraction.md) | High | 📋 In Progress | 30 |
-| 32 | [twin_update Profile](32_twin_update_profile.md) | High | 📋 In Progress | 31 |
+| 29 | [Implementer/Reviewer Duet Workflow](29_implementer_reviewer_duet.md) | Medium | ✅ Complete | - |
+| 30 | [Duet Autonomous Hardening](30_duet_autonomous_hardening.md) | High | ✅ Complete | 29 |
+| 31 | [TaskFamily Abstraction for the Duet Chassis](31_task_family_abstraction.md) | High | ✅ Complete | 30 |
+| 32 | [twin_update Profile](32_twin_update_profile.md) | High | ✅ Complete | 31 |
 
 
 ## Status Key

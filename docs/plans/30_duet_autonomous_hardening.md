@@ -1,10 +1,10 @@
 # Plan #30: Duet Autonomous Hardening
 
-**Status:** In Progress
+**Status:** ✅ Complete (2026-05-22)
 **Type:** implementation
 **Priority:** High
-**Blocked By:** None
-**Blocks:** TaskFamily refactor (future Plan #31)
+**Blocked By:** Plan #29
+**Blocks:** Plan #31 (TaskFamily abstraction)
 
 ---
 
@@ -104,6 +104,17 @@ Out of scope (deliberately):
 - [ ] `python -m llm_client duet-review --help` exits 0 and prints usage including `--plan-doc`, `--workspace`, `--out`, `--reviewer-model`, `--impl-base`.
 - [ ] `PlanReviewBlocker` and `CorrectnessFinding` both refuse ungrounded payloads at validation time.
 - [ ] `cwd` propagation verified by offline harness assertion.
+
+---
+
+## Completion Log
+
+| Commit | What |
+|--------|------|
+| `9b1f0f1` | Plan #30: cwd threading into all 4 `ctx.call_llm` sites; `PlanReviewBlocker.evidence_path` required; new typed `CorrectnessFinding(file_path, line, claim, severity)`; `python -m llm_client duet-review` CLI subcommand. 5 new tests + extended CLI smoke. Must-pass set: 30/30 green; broader sweep at the time was 146 passed (the plan body originally said "47/47" — that's the must-pass subset, not the broader regression sweep — caught and corrected by Plan #31 self-review). |
+| `2e1741d` | **Followup**: `cwd` ↔ `working_directory` alias at the SDK route boundary. Caught by Plan #30 self-review noticing the codex adapter reads `working_directory`, not `cwd`. New `_normalize_workspace_kwargs()` at route entry; 7 new tests including 2 end-to-end route-boundary captures. |
+
+Dogfood verdict v1 (`runs/plan-30-review/`, before the followup): `revise` — 1 blocker (the codex cwd gap), 4 nits, 3 unverified claims. Verdict v2 (`runs/plan-30-review-v2/`, after the followup): `pass` with the cwd path verified end-to-end.
 
 ---
 

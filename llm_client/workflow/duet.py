@@ -11,7 +11,27 @@ Context transfer between stages is via durable artifacts on disk -- no tool
 transcripts. The next stage's prompt receives the prior artifacts and a
 workspace path; the agent re-reads the workspace fresh.
 
-See ``docs/plans/29_implementer_reviewer_duet.md`` for the full design.
+Architecture layered across Plans #29-32 + followups:
+
+- Plan #29 (this file's core) -- chassis: schemas, prompts, nodes, routers,
+  builder. Followup commit 47c0821 resolves ``claude-code/<alias>`` to full
+  Anthropic model IDs in ``sdk/agents_claude.py``.
+- Plan #30 -- autonomous hardening: ``task["workspace_path"]`` threaded into
+  all four node call sites as ``cwd=``; ``PlanReviewBlocker.evidence_path``
+  required; typed ``CorrectnessFinding(file_path, line, claim, severity)``;
+  ``python -m llm_client duet-review`` CLI subcommand for review-only mode.
+  Followup commit 2e1741d aliases ``cwd`` <-> ``working_directory`` at the
+  agent SDK route boundary (the codex adapter reads ``working_directory``).
+- Plan #31 -- TaskFamily abstraction: chassis split from profiles via
+  ``duet_base.py`` (PlanReviewBase, ImplementReviewBase, TaskFamily) and
+  ``duet_registry.py``. Built-in profiles ``generic`` and
+  ``plan_doc_review`` ship under ``llm_client.workflow.profiles``.
+- Plan #32 -- ``twin_update`` profile encoding PCM v2's 5 layers plus the
+  Twin Fidelity rubric's three axes; small chassis addition
+  ``DuetTask.extra: dict[str, Any]`` as the per-task profile-extension hook.
+
+For the per-plan design rationale, see ``docs/plans/29_*.md`` through
+``docs/plans/32_*.md`` (each plan has a Completion Log section).
 """
 
 from __future__ import annotations

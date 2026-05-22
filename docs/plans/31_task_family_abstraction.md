@@ -1,10 +1,10 @@
 # Plan #31: TaskFamily Abstraction for the Duet Chassis
 
-**Status:** In Progress
+**Status:** ✅ Complete (2026-05-22)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** Plan #30 (chassis verified-correct)
-**Blocks:** Future twin_update / eval_audit profiles
+**Blocks:** Plan #32 (twin_update profile shipped against this abstraction)
 
 ---
 
@@ -117,6 +117,17 @@ Out of scope (deliberately):
 - [ ] `plan_doc_review` profile is registered at import and surfaces `template_section_misses` + `references_unverified` + `acceptance_criteria_unmeasurable` in the schema.
 - [ ] Unknown `task_family` name raises a clear error (no silent fallback to generic).
 - [ ] `tests/test_cli_duet.py::test_cli_plan_doc_review_threads_specialized_schema` asserts the resolved family schema actually reaches `call_llm_structured` from `cmd_duet_review`.
+
+---
+
+## Completion Log
+
+| Commit | What |
+|--------|------|
+| `f8760aa` | Plan #31: `duet_base.py` (PlanReviewBase, ImplementReviewBase, TaskFamily dataclass), `duet_registry.py`, `profiles/` subpackage with `generic` + `plan_doc_review`. Builder accepts `task_family="generic"` default; CLI gains `--task-family`. 13 new tests; 62/62 in regression sweep. |
+| `51ea4cf` | **Followup**: end-to-end CLI threading test (was a missing AC noted by self-review); fixture isolation fix (`empty_registry` was `importlib.reload`ing modules, creating fresh class objects that broke `is` comparisons in `test_cli_duet.py`); plan-doc drift corrections (PlanDocPlanReview parent class wording, test name drifts, AC 1 tightened to concrete pytest invocation). |
+
+Dogfood verdict (`runs/plan-31-review/plan_review.json`, using the new `plan_doc_review` profile): `pass` with 3 nits, 1 scope_creep, 4 `references_unverified` entries — the new profile's `references_unverified` field caught that the plan's cited `duet.py` line ranges all drifted by 10-100 lines after the refactor landed. Generic-schema review would have lumped these into `unverified_claims` with less structure. Direct evidence the profile pattern is worth the abstraction.
 
 ---
 

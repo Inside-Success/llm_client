@@ -1,10 +1,11 @@
 # Plan #29: Implementer/Reviewer Duet Workflow
 
-**Status:** In Progress
+**Status:** ✅ Complete (2026-05-22)
 **Type:** implementation
 **Priority:** Medium
 **Blocked By:** None
 **Blocks:** None
+**Layered by:** Plan #30 (hardening), Plan #31 (TaskFamily abstraction), Plan #32 (twin_update profile)
 
 ---
 
@@ -41,6 +42,10 @@
 - `tests/test_workflow_duet.py` (create) — offline unit tests with stub LLM (monkeypatch `WorkflowContext.call_llm` / `call_llm_structured`).
 - `docs/plans/29_implementer_reviewer_duet.md` (this file).
 - `docs/plans/CLAUDE.md` (modify) — append row to the plan index.
+
+Followup commit `47c0821` also touched:
+- `llm_client/sdk/agents_claude.py` (modify) — `CLAUDE_CODE_MODEL_ALIASES` + `_resolve_claude_code_model()` for `claude-code/<alias>` resolution.
+- `tests/test_agents.py` (modify) — alias resolution tests.
 
 Out of scope for this plan (deliberately):
 - A CLI front-end (`python -m llm_client duet ...`). Library function first; CLI can land in a follow-up once real-task evidence accrues.
@@ -97,6 +102,28 @@ Out of scope for this plan (deliberately):
 - [ ] Reviewer verdict schema is `Literal["pass", "revise", "block"]` — no free-text fallthrough.
 - [ ] `max_revise_cycles=1` is the default and a second revise at the same gate promotes to `block`.
 - [ ] Artifacts persisted as `.md` (where applicable) and `.json` sidecar to `run_dir`.
+
+---
+
+## Completion Log
+
+Landed across one primary commit plus three followup commits that addressed dogfood findings:
+
+| Commit | What |
+|--------|------|
+| `81d4c60` | Initial chassis: schemas, prompt builders, node factories, routers, builder. 8 offline unit tests. |
+| `99b9c13` | Default codex model switched to `codex/gpt-5.4` for ChatGPT-account compatibility (gpt-5-codex requires API auth). |
+| `6f51425` | Per-stage `call_llm` timeout raised to 300s to match codex SDK's internal default. |
+| `c7e7c40` | Default `codex_transport="auto"` to handle `FileChangeItem.status="in_progress"` schema drift. |
+| `460d661` | Live-smoke findings F-1/F-2/F-4 + remaining R-* concerns captured. |
+| `47c0821` | **Followup**: `claude-code/<alias>` resolution → full Anthropic IDs. Caught by self-review reporting `claude-sonnet-4-20250514` despite requesting `claude-code/opus`. |
+
+Dogfood verdict on the plan doc (`runs/plan-29-self-review/plan_review.json`): `pass` with 3 nits, 3 unverified_claims, 2 missing_acceptance_checks. All addressed in later plans.
+
+Followups deferred to Plan #30:
+- Plan claimed cwd threading would reach the agent SDK — actually only the prompt mentioned `workspace_path`; the kwarg never flowed. Fixed in Plan #30.
+- Reviewer schemas allowed ungrounded blockers (`PlanReviewBlocker.evidence_path` was optional). Fixed in Plan #30.
+- No CLI surface for invoking review-only mode. Added in Plan #30.
 
 ---
 
