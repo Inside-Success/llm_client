@@ -147,6 +147,12 @@ class VerifierLedger:
 # Match `file_path:line[-line]` — the dominant citation shape in our schemas.
 # file_path can include dots, slashes, dashes, underscores. No spaces.
 _FILE_LINE_RE = re.compile(r"^(?P<path>[\w./\-]+):(?P<start>\d+)(?:-(?P<end>\d+))?$")
+# Match `file_path:range[,range]+` — multiple line ranges in one citation.
+# Real-world agents emit "deliberate.py:4-7,9-17,364-380" routinely.
+_FILE_LINE_LIST_RE = re.compile(
+    r"^(?P<path>[\w./\-]+):(?P<ranges>\d+(?:-\d+)?(?:,\d+(?:-\d+)?)+)$"
+)
+_LINE_RANGE_RE = re.compile(r"^(?P<start>\d+)(?:-(?P<end>\d+))?$")
 # Match `file_path#section` — used for doc citations like `plan.md#step-4`.
 _FILE_SECTION_RE = re.compile(r"^(?P<path>[\w./\-]+)#(?P<section>[\w\-_]+)$")
 # Match bare `file_path` (no line range, no section).
@@ -184,6 +190,26 @@ def parse_evidence_path(evidence_path: str) -> list[ParsedCitation]:
     for piece in evidence_path.split(";"):
         piece = piece.strip()
         if not piece:
+            continue
+
+        if m := _FILE_LINE_LIST_RE.match(piece):
+            path = m.group("path")
+            for raw_range in m.group("ranges").split(","):
+                rm = _LINE_RANGE_RE.match(raw_range.strip())
+                if not rm:
+                    citations.append(ParsedCitation.unparseable(piece))
+                    continue
+                start = int(rm.group("start"))
+                end = int(rm.group("end")) if rm.group("end") else start
+                citations.append(
+                    ParsedCitation(
+                        raw=f"{path}:{raw_range.strip()}",
+                        file_path=path,
+                        line_range=(start, end),
+                        section=None,
+                        parseable=True,
+                    )
+                )
             continue
 
         if m := _FILE_LINE_RE.match(piece):

@@ -63,6 +63,29 @@ def test_parse_evidence_path_empty() -> None:
     assert not cites[0].parseable
 
 
+def test_parse_evidence_path_comma_range_list() -> None:
+    # Real-world pattern from the v2 self-deliberation: agents emit multiple
+    # line ranges in one citation, comma-separated after the colon.
+    cites = parse_evidence_path("deliberate.py:4-7,9-17,364-380,466-480")
+    assert len(cites) == 4
+    assert [c.parseable for c in cites] == [True, True, True, True]
+    assert all(c.file_path == "deliberate.py" for c in cites)
+    assert [c.line_range for c in cites] == [(4, 7), (9, 17), (364, 380), (466, 480)]
+
+
+def test_parse_evidence_path_comma_range_single_line() -> None:
+    cites = parse_evidence_path("foo.py:1-5,42")
+    assert len(cites) == 2
+    assert cites[1].line_range == (42, 42)
+
+
+def test_parse_evidence_path_mixed_semicolon_and_comma() -> None:
+    cites = parse_evidence_path("a.py:1-5,10-15; b.md#sec; c.py:42")
+    assert len(cites) == 4
+    assert [c.file_path for c in cites] == ["a.py", "a.py", "b.md", "c.py"]
+    assert cites[2].section == "sec"
+
+
 # ---------------------------------------------------------------------------
 # verify_position (per-citation resolution)
 # ---------------------------------------------------------------------------
