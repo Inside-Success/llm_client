@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-04-05
-Verification context: shared observability storage now honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression unless explicitly overridden, preventing accidental writes into the shared SQLite data plane during disabled test lanes
+Verification context: shared observability storage now honors dynamic env-backed enable/data-root/DB-path resolution unless explicitly overridden, preventing accidental writes into the shared SQLite data plane during disabled or temp-isolated test lanes
 Date: 2026-03-17
 
 ## Context

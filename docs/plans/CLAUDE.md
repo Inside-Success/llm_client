@@ -30,7 +30,8 @@ Track all implementation work here.
 | 22 | [Capability Ownership And Sanctioned Worktree Alignment](22_capability-ownership-and-sanctioned-worktree-alignment.md) | High | ✅ Complete | 21 |
 | 23 | [Authoritative coordination wave-1 rollout](23_authoritative-coordination-wave-1-rollout.md) | Critical | ✅ Complete | - |
 | 24 | [Workflow Kit Manifest, Validator, and Runtime Adapter Proving Slice](24_workflow-kit-manifest-validator-and-runtime-adapter-proving-slice.md) | — | Cancelled — execution strategy layer reassigned to agentic_scaffolding; packaging scope deferred to PROJECTS_DEFERRED. See `project-meta/docs/ops/ADR-2026-04-04-workflow-portability-revised-execution-strategies.md` (2026-04-04). | — |
-| 25 | [Provider Governance and Shared Coordination](25_provider-governance-and-shared-coordination.md) | Critical | 📋 Planned | llm_client PR #24 merge for the latest Gemini coordination baseline |
+| 25 | [Provider Governance and Shared Coordination](25_provider-governance-and-shared-coordination.md) | Critical | ✅ Complete | - |
+| 26 | [Observability Config Truthfulness and Test Isolation](26_observability-config-truthfulness-and-test-isolation.md) | High | ✅ Complete | - |
 
 
 ## Status Key

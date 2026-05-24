@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-17
 Last verified: 2026-04-05
-Verification context: the shared substrate now owns typed provider-governance policy and explicit governance events, and its observability layer now honors dynamic env-based logging suppression so shared SQLite contention does not break unrelated async client verification
+Verification context: the shared substrate now owns typed provider-governance policy and explicit governance events, and its observability layer now honors dynamic env-backed enable/data-root/DB-path resolution so shared SQLite contention does not break unrelated async client verification
 
 ## Context
 

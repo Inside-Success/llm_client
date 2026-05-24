@@ -1,6 +1,6 @@
 # Sprint: 2026-04-05 Plan 25 Provider Governance
 
-**Status:** In Progress
+**Status:** Complete
 **Owner:** codex
 **Plan:** [../plans/25_provider-governance-and-shared-coordination.md](../plans/25_provider-governance-and-shared-coordination.md)
 **Mission:** move recent anomaly-driven provider fixes out of tactical routing/rate-limit patches and into a durable shared provider-governance subsystem in `llm_client`.
@@ -21,7 +21,7 @@
 - Phase 3 substantially complete: routing traces now emit `provider_governance_events`, and cooldown registration emits a stable governance warning record.
 - Phase 4 complete for the implemented slice: new provider-policy and provider-coordination tests pass alongside routing/rate-limit/execution-kernel regressions.
 - Phase 5 complete for the implemented slice: README and advanced-usage docs now describe provider-governance routing and shared coordination env vars.
-- Phase 6 pending: merge, push integration branch, and clean worktrees.
+- Phase 6 complete: merge branch published, PR #25 merged to `main`, and Plan 25 worktrees were removed.
 
 ## Next 24 Hours
 
@@ -107,5 +107,4 @@ Acceptance:
 
 ### 2026-04-05
 
-- Plan 25 is documented as blocked on `llm_client` PR #24 merge. Safe default: implement on top of the sanctioned provider-governance plan branch that already includes the latest anomaly mitigation baseline, and keep the dependency visible in commits and tracker notes.
-- `pytest tests/test_client.py -k "codex or routing"` is not currently a trustworthy verification target in this shared environment. A bounded probe of `tests/test_client.py::TestAsyncResponsesAPIRouting::test_async_gpt5_routes_to_aresponses` failed on a locked shared observability SQLite DB during foundation-event logging, not on the new provider-governance code. Safe default: rely on the focused provider-policy/routing/rate-limit/execution-kernel suites for this sprint and keep the broader DB-lock issue separate.
+- `pytest tests/test_client.py -k "codex or routing"` was blocked in the shared environment by stale observability config caching in `io_log`. That follow-up is now explicitly split into Plan 26 so Plan 25 can remain closed without mixing concerns.

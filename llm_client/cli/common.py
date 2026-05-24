@@ -10,7 +10,7 @@ from pathlib import Path
 def get_db_path() -> Path:
     import llm_client.io_log as io_log
 
-    return io_log._db_path
+    return io_log._get_db_path()
 
 
 def connect() -> sqlite3.Connection:

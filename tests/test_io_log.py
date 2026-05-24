@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from llm_client import io_log
+from llm_client.cli import common as cli_common
 from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
 from llm_client.observability.query import summarize_trace
 
@@ -50,14 +51,18 @@ def _isolate_io_log(tmp_path):
     old_project = io_log._project
     old_db_path = io_log._db_path
     old_db_conn = io_log._db_conn
+    old_db_conn_path = io_log._db_conn_path
     old_last_cleanup = io_log._last_cleanup_date
+    old_project_detection_cache = io_log._project_detection_cache
 
     io_log._enabled = True
     io_log._data_root = tmp_path
     io_log._project = "test_project"
     io_log._db_path = tmp_path / "test.db"
     io_log._db_conn = None
+    io_log._db_conn_path = None
     io_log._last_cleanup_date = None
+    io_log._project_detection_cache = None
 
     yield tmp_path
 
@@ -68,11 +73,14 @@ def _isolate_io_log(tmp_path):
     if io_log._db_conn is not None:
         io_log._db_conn.close()
     io_log._db_conn = old_db_conn
+    io_log._db_conn_path = old_db_conn_path
     io_log._last_cleanup_date = old_last_cleanup
+    io_log._project_detection_cache = old_project_detection_cache
 
 
 class TestGetProject:
     def test_explicit_project_override_skips_git_lookup(self, monkeypatch):
+        monkeypatch.delenv("LLM_CLIENT_PROJECT", raising=False)
         io_log._project = "explicit_project"
 
         def _unexpected_git(*args, **kwargs):
@@ -83,7 +91,9 @@ class TestGetProject:
         assert io_log._get_project() == "explicit_project"
 
     def test_git_common_dir_maps_worktree_to_canonical_repo(self, monkeypatch):
+        monkeypatch.delenv("LLM_CLIENT_PROJECT", raising=False)
         io_log._project = None
+        io_log._project_detection_cache = None
 
         def _fake_run(cmd, **kwargs):
             assert cmd == ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]
@@ -94,7 +104,9 @@ class TestGetProject:
         assert io_log._get_project() == "llm_client"
 
     def test_cwd_basename_used_when_git_metadata_unavailable(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("LLM_CLIENT_PROJECT", raising=False)
         io_log._project = None
+        io_log._project_detection_cache = None
         repo_free_dir = tmp_path / "scratch_project"
         repo_free_dir.mkdir()
         monkeypatch.chdir(repo_free_dir)
@@ -1352,6 +1364,48 @@ class TestConfigure:
         new_db = tmp_path / "new.db"
         io_log.configure(db_path=new_db)
         assert io_log._db_conn is None
+
+    def test_data_root_env_change_after_import_is_respected(self, tmp_path, monkeypatch):
+        io_log._data_root = None
+        io_log._project = "env_project"
+        env_root = tmp_path / "env-root"
+        monkeypatch.setenv("LLM_CLIENT_DATA_ROOT", str(env_root))
+
+        result = _mock_result(content="env root", usage={"prompt_tokens": 1, "total_tokens": 2})
+        io_log.log_call(model="gpt-5", result=result, latency_s=1.0, task="env-data-root")
+
+        log_file = env_root / "env_project" / "env_project_llm_client_data" / f"calls_{date.today().isoformat()}.jsonl"
+        assert log_file.exists()
+
+    def test_db_path_env_change_after_import_reopens_connection(self, tmp_path, monkeypatch):
+        io_log._db_path = None
+        io_log._project = "env_project"
+        first_db = tmp_path / "first.db"
+        second_db = tmp_path / "second.db"
+        monkeypatch.setenv("LLM_CLIENT_DB_PATH", str(first_db))
+
+        first_result = _mock_result(content="first", usage={"prompt_tokens": 1, "total_tokens": 2})
+        io_log.log_call(model="gpt-5", result=first_result, latency_s=1.0, task="env-db-1")
+        assert io_log._db_conn_path == first_db
+
+        monkeypatch.setenv("LLM_CLIENT_DB_PATH", str(second_db))
+        second_result = _mock_result(content="second", usage={"prompt_tokens": 1, "total_tokens": 2})
+        io_log.log_call(model="gpt-5", result=second_result, latency_s=1.0, task="env-db-2")
+
+        assert io_log._db_conn_path == second_db
+        first_conn = sqlite3.connect(str(first_db))
+        second_conn = sqlite3.connect(str(second_db))
+        assert first_conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0] == 1
+        assert second_conn.execute("SELECT COUNT(*) FROM llm_calls").fetchone()[0] == 1
+        first_conn.close()
+        second_conn.close()
+
+    def test_cli_get_db_path_uses_effective_runtime_config(self, tmp_path, monkeypatch):
+        io_log._db_path = None
+        env_db = tmp_path / "cli.db"
+        monkeypatch.setenv("LLM_CLIENT_DB_PATH", str(env_db))
+
+        assert cli_common.get_db_path() == env_db
 
 
 # ---------------------------------------------------------------------------

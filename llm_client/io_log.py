@@ -21,7 +21,9 @@ from ~/.secrets/api_keys.env):
     LLM_CLIENT_DB_BUSY_TIMEOUT_MS   — SQLite busy timeout in ms (default: 5000)
     LLM_CLIENT_LOG_RETENTION_DAYS   — days to keep dated JSONL logs (default: 30)
 
-Or override at runtime via configure().
+Or override at runtime via configure(). Env-backed defaults are resolved
+dynamically when no explicit override is set so test fixtures and per-project
+launchers can safely patch observability configuration after import.
 """
 
 from __future__ import annotations
@@ -41,10 +43,11 @@ from typing import Any, Literal
 logger = logging.getLogger(__name__)
 
 _enabled: bool | None = None
-_data_root: Path = Path(os.environ.get("LLM_CLIENT_DATA_ROOT", str(Path.home() / "projects" / "data")))
-_project: str | None = os.environ.get("LLM_CLIENT_PROJECT")
-_db_path: Path = Path(os.environ.get("LLM_CLIENT_DB_PATH", str(Path.home() / "projects" / "data" / "llm_observability.db")))
+_data_root: Path | None = None
+_project: str | None = None
+_db_path: Path | None = None
 _db_conn: sqlite3.Connection | None = None
+_db_conn_path: Path | None = None
 _db_lock = threading.Lock()
 _db_write_lock = threading.Lock()
 _DB_BUSY_TIMEOUT_MS_ENV = "LLM_CLIENT_DB_BUSY_TIMEOUT_MS"
@@ -81,6 +84,7 @@ _LOG_RETENTION_DAYS_ENV = "LLM_CLIENT_LOG_RETENTION_DAYS"
 _DEFAULT_LOG_RETENTION_DAYS = 30
 _last_cleanup_date: date | None = None
 _cleanup_lock = threading.Lock()
+_project_detection_cache: tuple[Path, str] | None = None
 
 
 def _get_log_retention_days() -> int:
@@ -205,15 +209,22 @@ def glob_jsonl_files(directory: Path, stem: str) -> list[Path]:
 
 def _get_project() -> str:
     """Resolve a stable project name so observability rows group by repo, not worktree."""
-    global _project
+    global _project_detection_cache
     if _project is not None:
         return _project
+    configured = os.environ.get("LLM_CLIENT_PROJECT")
+    if configured:
+        return configured
     cwd = Path.cwd()
+    if _project_detection_cache is not None and _project_detection_cache[0] == cwd:
+        return _project_detection_cache[1]
     detected = _detect_git_project(cwd)
     if detected is not None:
-        _project = detected
+        _project_detection_cache = (cwd, detected)
         return detected
-    return cwd.name
+    fallback = cwd.name
+    _project_detection_cache = (cwd, fallback)
+    return fallback
 
 
 def _detect_git_project(cwd: Path) -> str | None:
@@ -264,8 +275,47 @@ def _canonical_project_name(path: Path) -> str | None:
     return None
 
 
+def _default_data_root() -> Path:
+    """Return the default observability data root from the current environment."""
+
+    return Path(os.environ.get("LLM_CLIENT_DATA_ROOT", str(Path.home() / "projects" / "data")))
+
+
+def _get_data_root() -> Path:
+    """Return the effective observability data root.
+
+    Explicit runtime overrides win. Otherwise, read the current environment
+    dynamically so post-import env changes still take effect.
+    """
+
+    if _data_root is not None:
+        return _data_root
+    return _default_data_root()
+
+
+def _default_db_path() -> Path:
+    """Return the default observability DB path from the current environment."""
+
+    return Path(
+        os.environ.get(
+            "LLM_CLIENT_DB_PATH",
+            str(Path.home() / "projects" / "data" / "llm_observability.db"),
+        )
+    )
+
+
+def _get_db_path() -> Path:
+    """Return the effective observability DB path."""
+
+    if _db_path is not None:
+        return _db_path
+    return _default_db_path()
+
+
 def _log_dir() -> Path:
-    return _data_root / _get_project() / f"{_get_project()}_llm_client_data"
+    data_root = _get_data_root()
+    project = _get_project()
+    return data_root / project / f"{project}_llm_client_data"
 
 
 def _env_logging_enabled() -> bool:
@@ -295,7 +345,7 @@ def configure(
     db_path: str | Path | None = None,
 ) -> None:
     """Override logging config at runtime."""
-    global _enabled, _data_root, _project, _db_path, _db_conn
+    global _enabled, _data_root, _project, _db_path, _db_conn, _db_conn_path
     if enabled is not None:
         _enabled = enabled
     if data_root is not None:
@@ -307,6 +357,7 @@ def configure(
             if _db_conn is not None:
                 _db_conn.close()
                 _db_conn = None
+                _db_conn_path = None
             _db_path = Path(db_path)
 
 
@@ -1069,17 +1120,23 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
 
 def _get_db() -> sqlite3.Connection:
     """Lazy singleton DB connection. Creates tables on first call."""
-    global _db_conn
+    global _db_conn, _db_conn_path
     with _db_lock:
-        if _db_conn is not None:
+        effective_db_path = _get_db_path()
+        if _db_conn is not None and _db_conn_path == effective_db_path:
             return _db_conn
-        _db_path.parent.mkdir(parents=True, exist_ok=True)
+        if _db_conn is not None:
+            _db_conn.close()
+            _db_conn = None
+            _db_conn_path = None
+        effective_db_path.parent.mkdir(parents=True, exist_ok=True)
         busy_timeout_ms = _get_db_busy_timeout_ms()
         _db_conn = sqlite3.connect(
-            str(_db_path),
+            str(effective_db_path),
             check_same_thread=False,
             timeout=busy_timeout_ms / 1000.0,
         )
+        _db_conn_path = effective_db_path
         _db_conn.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
         _db_conn.execute("PRAGMA journal_mode = WAL")
         _db_conn.execute("PRAGMA synchronous = NORMAL")

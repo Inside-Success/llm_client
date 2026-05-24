@@ -24,7 +24,7 @@ Log it in the sprint tracker and proceed with the safer option.
 **Commit every verified milestone before moving to the next phase.** Uncommitted progress is not acceptable.
 **Between merges and pushes, stay in worktrees.** Merge from clean integration worktrees, then remove completed worktrees once the merged branch is published and verified.
 **Document concerns and uncertainties in the active sprint tracker immediately, then continue with the safer option unless a real stop condition applies.**
-**Active sprint:** see `docs/ops/SPRINT_2026_04_05_PLAN25_PROVIDER_GOVERNANCE.md`.
+**Active sprint:** see `docs/ops/SPRINT_2026_04_05_PLAN26_OBSERVABILITY_CONFIG_TRUTHFULNESS.md`.
 
 ---
 

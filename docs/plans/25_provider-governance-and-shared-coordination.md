@@ -1,9 +1,9 @@
 # Plan #25: Provider Governance and Shared Coordination
 
-**Status:** Planned
-**Type:** design
+**Status:** Complete
+**Type:** implementation
 **Priority:** Critical
-**Blocked By:** llm_client PR #24 merge for the latest Gemini coordination baseline
+**Blocked By:** None
 **Blocks:** durable prevention of shared provider saturation and downstream provider-policy drift
 
 ---
@@ -171,13 +171,13 @@ Deliverables:
 
 ## Acceptance Criteria
 
-- [ ] provider-governance ownership is documented as part of the shared runtime substrate
-- [ ] one typed provider-policy surface is defined before further provider patches land
-- [ ] coordination behavior is separated from policy declaration
-- [ ] structured provider-governance events are part of the design contract
-- [ ] cross-process validation is required, not optional
-- [ ] downstream operator lifecycle expectations are explicit: mitigation can be acknowledged before recurrence is resolved
-- [ ] roadmap/index docs point to this as the next shared-infrastructure slice instead of leaving the work as unplanned anomaly fallout
+- [x] provider-governance ownership is documented as part of the shared runtime substrate
+- [x] one typed provider-policy surface is defined before further provider patches land
+- [x] coordination behavior is separated from policy declaration
+- [x] structured provider-governance events are part of the design contract
+- [x] cross-process validation is required, not optional for the implemented provider-governance paths
+- [x] downstream operator lifecycle expectations are explicit: mitigation can be acknowledged before recurrence is resolved
+- [x] roadmap/index docs point to this as the next shared-infrastructure slice instead of leaving the work as unplanned anomaly fallout
 
 ---
 
@@ -189,5 +189,5 @@ Deliverables:
   `llm_client`; application/job staggering remains downstream execution policy.
 - `ecosystem-ops` stays the operator console and lifecycle surface. It should
   consume governance facts, not become the source of provider policy truth.
-- If PR #24 changes materially before merge, refresh this plan’s references and
-  phase ordering before implementation begins.
+- Implementation landed on `main` via PR #25 on 2026-04-05. The remaining
+  follow-up is observability/test-isolation truthfulness, captured in Plan 26.

@@ -24,7 +24,7 @@ def cmd_backfill(args: argparse.Namespace) -> None:
         io_log._db_conn.close()
         io_log._db_conn = None
 
-    data_root = io_log._data_root
+    data_root = io_log._get_data_root()
     print(f"Scanning {data_root} for JSONL files...")
 
     total_calls = 0

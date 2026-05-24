@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-04-05
-Verification context: shared 429 cooldown warnings still emit stable `PROVIDER_GOVERNANCE_EVENT[cooldown_registered]` records, and foundation-event logging now honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression instead of leaking stale import-time enablement into tests and shared environments
+Verification context: shared 429 cooldown warnings still emit stable `PROVIDER_GOVERNANCE_EVENT[cooldown_registered]` records, and the `io_log` observability sink now honors dynamic env-backed enable/data-root/DB-path resolution so disabled or test-isolated lanes do not leak stale import-time config into shared environments
 
 ## Context
 

@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-04-05
-Verification context: observability sinks now honor dynamic `LLM_CLIENT_LOG_ENABLED` env suppression unless an explicit runtime override is set, preventing stale import-time enablement from forcing unwanted foundation-event writes
+Verification context: observability sinks now honor dynamic env-backed enable/data-root/DB-path resolution unless an explicit runtime override is set, preventing stale import-time config from forcing unwanted foundation-event writes or shared-DB reuse
 Date: 2026-02-23
 
 ## Context

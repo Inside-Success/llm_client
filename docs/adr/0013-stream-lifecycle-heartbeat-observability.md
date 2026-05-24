@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-04-05
-Verification context: stream and lifecycle observability now respect dynamic `LLM_CLIENT_LOG_ENABLED` env suppression, so disabled observability lanes do not still emit foundation events because of stale import-time logger state
+Verification context: stream and lifecycle observability now respect dynamic env-backed enable/data-root/DB-path resolution, so disabled or temp-isolated observability lanes do not still emit foundation events because of stale import-time logger state
 Date: 2026-03-22
 
 ## Context

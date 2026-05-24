@@ -182,7 +182,7 @@ stable enough that package-boundary churn is low.
 Programs A–E are complete. The library is in **maintenance mode**.
 
 **Active work:**
-- Plan 25 (Provider Governance and Shared Coordination) — consolidate model identity, provider caps, cooldowns, and shared coordination into one explicit runtime policy layer
+- None. After Plan 26, the repo returns to maintenance mode until the next evidence-driven shared-infrastructure slice is explicitly planned.
 
 **Cancelled:**
 - Plan 15 (Centralize Defaults) — pure refactoring, no consumer value
@@ -192,6 +192,9 @@ Programs A–E are complete. The library is in **maintenance mode**.
 - Plan 19 (Agent Planning & Working Memory) — well-designed but large scope, not blocking
 
 **Completed recently:**
+- Plan 26 (Observability Config Truthfulness and Test Isolation) — env-backed observability config now stays truthful after import, tests isolate observability state to temp paths, and the previously blocked async routing verification lane is green again
+- Plan 25 (Provider Governance and Shared Coordination) — provider policy, shared coordination, and governance-event infrastructure landed on `main`
+- Unplanned 2026-04-05 durability fix — `io_log` now honors `LLM_CLIENT_LOG_ENABLED=0` even when tests set it after module import, which unblocked the async routing verification lane
 - Plan 21 (Runtime Durability Follow-Ups From Grounded Research) — evidence-driven durability and diagnostics follow-up from a real downstream benchmark program
 - Module reorganization (Plan 12) landed; 29 stubs remain for Plan 16
 - Prompt assets externalized to `~/projects/prompts/`
