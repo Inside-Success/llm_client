@@ -266,7 +266,9 @@ def register_parser(subparsers: Any) -> None:
     p.add_argument(
         "--timeout",
         type=float,
-        default=600.0,
-        help="Per-call timeout seconds (default: 600).",
+        default=1500.0,
+        help="Per-call timeout seconds (default: 1500). claude-code reviewers "
+             "with workspace tool access routinely exceed 600s on non-trivial "
+             "artifacts; bump higher for large diffs.",
     )
     p.set_defaults(handler=cmd_review_artifact)
