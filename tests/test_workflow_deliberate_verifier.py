@@ -258,6 +258,59 @@ def test_lineage_detects_fabricated_peer_ref(workspace_with_file: Path) -> None:
     assert fab_entries[0].claim_id == "b99"
 
 
+def test_lineage_does_not_falsely_flag_rename_aware_peer_refs(workspace_with_file: Path) -> None:
+    """REGRESSION (Plan #35 background review): under the barrier, an agent
+    legitimately references the peer's round-(N-1) claim_ids (which it actually
+    saw). If the peer renames those claim_ids in round N, the verifier MUST
+    compare against the peer's PRIOR snapshot, not the peer's current. The
+    pre-fix code compared against latest_positions[peer] and produced false
+    fabricated_peer_ref flags. This test pins that semantics by:
+
+    1. Setting up peer's prior with claim_id 'b1' (what agent_a saw)
+    2. Setting peer's current with claim_id 'b1_renamed' (silent rename)
+    3. Agent_a r2 agrees with 'b1' (correctly — that's what it saw)
+    4. Asserting NO fabricated_peer_ref fires for 'b1'.
+
+    A revert of the Plan #35 verifier fix (comparing against latest_positions
+    instead of prior_positions_by_agent) would flag 'b1' as fabricated because
+    peer's current shows only 'b1_renamed'. This test would fail loud."""
+    peer_prior = _make_position(
+        agent_name="agent_b",
+        round_num=1,
+        claims=[_claim("b1", "foo.py:1", text="original claim text")],
+    )
+    peer_current = _make_position(
+        agent_name="agent_b",
+        round_num=2,
+        claims=[_claim("b1_renamed", "foo.py:1", text="original claim text")],
+    )
+    agent_a_current = _make_position(
+        round_num=2,
+        claims=[_claim("a1", "foo.py:1")],
+        agreed=["b1"],  # references what agent_a actually saw under barrier
+    )
+    new_ledger = verify_round(
+        latest_positions={"agent_a": agent_a_current, "agent_b": peer_current},
+        prior_positions_by_agent={
+            "agent_a": _make_position(round_num=1, claims=[_claim("a1", "foo.py:1")]),
+            "agent_b": peer_prior,
+        },
+        prior_ledger=VerifierLedger(),
+        round_num=2,
+        workspace_path=str(workspace_with_file),
+    )
+    fabricated_b1 = [
+        e for e in new_ledger.entries
+        if e.lineage_flag == "fabricated_peer_ref" and e.claim_id == "b1"
+    ]
+    assert fabricated_b1 == [], (
+        f"REGRESSION: 'b1' is a legitimate reference to peer's round-1 snapshot, "
+        f"but was flagged as fabricated_peer_ref. The verifier is comparing "
+        f"against peer's CURRENT position (where b1 was renamed to b1_renamed) "
+        f"instead of peer's PRIOR snapshot. Got entries: {fabricated_b1}"
+    )
+
+
 def test_lineage_detects_fabricated_disagreement_target(workspace_with_file: Path) -> None:
     """disagreed_with_peer.peer_claim_id that doesn't match peer's claim ids."""
     agent_a = _make_position(

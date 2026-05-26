@@ -556,7 +556,7 @@ def _lineage_entries(
                 lineage_flag="fabricated_peer_ref",
                 lineage_detail=(
                     f"{ref_type} references peer claim_id {fabricated_id!r} "
-                    f"but peer's latest position has no such claim_id"
+                    f"but peer's round-(N-1) snapshot has no such claim_id"
                 ),
             )
         )
