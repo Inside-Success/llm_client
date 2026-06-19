@@ -1,0 +1,22 @@
+version: 1
+project: llm_client
+publish:
+  - path: README.md
+    type: ProjectOverview
+    title: LLM Client Overview
+    tags: [portfolio, shared-infrastructure, llm-tooling]
+  - path: docs/REQUIREMENTS.md
+    type: Requirements
+    tags: [shared-infrastructure, requirements]
+  - path: docs/API_REFERENCE.md
+    type: APIReference
+    tags: [shared-infrastructure, api]
+  - path: docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md
+    type: ArchitectureDoc
+    tags: [shared-infrastructure, architecture]
+  - path: CHANGELOG.md
+    type: Changelog
+    tags: [shared-infrastructure, release-history]
+exclude:
+  - .pytest_cache/**
+  - docs/wiki_manifest.yaml
