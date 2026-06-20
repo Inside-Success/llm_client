@@ -32,6 +32,10 @@ standalone review profiles, the `quality_optimal_whitepaper` review profile,
 the synchronous `review-cycle` runner, OpenClaw scheduling boundaries, and
 legacy dialogue-code archival.
 
+Plan #37 is the long-running execution spine for Plan #36. Use it as the
+tracker when running continuously: it defines stop conditions, phase gates,
+adversarial-review checkpoints, test commands, and completion criteria.
+
 ## Gap Summary
 
 | # | Name | Priority | Status | Blocks |
@@ -72,6 +76,7 @@ legacy dialogue-code archival.
 | 34 | [Deliberation Verifier / Adjudicator Stage](34_deliberation_verifier_adjudicator.md) | High | ✅ Complete | 33 |
 | 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | 📋 In Progress (Phases 1-4 shipped; Phase 5 skipped per plan; Phase 6 awaiting Brian decision) | 34 |
 | 36 | [Intermodel Review Consolidation and Whitepaper Loop](36_intermodel_review_consolidation.md) | Critical | 📋 Planned | GitHub issue #30 for public release |
+| 37 | [Long-Running Execution Spine for Intermodel Review](37_long_running_intermodel_review_execution.md) | Critical | 📋 Planned | 36 |
 
 
 ## Status Key

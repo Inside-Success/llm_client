@@ -44,3 +44,26 @@ High-confidence findings integrated before implementation:
 - Keep release gates scoped: issue #30 gates public distribution of the
   sanitized branch; Plan #36's own feature release is gated by its tests,
   dogfood review, and optional live schema smoke.
+
+## Review 3 - Plan #37 Execution Spine
+
+Raw local artifact: `runs/dogfood-plan37-review/review.json`.
+
+Verdict: concerns.
+
+High-confidence findings integrated before commit:
+
+- Cross-repo OpenClaw and legacy archive work must not contradict the stop
+  condition for moving/deleting sibling-repo code. The spine now allows
+  additive sibling-repo branch work with baseline capture, but stops before
+  irreversible moves/deletes.
+- Pushes are safe only after verifying the target repo is the private
+  `BrianMills2718/llm_client` remote while issue #30 remains unresolved.
+- Live-model gates can block final completion. The spine now defines an
+  offline-complete/live-blocked state instead of pretending the plan is done.
+- Future test files are expected not to exist before their creation phase; the
+  spine now says to run only existing focused tests until each phase creates its
+  new tests.
+- The private issue #30 grep pattern must be fetched from the private issue body
+  into ignored local scratch state, not embedded in tracked docs.
+- The repeated-failure circuit breaker now has a concrete digest and ledger.
