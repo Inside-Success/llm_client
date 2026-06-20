@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-04-09
+Last verified: 2026-06-20
 Verification context: exhausted-model cooldown routing added to fallback kernel and call-plan suppression (2026-04-09)
 
 ## Context

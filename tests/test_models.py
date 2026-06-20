@@ -91,6 +91,10 @@ class TestGetModel:
         # gpt-5.2-pro wins on intelligence even though slower
         assert model == "gpt-5.2-pro"
 
+    def test_deep_review_selects_quality_optimal_pro_model(self):
+        model = get_model("deep_review", available_only=False, use_performance=False)
+        assert model == "gpt-5.5-pro"
+
     def test_unknown_task_raises_keyerror(self):
         with pytest.raises(KeyError, match="Unknown task"):
             get_model("nonexistent_task")

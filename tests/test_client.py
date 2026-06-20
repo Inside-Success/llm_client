@@ -1571,6 +1571,14 @@ class TestResponsesAPIDetection:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-5.2-pro") is True
 
+    def test_gpt55_detected(self) -> None:
+        from llm_client.core.client import _is_responses_api_model
+        assert _is_responses_api_model("gpt-5.5") is True
+
+    def test_gpt55_pro_detected(self) -> None:
+        from llm_client.core.client import _is_responses_api_model
+        assert _is_responses_api_model("gpt-5.5-pro") is True
+
     def test_gpt4_not_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-4o") is False
@@ -1770,6 +1778,29 @@ class TestResponsesAPIRouting:
             reasoning_effort="xhigh",
             task="test",
             trace_id="test_gpt52_background_reasoning",
+            max_budget=0,
+        )
+        kwargs = mock_resp.call_args.kwargs
+        assert kwargs["background"] is True
+        assert kwargs["reasoning"] == {"effort": "xhigh"}
+        assert isinstance(result.routing_trace, dict)
+        assert result.routing_trace.get("background_mode") is True
+
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.responses")
+    def test_gpt55_pro_xhigh_enables_background_with_reasoning(
+        self,
+        mock_resp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        """gpt-5.5-pro with xhigh reasoning should use background mode and reasoning payload."""
+        mock_resp.return_value = _mock_responses_api_response()
+        result = call_llm(
+            "gpt-5.5-pro",
+            [{"role": "user", "content": "Deep review"}],
+            reasoning_effort="xhigh",
+            task="test",
+            trace_id="test_gpt55_background_reasoning",
             max_budget=0,
         )
         kwargs = mock_resp.call_args.kwargs

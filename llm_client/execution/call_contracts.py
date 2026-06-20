@@ -233,11 +233,13 @@ _GPT5_REASONING_GATED_SAMPLING = {
     "gpt-5.1",
     "gpt-5.2",
     "gpt-5.2-pro",
+    "gpt-5.5",
+    "gpt-5.5-pro",
     "gpt-5.1-chat-latest",
     "gpt-5.2-chat-latest",
 }
 # Models that support long-thinking (5-10 min) and need background polling
-_LONG_THINKING_MODELS = {"gpt-5.2-pro"}
+_LONG_THINKING_MODELS = {"gpt-5.2-pro", "gpt-5.5-pro"}
 _LONG_THINKING_REASONING_EFFORTS = {"high", "xhigh"}
 _GPT5_SAMPLING_PARAMS = ("temperature", "top_p", "logprobs", "top_logprobs")
 _UNSUPPORTED_PARAM_POLICY_ENV = "LLM_CLIENT_UNSUPPORTED_PARAM_POLICY"

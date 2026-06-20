@@ -18,7 +18,14 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_RESPONSES_API_MODELS = {"gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.2-pro"}
+_RESPONSES_API_MODELS = {
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-5.2-pro",
+    "gpt-5.5",
+    "gpt-5.5-pro",
+}
 
 
 # ---------------------------------------------------------------------------
