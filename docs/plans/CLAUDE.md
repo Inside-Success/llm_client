@@ -2,7 +2,7 @@
 
 Track all implementation work here.
 
-## Duet stack (Plans #29-32, all complete 2026-05-22)
+## Agent collaboration stack (Plans #29-35)
 
 The implementer/reviewer duet shipped across four plans plus six followup
 commits, with each plan dogfooded against the prior one's outputs (the
@@ -17,10 +17,15 @@ Entry point for callers: `python -m llm_client duet-review --help`.
 Module docstring at `llm_client/workflow/duet.py` summarizes the full
 architecture and points to each plan's design rationale.
 
-**Plan #33 (proposed, not yet written)** — a sibling `deliberation`
-workflow: symmetric N-agent debate, multi-round, convergence-driven. The
-existing duet remains for ship-the-code work; deliberation is for "two
-minds chew on a problem independently and argue until they converge."
+The sibling deliberation stack is now implemented through Plans #33-35:
+
+- **Plan #33** — symmetric two-agent debate via `python -m llm_client deliberate-task`.
+- **Plan #34** — verifier/adjudicator ledger for claim evidence and lineage.
+- **Plan #35** — within-round barrier protocol and peer anonymization, with
+  tracked dogfood evidence in `runs/plan-35-barrier-pilot/`.
+
+Start with `docs/guides/agent-collaboration.md` when packaging or demoing the
+Claude/Codex collaboration surfaces.
 
 ## Gap Summary
 
