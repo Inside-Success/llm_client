@@ -113,7 +113,6 @@ and signoff artifacts.
 Tracked examples under `runs/` show prior dogfood runs:
 
 - `runs/background-review-demo/`
-- `runs/background-review-customer-twin/`
 - `runs/plan-33-self-deliberation*/`
 - `runs/plan-35-barrier-pilot/`
 

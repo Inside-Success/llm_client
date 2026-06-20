@@ -27,6 +27,11 @@ The sibling deliberation stack is now implemented through Plans #33-35:
 Start with `docs/guides/agent-collaboration.md` when packaging or demoing the
 Claude/Codex collaboration surfaces.
 
+Plan #36 is the consolidation layer on top of those primitives: canonical
+standalone review profiles, the `quality_optimal_whitepaper` review profile,
+the synchronous `review-cycle` runner, OpenClaw scheduling boundaries, and
+legacy dialogue-code archival.
+
 ## Gap Summary
 
 | # | Name | Priority | Status | Blocks |
@@ -66,6 +71,7 @@ Claude/Codex collaboration surfaces.
 | 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | 📋 In Progress | 31 |
 | 34 | [Deliberation Verifier / Adjudicator Stage](34_deliberation_verifier_adjudicator.md) | High | ✅ Complete | 33 |
 | 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | 📋 In Progress (Phases 1-4 shipped; Phase 5 skipped per plan; Phase 6 awaiting Brian decision) | 34 |
+| 36 | [Intermodel Review Consolidation and Whitepaper Loop](36_intermodel_review_consolidation.md) | Critical | 📋 Planned | GitHub issue #30 for public release |
 
 
 ## Status Key
