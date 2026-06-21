@@ -308,12 +308,16 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
     """Render quality-optimal review sections from canonical JSON."""
     payload = review.model_dump()
     annotations = payload.get("profile_annotations", []) or []
-    optimum_by_index = {
-        item["linked_finding_index"]: item
-        for item in annotations
-        if item.get("kind") == "optimum_gap"
-        and item.get("linked_finding_index") is not None
-    }
+    optimum_by_index = {}
+    duplicate_optimum = []
+    for item in annotations:
+        if item.get("kind") != "optimum_gap" or item.get("linked_finding_index") is None:
+            continue
+        index = item["linked_finding_index"]
+        if index in optimum_by_index:
+            duplicate_optimum.append(item)
+            continue
+        optimum_by_index[index] = item
     spurious = [item for item in annotations if item.get("kind") == "spurious"]
     uncertain = [item for item in annotations if item.get("kind") == "uncertain"]
 
@@ -359,6 +363,12 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
             + annotation["claim"]
             + " Uncertain because: "
             + annotation["why_rejected_or_uncertain"]
+        )
+    for annotation in duplicate_optimum:
+        lines.append(
+            "- "
+            + annotation["claim"]
+            + " Uncertain because: duplicate optimum_gap linked_finding_index."
         )
     return "\n".join(lines)
 

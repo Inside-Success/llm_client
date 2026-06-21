@@ -111,6 +111,31 @@ def test_actionable_digest_is_stable_under_reordering() -> None:
     assert classification.digest == reversed_digest
 
 
+def test_actionable_digest_unicode_normalizes_equivalent_text() -> None:
+    composed = classify_actionable_findings(
+        AdversarialReview(
+            artifact_label="paper",
+            verdict="concerns",
+            summary="summary",
+            correctness_findings=[
+                CorrectnessFinding(file_path="paper.md", line=1, claim="Cafe\u0301 defect", severity="high")
+            ],
+        )
+    )
+    compatibility = classify_actionable_findings(
+        AdversarialReview(
+            artifact_label="paper",
+            verdict="concerns",
+            summary="summary",
+            correctness_findings=[
+                CorrectnessFinding(file_path="paper.md", line=1, claim="Café defect", severity="high")
+            ],
+        )
+    )
+
+    assert composed.digest == compatibility.digest
+
+
 def test_budget_ledger_tracks_exhaustion() -> None:
     ledger = BudgetLedger(max_budget=1.5)
     ledger.add_call(cycle=1, call_kind="review", model="m1", cost_usd=0.75)
@@ -265,6 +290,59 @@ def test_review_cycle_stops_when_apply_makes_no_diff(tmp_path: Path) -> None:
 
     assert signoff.final_status == "no_diff"
     assert (task.run_dir() / "apply_1.md").read_text() == "No change."
+
+
+def test_review_cycle_default_run_dir_does_not_count_as_apply_diff(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    task = ReviewCycleTask(
+        task_id="default-run-dir-no-diff",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        return ApplyAttempt(narrative="No change.", cost_usd=0.1, model="impl")
+
+    signoff = run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+
+    assert signoff.final_status == "no_diff"
+    assert (task.run_dir() / "signoff.json").is_file()
+
+
+def test_review_cycle_default_run_dir_allows_declared_apply_diff(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    task = ReviewCycleTask(
+        task_id="default-run-dir-change",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+        max_cycles=1,
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        with (workspace / "paper.md").open("a", encoding="utf-8") as handle:
+            handle.write("Allowed change\n")
+        return ApplyAttempt(narrative="Changed declared file.", cost_usd=0.1, model="impl")
+
+    signoff = run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+    diff = (task.run_dir() / "diff_1.patch").read_text(encoding="utf-8")
+
+    assert signoff.final_status == "max_cycles"
+    assert "Allowed change" in diff
+    assert "apply_1.md" not in diff
 
 
 def test_review_cycle_detects_untracked_allowed_artifact_diff(tmp_path: Path) -> None:

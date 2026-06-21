@@ -14,6 +14,7 @@ import json
 import re
 import shlex
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Literal
 
@@ -171,7 +172,7 @@ class ReviewCycleSignoff(BaseModel):
     stop_reason: str = Field(description="Human-readable stop reason.")
     budget_spent_usd: float = Field(ge=0.0, description="Total in-run spend.")
     actionable_count: int = Field(ge=0, description="Actionable candidates in the terminal cycle.")
-    discussion_queue_count: int = Field(ge=0, description="Skipped/discussion items in the terminal cycle.")
+    discussion_queue_count: int = Field(ge=0, description="Cumulative skipped/discussion items in the run.")
     artifact_index: dict[str, str] = Field(default_factory=dict, description="Run artifact paths relative to run_dir.")
 
 
@@ -357,7 +358,8 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
 
 def normalize_digest_text(value: str) -> str:
     """Normalize review text for stable anti-spin digests."""
-    text = re.sub(r"^\s*[-*+]\s+", "", value.strip())
+    text = unicodedata.normalize("NFKC", value.strip())
+    text = re.sub(r"^\s*[-*+]\s+", "", text)
     text = re.sub(r"\s+", " ", text)
     return text.lower()
 
@@ -422,7 +424,7 @@ def _run_git(workspace: Path, args: list[str]) -> str:
 
 def git_status_short(workspace: Path) -> str:
     """Return ``git status --short`` for the workspace."""
-    return _run_git(workspace, ["status", "--short"])
+    return _run_git(workspace, ["status", "--short", "--untracked-files=all"])
 
 
 def git_diff_text(workspace: Path) -> str:
@@ -437,13 +439,21 @@ def git_head(workspace: Path) -> str:
     return _run_git(workspace, ["rev-parse", "HEAD"]).strip()
 
 
-def git_diff_from_ref(workspace: Path, ref: str, extra_untracked_paths: list[str] | None = None) -> str:
+def git_diff_from_ref(
+    workspace: Path,
+    ref: str,
+    extra_untracked_paths: list[str] | None = None,
+    exclude_untracked_paths: list[str] | None = None,
+) -> str:
     """Return working-tree diff relative to ``ref``, including untracked files."""
     diff_parts = [_run_git(workspace, ["diff", "--no-ext-diff", ref])]
     untracked_paths = set(git_untracked_paths(workspace))
     if extra_untracked_paths:
         untracked_paths.update(extra_untracked_paths)
+    excluded = exclude_untracked_paths or []
     for path in sorted(untracked_paths):
+        if _is_allowed_path(path, excluded):
+            continue
         diff_parts.append(
             _run_git_diff_allow_difference(
                 workspace,
@@ -556,6 +566,21 @@ def _is_allowed_path(path: str, allowed: list[str]) -> bool:
         if normalized == prefix or normalized.startswith(prefix + "/"):
             return True
     return False
+
+
+def _workspace_relative_prefix(workspace: Path, path: Path) -> str | None:
+    """Return ``path`` relative to ``workspace`` when it is inside it."""
+    try:
+        return str(path.resolve().relative_to(workspace.resolve()))
+    except ValueError:
+        return None
+
+
+def _exclude_paths(paths: list[str], excluded_prefixes: list[str]) -> list[str]:
+    """Remove paths owned by the runner itself from enforcement inputs."""
+    if not excluded_prefixes:
+        return paths
+    return [path for path in paths if not _is_allowed_path(path, excluded_prefixes)]
 
 
 def ensure_paths_allowed(paths: list[str], allowed_paths: list[str]) -> None:
@@ -684,6 +709,7 @@ def _write_terminal_artifacts(
     """Persist terminal artifacts and return signoff with artifact index."""
     write_json_artifact(run_dir, "discussion_queue.json", [item.model_dump() for item in discussion_queue])
     write_json_artifact(run_dir, "budget_ledger.json", ledger)
+    signoff.discussion_queue_count = len(discussion_queue)
     signoff.artifact_index = {**build_artifact_index(run_dir), "signoff.json": "signoff.json"}
     write_json_artifact(run_dir, "signoff.json", signoff)
     return signoff
@@ -731,8 +757,12 @@ def run_review_cycle(
 
     preflight_status = git_status_short(workspace)
     write_text_artifact(run_dir, "preflight_status.txt", preflight_status)
+    runner_artifact_prefixes = []
+    run_dir_prefix = _workspace_relative_prefix(workspace, run_dir)
+    if run_dir_prefix:
+        runner_artifact_prefixes.append(run_dir_prefix)
     if not task.allow_workspace_wide_edits:
-        ensure_paths_allowed(_status_paths(preflight_status), task.artifact_paths)
+        ensure_paths_allowed(_exclude_paths(_status_paths(preflight_status), runner_artifact_prefixes), task.artifact_paths)
 
     last_classification: ActionableClassification | None = None
     last_verdict = ""
@@ -828,7 +858,11 @@ def run_review_cycle(
 
         head_before = git_head(workspace)
         ignored_before = git_ignored_path_fingerprints(workspace)
-        diff_before = git_diff_from_ref(workspace, head_before)
+        diff_before = git_diff_from_ref(
+            workspace,
+            head_before,
+            exclude_untracked_paths=runner_artifact_prefixes,
+        )
         apply_result = apply_call(task, cycle, classification)
         ledger.add_call(
             cycle=cycle,
@@ -841,23 +875,35 @@ def run_review_cycle(
 
         if not task.allow_workspace_wide_edits:
             ignored_after = git_ignored_path_fingerprints(workspace)
-            changed_ignored = changed_ignored_paths(ignored_before, ignored_after)
+            changed_ignored = _exclude_paths(
+                changed_ignored_paths(ignored_before, ignored_after),
+                runner_artifact_prefixes,
+            )
             touched_paths = sorted(
                 set(git_changed_paths_from_ref(workspace, head_before))
                 | set(git_changed_paths(workspace))
                 | set(_status_paths(git_status_short(workspace)))
                 | set(changed_ignored)
             )
+            touched_paths = _exclude_paths(touched_paths, runner_artifact_prefixes)
             ensure_paths_allowed(touched_paths, task.artifact_paths)
         else:
             ignored_after = git_ignored_path_fingerprints(workspace)
-            changed_ignored = changed_ignored_paths(ignored_before, ignored_after)
+            changed_ignored = _exclude_paths(
+                changed_ignored_paths(ignored_before, ignored_after),
+                runner_artifact_prefixes,
+            )
         extra_ignored_files = [
             path
             for path in changed_ignored
             if path in ignored_after and (workspace / path).is_file()
         ]
-        diff_after = git_diff_from_ref(workspace, head_before, extra_untracked_paths=extra_ignored_files)
+        diff_after = git_diff_from_ref(
+            workspace,
+            head_before,
+            extra_untracked_paths=extra_ignored_files,
+            exclude_untracked_paths=runner_artifact_prefixes,
+        )
         write_text_artifact(run_dir, f"diff_{cycle}.patch", diff_after)
 
         if diff_after == diff_before:

@@ -238,3 +238,40 @@ def test_render_quality_optimal_sections_from_canonical_json() -> None:
     assert "[SPURIOUS]" in rendered
     assert "What is wrong without it" in rendered
     assert "No validity loss" in rendered
+
+
+def test_render_quality_optimal_sections_routes_duplicate_optimum_gap_to_uncertain() -> None:
+    review = AdversarialReview(
+        artifact_label="methodology.md",
+        verdict="concerns",
+        summary="summary",
+        correctness_findings=[
+            CorrectnessFinding(
+                file_path="methodology.md",
+                line=10,
+                claim="The estimator cannot identify the target quantity.",
+                severity="high",
+            )
+        ],
+        profile_annotations=[
+            ReviewAnnotation(
+                annotation_id="og1",
+                kind="optimum_gap",
+                claim="Add identification proof",
+                linked_finding_index=0,
+                validity_loss_without_change="The paper cannot distinguish estimand from estimator.",
+            ),
+            ReviewAnnotation(
+                annotation_id="og2",
+                kind="optimum_gap",
+                claim="Duplicate identification proof",
+                linked_finding_index=0,
+                validity_loss_without_change="Duplicate.",
+            ),
+        ],
+    )
+
+    rendered = render_quality_optimal_sections(review)
+
+    assert rendered.count("What is wrong without it") == 1
+    assert "duplicate optimum_gap linked_finding_index" in rendered
