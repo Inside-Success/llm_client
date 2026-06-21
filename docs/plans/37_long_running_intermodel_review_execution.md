@@ -37,7 +37,8 @@ Stop only when one of these occurs:
 2. **Irreversible shared-state action:** force-push, delete/move another repo's
    code, change repo visibility, drop data, or merge to a shared default branch.
    Ordinary additive edits in a sibling repo are allowed only after creating a
-   dedicated branch in that repo and capturing its baseline status.
+   dedicated branch in that repo, capturing its baseline status, and verifying
+   the push remote and repository visibility for that sibling repo.
 3. **Schema choice not pre-made:** a required `AdversarialReview` compatibility
    decision cannot be handled by schema v1/v2 support or permissive parsing.
 4. **Cross-project archive risk:** moving `utils/consensus_system/` or
@@ -47,9 +48,16 @@ Stop only when one of these occurs:
    recurs three times without new information. The digest is SHA-256 of
    `{phase_id, command, failing_test_node_or_script, normalized_top_error}` and
    is recorded in ignored `runs/plan37/failure_ledger.json`.
-6. **Credential/budget blocker for live gates:** offline implementation is done,
-   but required live `review-artifact`, `review-cycle`, or schema-smoke gates
-   cannot run because model credentials or budget are unavailable.
+   `normalized_top_error` is the first semantically specific error line after
+   removing timestamps, `/tmp/...` paths, workspace absolute prefixes, memory
+   addresses like `0x...`, UUIDs, and repeated whitespace. If no specific line
+   exists, use the failing test node or script name.
+6. **Credential/budget blocker for live gates:** any required live
+   `review-artifact`, `review-cycle`, prompt-evaluation, schema-smoke, or CI
+   gate cannot run because model credentials, service access, budget, or CI
+   infrastructure are unavailable. Commit all verified offline work, mark the
+   current phase `Blocked` with `live-gate-unavailable:<phase>`, and resume
+   from that gate later.
 
 Everything else is not a stop condition. Record the issue in this plan or a
 follow-up issue, choose the safer documented path, and continue.
@@ -65,11 +73,15 @@ follow-up issue, choose the safer documented path, and continue.
   - run the phase's required tests;
   - commit with `[Plan #37]` or `[Plan #36]` prefix;
   - push the branch only after verifying the remote owner is
-    `BrianMills2718/llm_client` and `gh repo view ... --json visibility`
-    reports `PRIVATE` while issue #30 is unresolved;
+    `BrianMills2718/llm_client`, `git remote get-url --push origin` targets
+    that same repo, and `gh repo view ... --json visibility,isPrivate`
+    reports private visibility while issue #30 is unresolved;
   - update the tracker table below.
 - Commit-prefix routing: implementation changes for Plan #36 use `[Plan #36]`;
   tracker, execution-spine, and long-running protocol docs use `[Plan #37]`.
+  Sibling-repo adapter or tombstone commits also use `[Plan #36]` unless that
+  repo's local convention explicitly rejects bracketed plan prefixes; record
+  the convention in the commit body when it differs.
 - Run adversarial review after architecture-affecting phases and before marking
   the whole plan complete.
 - Do not archive or delete legacy code until extraction notes are committed.
@@ -90,7 +102,7 @@ follow-up issue, choose the safer documented path, and continue.
 | 2. Review profiles and schema compatibility | Complete | 01ff820 | v1/v2 schema tests; default CLI compatibility tests | `generic` default, `quality_optimal_whitepaper` opt-in |
 | 3. `review-artifact` profile CLI | Complete | 01ff820 | CLI threading tests; rendered-section tests; `review-artifact --help` exposes profile flags | Human sections rendered from canonical JSON |
 | 4. Review-cycle core contracts | Complete | 21a21c2 | `tests/test_workflow_review_cycle.py tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_cli_smoke.py -q` => 31 passed | Deterministic classifier, digest, budget ledger, and artifact writes |
-| 5. Review-cycle implementer loop | Complete | 0b8382b | `tests/test_workflow_review_cycle.py tests/test_cli_review_cycle.py tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_cli_smoke.py -q` => 39 passed | Declared artifact paths enforced by default |
+| 5. Review-cycle implementer loop | Complete | 0b8382b | `tests/test_workflow_review_cycle.py tests/test_cli_review_cycle.py tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_cli_smoke.py -q` => 39 passed at commit 0b8382b; current sweep tracked in Phase 6 | Declared artifact paths enforced by default |
 | 6. Dogfood on Plan #36/37 docs | In Progress | - | `review-artifact` output has no blockers, or blockers tracked and fixed | Use generic for code/project plans; quality profile for methodology fixture |
 | 7. prompt_eval frozen case set | Pending | - | case files + runner smoke pass | No claims of superiority before this |
 | 8. OpenClaw adapter | Pending | - | adapter smoke; no task-report schema replacement | Store signoff path as artifact reference |
@@ -113,9 +125,11 @@ Tasks:
    `gh issue view 30 --repo BrianMills2718/llm_client --json body --jq .body`
    and extract the sensitive path/identifier list from that issue into a local
    ignored shell variable or scratch file under `runs/plan37/`. Do not repeat
-   the exact private pattern in tracked docs.
+   the exact private pattern in tracked docs. Delete any
+   `runs/plan37/sensitive_pattern*` scratch file before session handoff.
 4. Run `git status --short --branch` and record any pre-existing dirt.
 5. Confirm push safety with
+   `git remote get-url --push origin` and
    `gh repo view BrianMills2718/llm_client --json visibility,isPrivate`.
 
 Success criteria:
@@ -149,7 +163,8 @@ Success criteria:
 Tasks:
 
 1. Register `generic` and `quality_optimal_whitepaper`.
-2. Add `--review-schema-version {1,2}` if needed to preserve strict old JSON.
+2. Add `--review-schema-version {1,2}` as the explicit compatibility mode for
+   strict old JSON consumers; permissive consumers may continue using `auto`.
 3. Ensure `ReviewAnnotation` enforces:
    - `optimum_gap` requires `linked_finding_index` and
      `validity_loss_without_change`;
@@ -169,6 +184,12 @@ Tasks:
 1. Add `--review-profile`.
 2. Render the quality-optimal human sections from canonical JSON.
 3. Keep JSON output authoritative; rendered text is a view.
+4. Map rendered quality sections deterministically: `[DEFECT]` is
+   `contract_violations` plus `correctness_findings` not linked to an
+   `optimum_gap`; `[OPTIMUM-GAP]` is a `correctness_findings` entry linked by
+   `profile_annotations.kind == "optimum_gap"`; `[SPURIOUS]` is
+   `profile_annotations.kind == "spurious"`; `[UNCERTAIN]` is
+   `unverified_claims` plus `profile_annotations.kind == "uncertain"`.
 
 Success criteria:
 
@@ -205,7 +226,7 @@ Tasks:
 1. Wire reviewer call, deterministic classifier, implementer call, diff guard,
    and next-cycle review.
 2. Enforce declared artifact paths by default.
-3. Write `preflight_status.json`, `review_N.json`, `apply_N.md`,
+3. Write `preflight_status.txt`, `review_N.json`, `apply_N.md`,
    `apply_N.json`, `diff_N.patch`, `discussion_queue_N.json`, and
    `budget_ledger.json` under `runs/review-cycle/<task_id>/`.
 4. Write a terminal aggregate `discussion_queue.json` containing every skipped
@@ -215,6 +236,8 @@ Success criteria:
 
 - Offline stubbed loop tests cover pass, repeat, budget, no-diff, and dirty
   preflight cases.
+- Offline stubbed loop tests assert that terminal `discussion_queue.json`
+  aggregates every skipped item across the run.
 - The runner fails loud if undeclared files change.
 - A local dry run on a toy markdown artifact completes with a sane signoff.
 
@@ -259,13 +282,16 @@ Success criteria:
 Tasks:
 
 1. Open a sibling-repo branch in OpenClaw / `moltbot` for adapter work, capture
-   baseline status there, and commit/push adapter changes in that repo. If the
-   repo cannot be identified or is dirty in conflicting files, create a handoff
-   issue instead of editing blindly.
+   baseline status there, verify its push remote and visibility, and
+   commit/push adapter changes in that repo. If the repo cannot be identified,
+   the remote cannot be verified, visibility is unsafe for the issue #30 gate,
+   or it is dirty in conflicting files, create a handoff issue instead of
+   editing blindly.
 2. Add or update OpenClaw adapter to invoke
    `python -m llm_client review-cycle --task-file ...`.
-3. Store `outputs.review_cycle_signoff_path` if schema permits; otherwise store
-   a sidecar path.
+3. Store a sidecar `review_cycle_artifacts.json` path by default; only write
+   `outputs.review_cycle_signoff_path` after report-schema validation proves
+   the field is accepted.
 4. Do not replace OpenClaw task-report schemas.
 
 Success criteria:
@@ -278,13 +304,14 @@ Success criteria:
 
 Tasks:
 
-1. Inspect `/home/brian/projects/utils/consensus_system/`.
-2. Inspect `/home/brian/projects/agent_ontology/agents/debate_agent.py`.
+1. Inspect `~/projects/utils/consensus_system/`.
+2. Inspect `~/projects/agent_ontology/agents/debate_agent.py`.
 3. Commit extraction notes in:
    - `docs/plans/36_prior_art_consensus_system.md`
    - `docs/plans/36_prior_art_agent_ontology_debate.md`
 4. Do not move or delete sibling-repo code autonomously. After extraction notes
-   are committed, either:
+   are committed, treat any sibling-repo tombstone as its own verified Phase 9
+   checkpoint and either:
    - create a sibling-repo branch that adds `ARCHIVED_BY_PLAN_36.md` tombstones
      while leaving code in place, or
    - stop for explicit approval before moving code to
@@ -311,7 +338,8 @@ Success criteria:
 
 - Offline sweep passes.
 - CI passes on the private PR branch. If CI is unavailable, local full offline
-  sweep is the offline-complete proof and CI remains a live-gate blocker.
+  sweep is only offline-complete proof; mark Phase 10 blocked on the live gate
+  rather than complete.
 - Final adversarial review has no untracked blockers.
 - PR remains draft/private-gated if issue #30 is unresolved; otherwise it is
   ready for normal review.
@@ -335,6 +363,15 @@ Run adversarial review at these gates:
 | After Phase 5 | review-cycle diff | no blockers; concerns either fixed or tracked |
 | After Phase 6 | Plan #36 + Plan #37 dogfood | no blockers |
 | Before final handoff | full PR diff | no blockers or explicit tracked exceptions |
+
+Default gate command choices:
+
+- Reviewer model: `claude-code/opus`.
+- Review budget: `--max-budget 5` for plan/diff dogfood gates unless a phase
+  states a stricter cap.
+- Fallback reviewer: `codex/gpt-5.4` only when Claude credentials or service
+  access are unavailable; record that fallback in the tracker and treat it as
+  lower-confidence evidence.
 
 Review findings handling:
 
@@ -409,5 +446,6 @@ Plan #37 is complete when:
 - OpenClaw has a scheduler adapter or a documented blocked issue.
 - Legacy prior-art notes are committed and duplicate runnable code is archived
   or tombstoned.
-- Full offline tests pass and CI passes.
+- Full offline tests pass and CI passes. If CI is unavailable, Plan #37 remains
+  blocked at Phase 10 instead of complete.
 - Final adversarial review has no unresolved blockers.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -168,6 +169,18 @@ def _pass_review() -> AdversarialReview:
     return AdversarialReview(artifact_label="paper.md", verdict="pass", summary="ok")
 
 
+def _non_actionable_review() -> AdversarialReview:
+    return AdversarialReview(
+        artifact_label="paper.md",
+        verdict="concerns",
+        summary="only discussion items remain",
+        correctness_findings=[
+            CorrectnessFinding(file_path="paper.md", line=1, claim="warn-only concern", severity="warn")
+        ],
+        nits=[Nit(claim="rename a heading")],
+    )
+
+
 def test_review_cycle_pass_writes_signoff(tmp_path: Path) -> None:
     workspace = _init_repo(tmp_path)
     task = ReviewCycleTask(
@@ -186,6 +199,27 @@ def test_review_cycle_pass_writes_signoff(tmp_path: Path) -> None:
     assert signoff.cycles_completed == 1
     assert (task.run_dir() / "signoff.json").is_file()
     assert (task.run_dir() / "review_1.json").is_file()
+
+
+def test_review_cycle_writes_terminal_discussion_queue(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    task = ReviewCycleTask(
+        task_id="discussion-queue",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-discussion-queue"),
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_non_actionable_review(), cost_usd=0.1, model="reviewer")
+
+    signoff = run_review_cycle(task, reviewer=reviewer)
+    queue = json.loads((task.run_dir() / "discussion_queue.json").read_text(encoding="utf-8"))
+
+    assert signoff.final_status == "non_actionable_remaining"
+    assert signoff.discussion_queue_count == 2
+    assert {item["kind"] for item in queue} == {"correctness_non_high", "nit"}
+    assert json.loads((task.run_dir() / "discussion_queue_1.json").read_text(encoding="utf-8")) == queue
 
 
 def test_review_cycle_stops_when_apply_makes_no_diff(tmp_path: Path) -> None:
