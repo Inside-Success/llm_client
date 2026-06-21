@@ -31,6 +31,19 @@ from llm_client.workflow.duet_registry import (
     list_task_families,
     register_task_family,
 )
+from llm_client.workflow.adversarial_review import (
+    AdversarialReview,
+    AdversarialReviewV1,
+    ReviewAnnotation,
+    ReviewProfile,
+    adversarial_review_schema,
+    build_review_prompt,
+    get_review_profile,
+    list_review_profiles,
+    register_review_profile,
+    render_quality_optimal_sections,
+    resolve_review_schema_version,
+)
 
 # Side-effect import: registers built-in profiles ("generic", "plan_doc_review").
 from llm_client.workflow import profiles as _profiles  # noqa: F401
@@ -46,6 +59,17 @@ __all__ = [
     "get_task_family",
     "list_task_families",
     "register_task_family",
+    "AdversarialReview",
+    "AdversarialReviewV1",
+    "ReviewAnnotation",
+    "ReviewProfile",
+    "adversarial_review_schema",
+    "build_review_prompt",
+    "get_review_profile",
+    "list_review_profiles",
+    "register_review_profile",
+    "render_quality_optimal_sections",
+    "resolve_review_schema_version",
 ]
 
 # build_workflow is imported lazily to avoid requiring langgraph at import time

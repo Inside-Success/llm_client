@@ -37,53 +37,20 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-# ---------------------------------------------------------------------------
-# Output schema (reuses typed finding shapes from llm_client.workflow.duet)
-# ---------------------------------------------------------------------------
-
-AdversarialVerdict = Literal["pass", "concerns", "blocker"]
+from llm_client.workflow.adversarial_review import (
+    adversarial_review_schema,
+    build_review_prompt,
+    get_review_profile,
+    render_quality_optimal_sections,
+    resolve_review_schema_version,
+)
 
 
 def _adversarial_review_schema():
-    """Build the AdversarialReview schema lazily so this module loads
-    without forcing langgraph/workflow imports at process start."""
-    from llm_client.workflow.duet import (
-        ContractViolation,
-        CorrectnessFinding,
-        Nit,
-        UnverifiedClaim,
-    )
-
-    class AdversarialReview(BaseModel):
-        """Output of a standalone adversarial review.
-
-        Verdict semantics:
-        - ``pass``: no blockers; nits/unverified-claims may still appear but
-          the artifact is shippable as-is.
-        - ``concerns``: blockers or contract violations exist; integrate before
-          shipping.
-        - ``blocker``: at least one high-severity correctness or contract
-          finding; do not ship until resolved.
-        """
-
-        model_config = ConfigDict(extra="forbid")
-
-        artifact_label: str
-        verdict: AdversarialVerdict
-        summary: str
-        correctness_findings: list[CorrectnessFinding] = Field(default_factory=list)
-        contract_violations: list[ContractViolation] = Field(default_factory=list)
-        nits: list[Nit] = Field(default_factory=list)
-        unverified_claims: list[UnverifiedClaim] = Field(default_factory=list)
-        scope_drift_findings: list[str] = Field(default_factory=list)
-        reviewer_model: str = ""
-
-    return AdversarialReview
+    """Compatibility shim for callers that imported the old CLI helper."""
+    return adversarial_review_schema("1")
 
 
 # ---------------------------------------------------------------------------
@@ -97,41 +64,12 @@ def _review_prompt(
     context_body: str,
     response_schema: type,
 ) -> list[dict[str, Any]]:
-    system = (
-        "You are an adversarial reviewer. Your job is to find what's WRONG "
-        "with the artifact below, not to validate it. The author of the "
-        "artifact is biased toward their own work; your role is the opposite "
-        "bias — look for bugs, missed edge cases, contradictions with stated "
-        "constraints, unverifiable claims, and scope drift. Inspect the "
-        "workspace via your file-reading tools to verify any claim against "
-        "actual code. Do not edit any files."
+    return build_review_prompt(
+        artifact_label=artifact_label,
+        artifact_body=artifact_body,
+        context_body=context_body,
+        response_schema=response_schema,
     )
-
-    user_parts = [
-        f"## Artifact under review: {artifact_label}",
-        "",
-        "## Context (what the author was attempting)",
-        context_body or "(no context provided — review on intrinsic merit)",
-        "",
-        "## Artifact body",
-        artifact_body,
-        "",
-        "Return an AdversarialReview JSON object. Verdict must be one of: "
-        "pass, concerns, blocker. Groundedness rules: every "
-        "correctness_findings entry MUST have file_path (str) and line (int); "
-        "every contract_violations entry MUST have constraint, violation, "
-        "and evidence_path. If you cannot cite a specific file:line, use "
-        "unverified_claims (UnverifiedClaim with claim + reason_unverified) "
-        "or a free-text scope_drift_findings entry instead. Use 'blocker' "
-        "verdict only when at least one finding would break correctness or "
-        "a stated constraint. Use 'concerns' when there are blockers or "
-        "contract violations but they're not catastrophic. Use 'pass' when "
-        "the artifact is shippable as-is (nits/unverified may still appear).",
-    ]
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": "\n".join(user_parts)},
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +116,16 @@ def cmd_review_artifact(args: argparse.Namespace) -> None:
     workspace = str(Path(args.workspace).resolve()) if args.workspace else None
     task_id = args.task_id or f"review-{int(time.time())}"
 
-    schema = _adversarial_review_schema()
-    messages = _review_prompt(artifact_label, artifact_body, context_body, schema)
+    profile = get_review_profile(args.review_profile)
+    schema_version = resolve_review_schema_version(profile, args.review_schema_version)
+    schema = adversarial_review_schema(schema_version)
+    messages = build_review_prompt(
+        artifact_label=artifact_label,
+        artifact_body=artifact_body,
+        context_body=context_body,
+        response_schema=schema,
+        profile=profile,
+    )
 
     print(
         f"=== adversarial review ({args.reviewer}, artifact={artifact_label!r}) ===",
@@ -199,6 +145,8 @@ def cmd_review_artifact(args: argparse.Namespace) -> None:
 
     payload = review.model_dump()
     payload["reviewer_model"] = args.reviewer
+    if schema_version == "1":
+        payload.pop("profile_annotations", None)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
     print(f"  verdict: {payload['verdict']}")
@@ -209,6 +157,10 @@ def cmd_review_artifact(args: argparse.Namespace) -> None:
         f"unverified: {len(payload['unverified_claims'])}, "
         f"scope_drift: {len(payload['scope_drift_findings'])}"
     )
+    if profile.name == "quality_optimal_whitepaper":
+        rendered_path = out_path.with_suffix(".md")
+        rendered_path.write_text(render_quality_optimal_sections(review), encoding="utf-8")
+        print(f"  rendered to {rendered_path}")
     print(f"  written to {out_path}")
 
 
@@ -243,6 +195,17 @@ def register_parser(subparsers: Any) -> None:
         "--reviewer",
         default="claude-code/opus",
         help="Reviewer model (default: claude-code/opus).",
+    )
+    p.add_argument(
+        "--review-profile",
+        default="generic",
+        help="Review profile to use (default: generic).",
+    )
+    p.add_argument(
+        "--review-schema-version",
+        choices=["auto", "1", "2"],
+        default="auto",
+        help="AdversarialReview schema version (default: auto).",
     )
     p.add_argument(
         "--workspace",

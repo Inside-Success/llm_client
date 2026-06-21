@@ -8,13 +8,14 @@ The live LLM call is exercised separately via integration tests (see
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
+from llm_client.cli import review_artifact as review_cli
 from llm_client.cli.review_artifact import (
     _adversarial_review_schema,
+    cmd_review_artifact,
     _resolve_artifact,
     _resolve_context,
     _review_prompt,
@@ -149,3 +150,94 @@ def test_resolve_context_from_file(tmp_path: Path) -> None:
     f.write_text("context body\n")
     args = MagicMock(context_file=str(f), context_text=None)
     assert _resolve_context(args) == "context body\n"
+
+
+def test_cmd_review_artifact_threads_quality_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_call_llm_structured(model, messages, schema, **kwargs):
+        calls.append(
+            {
+                "model": model,
+                "messages": messages,
+                "schema": schema,
+                "kwargs": kwargs,
+            }
+        )
+        return (
+            schema(
+                artifact_label="methodology",
+                verdict="concerns",
+                summary="summary",
+                correctness_findings=[
+                    {
+                        "file_path": "methodology.md",
+                        "line": 1,
+                        "claim": "Missing validity lever",
+                        "severity": "high",
+                    }
+                ],
+                profile_annotations=[
+                    {
+                        "annotation_id": "og1",
+                        "kind": "optimum_gap",
+                        "claim": "Add validity lever",
+                        "linked_finding_index": 0,
+                        "validity_loss_without_change": "Current paper gets X wrong.",
+                    }
+                ],
+            ),
+            {},
+        )
+
+    monkeypatch.setattr("llm_client.call_llm_structured", fake_call_llm_structured)
+    out = tmp_path / "review.json"
+    args = MagicMock(
+        artifact_file=None,
+        artifact_text="artifact body",
+        artifact_label="methodology",
+        context_file=None,
+        context_text="review context",
+        out=str(out),
+        workspace=str(tmp_path),
+        task_id="test-review",
+        review_profile="quality_optimal_whitepaper",
+        review_schema_version="auto",
+        reviewer="claude-code/opus",
+        max_budget=1.0,
+        timeout=30,
+    )
+
+    cmd_review_artifact(args)
+
+    assert calls
+    assert "profile_annotations" in calls[0]["schema"].model_fields
+    user = calls[0]["messages"][1]["content"]
+    assert "profile_annotations kind=optimum_gap" in user
+    payload = out.read_text()
+    rendered = out.with_suffix(".md").read_text()
+    assert "profile_annotations" in payload
+    assert "[OPTIMUM-GAP]" in rendered
+
+
+def test_cmd_review_artifact_rejects_unknown_profile(tmp_path: Path) -> None:
+    args = MagicMock(
+        artifact_file=None,
+        artifact_text="artifact body",
+        artifact_label="x",
+        context_file=None,
+        context_text=None,
+        out=str(tmp_path / "review.json"),
+        workspace=None,
+        task_id="test-review",
+        review_profile="missing",
+        review_schema_version="auto",
+        reviewer="claude-code/opus",
+        max_budget=1.0,
+        timeout=30,
+    )
+    with pytest.raises(KeyError):
+        review_cli.cmd_review_artifact(args)
