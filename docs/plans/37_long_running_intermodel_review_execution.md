@@ -1,6 +1,6 @@
 # Plan #37: Long-Running Execution Spine for Intermodel Review
 
-**Status:** Complete
+**Status:** Complete (private-gated)
 **Type:** execution
 **Priority:** Critical
 **Blocked By:** Plan #36 accepted as the target architecture
@@ -108,6 +108,30 @@ follow-up issue, choose the safer documented path, and continue.
 | 8. OpenClaw adapter | Complete | openclaw:4a75451 | launcher smoke; adapter/report tests => 31 passed; ruff passed | Branch `plan-36-review-cycle-adapter` pushed; sidecar artifact reference, no report-schema replacement |
 | 9. Legacy extraction notes | Complete | 517ef92; consensus_system:eb1f589; agent_ontology:f7b89db | extraction notes committed; tombstone branches pushed; `py_compile` passed for legacy modules | Additive tombstones only; no legacy code moved or deleted |
 | 10. Cleanup and full verification | Complete | 5451533 | offline sweep => 116 passed; live schema smoke => 10 passed after schema hardening; final blocker-focused review => pass with 0 contract violations; PR check `observability-switches` passed | PR #29 remains draft/private-gated while issue #30 is open |
+
+## Public-Release Gate Recheck - 2026-06-21
+
+Issue #30 remains the public-release gate. A post-completion recheck found that
+GitHub's web/API serving paths no longer expose the old sensitive revision, but
+the Git object still exists server-side for authenticated repository access:
+
+- `BrianMills2718/llm_client` visibility is still private.
+- Authenticated GitHub REST contents checks for all three issue #30 paths at
+  the old commit returned 404.
+- Unauthenticated GitHub REST contents checks for the same paths returned 404.
+- Unauthenticated raw-content URLs for the same paths returned 404.
+- `git ls-remote origin 'refs/*'` did not report the old sensitive commit or
+  the pre-rewrite PR head.
+- `refs/pull/29/head` points at sanitized head
+  `dee842bcacd6599f5d68f9e68095fcb90d1b9106`.
+- `git fetch origin e6ef8cde430da6f99ea1bccc220d738ed861231f` still succeeds,
+  and `git fsck --no-reflogs --unreachable --no-progress` reports that commit
+  as an unreachable local object after fetch.
+
+Decision: do not close issue #30, make `llm_client` public, or mark PR #29
+ready for public distribution from this evidence alone. The next required
+action is a GitHub Support request asking Support to dereference/purge the
+stale object and run server-side garbage collection for the affected PR data.
 
 Status values: `Pending`, `In Progress`, `Blocked`, `Complete`.
 
