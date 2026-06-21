@@ -136,18 +136,20 @@ index_path="$out_dir/INDEX.md"
   printf '| %s | %s | %s | %s | queued |\n' "$ts" "$reviewer" "$artifact_kind" "$loc_changed"
 } >> "$index_path"
 
-nohup setsid bash -c "
-  cd '$cwd' && \
+nohup setsid bash -c '
+  cd "$1" || exit
+  shift
+  exec "$@"
+' bash "$cwd" \
   python -m llm_client review-artifact \
-    --artifact-file '$artifact_path' \
-    --artifact-label 'auto-review $ts ($artifact_kind, $loc_changed loc)' \
-    --context-file '$context_path' \
-    --reviewer '$reviewer' \
-    --workspace '$cwd' \
+    --artifact-file "$artifact_path" \
+    --artifact-label "auto-review $ts ($artifact_kind, $loc_changed loc)" \
+    --context-file "$context_path" \
+    --reviewer "$reviewer" \
+    --workspace "$cwd" \
     --timeout 2400 \
-    --out '$review_path' \
-    2>'$log_path'
-" </dev/null >/dev/null 2>&1 &
+    --out "$review_path" \
+  </dev/null >/dev/null 2>"$log_path" &
 
 printf 'auto-adversarial-review queued: %s (artifact=%s loc=%s reviewer=%s)\n' \
   "$review_path" "$artifact_kind" "$loc_changed" "$reviewer" >&2

@@ -214,7 +214,13 @@ def test_render_quality_optimal_sections_from_canonical_json() -> None:
                 line=10,
                 claim="The estimator cannot identify the target quantity.",
                 severity="high",
-            )
+            ),
+            CorrectnessFinding(
+                file_path="methodology.md",
+                line=12,
+                claim="Warn-only concern should not render as a defect.",
+                severity="warn",
+            ),
         ],
         profile_annotations=[
             ReviewAnnotation(
@@ -238,6 +244,7 @@ def test_render_quality_optimal_sections_from_canonical_json() -> None:
     assert "[SPURIOUS]" in rendered
     assert "What is wrong without it" in rendered
     assert "No validity loss" in rendered
+    assert "Warn-only concern should not render as a defect" not in rendered
 
 
 def test_render_quality_optimal_sections_routes_duplicate_optimum_gap_to_uncertain() -> None:

@@ -329,7 +329,7 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
     for finding in payload.get("contract_violations", []):
         lines.append(f"- {finding['constraint']}: {finding['violation']}")
     for idx, finding in enumerate(payload.get("correctness_findings", [])):
-        if idx not in optimum_by_index:
+        if idx not in optimum_by_index and finding.get("severity") == "high":
             lines.append(f"- {finding['severity']}: {finding['claim']}")
 
     lines.extend(["", "[OPTIMUM-GAP]"])
