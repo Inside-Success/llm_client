@@ -72,11 +72,11 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 30 | [Duet Autonomous Hardening](30_duet_autonomous_hardening.md) | High | ✅ Complete | 29 |
 | 31 | [TaskFamily Abstraction for the Duet Chassis](31_task_family_abstraction.md) | High | ✅ Complete | 30 |
 | 32 | [twin_update Profile](32_twin_update_profile.md) | High | ✅ Complete | 31 |
-| 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | 📋 In Progress | 31 |
+| 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | 🚧 In Progress | 31 |
 | 34 | [Deliberation Verifier / Adjudicator Stage](34_deliberation_verifier_adjudicator.md) | High | ✅ Complete | 33 |
 | 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | 📋 In Progress (Phases 1-4 shipped; Phase 5 skipped per plan; Phase 6 awaiting Brian decision) | 34 |
 | 36 | [Intermodel Review Consolidation and Whitepaper Loop](36_intermodel_review_consolidation.md) | Critical | 📋 Planned | GitHub issue #30 for public release |
-| 37 | [Long-Running Execution Spine for Intermodel Review](37_long_running_intermodel_review_execution.md) | Critical | 📋 Planned | 36 |
+| 37 | [Long-Running Execution Spine for Intermodel Review](37_long_running_intermodel_review_execution.md) | Critical | 🚧 In Progress | 36 |
 
 
 ## Status Key
