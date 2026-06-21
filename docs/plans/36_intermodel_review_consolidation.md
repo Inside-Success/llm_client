@@ -199,7 +199,7 @@ Out of scope:
     fails loud if any touched path is outside the declared artifact list unless
     the task config explicitly allows workspace-wide edits. A dirty pre-flight
     tree is allowed only when the dirt is confined to declared artifact paths
-    and is recorded in `preflight_status.json`.
+    and is recorded in `preflight_status.txt`.
 13. The loop stops when one of these occurs:
     - review verdict is `pass` or only non-actionable findings remain;
     - no artifact diff occurs after an apply attempt;

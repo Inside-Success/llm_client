@@ -19,7 +19,6 @@ from typing import Any, Callable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.workflow.adversarial_review import (
-    AdversarialReview,
     AdversarialReviewV1,
     adversarial_review_schema,
     adversarial_review_response_schema,
@@ -141,7 +140,9 @@ class BudgetLedger(BaseModel):
 
     def add_call(self, *, cycle: int, call_kind: Literal["review", "apply"], model: str, cost_usd: float) -> None:
         """Append one model-call cost to the ledger."""
-        cost = max(float(cost_usd), 0.0)
+        cost = float(cost_usd)
+        if cost < 0:
+            raise ValueError("Review-cycle cost entries must be non-negative.")
         cumulative = self.total_spent + cost
         self.entries.append(
             BudgetLedgerEntry(
@@ -215,6 +216,7 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
     actionable: list[ActionableFinding] = []
     skipped: list[SkippedFinding] = []
 
+    annotations = payload.get("profile_annotations", []) or []
     for item in payload.get("contract_violations", []):
         actionable.append(
             ActionableFinding(
@@ -227,19 +229,34 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
         )
 
     correctness = payload.get("correctness_findings", [])
-    for item in correctness:
+    valid_optimum_gap_links: set[int] = set()
+    for item in annotations:
+        if item.get("kind") != "optimum_gap":
+            continue
+        linked = item.get("linked_finding_index")
+        if type(linked) is not int or linked < 0 or linked >= len(correctness):
+            continue
+        linked_item = correctness[linked]
+        if (
+            linked_item.get("severity") == "high"
+            and str(item.get("validity_loss_without_change", "")).strip()
+        ):
+            valid_optimum_gap_links.add(linked)
+
+    for index, item in enumerate(correctness):
         severity = str(item.get("severity", "warn"))
         evidence_ref = f"{item.get('file_path', '')}:{item.get('line', '')}"
         if severity == "high":
-            actionable.append(
-                ActionableFinding(
-                    kind="correctness_high",
-                    claim=str(item.get("claim", "")),
-                    evidence_ref=evidence_ref,
-                    severity=severity,
-                    payload=item,
+            if index not in valid_optimum_gap_links:
+                actionable.append(
+                    ActionableFinding(
+                        kind="correctness_high",
+                        claim=str(item.get("claim", "")),
+                        evidence_ref=evidence_ref,
+                        severity=severity,
+                        payload=item,
+                    )
                 )
-            )
         else:
             skipped.append(
                 SkippedFinding(
@@ -250,12 +267,11 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
                 )
             )
 
-    annotations = payload.get("profile_annotations", []) or []
     for item in annotations:
         kind = item.get("kind")
         if kind == "optimum_gap":
             linked = item.get("linked_finding_index")
-            linked_item = correctness[linked] if isinstance(linked, int) and linked < len(correctness) else None
+            linked_item = correctness[linked] if type(linked) is int and 0 <= linked < len(correctness) else None
             if (
                 linked_item is not None
                 and linked_item.get("severity") == "high"
@@ -410,8 +426,41 @@ def git_head(workspace: Path) -> str:
 
 
 def git_diff_from_ref(workspace: Path, ref: str) -> str:
-    """Return working-tree diff relative to ``ref``."""
-    return _run_git(workspace, ["diff", "--no-ext-diff", ref])
+    """Return working-tree diff relative to ``ref``, including untracked files."""
+    diff_parts = [_run_git(workspace, ["diff", "--no-ext-diff", ref])]
+    for path in git_untracked_paths(workspace):
+        diff_parts.append(
+            _run_git_diff_allow_difference(
+                workspace,
+                ["diff", "--no-ext-diff", "--no-index", "--", "/dev/null", path],
+            )
+        )
+    return "".join(diff_parts)
+
+
+def _run_git_diff_allow_difference(workspace: Path, args: list[str]) -> str:
+    """Run a git diff command where return code 1 means differences exist."""
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode not in (0, 1):
+        raise ReviewCycleError(
+            f"git {' '.join(args)} failed in {workspace}: {proc.stderr.strip()}"
+        )
+    return proc.stdout
+
+
+def git_untracked_paths(workspace: Path) -> list[str]:
+    """Return untracked, non-ignored paths in the workspace."""
+    return sorted(
+        path.strip()
+        for path in _run_git(workspace, ["ls-files", "--others", "--exclude-standard"]).splitlines()
+        if path.strip()
+    )
 
 
 def git_changed_paths(workspace: Path) -> list[str]:
@@ -484,7 +533,10 @@ def _cost_from_meta(meta: Any) -> float:
     for attr in ("marginal_cost", "cost"):
         value = getattr(meta, attr, None)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return max(float(value), 0.0)
+            cost = float(value)
+            if cost < 0:
+                raise ReviewCycleError(f"LLM metadata reported negative {attr}: {cost}.")
+            return cost
     return 0.0
 
 
@@ -652,13 +704,13 @@ def run_review_cycle(
             [item.model_dump() for item in classification.skipped],
         )
 
-        if ledger.is_exhausted():
+        if last_verdict == "pass":
             signoff = _make_signoff(
                 task=task,
-                final_status="budget_exhausted",
+                final_status="pass",
                 cycles_completed=cycle,
                 final_verdict=last_verdict,
-                stop_reason="Cumulative review-cycle budget exhausted after review.",
+                stop_reason="Reviewer verdict passed.",
                 ledger=ledger,
                 classification=classification,
             )
@@ -669,13 +721,13 @@ def run_review_cycle(
                 ledger=ledger,
             )
 
-        if last_verdict == "pass":
+        if ledger.is_exhausted():
             signoff = _make_signoff(
                 task=task,
-                final_status="pass",
+                final_status="budget_exhausted",
                 cycles_completed=cycle,
                 final_verdict=last_verdict,
-                stop_reason="Reviewer verdict passed.",
+                stop_reason="Cumulative review-cycle budget exhausted after review.",
                 ledger=ledger,
                 classification=classification,
             )

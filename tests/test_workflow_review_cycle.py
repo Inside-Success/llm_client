@@ -42,6 +42,7 @@ def test_actionable_classifier_excludes_warn_spurious_uncertain_and_nits() -> No
         correctness_findings=[
             CorrectnessFinding(file_path="paper.md", line=1, claim="high defect", severity="high"),
             CorrectnessFinding(file_path="paper.md", line=2, claim="warn concern", severity="warn"),
+            CorrectnessFinding(file_path="paper.md", line=4, claim="unlinked high defect", severity="high"),
         ],
         contract_violations=[
             ContractViolation(
@@ -82,6 +83,11 @@ def test_actionable_classifier_excludes_warn_spurious_uncertain_and_nits() -> No
         "correctness_high",
         "optimum_gap",
     ]
+    assert [item.claim for item in classification.actionable] == [
+        "missing evidence citation",
+        "unlinked high defect",
+        "quality lever",
+    ]
     skipped_kinds = [item.kind for item in classification.skipped]
     assert "correctness_non_high" in skipped_kinds
     assert "spurious" in skipped_kinds
@@ -113,6 +119,17 @@ def test_budget_ledger_tracks_exhaustion() -> None:
     ledger.add_call(cycle=1, call_kind="apply", model="m2", cost_usd=0.8)
     assert ledger.total_spent == 1.55
     assert ledger.is_exhausted()
+
+
+def test_budget_ledger_rejects_negative_cost() -> None:
+    ledger = BudgetLedger(max_budget=1.0)
+
+    try:
+        ledger.add_call(cycle=1, call_kind="review", model="m1", cost_usd=-0.01)
+    except ValueError as exc:
+        assert "non-negative" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for negative cost")
 
 
 def test_artifact_writers_and_index(tmp_path: Path) -> None:
@@ -247,6 +264,35 @@ def test_review_cycle_stops_when_apply_makes_no_diff(tmp_path: Path) -> None:
     assert (task.run_dir() / "apply_1.md").read_text() == "No change."
 
 
+def test_review_cycle_detects_untracked_allowed_artifact_diff(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    task = ReviewCycleTask(
+        task_id="new-file",
+        artifact_paths=["paper.md", "appendix.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-new-file"),
+        max_cycles=1,
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        (workspace / "appendix.md").write_text("New appendix\n", encoding="utf-8")
+        return ApplyAttempt(narrative="Created appendix.", cost_usd=0.1, model="impl")
+
+    signoff = run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+    diff = (task.run_dir() / "diff_1.patch").read_text(encoding="utf-8")
+
+    assert signoff.final_status == "max_cycles"
+    assert "appendix.md" in diff
+    assert "New appendix" in diff
+
+
 def test_review_cycle_stops_on_repeated_finding_digest(tmp_path: Path) -> None:
     workspace = _init_repo(tmp_path)
     task = ReviewCycleTask(
@@ -350,4 +396,23 @@ def test_review_cycle_stops_on_budget_after_review(tmp_path: Path) -> None:
     signoff = run_review_cycle(task, reviewer=reviewer)
 
     assert signoff.final_status == "budget_exhausted"
+    assert signoff.budget_spent_usd == 0.2
+
+
+def test_review_cycle_pass_takes_precedence_over_budget_after_review(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    task = ReviewCycleTask(
+        task_id="pass-budget",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-pass-budget"),
+        max_budget=0.1,
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_pass_review(), cost_usd=0.2, model="reviewer")
+
+    signoff = run_review_cycle(task, reviewer=reviewer)
+
+    assert signoff.final_status == "pass"
     assert signoff.budget_spent_usd == 0.2
