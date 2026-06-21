@@ -1,6 +1,6 @@
 # Plan #37: Long-Running Execution Spine for Intermodel Review
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** execution
 **Priority:** Critical
 **Blocked By:** Plan #36 accepted as the target architecture
@@ -107,7 +107,7 @@ follow-up issue, choose the safer documented path, and continue.
 | 7. prompt_eval frozen case set | Complete | prompt_eval:40c3824 | 6-case frozen set; CLI smoke; `tests/test_methodology_review_case_set.py tests/test_runner.py tests/test_experiment.py -q` => 47 passed; ruff passed | Branch `plan-36-methodology-review-cases` pushed; no superiority claim made |
 | 8. OpenClaw adapter | Complete | openclaw:4a75451 | launcher smoke; adapter/report tests => 31 passed; ruff passed | Branch `plan-36-review-cycle-adapter` pushed; sidecar artifact reference, no report-schema replacement |
 | 9. Legacy extraction notes | Complete | 517ef92; consensus_system:eb1f589; agent_ontology:f7b89db | extraction notes committed; tombstone branches pushed; `py_compile` passed for legacy modules | Additive tombstones only; no legacy code moved or deleted |
-| 10. Cleanup and full verification | Pending | - | offline sweep; optional live schema smoke; PR comment | Ready except public-release gate |
+| 10. Cleanup and full verification | Complete | 5451533 | offline sweep => 116 passed; live schema smoke => 10 passed after schema hardening; final blocker-focused review => pass with 0 contract violations; PR check `observability-switches` passed | PR #29 remains draft/private-gated while issue #30 is open |
 
 Status values: `Pending`, `In Progress`, `Blocked`, `Complete`.
 

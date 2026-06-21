@@ -1,6 +1,6 @@
 # Plan #36: Intermodel Review Consolidation and Whitepaper Loop
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** GitHub issue #30 for any public release; private-only implementation may proceed
@@ -298,29 +298,29 @@ Out of scope:
 
 ## Acceptance Criteria
 
-- [ ] GitHub issue #30 is resolved, or the repo is explicitly kept private and
+- [x] GitHub issue #30 is resolved, or the repo is explicitly kept private and
       the sanitized branch stays marked private-only.
-- [ ] A local grep for the private issue #30 evidence patterns returns no hits
+- [x] A local grep for the private issue #30 evidence patterns returns no hits
       in the current PR tree; the exact pattern is not repeated in tracked docs.
-- [ ] `review-artifact` still works without `--review-profile`; `generic` is
+- [x] `review-artifact` still works without `--review-profile`; `generic` is
       the default.
-- [ ] Schema version 1 JSON output remains available, or every known
+- [x] Schema version 1 JSON output remains available, or every known
       `AdversarialReview` consumer is updated to tolerate the optional
       `profile_annotations` field.
-- [ ] `quality_optimal_whitepaper` produces the requested rendered sections
+- [x] `quality_optimal_whitepaper` produces the requested rendered sections
       without replacing the canonical `AdversarialReview` JSON contract.
-- [ ] `review-cycle` has typed config, deterministic stop conditions, a total
+- [x] `review-cycle` has typed config, deterministic stop conditions, a total
       budget guard, and durable per-cycle artifacts.
-- [ ] No OpenClaw task-report schema is replaced by `AdversarialReview`.
-- [ ] Legacy archive extraction notes exist before any legacy code is moved or
+- [x] No OpenClaw task-report schema is replaced by `AdversarialReview`.
+- [x] Legacy archive extraction notes exist before any legacy code is moved or
       tombstoned.
-- [ ] Offline test sweep exits 0:
+- [x] Offline test sweep exits 0:
       `pytest tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_workflow_review_cycle.py tests/test_cli_review_cycle.py tests/test_cli_smoke.py tests/test_workflow_duet.py tests/test_workflow_deliberate.py tests/test_workflow_deliberate_verifier.py -q`.
-- [ ] Gated live schema smoke is documented and run before any public release:
+- [x] Gated live schema smoke is documented and run before any public release:
       `LLM_CLIENT_INTEGRATION=1 pytest tests/test_workflow_schema_smoke.py -q`.
-- [ ] PR comment posted with sanitized head SHA, issue #30 link, and the
+- [x] PR comment posted with sanitized head SHA, issue #30 link, and the
       public-distribution gate.
-- [ ] A new `review-artifact` dogfood run against this plan returns no blocker
+- [x] A new `review-artifact` dogfood run against this plan returns no blocker
       findings, or every blocker is tracked as a new plan/update before
       implementation begins.
 

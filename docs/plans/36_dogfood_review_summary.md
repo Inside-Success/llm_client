@@ -145,3 +145,30 @@ Result:
 - Retry completed one bounded cycle with `max_cycles` status. The implementer
   edited only the declared artifact file and corrected the seeded time and
   factuality defect.
+
+## Review 8 - Final PR Diff Gate
+
+Raw local artifacts:
+
+- `runs/final-plan37-review/review.json`
+- `runs/final-plan37-review/review_after_fixes.json`
+- `runs/final-plan37-review/review_current_head.json`
+- `runs/final-plan37-review/review_after_signoff_cli_fixes.json`
+- `runs/final-plan37-review/review_after_runner_artifact_fix.json`
+- `runs/final-plan37-review/review_after_renderer_hook_fix.json`
+- `runs/final-plan37-review/review_final_cleanup.json`
+
+Result:
+
+- Early final-gate reviews found real defects in untracked-file diffing,
+  duplicate `optimum_gap` actionables, budget/pass precedence, negative cost
+  handling, CLI success semantics, signoff artifact indexing, ignored-file
+  detection, default run-dir enforcement, and quality renderer severity
+  mapping.
+- Each blocker or contract violation was fixed with focused regression tests
+  before continuing.
+- The terminal blocker-focused review returned `verdict: pass`, with no
+  contract violations and no unresolved blockers.
+- Final local gates: full offline sweep passed 116 tests; gated live schema
+  smoke passed 10 tests after schema hardening; GitHub PR check
+  `observability-switches` passed.
