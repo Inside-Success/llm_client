@@ -44,6 +44,18 @@ from llm_client.workflow.adversarial_review import (
     render_quality_optimal_sections,
     resolve_review_schema_version,
 )
+from llm_client.workflow.review_cycle import (
+    ActionableClassification,
+    ActionableFinding,
+    BudgetLedger,
+    BudgetLedgerEntry,
+    ReviewCycleSignoff,
+    ReviewCycleTask,
+    SkippedFinding,
+    actionable_finding_digest,
+    build_artifact_index,
+    classify_actionable_findings,
+)
 
 # Side-effect import: registers built-in profiles ("generic", "plan_doc_review").
 from llm_client.workflow import profiles as _profiles  # noqa: F401
@@ -70,6 +82,16 @@ __all__ = [
     "register_review_profile",
     "render_quality_optimal_sections",
     "resolve_review_schema_version",
+    "ActionableClassification",
+    "ActionableFinding",
+    "BudgetLedger",
+    "BudgetLedgerEntry",
+    "ReviewCycleSignoff",
+    "ReviewCycleTask",
+    "SkippedFinding",
+    "actionable_finding_digest",
+    "build_artifact_index",
+    "classify_actionable_findings",
 ]
 
 # build_workflow is imported lazily to avoid requiring langgraph at import time
