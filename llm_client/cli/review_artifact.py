@@ -41,8 +41,10 @@ from typing import Any
 
 from llm_client.workflow.adversarial_review import (
     adversarial_review_schema,
+    adversarial_review_response_schema,
     build_review_prompt,
     get_review_profile,
+    normalize_adversarial_review_response,
     render_quality_optimal_sections,
     resolve_review_schema_version,
 )
@@ -119,6 +121,7 @@ def cmd_review_artifact(args: argparse.Namespace) -> None:
     profile = get_review_profile(args.review_profile)
     schema_version = resolve_review_schema_version(profile, args.review_schema_version)
     schema = adversarial_review_schema(schema_version)
+    response_schema = adversarial_review_response_schema(schema_version)
     messages = build_review_prompt(
         artifact_label=artifact_label,
         artifact_body=artifact_body,
@@ -134,7 +137,7 @@ def cmd_review_artifact(args: argparse.Namespace) -> None:
     review, _meta = call_llm_structured(
         args.reviewer,
         messages,
-        schema,
+        response_schema,
         task="review_artifact",
         trace_id=f"{task_id}/review",
         max_budget=args.max_budget,
@@ -142,6 +145,7 @@ def cmd_review_artifact(args: argparse.Namespace) -> None:
         yolo_mode=True,
         cwd=workspace,
     )
+    review = normalize_adversarial_review_response(review)
 
     payload = review.model_dump()
     payload["reviewer_model"] = args.reviewer

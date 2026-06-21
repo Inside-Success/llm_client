@@ -154,6 +154,13 @@ Out of scope:
    fields can continue reading the JSON; consumers that mirror the old
    `extra="forbid"` schema must either pin `--review-schema-version 1` or
    update to schema version 2 before reading profile annotations.
+   Live parse rule: model output is parsed through a permissive response schema
+   and then normalized into the canonical schema before JSON is written or
+   findings are classified. Canonical `ReviewAnnotation` stays strict, but
+   malformed live profile annotations become non-actionable discussion items:
+   missing `why_rejected_or_uncertain` receives an explicit repair note, and an
+   invalid `optimum_gap` missing a non-negative `linked_finding_index` or
+   `validity_loss_without_change` is converted to `uncertain`.
 8. `review-artifact --review-profile quality_optimal_whitepaper` renders the
    user's desired sections from canonical JSON:
    - `[DEFECT]` = high-impact `correctness_findings` and

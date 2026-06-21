@@ -34,7 +34,7 @@ class ReviewAnnotation(BaseModel):
     kind: ReviewAnnotationKind
     claim: str
     evidence_path: str | None = None
-    linked_finding_index: int | None = None
+    linked_finding_index: int | None = Field(default=None, ge=0)
     validity_loss_without_change: str = ""
     why_rejected_or_uncertain: str = ""
 
@@ -74,6 +74,34 @@ class AdversarialReview(AdversarialReviewV1):
     """Version-2 standalone review schema with profile annotations."""
 
     profile_annotations: list[ReviewAnnotation] = Field(default_factory=list)
+
+
+class ReviewAnnotationResponse(BaseModel):
+    """Permissive LLM-facing profile annotation parsed before repair.
+
+    Provider-side structured decoding does not enforce Pydantic validators such
+    as "uncertain requires why_rejected_or_uncertain". This boundary model keeps
+    live malformed annotations observable so they can be repaired or routed to
+    discussion instead of crashing the whole review cycle.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    annotation_id: str = ""
+    kind: str = ""
+    claim: str = ""
+    evidence_path: str | None = None
+    linked_finding_index: int | None = None
+    validity_loss_without_change: str = ""
+    why_rejected_or_uncertain: str = ""
+
+
+class AdversarialReviewResponse(AdversarialReviewV1):
+    """Permissive v2 LLM response shape normalized into ``AdversarialReview``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    profile_annotations: list[ReviewAnnotationResponse] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -121,6 +149,75 @@ def adversarial_review_schema(
     if version == "2":
         return AdversarialReview
     raise ValueError(f"Unknown review schema version: {version!r}")
+
+
+def adversarial_review_response_schema(
+    version: ReviewSchemaVersion = "1",
+) -> type[AdversarialReviewV1]:
+    """Return the schema used to parse live LLM output for ``version``."""
+    if version == "1":
+        return AdversarialReviewV1
+    if version == "2":
+        return AdversarialReviewResponse
+    raise ValueError(f"Unknown review schema version: {version!r}")
+
+
+def normalize_adversarial_review_response(
+    payload: AdversarialReviewV1 | dict[str, Any],
+) -> AdversarialReviewV1:
+    """Normalize permissive live review output into the canonical schema."""
+    data = payload.model_dump() if isinstance(payload, BaseModel) else dict(payload)
+    if "profile_annotations" not in data:
+        return AdversarialReviewV1.model_validate(data)
+
+    normalized: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(data.get("profile_annotations") or [], start=1):
+        if isinstance(raw_item, BaseModel):
+            item = raw_item.model_dump()
+        elif isinstance(raw_item, dict):
+            item = dict(raw_item)
+        else:
+            item = {
+                "annotation_id": f"annotation_{index}",
+                "kind": "uncertain",
+                "claim": str(raw_item),
+                "why_rejected_or_uncertain": "Malformed profile annotation was not an object.",
+            }
+
+        item["annotation_id"] = str(item.get("annotation_id") or f"annotation_{index}")
+        item["claim"] = str(item.get("claim") or "Malformed profile annotation")
+        kind = str(item.get("kind") or "uncertain")
+        item["kind"] = kind
+
+        if kind == "optimum_gap":
+            linked = item.get("linked_finding_index")
+            validity = str(item.get("validity_loss_without_change") or "")
+            if not isinstance(linked, int) or linked < 0 or not validity.strip():
+                item["kind"] = "uncertain"
+                item["linked_finding_index"] = None
+                item["validity_loss_without_change"] = ""
+                item["why_rejected_or_uncertain"] = (
+                    "Invalid optimum_gap annotation omitted a non-negative "
+                    "linked_finding_index or validity_loss_without_change; "
+                    "routed to discussion instead of auto-apply."
+                )
+        elif kind in {"spurious", "uncertain"}:
+            if not str(item.get("why_rejected_or_uncertain") or "").strip():
+                item["why_rejected_or_uncertain"] = (
+                    f"Reviewer omitted why_rejected_or_uncertain for {kind}; "
+                    "routed to discussion with repair note."
+                )
+        else:
+            item["kind"] = "uncertain"
+            item["linked_finding_index"] = None
+            item["validity_loss_without_change"] = ""
+            item["why_rejected_or_uncertain"] = (
+                f"Unknown profile annotation kind {kind!r}; routed to discussion."
+            )
+        normalized.append(item)
+
+    data["profile_annotations"] = normalized
+    return AdversarialReview.model_validate(data)
 
 
 def resolve_review_schema_version(

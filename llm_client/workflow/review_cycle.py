@@ -22,8 +22,10 @@ from llm_client.workflow.adversarial_review import (
     AdversarialReview,
     AdversarialReviewV1,
     adversarial_review_schema,
+    adversarial_review_response_schema,
     build_review_prompt,
     get_review_profile,
+    normalize_adversarial_review_response,
     resolve_review_schema_version,
 )
 
@@ -203,11 +205,7 @@ ApplyCallable = Callable[[ReviewCycleTask, int, ActionableClassification], Apply
 
 def parse_review_payload(payload: AdversarialReviewV1 | dict[str, Any]) -> AdversarialReviewV1:
     """Parse a review payload into the canonical schema version it declares."""
-    if isinstance(payload, AdversarialReviewV1):
-        return payload
-    if "profile_annotations" in payload:
-        return AdversarialReview.model_validate(payload)
-    return AdversarialReviewV1.model_validate(payload)
+    return normalize_adversarial_review_response(payload)
 
 
 def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -> ActionableClassification:
@@ -497,6 +495,7 @@ def default_review_call(task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
     profile = get_review_profile(task.review_profile)
     schema_version = resolve_review_schema_version(profile, "auto")
     schema = adversarial_review_schema(schema_version)
+    response_schema = adversarial_review_response_schema(schema_version)
     messages = build_review_prompt(
         artifact_label=", ".join(task.artifact_paths),
         artifact_body=_read_artifacts(task),
@@ -507,7 +506,7 @@ def default_review_call(task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
     review, meta = call_llm_structured(
         task.reviewer_model,
         messages,
-        schema,
+        response_schema,
         task="review_cycle_review",
         trace_id=f"{task.task_id}/review/{cycle}",
         max_budget=task.per_call_max_budget,
@@ -515,7 +514,7 @@ def default_review_call(task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
         yolo_mode=True,
     )
     return ReviewCallResult(
-        review=parse_review_payload(review.model_dump()),
+        review=parse_review_payload(review),
         cost_usd=_cost_from_meta(meta),
         model=task.reviewer_model,
     )

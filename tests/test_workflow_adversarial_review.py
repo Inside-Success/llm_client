@@ -8,10 +8,12 @@ from llm_client.workflow.adversarial_review import (
     AdversarialReview,
     ReviewAnnotation,
     ReviewProfile,
+    adversarial_review_response_schema,
     adversarial_review_schema,
     build_review_prompt,
     get_review_profile,
     list_review_profiles,
+    normalize_adversarial_review_response,
     register_review_profile,
     render_quality_optimal_sections,
     resolve_review_schema_version,
@@ -101,6 +103,49 @@ def test_schema_v2_accepts_profile_annotations() -> None:
     )
     assert isinstance(instance, AdversarialReview)
     assert instance.profile_annotations[0].kind == "optimum_gap"
+
+
+def test_response_schema_v2_accepts_repairable_annotation() -> None:
+    schema = adversarial_review_response_schema("2")
+    response = schema(
+        artifact_label="x",
+        verdict="concerns",
+        summary="needs discussion",
+        profile_annotations=[
+            {
+                "annotation_id": "u1",
+                "kind": "uncertain",
+                "claim": "Maybe add adjudication details",
+            }
+        ],
+    )
+
+    normalized = normalize_adversarial_review_response(response)
+
+    assert isinstance(normalized, AdversarialReview)
+    assert normalized.profile_annotations[0].kind == "uncertain"
+    assert "omitted why_rejected_or_uncertain" in normalized.profile_annotations[0].why_rejected_or_uncertain
+
+
+def test_invalid_optimum_gap_response_is_routed_to_discussion() -> None:
+    normalized = normalize_adversarial_review_response(
+        {
+            "artifact_label": "x",
+            "verdict": "concerns",
+            "summary": "bad optimum gap",
+            "profile_annotations": [
+                {
+                    "annotation_id": "og1",
+                    "kind": "optimum_gap",
+                    "claim": "Add a component",
+                }
+            ],
+        }
+    )
+
+    assert isinstance(normalized, AdversarialReview)
+    assert normalized.profile_annotations[0].kind == "uncertain"
+    assert "Invalid optimum_gap" in normalized.profile_annotations[0].why_rejected_or_uncertain
 
 
 def test_quality_profile_requires_schema_v2() -> None:
