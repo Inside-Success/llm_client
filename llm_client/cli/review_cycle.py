@@ -10,7 +10,7 @@ from typing import Any
 
 from llm_client.workflow.review_cycle import ReviewCycleTask, run_review_cycle
 
-SUCCESS_STATUSES = {"pass", "non_actionable_remaining"}
+SUCCESS_STATUSES = {"pass"}
 
 
 def _load_task_file(path: str) -> ReviewCycleTask:

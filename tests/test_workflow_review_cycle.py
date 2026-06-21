@@ -214,6 +214,9 @@ def test_review_cycle_pass_writes_signoff(tmp_path: Path) -> None:
 
     assert signoff.final_status == "pass"
     assert signoff.cycles_completed == 1
+    assert signoff.artifact_index["signoff.json"] == "signoff.json"
+    persisted = json.loads((task.run_dir() / "signoff.json").read_text(encoding="utf-8"))
+    assert persisted["artifact_index"]["signoff.json"] == "signoff.json"
     assert (task.run_dir() / "signoff.json").is_file()
     assert (task.run_dir() / "review_1.json").is_file()
 
@@ -381,6 +384,75 @@ def test_review_cycle_fails_on_undeclared_ignored_file_edit(tmp_path: Path) -> N
         assert "ignored/secret.txt" in str(exc)
     else:
         raise AssertionError("expected ReviewCycleError")
+
+
+def test_review_cycle_fails_on_modified_preexisting_ignored_file(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    (workspace / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=workspace, check=True)
+    subprocess.run(["git", "commit", "-m", "ignore ignored dir"], cwd=workspace, check=True, capture_output=True)
+    ignored_dir = workspace / "ignored"
+    ignored_dir.mkdir()
+    (ignored_dir / "secret.txt").write_text("before\n", encoding="utf-8")
+    task = ReviewCycleTask(
+        task_id="modified-ignored",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-modified-ignored"),
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        (ignored_dir / "secret.txt").write_text("after\n", encoding="utf-8")
+        return ApplyAttempt(narrative="Changed ignored undeclared file.", cost_usd=0.1, model="impl")
+
+    try:
+        run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+    except ReviewCycleError as exc:
+        assert "ignored/secret.txt" in str(exc)
+    else:
+        raise AssertionError("expected ReviewCycleError")
+
+
+def test_review_cycle_allows_quoted_declared_status_path(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    subprocess.run(["git", "init"], cwd=workspace, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=workspace, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=workspace, check=True)
+    artifact = workspace / "paper with space.md"
+    artifact.write_text("Initial paper\n", encoding="utf-8")
+    subprocess.run(["git", "add", "paper with space.md"], cwd=workspace, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=workspace, check=True, capture_output=True)
+    task = ReviewCycleTask(
+        task_id="quoted-path",
+        artifact_paths=["paper with space.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-quoted-path"),
+        max_cycles=1,
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        with artifact.open("a", encoding="utf-8") as handle:
+            handle.write("Allowed change\n")
+        return ApplyAttempt(narrative="Changed declared file.", cost_usd=0.1, model="impl")
+
+    signoff = run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+
+    assert signoff.final_status == "max_cycles"
 
 
 def test_review_cycle_detects_committed_apply_diff(tmp_path: Path) -> None:

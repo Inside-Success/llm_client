@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -44,7 +45,6 @@ ReviewCycleStopReason = Literal[
     "repeated_digest",
     "max_cycles",
     "budget_exhausted",
-    "failed",
 ]
 
 
@@ -230,6 +230,7 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
 
     correctness = payload.get("correctness_findings", [])
     valid_optimum_gap_links: set[int] = set()
+    emitted_optimum_gap_links: set[int] = set()
     for item in annotations:
         if item.get("kind") != "optimum_gap":
             continue
@@ -272,6 +273,16 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
         if kind == "optimum_gap":
             linked = item.get("linked_finding_index")
             linked_item = correctness[linked] if type(linked) is int and 0 <= linked < len(correctness) else None
+            if linked in emitted_optimum_gap_links:
+                skipped.append(
+                    SkippedFinding(
+                        kind="invalid_optimum_gap",
+                        claim=str(item.get("claim", "")),
+                        reason="Duplicate optimum_gap annotation for the same correctness finding.",
+                        payload=item,
+                    )
+                )
+                continue
             if (
                 linked_item is not None
                 and linked_item.get("severity") == "high"
@@ -289,6 +300,7 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
                         payload=item,
                     )
                 )
+                emitted_optimum_gap_links.add(linked)
             else:
                 skipped.append(
                     SkippedFinding(
@@ -475,6 +487,28 @@ def git_ignored_paths(workspace: Path) -> list[str]:
     )
 
 
+def git_ignored_path_fingerprints(workspace: Path) -> dict[str, tuple[bool, int, int]]:
+    """Return cheap fingerprints for ignored, untracked paths."""
+    fingerprints: dict[str, tuple[bool, int, int]] = {}
+    for path in git_ignored_paths(workspace):
+        full_path = workspace / path
+        try:
+            stat = full_path.stat()
+        except FileNotFoundError:
+            continue
+        fingerprints[path] = (full_path.is_file(), stat.st_size, stat.st_mtime_ns)
+    return fingerprints
+
+
+def changed_ignored_paths(
+    before: dict[str, tuple[bool, int, int]],
+    after: dict[str, tuple[bool, int, int]],
+) -> list[str]:
+    """Return ignored paths created, modified, or deleted between snapshots."""
+    paths = set(before) | set(after)
+    return sorted(path for path in paths if before.get(path) != after.get(path))
+
+
 def git_changed_paths(workspace: Path) -> list[str]:
     """Return tracked changed paths from staged and unstaged diffs."""
     names = set()
@@ -502,7 +536,14 @@ def _status_paths(status: str) -> list[str]:
         if not line.strip():
             continue
         raw_path = line[3:].strip()
-        if " -> " in raw_path:
+        if '"' in raw_path:
+            try:
+                parts = shlex.split(raw_path)
+            except ValueError:
+                parts = []
+            if parts:
+                raw_path = parts[-1]
+        elif " -> " in raw_path:
             raw_path = raw_path.split(" -> ", 1)[1]
         paths.append(raw_path)
     return paths
@@ -643,7 +684,7 @@ def _write_terminal_artifacts(
     """Persist terminal artifacts and return signoff with artifact index."""
     write_json_artifact(run_dir, "discussion_queue.json", [item.model_dump() for item in discussion_queue])
     write_json_artifact(run_dir, "budget_ledger.json", ledger)
-    signoff.artifact_index = build_artifact_index(run_dir)
+    signoff.artifact_index = {**build_artifact_index(run_dir), "signoff.json": "signoff.json"}
     write_json_artifact(run_dir, "signoff.json", signoff)
     return signoff
 
@@ -786,7 +827,7 @@ def run_review_cycle(
         seen_digests.add(classification.digest)
 
         head_before = git_head(workspace)
-        ignored_before = set(git_ignored_paths(workspace))
+        ignored_before = git_ignored_path_fingerprints(workspace)
         diff_before = git_diff_from_ref(workspace, head_before)
         apply_result = apply_call(task, cycle, classification)
         ledger.add_call(
@@ -799,15 +840,24 @@ def run_review_cycle(
         write_json_artifact(run_dir, f"apply_{cycle}.json", apply_result)
 
         if not task.allow_workspace_wide_edits:
+            ignored_after = git_ignored_path_fingerprints(workspace)
+            changed_ignored = changed_ignored_paths(ignored_before, ignored_after)
             touched_paths = sorted(
                 set(git_changed_paths_from_ref(workspace, head_before))
                 | set(git_changed_paths(workspace))
                 | set(_status_paths(git_status_short(workspace)))
-                | (set(git_ignored_paths(workspace)) - ignored_before)
+                | set(changed_ignored)
             )
             ensure_paths_allowed(touched_paths, task.artifact_paths)
-        new_ignored_paths = sorted(set(git_ignored_paths(workspace)) - ignored_before)
-        diff_after = git_diff_from_ref(workspace, head_before, extra_untracked_paths=new_ignored_paths)
+        else:
+            ignored_after = git_ignored_path_fingerprints(workspace)
+            changed_ignored = changed_ignored_paths(ignored_before, ignored_after)
+        extra_ignored_files = [
+            path
+            for path in changed_ignored
+            if path in ignored_after and (workspace / path).is_file()
+        ]
+        diff_after = git_diff_from_ref(workspace, head_before, extra_untracked_paths=extra_ignored_files)
         write_text_artifact(run_dir, f"diff_{cycle}.patch", diff_after)
 
         if diff_after == diff_before:

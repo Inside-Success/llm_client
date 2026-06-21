@@ -116,3 +116,43 @@ def test_cli_review_cycle_exits_nonzero_for_nonconverged_status(
         cli_mod.cmd_review_cycle(MagicMock(task_file=str(task_file)))
 
     assert exc_info.value.code == 1
+
+
+def test_cli_review_cycle_exits_nonzero_for_non_actionable_concerns(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from llm_client.cli import review_cycle as cli_mod
+    from llm_client.workflow.review_cycle import ReviewCycleSignoff
+
+    task_file = tmp_path / "task.json"
+    task_file.write_text(
+        json.dumps(
+            {
+                "task_id": "t1",
+                "artifact_paths": ["paper.md"],
+                "workspace_path": str(tmp_path),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run(task):
+        return ReviewCycleSignoff(
+            task_id=task.task_id,
+            final_status="non_actionable_remaining",
+            cycles_completed=1,
+            final_verdict="concerns",
+            stop_reason="discussion remains",
+            budget_spent_usd=0.0,
+            actionable_count=0,
+            discussion_queue_count=1,
+            artifact_index={},
+        )
+
+    monkeypatch.setattr(cli_mod, "run_review_cycle", fake_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli_mod.cmd_review_cycle(MagicMock(task_file=str(task_file)))
+
+    assert exc_info.value.code == 1
