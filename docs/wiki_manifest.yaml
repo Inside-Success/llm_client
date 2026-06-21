@@ -5,6 +5,10 @@ publish:
     type: ProjectOverview
     title: LLM Client Overview
     tags: [portfolio, shared-infrastructure, llm-tooling]
+  - path: docs/APPLIED_OBSERVABILITY_CASE.md
+    type: PortfolioGuide
+    title: LLM Client Applied Observability Case
+    tags: [portfolio, observability, llm-tooling]
   - path: docs/REQUIREMENTS.md
     type: Requirements
     tags: [shared-infrastructure, requirements]
