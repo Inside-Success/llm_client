@@ -105,7 +105,7 @@ follow-up issue, choose the safer documented path, and continue.
 | 5. Review-cycle implementer loop | Complete | 0b8382b | `tests/test_workflow_review_cycle.py tests/test_cli_review_cycle.py tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_cli_smoke.py -q` => 39 passed at commit 0b8382b; current sweep tracked in Phase 6 | Declared artifact paths enforced by default |
 | 6. Dogfood on Plan #36/37 docs | Complete | 1a11a65 | generic Plan #36/#37 reviews; quality methodology fixture; live `review-cycle`; focused suite => 43 passed | Live annotation-normalization defect fixed; no blocker remains unaddressed |
 | 7. prompt_eval frozen case set | Complete | prompt_eval:40c3824 | 6-case frozen set; CLI smoke; `tests/test_methodology_review_case_set.py tests/test_runner.py tests/test_experiment.py -q` => 47 passed; ruff passed | Branch `plan-36-methodology-review-cases` pushed; no superiority claim made |
-| 8. OpenClaw adapter | Complete | openclaw:e92f0aa | launcher smoke; adapter/report tests => 31 passed; ruff passed | Branch `plan-36-review-cycle-adapter` pushed; sidecar artifact reference, no report-schema replacement |
+| 8. OpenClaw adapter | Complete | openclaw:4a75451 | launcher smoke; adapter/report tests => 31 passed; ruff passed | Branch `plan-36-review-cycle-adapter` pushed; sidecar artifact reference, no report-schema replacement |
 | 9. Legacy extraction notes | Pending | - | notes committed before move/tombstone | Sources: ecosystem `utils`, `agent_ontology` |
 | 10. Cleanup and full verification | Pending | - | offline sweep; optional live schema smoke; PR comment | Ready except public-release gate |
 
