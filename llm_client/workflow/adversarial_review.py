@@ -87,13 +87,28 @@ class ReviewAnnotationResponse(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    annotation_id: str = ""
-    kind: str = ""
-    claim: str = ""
-    evidence_path: str | None = None
-    linked_finding_index: int | None = None
-    validity_loss_without_change: str = ""
-    why_rejected_or_uncertain: str = ""
+    annotation_id: str = Field(default="", description="Stable annotation identifier assigned by the reviewer.")
+    kind: str = Field(
+        default="",
+        description="One of optimum_gap, spurious, or uncertain. Unknown values are routed to discussion.",
+    )
+    claim: str = Field(default="", description="Profile-specific review claim.")
+    evidence_path: str | None = Field(
+        default=None,
+        description="Optional evidence locator for the profile annotation.",
+    )
+    linked_finding_index: int | None = Field(
+        default=None,
+        description="For optimum_gap only: non-negative index into correctness_findings; booleans are invalid.",
+    )
+    validity_loss_without_change: str = Field(
+        default="",
+        description="For optimum_gap only: what the artifact gets wrong without this change.",
+    )
+    why_rejected_or_uncertain: str = Field(
+        default="",
+        description="Required rationale for spurious and uncertain annotations.",
+    )
 
 
 class AdversarialReviewResponse(AdversarialReviewV1):
@@ -192,7 +207,7 @@ def normalize_adversarial_review_response(
         if kind == "optimum_gap":
             linked = item.get("linked_finding_index")
             validity = str(item.get("validity_loss_without_change") or "")
-            if not isinstance(linked, int) or linked < 0 or not validity.strip():
+            if type(linked) is not int or linked < 0 or not validity.strip():
                 item["kind"] = "uncertain"
                 item["linked_finding_index"] = None
                 item["validity_loss_without_change"] = ""
@@ -245,6 +260,7 @@ def build_review_prompt(
 ) -> list[dict[str, Any]]:
     """Build messages for a standalone adversarial review."""
     selected_profile = profile or get_review_profile("generic")
+    schema_name = response_schema.__name__
     system = (
         "You are an adversarial reviewer. Your job is to find what's WRONG "
         "with the artifact below, not to validate it. The author of the "
@@ -266,7 +282,7 @@ def build_review_prompt(
         "## Artifact body",
         artifact_body,
         "",
-        "Return an AdversarialReview JSON object. Verdict must be one of: "
+        f"Return a {schema_name} JSON object. Verdict must be one of: "
         "pass, concerns, blocker. Groundedness rules: every "
         "correctness_findings entry MUST have file_path (str) and line (int); "
         "every contract_violations entry MUST have constraint, violation, "
@@ -274,8 +290,8 @@ def build_review_prompt(
         "unverified_claims (UnverifiedClaim with claim + reason_unverified) "
         "or a free-text scope_drift_findings entry instead. Use 'blocker' "
         "verdict only when at least one finding would break correctness or "
-        "a stated constraint. Use 'concerns' when there are blockers or "
-        "contract violations but they're not catastrophic. Use 'pass' when "
+        "a stated constraint. Use 'concerns' when at least one significant "
+        "correctness or contract issue exists but none is catastrophic. Use 'pass' when "
         "the artifact is shippable as-is (nits/unverified may still appear).",
     ]
     if selected_profile.user_addendum.strip():

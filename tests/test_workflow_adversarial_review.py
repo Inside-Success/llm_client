@@ -173,6 +173,36 @@ def test_quality_profile_adds_prompt_contract() -> None:
     assert "methodology.md" in user
 
 
+def test_normalize_rejects_boolean_optimum_gap_link() -> None:
+    normalized = normalize_adversarial_review_response(
+        {
+            "artifact_label": "paper",
+            "verdict": "concerns",
+            "summary": "summary",
+            "correctness_findings": [
+                {"file_path": "paper.md", "line": 1, "claim": "defect", "severity": "high"}
+            ],
+            "contract_violations": [],
+            "nits": [],
+            "unverified_claims": [],
+            "scope_drift_findings": [],
+            "profile_annotations": [
+                {
+                    "annotation_id": "og-bool",
+                    "kind": "optimum_gap",
+                    "claim": "bad bool link",
+                    "linked_finding_index": True,
+                    "validity_loss_without_change": "loss",
+                }
+            ],
+        }
+    )
+
+    assert isinstance(normalized, AdversarialReview)
+    assert normalized.profile_annotations[0].kind == "uncertain"
+    assert normalized.profile_annotations[0].linked_finding_index is None
+
+
 def test_render_quality_optimal_sections_from_canonical_json() -> None:
     review = AdversarialReview(
         artifact_label="methodology.md",

@@ -425,10 +425,13 @@ def git_head(workspace: Path) -> str:
     return _run_git(workspace, ["rev-parse", "HEAD"]).strip()
 
 
-def git_diff_from_ref(workspace: Path, ref: str) -> str:
+def git_diff_from_ref(workspace: Path, ref: str, extra_untracked_paths: list[str] | None = None) -> str:
     """Return working-tree diff relative to ``ref``, including untracked files."""
     diff_parts = [_run_git(workspace, ["diff", "--no-ext-diff", ref])]
-    for path in git_untracked_paths(workspace):
+    untracked_paths = set(git_untracked_paths(workspace))
+    if extra_untracked_paths:
+        untracked_paths.update(extra_untracked_paths)
+    for path in sorted(untracked_paths):
         diff_parts.append(
             _run_git_diff_allow_difference(
                 workspace,
@@ -459,6 +462,15 @@ def git_untracked_paths(workspace: Path) -> list[str]:
     return sorted(
         path.strip()
         for path in _run_git(workspace, ["ls-files", "--others", "--exclude-standard"]).splitlines()
+        if path.strip()
+    )
+
+
+def git_ignored_paths(workspace: Path) -> list[str]:
+    """Return ignored, untracked paths in the workspace."""
+    return sorted(
+        path.strip()
+        for path in _run_git(workspace, ["ls-files", "--others", "--ignored", "--exclude-standard"]).splitlines()
         if path.strip()
     )
 
@@ -774,6 +786,7 @@ def run_review_cycle(
         seen_digests.add(classification.digest)
 
         head_before = git_head(workspace)
+        ignored_before = set(git_ignored_paths(workspace))
         diff_before = git_diff_from_ref(workspace, head_before)
         apply_result = apply_call(task, cycle, classification)
         ledger.add_call(
@@ -790,9 +803,11 @@ def run_review_cycle(
                 set(git_changed_paths_from_ref(workspace, head_before))
                 | set(git_changed_paths(workspace))
                 | set(_status_paths(git_status_short(workspace)))
+                | (set(git_ignored_paths(workspace)) - ignored_before)
             )
             ensure_paths_allowed(touched_paths, task.artifact_paths)
-        diff_after = git_diff_from_ref(workspace, head_before)
+        new_ignored_paths = sorted(set(git_ignored_paths(workspace)) - ignored_before)
+        diff_after = git_diff_from_ref(workspace, head_before, extra_untracked_paths=new_ignored_paths)
         write_text_artifact(run_dir, f"diff_{cycle}.patch", diff_after)
 
         if diff_after == diff_before:

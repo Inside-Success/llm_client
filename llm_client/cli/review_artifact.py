@@ -55,17 +55,13 @@ def _adversarial_review_schema():
     return adversarial_review_schema("1")
 
 
-# ---------------------------------------------------------------------------
-# Prompt
-# ---------------------------------------------------------------------------
-
-
 def _review_prompt(
     artifact_label: str,
     artifact_body: str,
     context_body: str,
     response_schema: type,
 ) -> list[dict[str, Any]]:
+    """Compatibility shim for callers that imported the old CLI helper."""
     return build_review_prompt(
         artifact_label=artifact_label,
         artifact_body=artifact_body,

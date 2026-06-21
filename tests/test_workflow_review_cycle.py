@@ -350,6 +350,39 @@ def test_review_cycle_fails_on_undeclared_file_edit(tmp_path: Path) -> None:
         raise AssertionError("expected ReviewCycleError")
 
 
+def test_review_cycle_fails_on_undeclared_ignored_file_edit(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    (workspace / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=workspace, check=True)
+    subprocess.run(["git", "commit", "-m", "ignore ignored dir"], cwd=workspace, check=True, capture_output=True)
+    task = ReviewCycleTask(
+        task_id="illegal-ignored",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-illegal-ignored"),
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        ignored_dir = workspace / "ignored"
+        ignored_dir.mkdir()
+        (ignored_dir / "secret.txt").write_text("ignored but illegal\n", encoding="utf-8")
+        return ApplyAttempt(narrative="Changed ignored undeclared file.", cost_usd=0.1, model="impl")
+
+    try:
+        run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+    except ReviewCycleError as exc:
+        assert "ignored/secret.txt" in str(exc)
+    else:
+        raise AssertionError("expected ReviewCycleError")
+
+
 def test_review_cycle_detects_committed_apply_diff(tmp_path: Path) -> None:
     workspace = _init_repo(tmp_path)
     task = ReviewCycleTask(

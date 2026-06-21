@@ -10,6 +10,8 @@ from typing import Any
 
 from llm_client.workflow.review_cycle import ReviewCycleTask, run_review_cycle
 
+SUCCESS_STATUSES = {"pass", "non_actionable_remaining"}
+
 
 def _load_task_file(path: str) -> ReviewCycleTask:
     """Load a ReviewCycleTask from JSON."""
@@ -33,6 +35,8 @@ def cmd_review_cycle(args: argparse.Namespace) -> None:
     print(f"cycles: {signoff.cycles_completed}")
     print(f"budget: ${signoff.budget_spent_usd:.4f}")
     print(f"signoff: {task.run_dir() / 'signoff.json'}")
+    if signoff.final_status not in SUCCESS_STATUSES:
+        sys.exit(1)
 
 
 def register_parser(subparsers: Any) -> None:
