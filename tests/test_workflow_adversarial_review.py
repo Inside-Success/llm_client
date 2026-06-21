@@ -244,7 +244,8 @@ def test_render_quality_optimal_sections_from_canonical_json() -> None:
     assert "[SPURIOUS]" in rendered
     assert "What is wrong without it" in rendered
     assert "No validity loss" in rendered
-    assert "Warn-only concern should not render as a defect" not in rendered
+    assert "Warn-only concern should not render as a defect" in rendered
+    assert "non-high-severity correctness finding" in rendered
 
 
 def test_render_quality_optimal_sections_routes_duplicate_optimum_gap_to_uncertain() -> None:
@@ -275,6 +276,13 @@ def test_render_quality_optimal_sections_routes_duplicate_optimum_gap_to_uncerta
                 linked_finding_index=0,
                 validity_loss_without_change="Duplicate.",
             ),
+            ReviewAnnotation(
+                annotation_id="og3",
+                kind="optimum_gap",
+                claim="Out-of-range identification proof",
+                linked_finding_index=3,
+                validity_loss_without_change="Out of range.",
+            ),
         ],
     )
 
@@ -282,3 +290,4 @@ def test_render_quality_optimal_sections_routes_duplicate_optimum_gap_to_uncerta
 
     assert rendered.count("What is wrong without it") == 1
     assert "duplicate optimum_gap linked_finding_index" in rendered
+    assert "optimum_gap linked_finding_index is out of range" in rendered

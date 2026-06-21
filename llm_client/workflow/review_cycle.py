@@ -303,11 +303,17 @@ def classify_actionable_findings(review: AdversarialReviewV1 | dict[str, Any]) -
                 )
                 emitted_optimum_gap_links.add(linked)
             else:
+                if linked_item is None:
+                    reason = "Optimum gap is missing a valid linked_finding_index."
+                elif linked_item.get("severity") != "high":
+                    reason = "Optimum gap links to a non-high-severity correctness finding."
+                else:
+                    reason = "Optimum gap is missing validity_loss_without_change."
                 skipped.append(
                     SkippedFinding(
                         kind="invalid_optimum_gap",
                         claim=str(item.get("claim", "")),
-                        reason="Optimum gap is not linked to a high-severity correctness finding.",
+                        reason=reason,
                         payload=item,
                     )
                 )

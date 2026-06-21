@@ -320,6 +320,7 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
         optimum_by_index[index] = item
     spurious = [item for item in annotations if item.get("kind") == "spurious"]
     uncertain = [item for item in annotations if item.get("kind") == "uncertain"]
+    discussion_correctness = []
 
     lines = [
         f"Verdict: {payload['verdict']}",
@@ -331,11 +332,15 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
     for idx, finding in enumerate(payload.get("correctness_findings", [])):
         if idx not in optimum_by_index and finding.get("severity") == "high":
             lines.append(f"- {finding['severity']}: {finding['claim']}")
+        elif idx not in optimum_by_index:
+            discussion_correctness.append(finding)
 
     lines.extend(["", "[OPTIMUM-GAP]"])
     correctness_findings = payload.get("correctness_findings", [])
+    malformed_optimum = []
     for idx, annotation in optimum_by_index.items():
         if idx >= len(correctness_findings):
+            malformed_optimum.append(annotation)
             continue
         finding = correctness_findings[idx]
         lines.append(
@@ -363,6 +368,18 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
             + annotation["claim"]
             + " Uncertain because: "
             + annotation["why_rejected_or_uncertain"]
+        )
+    for finding in discussion_correctness:
+        lines.append(
+            "- "
+            + finding["claim"]
+            + " Uncertain because: non-high-severity correctness finding preserved for discussion."
+        )
+    for annotation in malformed_optimum:
+        lines.append(
+            "- "
+            + annotation["claim"]
+            + " Uncertain because: optimum_gap linked_finding_index is out of range."
         )
     for annotation in duplicate_optimum:
         lines.append(

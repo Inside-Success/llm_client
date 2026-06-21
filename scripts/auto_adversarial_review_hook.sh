@@ -96,7 +96,8 @@ if [[ ! -s "$artifact_tmp" ]]; then
   exit 0
 fi
 
-loc_changed="$(grep -E '^[-+][^-+]' "$artifact_tmp" 2>/dev/null | wc -l || echo 0)"
+loc_changed="$({ grep -E '^[-+][^-+]' "$artifact_tmp" 2>/dev/null || true; } | wc -l)"
+loc_changed="${loc_changed//[[:space:]]/}"
 if [[ "$loc_changed" -lt "$min_loc" ]]; then
   rm -f "$artifact_tmp"
   exit 0
