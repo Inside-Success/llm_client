@@ -1,6 +1,6 @@
 # Plan #36: Intermodel Review Consolidation and Whitepaper Loop
 
-**Status:** Planned
+**Status:** In Progress
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** GitHub issue #30 for any public release; private-only implementation may proceed
@@ -76,22 +76,22 @@ the existing typed review contract and observability discipline.
 
 - `docs/guides/agent-collaboration.md` (modify) - remove stale sensitive-run
   references and add the new whitepaper loop once implemented.
-- `llm_client/workflow/adversarial_review.py` (create) - move
+- `llm_client/workflow/adversarial_review.py` (created; modify in follow-ups) - move
   `AdversarialReview`, finding imports, prompt builder, and review-profile
   registry out of the CLI.
-- `llm_client/cli/review_artifact.py` (modify) - delegate schema/prompt/profile
+- `llm_client/cli/review_artifact.py` (modified) - delegate schema/prompt/profile
   resolution to `workflow.adversarial_review`; add `--review-profile`.
-- `llm_client/workflow/review_cycle.py` (create) - synchronous local loop runner
+- `llm_client/workflow/review_cycle.py` (created; modify in follow-ups) - synchronous local loop runner
   for review -> apply -> verify -> repeat.
-- `llm_client/cli/review_cycle.py` (create) - `review-cycle` subcommand.
-- `llm_client/__main__.py` (modify) - register `review-cycle`.
-- `tests/test_cli_review_artifact.py` (modify) - profile flag and schema
+- `llm_client/cli/review_cycle.py` (created) - `review-cycle` subcommand.
+- `llm_client/__main__.py` (modified) - register `review-cycle`.
+- `tests/test_cli_review_artifact.py` (modified) - profile flag and schema
   relocation coverage.
-- `tests/test_workflow_adversarial_review.py` (create) - review-profile
+- `tests/test_workflow_adversarial_review.py` (created) - review-profile
   registry, profile annotation schema, and prompt mapping tests.
-- `tests/test_workflow_review_cycle.py` (create) - loop convergence, budget,
+- `tests/test_workflow_review_cycle.py` (created; modify in follow-ups) - loop convergence, budget,
   artifact persistence, and high-confidence apply gating.
-- `tests/test_cli_review_cycle.py` (create) - CLI parsing and builder threading.
+- `tests/test_cli_review_cycle.py` (created) - CLI parsing and builder threading.
 - `docs/plans/36_dogfood_review_summary.md` (create) - tracked,
   redacted evidence note for the reviews that shaped this plan.
 - `docs/plans/36_prior_art_consensus_system.md` (create) - extracted
@@ -141,10 +141,9 @@ Out of scope:
    - `kind: Literal["optimum_gap", "spurious", "uncertain"]`
    - `claim: str`
    - `evidence_path: str | None`
-   - `linked_finding_index: int | None` - index into the same review's
-     `correctness_findings`; required for `kind == "optimum_gap"` when the
-     annotation is actionable.
-   - `validity_loss_without_change: str` - required for actionable
+   - `linked_finding_index: int` - index into the same review's
+     `correctness_findings`; required for every `kind == "optimum_gap"`.
+   - `validity_loss_without_change: str` - required for every
      `optimum_gap`; answers "what does the paper get wrong today without this?"
    - `why_rejected_or_uncertain: str` - required for `spurious` and
      `uncertain`.
@@ -188,7 +187,8 @@ Out of scope:
     - write all skipped items to `discussion_queue.json`.
 12. The implementer is instructed to edit only the declared artifact files.
     The runner snapshots `HEAD` and `git status --short` before each apply,
-    computes the diff against that snapshot after the implementer returns, and
+    computes the working-tree diff against that `HEAD` snapshot after the
+    implementer returns, and
     fails loud if any touched path is outside the declared artifact list unless
     the task config explicitly allows workspace-wide edits. A dirty pre-flight
     tree is allowed only when the dirt is confined to declared artifact paths
@@ -206,8 +206,9 @@ Out of scope:
     lowercasing, trimming, collapsing whitespace, and removing Markdown list
     markers from `claim`, then hash the JSON with SHA-256.
 14. Every cycle writes `review_<n>.json`, `apply_<n>.md`,
-    `apply_<n>.json`, `diff_<n>.patch`, `discussion_queue_<n>.json`, and a
-    terminal `signoff.json`.
+    `apply_<n>.json`, `diff_<n>.patch`, `discussion_queue_<n>.json`; the run
+    also writes `preflight_status.txt`, `discussion_queue.json`,
+    `budget_ledger.json`, and terminal `signoff.json`.
 
 ### Phase 3 - Verification and Evaluation
 
@@ -232,10 +233,10 @@ Out of scope:
 20. Store `review-cycle` artifact paths in OpenClaw task reports. Do not change
     `graph_task_report.schema.json` or `flat_task_report.schema.json` except
     to add optional artifact-reference fields if a separate schema review
-    proves they are needed. V1 writes the signoff path into the existing
-    report outputs map as `outputs.review_cycle_signoff_path`; if that key is
-    not valid in the current OpenClaw schema, the adapter writes a sidecar
-    `review_cycle_artifacts.json` and links only the sidecar path.
+    proves they are needed. V1 defaults to writing a sidecar
+    `review_cycle_artifacts.json` and linking only the sidecar path from the
+    OpenClaw report; direct `outputs.review_cycle_signoff_path` is a later
+    optimization only after the OpenClaw schema accepts it.
 21. Migrate or remove only the old OpenClaw review-cycle wrapper scripts after
     the adapter can reproduce their current reports.
 
@@ -247,6 +248,13 @@ Out of scope:
 23. Create the two extraction notes listed in Files Affected. Each note must
     name the specific idea kept, why it matters, and the `llm_client` surface
     that supersedes it.
+    Minimum checklist:
+    - convergence / disagreement representation
+    - opinion-dynamics or confidence reporting
+    - debate turn topology
+    - summarization / synthesis artifact shape
+    - any evaluation metric not already covered by `AdversarialReview`,
+      `deliberate-task`, or `review-cycle`
 24. Move legacy code to `PROJECTS_DEFERRED/intermodel-dialogue-legacy/` or add
     an `ARCHIVED_BY_PLAN_36.md` tombstone in place if moving would break
     imports. No deletion before extraction notes exist.

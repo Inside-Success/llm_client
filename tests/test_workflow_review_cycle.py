@@ -270,6 +270,36 @@ def test_review_cycle_fails_on_undeclared_file_edit(tmp_path: Path) -> None:
         raise AssertionError("expected ReviewCycleError")
 
 
+def test_review_cycle_detects_committed_apply_diff(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    task = ReviewCycleTask(
+        task_id="committed",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-committed"),
+        max_cycles=1,
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        with (workspace / "paper.md").open("a", encoding="utf-8") as handle:
+            handle.write("Committed apply\n")
+        subprocess.run(["git", "add", "paper.md"], cwd=workspace, check=True)
+        subprocess.run(["git", "commit", "-m", "apply"], cwd=workspace, check=True, capture_output=True)
+        return ApplyAttempt(narrative="Committed change.", cost_usd=0.1, model="impl")
+
+    signoff = run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+
+    assert signoff.final_status == "max_cycles"
+    assert "Committed apply" in (task.run_dir() / "diff_1.patch").read_text()
+
+
 def test_review_cycle_stops_on_budget_after_review(tmp_path: Path) -> None:
     workspace = _init_repo(tmp_path)
     task = ReviewCycleTask(

@@ -406,6 +406,16 @@ def git_diff_text(workspace: Path) -> str:
     return unstaged + staged
 
 
+def git_head(workspace: Path) -> str:
+    """Return the current HEAD commit SHA."""
+    return _run_git(workspace, ["rev-parse", "HEAD"]).strip()
+
+
+def git_diff_from_ref(workspace: Path, ref: str) -> str:
+    """Return working-tree diff relative to ``ref``."""
+    return _run_git(workspace, ["diff", "--no-ext-diff", ref])
+
+
 def git_changed_paths(workspace: Path) -> list[str]:
     """Return tracked changed paths from staged and unstaged diffs."""
     names = set()
@@ -415,6 +425,15 @@ def git_changed_paths(workspace: Path) -> list[str]:
             if path:
                 names.add(path)
     return sorted(names)
+
+
+def git_changed_paths_from_ref(workspace: Path, ref: str) -> list[str]:
+    """Return changed paths between ``ref`` and current working tree."""
+    return sorted(
+        path.strip()
+        for path in _run_git(workspace, ["diff", "--name-only", ref]).splitlines()
+        if path.strip()
+    )
 
 
 def _status_paths(status: str) -> list[str]:
@@ -703,7 +722,8 @@ def run_review_cycle(
             )
         seen_digests.add(classification.digest)
 
-        diff_before = git_diff_text(workspace)
+        head_before = git_head(workspace)
+        diff_before = git_diff_from_ref(workspace, head_before)
         apply_result = apply_call(task, cycle, classification)
         ledger.add_call(
             cycle=cycle,
@@ -716,10 +736,12 @@ def run_review_cycle(
 
         if not task.allow_workspace_wide_edits:
             touched_paths = sorted(
-                set(git_changed_paths(workspace)) | set(_status_paths(git_status_short(workspace)))
+                set(git_changed_paths_from_ref(workspace, head_before))
+                | set(git_changed_paths(workspace))
+                | set(_status_paths(git_status_short(workspace)))
             )
             ensure_paths_allowed(touched_paths, task.artifact_paths)
-        diff_after = git_diff_text(workspace)
+        diff_after = git_diff_from_ref(workspace, head_before)
         write_text_artifact(run_dir, f"diff_{cycle}.patch", diff_after)
 
         if diff_after == diff_before:
