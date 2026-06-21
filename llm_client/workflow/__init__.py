@@ -51,10 +51,13 @@ from llm_client.workflow.review_cycle import (
     BudgetLedgerEntry,
     ReviewCycleSignoff,
     ReviewCycleTask,
+    ReviewCallResult,
+    ReviewCycleError,
     SkippedFinding,
     actionable_finding_digest,
     build_artifact_index,
     classify_actionable_findings,
+    run_review_cycle,
 )
 
 # Side-effect import: registers built-in profiles ("generic", "plan_doc_review").
@@ -88,10 +91,13 @@ __all__ = [
     "BudgetLedgerEntry",
     "ReviewCycleSignoff",
     "ReviewCycleTask",
+    "ReviewCallResult",
+    "ReviewCycleError",
     "SkippedFinding",
     "actionable_finding_digest",
     "build_artifact_index",
     "classify_actionable_findings",
+    "run_review_cycle",
 ]
 
 # build_workflow is imported lazily to avoid requiring langgraph at import time

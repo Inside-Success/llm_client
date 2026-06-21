@@ -12,14 +12,19 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.workflow.adversarial_review import (
     AdversarialReview,
     AdversarialReviewV1,
+    adversarial_review_schema,
+    build_review_prompt,
+    get_review_profile,
+    resolve_review_schema_version,
 )
 
 ActionableKind = Literal["contract_violation", "correctness_high", "optimum_gap"]
@@ -165,6 +170,35 @@ class ReviewCycleSignoff(BaseModel):
     actionable_count: int = Field(ge=0, description="Actionable candidates in the terminal cycle.")
     discussion_queue_count: int = Field(ge=0, description="Skipped/discussion items in the terminal cycle.")
     artifact_index: dict[str, str] = Field(default_factory=dict, description="Run artifact paths relative to run_dir.")
+
+
+class ReviewCallResult(BaseModel):
+    """Reviewer output plus cost metadata."""
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    review: AdversarialReviewV1 = Field(description="Structured review payload.")
+    cost_usd: float = Field(default=0.0, ge=0.0, description="Cost attributed to this review call.")
+    model: str = Field(default="", description="Model used for this review call.")
+
+
+class ApplyAttempt(BaseModel):
+    """Implementer apply-call result."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    narrative: str = Field(description="Human-readable apply result.")
+    sidecar: dict[str, Any] = Field(default_factory=dict, description="Machine-readable apply details.")
+    cost_usd: float = Field(default=0.0, ge=0.0, description="Cost attributed to this apply call.")
+    model: str = Field(default="", description="Model used for this apply call.")
+
+
+class ReviewCycleError(RuntimeError):
+    """Raised when a review-cycle safety contract is violated."""
+
+
+ReviewCallable = Callable[[ReviewCycleTask, int], ReviewCallResult]
+ApplyCallable = Callable[[ReviewCycleTask, int, ActionableClassification], ApplyAttempt]
 
 
 def parse_review_payload(payload: AdversarialReviewV1 | dict[str, Any]) -> AdversarialReviewV1:
@@ -342,3 +376,401 @@ def build_artifact_index(run_dir: Path) -> dict[str, str]:
     if not run_dir.exists():
         return {}
     return {path.name: path.name for path in sorted(run_dir.iterdir()) if path.is_file()}
+
+
+def _run_git(workspace: Path, args: list[str]) -> str:
+    """Run a git command in ``workspace`` and return stdout."""
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise ReviewCycleError(
+            f"git {' '.join(args)} failed in {workspace}: {proc.stderr.strip()}"
+        )
+    return proc.stdout
+
+
+def git_status_short(workspace: Path) -> str:
+    """Return ``git status --short`` for the workspace."""
+    return _run_git(workspace, ["status", "--short"])
+
+
+def git_diff_text(workspace: Path) -> str:
+    """Return unstaged + staged diff text for the workspace."""
+    unstaged = _run_git(workspace, ["diff", "--no-ext-diff"])
+    staged = _run_git(workspace, ["diff", "--cached", "--no-ext-diff"])
+    return unstaged + staged
+
+
+def git_changed_paths(workspace: Path) -> list[str]:
+    """Return tracked changed paths from staged and unstaged diffs."""
+    names = set()
+    for args in (["diff", "--name-only"], ["diff", "--cached", "--name-only"]):
+        for line in _run_git(workspace, args).splitlines():
+            path = line.strip()
+            if path:
+                names.add(path)
+    return sorted(names)
+
+
+def _status_paths(status: str) -> list[str]:
+    """Parse paths from ``git status --short`` output."""
+    paths: list[str] = []
+    for line in status.splitlines():
+        if not line.strip():
+            continue
+        raw_path = line[3:].strip()
+        if " -> " in raw_path:
+            raw_path = raw_path.split(" -> ", 1)[1]
+        paths.append(raw_path)
+    return paths
+
+
+def _is_allowed_path(path: str, allowed: list[str]) -> bool:
+    normalized = path.strip().rstrip("/")
+    for allowed_path in allowed:
+        prefix = allowed_path.strip().rstrip("/")
+        if normalized == prefix or normalized.startswith(prefix + "/"):
+            return True
+    return False
+
+
+def ensure_paths_allowed(paths: list[str], allowed_paths: list[str]) -> None:
+    """Fail loud if any path falls outside the declared artifact set."""
+    illegal = [path for path in paths if not _is_allowed_path(path, allowed_paths)]
+    if illegal:
+        raise ReviewCycleError(
+            "Review cycle touched undeclared path(s): " + ", ".join(sorted(illegal))
+        )
+
+
+def _read_artifacts(task: ReviewCycleTask) -> str:
+    """Read declared artifact files into one review body."""
+    workspace = Path(task.workspace_path)
+    parts: list[str] = []
+    for raw_path in task.artifact_paths:
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = workspace / path
+        if not path.is_file():
+            raise ReviewCycleError(f"Artifact path not found: {path}")
+        parts.extend([f"## {raw_path}", path.read_text(encoding="utf-8")])
+    return "\n\n".join(parts)
+
+
+def _cost_from_meta(meta: Any) -> float:
+    """Extract marginal cost from an LLM result-like object."""
+    for attr in ("marginal_cost", "cost"):
+        value = getattr(meta, attr, None)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return max(float(value), 0.0)
+    return 0.0
+
+
+def default_review_call(task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+    """Run the configured reviewer model for one cycle."""
+    from llm_client import call_llm_structured  # type: ignore[attr-defined]
+
+    profile = get_review_profile(task.review_profile)
+    schema_version = resolve_review_schema_version(profile, "auto")
+    schema = adversarial_review_schema(schema_version)
+    messages = build_review_prompt(
+        artifact_label=", ".join(task.artifact_paths),
+        artifact_body=_read_artifacts(task),
+        context_body=f"Review-cycle task {task.task_id}, cycle {cycle}.",
+        response_schema=schema,
+        profile=profile,
+    )
+    review, meta = call_llm_structured(
+        task.reviewer_model,
+        messages,
+        schema,
+        task="review_cycle_review",
+        trace_id=f"{task.task_id}/review/{cycle}",
+        max_budget=task.per_call_max_budget,
+        cwd=task.workspace_path,
+        yolo_mode=True,
+    )
+    return ReviewCallResult(
+        review=parse_review_payload(review.model_dump()),
+        cost_usd=_cost_from_meta(meta),
+        model=task.reviewer_model,
+    )
+
+
+def default_apply_call(
+    task: ReviewCycleTask,
+    cycle: int,
+    classification: ActionableClassification,
+) -> ApplyAttempt:
+    """Run the configured implementer model for one apply cycle."""
+    from llm_client import call_llm  # type: ignore[attr-defined]
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are applying high-confidence adversarial review findings. "
+                "Edit only the declared artifact files. Do not edit any other "
+                "workspace files. If a finding cannot be applied confidently, "
+                "leave the file unchanged and explain why."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "task_id": task.task_id,
+                    "cycle": cycle,
+                    "artifact_paths": task.artifact_paths,
+                    "actionable_findings": [item.model_dump() for item in classification.actionable],
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+        },
+    ]
+    result = call_llm(
+        task.implementer_model,
+        messages,
+        task="review_cycle_apply",
+        trace_id=f"{task.task_id}/apply/{cycle}",
+        max_budget=task.per_call_max_budget,
+        cwd=task.workspace_path,
+        yolo_mode=True,
+    )
+    return ApplyAttempt(
+        narrative=str(result.content),
+        sidecar={"actionable_count": len(classification.actionable)},
+        cost_usd=_cost_from_meta(result),
+        model=task.implementer_model,
+    )
+
+
+def _write_terminal_artifacts(
+    *,
+    run_dir: Path,
+    signoff: ReviewCycleSignoff,
+    discussion_queue: list[SkippedFinding],
+    ledger: BudgetLedger,
+) -> ReviewCycleSignoff:
+    """Persist terminal artifacts and return signoff with artifact index."""
+    write_json_artifact(run_dir, "discussion_queue.json", [item.model_dump() for item in discussion_queue])
+    write_json_artifact(run_dir, "budget_ledger.json", ledger)
+    signoff.artifact_index = build_artifact_index(run_dir)
+    write_json_artifact(run_dir, "signoff.json", signoff)
+    return signoff
+
+
+def _make_signoff(
+    *,
+    task: ReviewCycleTask,
+    final_status: ReviewCycleStopReason,
+    cycles_completed: int,
+    final_verdict: str,
+    stop_reason: str,
+    ledger: BudgetLedger,
+    classification: ActionableClassification | None,
+) -> ReviewCycleSignoff:
+    """Construct a terminal signoff object."""
+    return ReviewCycleSignoff(
+        task_id=task.task_id,
+        final_status=final_status,
+        cycles_completed=cycles_completed,
+        final_verdict=final_verdict,
+        stop_reason=stop_reason,
+        budget_spent_usd=ledger.total_spent,
+        actionable_count=len(classification.actionable) if classification else 0,
+        discussion_queue_count=len(classification.skipped) if classification else 0,
+        artifact_index={},
+    )
+
+
+def run_review_cycle(
+    task: ReviewCycleTask,
+    *,
+    reviewer: ReviewCallable | None = None,
+    implementer: ApplyCallable | None = None,
+) -> ReviewCycleSignoff:
+    """Run a bounded local review/apply/review loop."""
+    workspace = Path(task.workspace_path)
+    run_dir = task.run_dir()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    review_call = reviewer or default_review_call
+    apply_call = implementer or default_apply_call
+    ledger = BudgetLedger(max_budget=task.max_budget)
+    discussion_queue: list[SkippedFinding] = []
+    seen_digests: set[str] = set()
+
+    preflight_status = git_status_short(workspace)
+    write_text_artifact(run_dir, "preflight_status.txt", preflight_status)
+    if not task.allow_workspace_wide_edits:
+        ensure_paths_allowed(_status_paths(preflight_status), task.artifact_paths)
+
+    last_classification: ActionableClassification | None = None
+    last_verdict = ""
+    for cycle in range(1, task.max_cycles + 1):
+        review_result = review_call(task, cycle)
+        ledger.add_call(
+            cycle=cycle,
+            call_kind="review",
+            model=review_result.model or task.reviewer_model,
+            cost_usd=review_result.cost_usd,
+        )
+        review = parse_review_payload(review_result.review)
+        last_verdict = review.verdict
+        write_json_artifact(run_dir, f"review_{cycle}.json", review)
+
+        classification = classify_actionable_findings(review)
+        last_classification = classification
+        discussion_queue.extend(classification.skipped)
+        write_json_artifact(
+            run_dir,
+            f"discussion_queue_{cycle}.json",
+            [item.model_dump() for item in classification.skipped],
+        )
+
+        if ledger.is_exhausted():
+            signoff = _make_signoff(
+                task=task,
+                final_status="budget_exhausted",
+                cycles_completed=cycle,
+                final_verdict=last_verdict,
+                stop_reason="Cumulative review-cycle budget exhausted after review.",
+                ledger=ledger,
+                classification=classification,
+            )
+            return _write_terminal_artifacts(
+                run_dir=run_dir,
+                signoff=signoff,
+                discussion_queue=discussion_queue,
+                ledger=ledger,
+            )
+
+        if last_verdict == "pass":
+            signoff = _make_signoff(
+                task=task,
+                final_status="pass",
+                cycles_completed=cycle,
+                final_verdict=last_verdict,
+                stop_reason="Reviewer verdict passed.",
+                ledger=ledger,
+                classification=classification,
+            )
+            return _write_terminal_artifacts(
+                run_dir=run_dir,
+                signoff=signoff,
+                discussion_queue=discussion_queue,
+                ledger=ledger,
+            )
+
+        if not classification.actionable:
+            signoff = _make_signoff(
+                task=task,
+                final_status="non_actionable_remaining",
+                cycles_completed=cycle,
+                final_verdict=last_verdict,
+                stop_reason="Only non-actionable review findings remain.",
+                ledger=ledger,
+                classification=classification,
+            )
+            return _write_terminal_artifacts(
+                run_dir=run_dir,
+                signoff=signoff,
+                discussion_queue=discussion_queue,
+                ledger=ledger,
+            )
+
+        if classification.digest in seen_digests:
+            signoff = _make_signoff(
+                task=task,
+                final_status="repeated_digest",
+                cycles_completed=cycle,
+                final_verdict=last_verdict,
+                stop_reason="Actionable finding digest repeated.",
+                ledger=ledger,
+                classification=classification,
+            )
+            return _write_terminal_artifacts(
+                run_dir=run_dir,
+                signoff=signoff,
+                discussion_queue=discussion_queue,
+                ledger=ledger,
+            )
+        seen_digests.add(classification.digest)
+
+        diff_before = git_diff_text(workspace)
+        apply_result = apply_call(task, cycle, classification)
+        ledger.add_call(
+            cycle=cycle,
+            call_kind="apply",
+            model=apply_result.model or task.implementer_model,
+            cost_usd=apply_result.cost_usd,
+        )
+        write_text_artifact(run_dir, f"apply_{cycle}.md", apply_result.narrative)
+        write_json_artifact(run_dir, f"apply_{cycle}.json", apply_result)
+
+        if not task.allow_workspace_wide_edits:
+            touched_paths = sorted(
+                set(git_changed_paths(workspace)) | set(_status_paths(git_status_short(workspace)))
+            )
+            ensure_paths_allowed(touched_paths, task.artifact_paths)
+        diff_after = git_diff_text(workspace)
+        write_text_artifact(run_dir, f"diff_{cycle}.patch", diff_after)
+
+        if diff_after == diff_before:
+            signoff = _make_signoff(
+                task=task,
+                final_status="no_diff",
+                cycles_completed=cycle,
+                final_verdict=last_verdict,
+                stop_reason="Apply step produced no artifact diff.",
+                ledger=ledger,
+                classification=classification,
+            )
+            return _write_terminal_artifacts(
+                run_dir=run_dir,
+                signoff=signoff,
+                discussion_queue=discussion_queue,
+                ledger=ledger,
+            )
+
+        if ledger.is_exhausted():
+            signoff = _make_signoff(
+                task=task,
+                final_status="budget_exhausted",
+                cycles_completed=cycle,
+                final_verdict=last_verdict,
+                stop_reason="Cumulative review-cycle budget exhausted after apply.",
+                ledger=ledger,
+                classification=classification,
+            )
+            return _write_terminal_artifacts(
+                run_dir=run_dir,
+                signoff=signoff,
+                discussion_queue=discussion_queue,
+                ledger=ledger,
+            )
+
+    signoff = _make_signoff(
+        task=task,
+        final_status="max_cycles",
+        cycles_completed=task.max_cycles,
+        final_verdict=last_verdict,
+        stop_reason="Maximum review cycles reached.",
+        ledger=ledger,
+        classification=last_classification,
+    )
+    return _write_terminal_artifacts(
+        run_dir=run_dir,
+        signoff=signoff,
+        discussion_queue=discussion_queue,
+        ledger=ledger,
+    )
+
+
+build_review_cycle = run_review_cycle

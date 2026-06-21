@@ -26,6 +26,7 @@ from llm_client.cli.experiments import register_parser as register_experiments_p
 from llm_client.cli.models import register_parser as register_models_parser
 from llm_client.cli.replay import register_parser as register_replay_parser
 from llm_client.cli.review_artifact import register_parser as register_review_artifact_parser
+from llm_client.cli.review_cycle import register_parser as register_review_cycle_parser
 from llm_client.cli.scores import register_parser as register_scores_parser
 from llm_client.cli.tool_lint import register_parser as register_tool_lint_parser
 from llm_client.cli.tools import register_parser as register_tools_parser
@@ -45,6 +46,7 @@ def main() -> None:
     register_models_parser(subparsers)
     register_replay_parser(subparsers)
     register_review_artifact_parser(subparsers)
+    register_review_cycle_parser(subparsers)
     register_traces_parser(subparsers)
     register_scores_parser(subparsers)
     register_experiments_parser(subparsers)
