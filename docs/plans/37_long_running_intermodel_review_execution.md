@@ -133,6 +133,25 @@ ready for public distribution from this evidence alone. The next required
 action is a GitHub Support request asking Support to dereference/purge the
 stale object and run server-side garbage collection for the affected PR data.
 
+## Sibling PR Handoff - 2026-06-21
+
+Draft sibling PRs were opened for the cross-repo pieces produced by this plan:
+
+- `prompt_eval` PR #2: <https://github.com/BrianMills2718/prompt_eval/pull/2>
+  at `e565919d48c3caa485b4abd4ff1103d10df539ed`. This PR is intentionally
+  blocked in CI until `prompt_eval` has an `LLM_CLIENT_REPO_TOKEN` secret or
+  `llm_client` is public again; the workflow now fails loud instead of
+  installing the unrelated PyPI `llm-client` package.
+- `openclaw` PR #1: <https://github.com/BrianMills2718/openclaw/pull/1> at
+  `4a75451801793bb4974b6296adf12e6807017dd8`.
+- `consensus_system` PR #1:
+  <https://github.com/BrianMills2718/consensus_system/pull/1> at
+  `9d1e97308d03cf4eea56ad7709f9cc68e27b82eb`; this includes a merge commit
+  resolving the `CLAUDE.md` add/add conflict with `origin/master`.
+- `agent_ontology` PR #1:
+  <https://github.com/BrianMills2718/agent_ontology/pull/1> at
+  `f7b89dbc88ba0c65a10018cffdf69bddfdff8084`.
+
 Status values: `Pending`, `In Progress`, `Blocked`, `Complete`.
 
 ---
