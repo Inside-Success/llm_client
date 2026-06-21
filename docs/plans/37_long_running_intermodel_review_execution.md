@@ -89,8 +89,8 @@ follow-up issue, choose the safer documented path, and continue.
 | 1. Canonical `AdversarialReview` module | Complete | 01ff820 | `tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_cli_smoke.py -q` => 26 passed | Schema/prompt moved out of CLI with compatibility shims |
 | 2. Review profiles and schema compatibility | Complete | 01ff820 | v1/v2 schema tests; default CLI compatibility tests | `generic` default, `quality_optimal_whitepaper` opt-in |
 | 3. `review-artifact` profile CLI | Complete | 01ff820 | CLI threading tests; rendered-section tests; `review-artifact --help` exposes profile flags | Human sections rendered from canonical JSON |
-| 4. Review-cycle core contracts | In Progress | - | classifier, digest, budget, artifact tests | No live LLM required |
-| 5. Review-cycle implementer loop | Pending | - | no-diff, repeated-digest, undeclared-file guard tests | Declared artifact paths only by default |
+| 4. Review-cycle core contracts | Complete | 21a21c2 | `tests/test_workflow_review_cycle.py tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_cli_smoke.py -q` => 31 passed | Deterministic classifier, digest, budget ledger, and artifact writes |
+| 5. Review-cycle implementer loop | In Progress | - | no-diff, repeated-digest, undeclared-file guard tests | Declared artifact paths only by default |
 | 6. Dogfood on Plan #36/37 docs | Pending | - | `review-artifact` output has no blockers, or blockers tracked and fixed | Uses `quality_optimal_whitepaper` if available |
 | 7. prompt_eval frozen case set | Pending | - | case files + runner smoke pass | No claims of superiority before this |
 | 8. OpenClaw adapter | Pending | - | adapter smoke; no task-report schema replacement | Store signoff path as artifact reference |
