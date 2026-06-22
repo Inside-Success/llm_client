@@ -23,6 +23,7 @@ Log it in the sprint tracker and proceed with the safer option.
 **Always work in dedicated worktrees for Plan-level changes.** Do not edit the main checkout for plan execution.
 **Commit every verified milestone before moving to the next phase.** Uncommitted progress is not acceptable.
 **Between merges and pushes, stay in worktrees.** Merge from clean integration worktrees, then remove completed worktrees once the merged branch is published and verified.
+**Live Codex subprocess caveat:** keep code edits in the dedicated worktree, but run `review-cycle` dogfood in a standalone clone when the implementer uses Codex and linked-worktree config resolution hits stale common-checkout `.codex` state. Port the resulting artifact diff back to the worktree.
 **Document concerns and uncertainties in the active sprint tracker immediately, then continue with the safer option unless a real stop condition applies.**
 **Active sprint:** see `docs/ops/SPRINT_2026_04_05_PLAN25_PROVIDER_GOVERNANCE.md`.
 
