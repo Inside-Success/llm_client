@@ -525,6 +525,17 @@ def changed_ignored_paths(
     return sorted(path for path in paths if before.get(path) != after.get(path))
 
 
+def _is_python_bytecode_cache(path: str) -> bool:
+    """Return true for interpreter bytecode cache files owned by local runtime."""
+    parts = Path(path).parts
+    return "__pycache__" in parts or path.endswith((".pyc", ".pyo"))
+
+
+def _exclude_runtime_cache_paths(paths: list[str]) -> list[str]:
+    """Remove local runtime cache churn from review-cycle edit enforcement."""
+    return [path for path in paths if not _is_python_bytecode_cache(path)]
+
+
 def git_changed_paths(workspace: Path) -> list[str]:
     """Return tracked changed paths from staged and unstaged diffs."""
     names = set()
@@ -885,6 +896,7 @@ def run_review_cycle(
                 changed_ignored_paths(ignored_before, ignored_after),
                 runner_artifact_prefixes,
             )
+            changed_ignored = _exclude_runtime_cache_paths(changed_ignored)
             touched_paths = sorted(
                 set(git_changed_paths_from_ref(workspace, head_before))
                 | set(git_changed_paths(workspace))
@@ -899,6 +911,7 @@ def run_review_cycle(
                 changed_ignored_paths(ignored_before, ignored_after),
                 runner_artifact_prefixes,
             )
+            changed_ignored = _exclude_runtime_cache_paths(changed_ignored)
         extra_ignored_files = [
             path
             for path in changed_ignored

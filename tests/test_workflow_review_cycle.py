@@ -464,6 +464,37 @@ def test_review_cycle_fails_on_undeclared_ignored_file_edit(tmp_path: Path) -> N
         raise AssertionError("expected ReviewCycleError")
 
 
+def test_review_cycle_ignores_runtime_bytecode_cache_churn(tmp_path: Path) -> None:
+    workspace = _init_repo(tmp_path)
+    (workspace / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=workspace, check=True)
+    subprocess.run(["git", "commit", "-m", "ignore bytecode cache"], cwd=workspace, check=True, capture_output=True)
+    task = ReviewCycleTask(
+        task_id="bytecode-cache",
+        artifact_paths=["paper.md"],
+        workspace_path=str(workspace),
+        out_dir=str(tmp_path / "run-bytecode-cache"),
+    )
+
+    def reviewer(_task: ReviewCycleTask, cycle: int) -> ReviewCallResult:
+        return ReviewCallResult(review=_high_review(), cost_usd=0.1, model="reviewer")
+
+    def implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        cache_dir = workspace / "pkg" / "__pycache__"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "mod.cpython-312.pyc").write_bytes(b"bytecode cache")
+        return ApplyAttempt(narrative="Runtime created bytecode cache.", cost_usd=0.1, model="impl")
+
+    signoff = run_review_cycle(task, reviewer=reviewer, implementer=implementer)
+
+    assert signoff.final_status == "no_diff"
+    assert (workspace / "pkg" / "__pycache__" / "mod.cpython-312.pyc").is_file()
+
+
 def test_review_cycle_fails_on_modified_preexisting_ignored_file(tmp_path: Path) -> None:
     workspace = _init_repo(tmp_path)
     (workspace / ".gitignore").write_text("ignored/\n", encoding="utf-8")
