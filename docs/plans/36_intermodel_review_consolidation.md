@@ -3,7 +3,7 @@
 **Status:** Complete
 **Type:** implementation
 **Priority:** Critical
-**Blocked By:** GitHub issue #30 for any public release; private-only implementation may proceed
+**Blocked By:** Existing-repo public release remains blocked unless issue #30 is reopened and purged, or a fresh clean public repo is created; private-only implementation accepted on 2026-06-22
 **Blocks:** OpenClaw scheduling integration, legacy intermodel-dialogue archival
 
 ---
@@ -21,8 +21,9 @@ corrections and repeats until the paper converges.
 The first dogfood review of the consolidation plan found one release blocker
 and four design defects:
 
-- Sensitive historical PR artifacts were pushed and remain reachable by old
-  commit SHA until GitHub purges them or the repo stays private.
+- Sensitive historical PR artifacts were pushed. Brian accepted private-only
+  distribution on 2026-06-22, so the existing repo stays private unless the
+  stale object is purged or a fresh clean public repo is created.
 - The quality-optimal review prompt introduces `DEFECT`, `OPTIMUM-GAP`,
   `SPURIOUS`, and `UNCERTAIN` buckets without reconciling them with the
   existing `AdversarialReview` contract.
@@ -68,7 +69,8 @@ the existing typed review contract and observability discipline.
   and prompt currently live inside the CLI module.
 - `docs/plans/36_dogfood_review_summary.md` - redacted summary of the
   dogfood reviews that produced this plan's blocker/defect list.
-- GitHub issue #30 - tracks stale historical commit/blob purge for PR #29.
+- GitHub issue #30 - closed on 2026-06-22 by private-only acceptance; reopen
+  only if making the existing repository public again.
 
 ---
 
@@ -115,13 +117,15 @@ Out of scope:
 
 ### Phase 0 - Release Gate and Containment
 
-1. Keep `llm_client` private until GitHub issue #30 is resolved or Brian
-   explicitly accepts private-only distribution.
+1. Keep the existing `llm_client` repository private. Brian explicitly accepted
+   private-only distribution on 2026-06-22. Do not make this repository public
+   unless issue #30 is reopened and the stale object is purged, or a fresh clean
+   public repo is created from a sanitized tree.
 2. Verify the current PR tree contains no sensitive run directory names or
    private identifiers from issue #30. Keep the exact private grep pattern in
    the issue, not in tracked repo docs.
 3. Add a PR comment with the final sanitized head, issue #30 link, and the
-   public-release gate.
+   private-only/public-release policy.
 
 ### Phase 1 - Canonicalize `AdversarialReview`
 

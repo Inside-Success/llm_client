@@ -1,6 +1,6 @@
 # Plan #37: Long-Running Execution Spine for Intermodel Review
 
-**Status:** Complete (private-gated)
+**Status:** Complete (private-only accepted)
 **Type:** execution
 **Priority:** Critical
 **Blocked By:** Plan #36 accepted as the target architecture
@@ -32,8 +32,10 @@ The goal is a production-usable intermodel review system:
 
 Stop only when one of these occurs:
 
-1. **Public-release gate:** GitHub issue #30 is unresolved and the next action
-   would make `llm_client` public or publish the sensitive branch elsewhere.
+1. **Existing-repo public-release gate:** the next action would make the
+   existing `BrianMills2718/llm_client` repository public or publish the
+   sensitive history elsewhere. Issue #30 was closed on 2026-06-22 by
+   private-only acceptance, not by stale-object purge.
 2. **Irreversible shared-state action:** force-push, delete/move another repo's
    code, change repo visibility, drop data, or merge to a shared default branch.
    Ordinary additive edits in a sibling repo are allowed only after creating a
@@ -66,7 +68,8 @@ follow-up issue, choose the safer documented path, and continue.
 
 ## Continuous Execution Rules
 
-- Start every run by reading this file, Plan #36, and issue #30.
+- Start every run by reading this file, Plan #36, and issue #30's private-only
+  closure policy.
 - Capture baseline `git status --short --branch` before edits.
 - Keep changes small enough that tests identify the failing layer.
 - After each verified increment:
@@ -75,7 +78,7 @@ follow-up issue, choose the safer documented path, and continue.
   - push the branch only after verifying the remote owner is
     `BrianMills2718/llm_client`, `git remote get-url --push origin` targets
     that same repo, and `gh repo view ... --json visibility,isPrivate`
-    reports private visibility while issue #30 is unresolved;
+    reports private visibility for the existing repository;
   - update the tracker table below.
 - Commit-prefix routing: implementation changes for Plan #36 use `[Plan #36]`;
   tracker, execution-spine, and long-running protocol docs use `[Plan #37]`.
@@ -97,7 +100,7 @@ follow-up issue, choose the safer documented path, and continue.
 
 | Phase | Status | Commit | Verification | Notes |
 |-------|--------|--------|--------------|-------|
-| 0. Containment and baseline | Complete | 8dccac9 | issue #30 open; repo private; sensitive-pattern grep clean; branch baseline clean | Must stay private until issue #30 resolved or accepted |
+| 0. Containment and baseline | Complete | 8dccac9 | issue #30 closed by private-only acceptance on 2026-06-22; repo private; sensitive-pattern grep clean; branch baseline clean | Existing repo must stay private unless stale object is purged or a fresh clean public repo is created |
 | 1. Canonical `AdversarialReview` module | Complete | 01ff820 | `tests/test_workflow_adversarial_review.py tests/test_cli_review_artifact.py tests/test_cli_smoke.py -q` => 26 passed | Schema/prompt moved out of CLI with compatibility shims |
 | 2. Review profiles and schema compatibility | Complete | 01ff820 | v1/v2 schema tests; default CLI compatibility tests | `generic` default, `quality_optimal_whitepaper` opt-in |
 | 3. `review-artifact` profile CLI | Complete | 01ff820 | CLI threading tests; rendered-section tests; `review-artifact --help` exposes profile flags | Human sections rendered from canonical JSON |
@@ -107,13 +110,13 @@ follow-up issue, choose the safer documented path, and continue.
 | 7. prompt_eval frozen case set | Complete | prompt_eval:40c3824 | 6-case frozen set; CLI smoke; `tests/test_methodology_review_case_set.py tests/test_runner.py tests/test_experiment.py -q` => 47 passed; ruff passed | Branch `plan-36-methodology-review-cases` pushed; no superiority claim made |
 | 8. OpenClaw adapter | Complete | openclaw:4a75451 | launcher smoke; adapter/report tests => 31 passed; ruff passed | Branch `plan-36-review-cycle-adapter` pushed; sidecar artifact reference, no report-schema replacement |
 | 9. Legacy extraction notes | Complete | 517ef92; consensus_system:eb1f589; agent_ontology:f7b89db | extraction notes committed; tombstone branches pushed; `py_compile` passed for legacy modules | Additive tombstones only; no legacy code moved or deleted |
-| 10. Cleanup and full verification | Complete | 5451533 | offline sweep => 116 passed; live schema smoke => 10 passed after schema hardening; final blocker-focused review => pass with 0 contract violations; PR check `observability-switches` passed | PR #29 remains draft/private-gated while issue #30 is open |
+| 10. Cleanup and full verification | Complete | 5451533 | offline sweep => 116 passed; live schema smoke => 10 passed after schema hardening; final blocker-focused review => pass with 0 contract violations; PR check `observability-switches` passed | PR #29 may proceed as a private-repo PR; existing repo remains private-only |
 
-## Public-Release Gate Recheck - 2026-06-21
+## Public-Release Gate Recheck - 2026-06-21; Accepted 2026-06-22
 
-Issue #30 remains the public-release gate. A post-completion recheck found that
-GitHub's web/API serving paths no longer expose the old sensitive revision, but
-the Git object still exists server-side for authenticated repository access:
+The 2026-06-21 recheck found that GitHub's web/API serving paths no longer
+expose the old sensitive revision, but the Git object still exists server-side
+for authenticated repository access:
 
 - `BrianMills2718/llm_client` visibility is still private.
 - Authenticated GitHub REST contents checks for all three issue #30 paths at
@@ -128,10 +131,12 @@ the Git object still exists server-side for authenticated repository access:
   and `git fsck --no-reflogs --unreachable --no-progress` reports that commit
   as an unreachable local object after fetch.
 
-Decision: do not close issue #30, make `llm_client` public, or mark PR #29
-ready for public distribution from this evidence alone. The next required
-action is a GitHub Support request asking Support to dereference/purge the
-stale object and run server-side garbage collection for the affected PR data.
+Decision on 2026-06-22: Brian accepts this residual risk for authorized users of
+the private repository. Issue #30 was closed by private-only acceptance, not by
+GitHub-side stale-object purge. Do not make the existing repository public from
+this history. If public distribution is required later, either reopen issue #30
+and get the stale object purged, or create a fresh clean public repository from
+a sanitized tree.
 
 ## Sibling PR Handoff - 2026-06-21
 
@@ -139,8 +144,9 @@ Draft sibling PRs were opened for the cross-repo pieces produced by this plan:
 
 - `prompt_eval` PR #2: <https://github.com/BrianMills2718/prompt_eval/pull/2>
   at `e565919d48c3caa485b4abd4ff1103d10df539ed`. This PR is intentionally
-  blocked in CI until `prompt_eval` has an `LLM_CLIENT_REPO_TOKEN` secret or
-  `llm_client` is public again; the workflow now fails loud instead of
+  blocked in CI until `prompt_eval` has an `LLM_CLIENT_REPO_TOKEN` secret or a
+  fresh public/sanitized `llm_client` source exists; the workflow now fails loud
+  instead of
   installing the unrelated PyPI `llm-client` package.
 - `openclaw` PR #1: <https://github.com/BrianMills2718/openclaw/pull/1> at
   `4a75451801793bb4974b6296adf12e6807017dd8`.
@@ -163,7 +169,8 @@ Status values: `Pending`, `In Progress`, `Blocked`, `Complete`.
 Tasks:
 
 1. Confirm PR #29 head and issue #30 state.
-2. Confirm repo visibility is private while issue #30 is unresolved.
+2. Confirm repo visibility is private under the issue #30 private-only
+   acceptance policy.
 3. Fetch the private issue #30 body with
    `gh issue view 30 --repo BrianMills2718/llm_client --json body --jq .body`
    and extract the sensitive path/identifier list from that issue into a local
@@ -179,9 +186,10 @@ Success criteria:
 
 - Branch is clean before implementation edits.
 - Current tree has no known sensitive run artifacts.
-- PR comment states that public distribution is gated on issue #30.
+- PR comment states that the existing repo is private-only unless issue #30 is
+  reopened and purged, or a fresh clean public repo is created.
 - Pushes go only to the verified private `BrianMills2718/llm_client` remote
-  until issue #30 is resolved.
+  for this existing-repo history.
 
 ### Phase 1 - Canonical `AdversarialReview` Module
 
@@ -384,8 +392,9 @@ Success criteria:
   sweep is only offline-complete proof; mark Phase 10 blocked on the live gate
   rather than complete.
 - Final adversarial review has no untracked blockers.
-- PR remains draft/private-gated if issue #30 is unresolved; otherwise it is
-  ready for normal review.
+- PR #29 may proceed through normal private-repo review. Public distribution of
+  the existing repo remains out of scope unless issue #30 is reopened and
+  purged, or a fresh clean public repo is created.
 
 Offline-complete path:
 

@@ -11,9 +11,8 @@ Verdict: blocker.
 High-confidence findings integrated into Plan #36:
 
 - Historical PR artifacts had been pushed to GitHub and required containment
-  beyond deleting files from the branch tip. GitHub issue #30 now tracks stale
-  commit/blob purge, and the repo is private until that is resolved or accepted
-  as private-only.
+  beyond deleting files from the branch tip. GitHub issue #30 tracked stale
+  commit/blob purge and was closed on 2026-06-22 by private-only acceptance.
 - A quality-optimal whitepaper review must not create a parallel defect schema.
   It should preserve `AdversarialReview` and add only a typed profile annotation
   extension if the profile needs extra rationale fields.
@@ -41,9 +40,10 @@ High-confidence findings integrated before implementation:
 - Define the repeated-actionable-finding digest used as the anti-spin stop
   condition.
 - Make cross-project legacy archive source locations explicit.
-- Keep release gates scoped: issue #30 gates public distribution of the
-  sanitized branch; Plan #36's own feature release is gated by its tests,
-  dogfood review, and optional live schema smoke.
+- Keep release gates scoped: the existing repo remains private-only unless
+  issue #30 is reopened and purged, or a fresh clean public repo is created;
+  Plan #36's own feature release is gated by its tests, dogfood review, and
+  optional live schema smoke.
 
 ## Review 3 - Plan #37 Execution Spine
 
@@ -58,7 +58,8 @@ High-confidence findings integrated before commit:
   additive sibling-repo branch work with baseline capture, but stops before
   irreversible moves/deletes.
 - Pushes are safe only after verifying the target repo is the private
-  `BrianMills2718/llm_client` remote while issue #30 remains unresolved.
+  `BrianMills2718/llm_client` remote under the issue #30 private-only
+  acceptance policy.
 - Live-model gates can block final completion. The spine now defines an
   offline-complete/live-blocked state instead of pretending the plan is done.
 - Future test files are expected not to exist before their creation phase; the
