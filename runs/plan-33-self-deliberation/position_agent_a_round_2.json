@@ -1,0 +1,110 @@
+{
+  "agent_name": "agent_a",
+  "agreed_with_peer": [
+    "b2",
+    "b3",
+    "b5",
+    "b6"
+  ],
+  "claims": [
+    {
+      "claim": "The single highest-priority next improvement is a chassis-owned adjudication/verification stage that produces a per-claim ledger from cited evidence and drives convergence/synthesis. The shipped detector is not trustworthy because it decides `converged` from agent-authored `agreed_with_peer` / `disagreed_with_peer` metadata on only the latest positions; it never audits evidence, never preserves claim lineage across rounds, and therefore can false-converge when agents politely acknowledge current claims or silently drop earlier disputed ones.",
+      "claim_id": "a1",
+      "evidence_path": "llm_client/workflow/deliberate.py:141-160; llm_client/workflow/deliberate.py:217-280; llm_client/workflow/deliberate.py:304-362; llm_client/workflow/deliberate.py:490-519; tests/test_workflow_deliberate.py:124-151",
+      "severity": "high"
+    },
+    {
+      "claim": "Required `evidence_path` fields improve schema completeness, not actual falsifiability. In the shipped deliberation path, `evidence_path` is an unconstrained `str`, there is no chassis-level existence/line-range check, and the live schema-smoke tests only prove that providers accept the schema shape. Agents can therefore satisfy strict-mode with bogus or unverifiable citations.",
+      "claim_id": "a2",
+      "evidence_path": "llm_client/workflow/deliberate.py:95-109; llm_client/workflow/deliberate.py:127-138; llm_client/workflow/profiles/plan_doc_review.py:52-66; tests/test_workflow_deliberate.py:182-197; tests/test_workflow_schema_smoke.py:14-17; tests/test_workflow_schema_smoke.py:100-125",
+      "severity": "high"
+    },
+    {
+      "claim": "A third symmetric debater is not the first fix for blind spots. V1 already compromises independence because round 1 is serialized `agent_a -> agent_b`, so `agent_b` can see `agent_a`'s first position before emitting its own; and the builder/CLI hard-code exactly two agents anyway. The next topology change should be true independent first-pass generation or a role-differentiated verifier, not just adding a third self-reporting agent.",
+      "claim_id": "a3",
+      "evidence_path": "llm_client/workflow/deliberate.py:9-17; llm_client/workflow/deliberate.py:431-445; llm_client/workflow/deliberate.py:666-693; llm_client/cli/deliberate.py:32-60; tests/test_workflow_deliberate.py:205-255",
+      "severity": "warn"
+    },
+    {
+      "claim": "At `max_rounds > 5`, the first structural correctness failure is synthesis-history/context growth plus convergence drift, not a total budget reset. The runtime already enforces cumulative budget by `trace_id` before each call, but deliberation still appends full `position_history`, feeds the whole chronology into synthesis, and computes convergence from only `latest_positions`, so long debates lose lineage while the synthesis prompt keeps growing.",
+      "claim_id": "a4",
+      "evidence_path": "llm_client/workflow/context.py:131-147; llm_client/execution/call_contracts.py:136-145; llm_client/execution/structured_runtime.py:219-233; llm_client/workflow/deliberate.py:201-202; llm_client/workflow/deliberate.py:217-280; llm_client/workflow/deliberate.py:370-400; llm_client/workflow/deliberate.py:490-519",
+      "severity": "warn"
+    },
+    {
+      "claim": "Asymmetric duet plus symmetric deliberation is still the right top-level partition, but deliberation shipped without duet's profile-extension surface even though its module docstring promises profile specialization. That inconsistency is real debt, but it is lower leverage than fixing adjudication correctness first; otherwise new deliberation profiles inherit the same unverified convergence semantics.",
+      "claim_id": "a5",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-33; llm_client/workflow/deliberate.py:592-643; llm_client/cli/deliberate.py:99-125; llm_client/cli/deliberate.py:153-201; llm_client/workflow/duet_base.py:1-13; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:1-47; llm_client/workflow/duet.py:833-883; llm_client/cli/duet.py:130-149; llm_client/cli/duet.py:266-273",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/context.py:131-147; llm_client/workflow/deliberate.py:609-610; llm_client/workflow/deliberate.py:697-711; llm_client/execution/call_contracts.py:136-145; llm_client/execution/structured_runtime.py:219-233; llm_client/cli/deliberate.py:198-201",
+      "my_counterclaim": "The shipped system does not reset the budget per call. `WorkflowContext` reuses the same `trace_id` and `max_budget`, and the core runtime checks cumulative spend for that trace before each dispatch. The real budget flaw is bounded overshoot by one in-flight call, not `11 calls * $8 = $88` with no chassis stop. That makes budget safety a real but lower-priority issue than unaudited convergence/citation truth.",
+      "peer_claim_id": "b1"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:24-33; llm_client/workflow/deliberate.py:217-280; llm_client/workflow/deliberate.py:490-519; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:1-47; llm_client/workflow/duet.py:842-883",
+      "my_counterclaim": "The missing deliberation profile registry is real, but it is not the highest-leverage structural inconsistency. Fixing extensibility before fixing adjudication correctness would just let more profiles inherit the same self-reported convergence rule and unverified citation semantics. Control correctness has to come first; profile parity is second.",
+      "peer_claim_id": "b4"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:255-275",
+      "content_snippet": "`converged_signal` stays true only if each latest position has no `disagreed_with_peer` and `other_claim_ids.issubset(agreed_set)`; no evidence audit or cross-round lineage exists.",
+      "label": "Convergence is purely self-reported metadata on latest positions"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:683-693",
+      "content_snippet": "The graph edges are `agent_a -> agent_b -> round_increment` with `entry_point='agent_a'`, so round 1 is serialized rather than independent.",
+      "label": "Round-1 prompt sequencing is asymmetric"
+    },
+    {
+      "citation": "tests/test_workflow_deliberate.py:205-209",
+      "content_snippet": "The test docstring says `agent_a` writes first, `agent_b` second, and `agent_b`'s first prompt may have `agent_a`'s round-1 position.",
+      "label": "Tests acknowledge round-1 leakage"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:104-109",
+      "content_snippet": "`PositionClaim` declares `claim_id: str`, `claim: str`, `severity`, `evidence_path: str` with no pattern or validator; `DisagreementAtom` does the same for `evidence_path`.",
+      "label": "Evidence-path fields are only required strings"
+    },
+    {
+      "citation": "llm_client/workflow/profiles/plan_doc_review.py:59-61",
+      "content_snippet": "The profile tells the reviewer to `list every cited file:line ... you could not open or whose claimed content you could not confirm`, which is prompt guidance rather than chassis enforcement.",
+      "label": "Prompt-time citation checking exists only in a duet profile addendum"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:14-17",
+      "content_snippet": "The file says these tests are the `minimum live-LLM round-trip` and only assert the call returns `without a schema-validation error`.",
+      "label": "Schema-smoke tests prove provider acceptance, not citation truth"
+    },
+    {
+      "citation": "llm_client/execution/call_contracts.py:136-145",
+      "content_snippet": "`check_budget(trace_id, max_budget)` loads prior spend via `_io_log.get_cost(trace_id=trace_id)` and raises `LLMBudgetExceededError` once spent exceeds the limit.",
+      "label": "Budget is enforced cumulatively by trace_id before dispatch"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:389-390",
+      "content_snippet": "The synthesis prompt includes `## Position history (chronological)` followed by `json.dumps(positions, indent=2)`.",
+      "label": "Synthesis receives full chronological history"
+    },
+    {
+      "citation": "llm_client/workflow/duet.py:842-883",
+      "content_snippet": "`build_duet_workflow(... task_family='generic' ...)` resolves `get_task_family(task_family)`, unlike deliberation which has no analogous parameter.",
+      "label": "Duet has a real profile registry and CLI surface"
+    }
+  ],
+  "open_questions": [
+    "Should the adjudicator verify citations only syntactically at first (file exists / line range parses), or should v1 of the verifier actually open cited files and mark each claim supported/refuted/unverified?",
+    "What is the least-fragile claim-lineage mechanism for deliberation: chassis-issued stable IDs, normalized-claim hashing, or an explicit `supersedes_claim_ids` field?",
+    "If round-1 independence is fixed, should the verifier be an internal stage within deliberation or a shared workflow primitive that duet can also call after reviewer disagreement?"
+  ],
+  "reviewer_model": "codex/gpt-5.4",
+  "reviewer_summary": "Ranking by leverage: (1) add a chassis-owned adjudication/verification ledger and make convergence depend on that ledger rather than self-reported agreement; this directly fixes the two biggest shipped trust failures, false convergence and bogus groundedness. (2) Fix true round-1 independence; adding a third symmetric debater before that just multiplies correlated prompts. (3) Address long-run scaling by summarizing or compressing synthesis history and preserving claim lineage across rounds. (4) Add deliberation profile/registry parity with duet once the core control logic is trustworthy. The single highest-priority next improvement is the adjudicator/verifier stage because it attacks the root structural problem: the workflow currently lets the same agents both make the claims and certify that the claims have been resolved. Until the chassis independently checks cited evidence and records per-claim statuses such as supported, refuted, or unverified, both convergence and synthesis remain easy to game even when strict-mode JSON validation passes.",
+  "round": 2,
+  "state": "revised"
+}

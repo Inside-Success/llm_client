@@ -28,6 +28,24 @@ make worktree-remove BRANCH=plan-22-example
 Those entrypoints should be preferred over ad hoc local worktree commands when
 doing bounded implementation work in this repo.
 
+## Agent collaboration workflows
+
+This branch includes the Claude/Codex collaboration work that replaces manual
+paste-between-terminal loops with structured `llm_client` calls and on-disk
+artifacts:
+
+- `python -m llm_client duet-review --help` reviews an existing plan and,
+  optionally, the implementation diff against that plan.
+- `python -m llm_client review-artifact --help` performs a standalone
+  adversarial review of a patch, plan, decision, or text artifact. It is
+  designed to run in the background while the foreground agent keeps working.
+- `python -m llm_client deliberate-task --help` runs a two-agent symmetric
+  debate, usually `codex/gpt-5.4` plus `claude-code/opus`, with persisted
+  positions and synthesis.
+
+See [docs/guides/agent-collaboration.md](docs/guides/agent-collaboration.md)
+for install notes, command examples, and the tracked dogfood evidence map.
+
 ## Install
 
 ```bash

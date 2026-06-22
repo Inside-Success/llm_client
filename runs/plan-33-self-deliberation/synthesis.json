@@ -1,0 +1,71 @@
+{
+  "agent_name": "synthesis",
+  "round": 3,
+  "reviewer_model": "manual-synthesis-from-rounds-1-3-after-kill",
+  "confidence": "high",
+  "state": "stable",
+  "reviewer_summary": "Manual synthesis after the deliberation was killed at end of round 3 due to wall-clock cost (~35 min for 3 rounds, ~7-8 min per position). Round 3 was already producing diminishing returns — both agents had converged on a substantive core with two narrow residual disagreements. The single highest-priority next improvement is a chassis-owned verifier/adjudicator stage that resolves cited evidence into a ledger and drives convergence from the ledger rather than from agents' self-reported agreed_with_peer / disagreed_with_peer. Both agents reached this conclusion independently by round 3 with file:line citations.",
+  "claims": [
+    {
+      "claim_id": "s1",
+      "claim": "Highest-priority next improvement is a chassis-owned verifier/adjudicator stage. After each round, before convergence_check, run a non-LLM verifier that opens every claim's evidence_path, records verified|unresolved_path|content_mismatch|unparseable per claim, attaches the actual file content snippet, tracks claim lineage across rounds (rename / retire / fabricated peer ref detection), and feeds detect_convergence() the ledger instead of agents' self-reported metadata. Closes converged findings 1, 2, and partially 3.",
+      "severity": "high",
+      "evidence_path": "deliberate.py:217-280; deliberate.py:241-247; deliberate.py:304-367; runs/plan-33-self-deliberation/position_agent_a_round_3.json; runs/plan-33-self-deliberation/position_agent_b_round_3.json"
+    },
+    {
+      "claim_id": "s2",
+      "claim": "Convergence detector is structurally weaker than 'polite agents trust' framing. agreed_with_peer is list[str] of free-text strings the same agent authored in the same response; detect_convergence treats them as a set; nothing prevents silent claim renames, silently retired claims, or fabricated peer IDs from passing the check. Set subset semantics also let extra-garbage agreed_with_peer entries pass.",
+      "severity": "high",
+      "evidence_path": "deliberate.py:241-247; deliberate.py:255-275"
+    },
+    {
+      "claim_id": "s3",
+      "claim": "evidence_path is a bare str with no sub-grammar — 'docs/x.md#sec', 'file.py:LL-LL', and 'because I said so' all pass schema validation. Even syntactic+filesystem-only verification is insufficient for v1 (agent can cite a real file:line with misstated content); v1 must attach actual content snippet from the cited range. LLM-semantic content match is a v2 question.",
+      "severity": "high",
+      "evidence_path": "deliberate.py:104-109; deliberate.py:127-138; profiles/plan_doc_review.py:59-61"
+    },
+    {
+      "claim_id": "s4",
+      "claim": "Round-1 non-independence is graph-deterministic and inconsistent with the docstring's 'each agent independently' framing. LangGraph edges hardwire agent_a -> agent_b -> round_increment, entry_point is agent_a, agent_a's position is written into latest_positions before agent_b reads. agent_b's round-1 prompt includes agent_a's round-1 position via the peer_latest block.",
+      "severity": "warn",
+      "evidence_path": "deliberate.py:431-476; deliberate.py:683-693; deliberate.py:637"
+    },
+    {
+      "claim_id": "s5",
+      "claim": "Synthesis is a distinct context-bloat failure mode from convergence drift. _synthesis_prompt dumps the full chronological position_history via json.dumps(positions, indent=2) into one LLM call with no truncation, summarization, or last-N-rounds limit. Bites at max_rounds > 5 before agent-prompt bloat does — per-round agent prompts only see peer_latest + own_prior, but synthesis sees everything.",
+      "severity": "warn",
+      "evidence_path": "deliberate.py:370-400; deliberate.py:389-390; deliberate.py:490-519"
+    },
+    {
+      "claim_id": "s6",
+      "claim": "Deliberation chassis is missing the TaskFamily/profile extension point the duet has, despite the module docstring promising 'deliberation can also be specialized by profile when domain-specific Position fields are needed'. Build-order resolution from round 3: verifier ships first but MUST include an override hook so future DeliberationFamily can plug in a domain-specific verifier without forking the chassis. Full DeliberationFamily registry can land later.",
+      "severity": "warn",
+      "evidence_path": "deliberate.py:24-32; deliberate.py:592-643; duet_registry.py:1-65; duet_base.py:68-100"
+    },
+    {
+      "claim_id": "s7_recanted",
+      "claim": "RECANTED (was originally agent_b's b1 highest-priority): max_budget is NOT reused as a per-call cap; the kernel layer's _check_budget loads cumulative spend by trace_id and WorkflowContext reuses one trace_id across every agent/synthesis call. Earlier framing of budget-cap leakage was wrong; this is a corrected mental model, not a bug.",
+      "severity": "info",
+      "evidence_path": "execution/call_contracts.py:136-145; execution/structured_runtime.py:219-233; workflow/context.py:144-146"
+    }
+  ],
+  "evidence": [],
+  "open_questions": [
+    "Does an LLM-semantic content match (does the cited snippet actually support the claim) need to ship in v1 of the verifier, or is filesystem+snippet-attachment sufficient as a v1 floor?",
+    "Should claim_id become chassis-owned (stable IDs across rounds, monotonic across the run) rather than agent-authored free text, so lineage tracking is structurally guaranteed?",
+    "Is the verifier stage best implemented inside the deliberation chassis only, or should it also gate the duet's reviewer schemas (PlanReviewBlocker.evidence_path, CorrectnessFinding.file_path+line)?"
+  ],
+  "agreed_with_peer": [],
+  "disagreed_with_peer": [
+    {
+      "peer_claim_id": "build_order_a5_vs_b4",
+      "my_counterclaim": "Narrow build-order residual: A prefers adjudicator-first then extension hook in a separate change; B prefers verifier-with-override-hook in the same change. Engineering preference, not a structural disagreement. Either ordering works.",
+      "evidence_path": "deliberate.py:24-32; deliberate.py:217-280; duet_registry.py:1-65"
+    },
+    {
+      "peer_claim_id": "adjudicator_explicit_silent_retirement",
+      "my_counterclaim": "B claims silent-claim-retirement detection must be an explicit named requirement of the adjudicator. A claims it falls out naturally from lineage tracking. Equivalent in outcome; framing difference only. Implementation should make the silent-retirement detection observable in the per-claim ledger output so the property is testable.",
+      "evidence_path": "deliberate.py:217-280; deliberate.py:255-275"
+    }
+  ]
+}

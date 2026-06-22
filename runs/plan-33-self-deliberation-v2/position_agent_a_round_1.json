@@ -1,0 +1,85 @@
+{
+  "agent_name": "agent_a",
+  "agreed_with_peer": [],
+  "claims": [
+    {
+      "claim": "The highest-leverage structural flaw is that shipped deliberation is not actually symmetric on round 1: `agent_b` can see `agent_a`'s first position before writing its own, so the workflow contaminates the supposedly independent initial pass and makes polite convergence more likely. The next improvement should be a barriered round protocol that withholds peer positions until both initial positions are persisted, then starts rebuttal/adjudication rounds.",
+      "claim_id": "a_round1_anchor",
+      "evidence_path": "llm_client/workflow/deliberate.py:4-7,9-17,364-380,466-480; tests/test_workflow_deliberate.py:205-209",
+      "severity": "high"
+    },
+    {
+      "claim": "The rule-based convergence detector is not trustworthy on self-report alone. The shipped code already acknowledges this by adding verifier-gated convergence, but the detector still decides from latest-position metadata plus latest-round ledger flags, so it can still false-converge when agents politely drop or mutate claims without a strong semantic check.",
+      "claim_id": "a_convergence_syntax",
+      "evidence_path": "llm_client/workflow/deliberate.py:232-247,294-315,661-680; tests/test_workflow_deliberate.py:421-464,497-525; llm_client/workflow/deliberate_verifier.py:22-25,123-136,403-441,478-580",
+      "severity": "high"
+    },
+    {
+      "claim": "Required `evidence_path` makes positions locatable, not fully falsifiable. The schema forces agents to provide a citation string, and the verifier proves that the citation parses and resolves to a file/snippet, but it does not verify that the cited snippet actually supports the claim text. Bogus-but-existing citations can therefore pass as `verified`.",
+      "claim_id": "a_evidence_semantics",
+      "evidence_path": "llm_client/workflow/deliberate.py:100-115,117-129,132-143; llm_client/workflow/deliberate_verifier.py:19-25,171-227,292-347,355-391; tests/test_workflow_schema_smoke.py:62-67,101-123",
+      "severity": "high"
+    },
+    {
+      "claim": "Two-agent-only v1 leaves blind spots that a third role could catch, and the current deliberation surface is less extensible than duet. The code hard-rejects any agent count other than 2, while duet already has an explicit `TaskFamily`/profile registry for domain-specific schemas and prompts; deliberation advertises profile specialization in comments but exposes no equivalent `task_family` hook in the builder or CLI.",
+      "claim_id": "a_topology_profiles",
+      "evidence_path": "llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:20-47; llm_client/workflow/profiles/plan_doc_review.py:37-77; llm_client/workflow/profiles/twin_update.py:149-157,193-200,337-349; llm_client/workflow/deliberate.py:24-31,696-740; llm_client/cli/deliberate.py:32-60,149-188",
+      "severity": "warn"
+    },
+    {
+      "claim": "At `max_rounds > 5`, the first failure is more likely convergence drift than non-cumulative budget or raw per-turn context bloat. Budget is cumulative by `trace_id`, and per-agent prompts only include own prior plus peer latest, so most rounds do not accumulate full history. The weak point is that the agents do not see verifier output or full argument history during debate, while synthesis alone gets chronological history; over many rounds this encourages semantic drift behind stable claim IDs or narrowed latest-round positions.",
+      "claim_id": "a_rounds_drift",
+      "evidence_path": "llm_client/workflow/context.py:48-54,112-147; llm_client/execution/call_contracts.py:136-145; llm_client/workflow/deliberate.py:364-397,405-435,471-480,506-507,712-717; llm_client/workflow/deliberate_verifier.py:409-441",
+      "severity": "warn"
+    },
+    {
+      "claim": "Asymmetric duet plus symmetric deliberation is not quite the right partition. Duet is structurally coherent for ship/no-ship work because it has explicit reviewer gates (`pass|revise|block`), one bounded revise loop, and a profile registry. What is missing is a third pattern: independent fan-out plus adjudication, where multiple agents produce isolated first passes and a verifier/adjudicator merges or challenges them without forcing early peer influence.",
+      "claim_id": "a_partition_third_pattern",
+      "evidence_path": "llm_client/workflow/duet.py:471-499,559-591,797-823,833-858; llm_client/workflow/duet_base.py:8-12,68-100; llm_client/workflow/deliberate.py:4-7,9-21,364-380,690-740",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [],
+  "evidence": [
+    {
+      "citation": "tests/test_workflow_deliberate.py:205-209",
+      "content_snippet": "Neither has peer context on its own first call ... agent_b's first prompt may have agent_a's round-1 position.",
+      "label": "Round-1 asymmetry is explicit in tests"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:364-371",
+      "content_snippet": "## Peer's most-recent position ... json.dumps(peer_latest, indent=2)",
+      "label": "Prompt injects peer position whenever available"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:324-347",
+      "content_snippet": "snippet, notes = _extract_snippet(...); ... status=\"verified\" ... snippet=snippet, notes=notes",
+      "label": "Verifier only marks citation resolution"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:64-67",
+      "content_snippet": "We aren't testing the LLM's reviewing quality here \u2014 only that the schema is structurally valid for the provider's structured-output API.",
+      "label": "Smoke tests cover schema acceptance, not truthfulness"
+    },
+    {
+      "citation": "llm_client/cli/deliberate.py:55-59",
+      "content_snippet": "--agents must list exactly 2 entries for v1; got {len(pairs)}.",
+      "label": "CLI hard-codes exact-2 agents"
+    },
+    {
+      "citation": "llm_client/execution/call_contracts.py:136-145",
+      "content_snippet": "Raise before dispatch if a trace has already spent its budget. ... spent = _io_log.get_cost(trace_id=trace_id)",
+      "label": "Budget is cumulative by trace"
+    }
+  ],
+  "open_questions": [
+    "After fixing round-1 independence, does a 3-agent topology still buy enough blind-spot coverage to justify the extra cost, or is verifier-backed adjudication sufficient?",
+    "Should the next semantic-grounding step be deterministic claim-to-snippet checks, or a dedicated adjudicator model that scores whether a citation actually supports a claim?",
+    "Should deliberation gain a `TaskFamily`-style extension surface, or should the missing independent-fanout/adjudication pattern own domain-specific schemas instead?"
+  ],
+  "reviewer_model": "codex/gpt-5.4",
+  "reviewer_summary": "Leverage ranking: (1) fix the false symmetry first by making round 1 genuinely independent and adding adjudicated rebuttal rounds; this directly attacks the biggest source of false convergence. (2) strengthen evidence semantics, because today `evidence_path` plus verifier proves only that a citation resolves, not that it supports the claim. (3) close the topology/surface gap: exact-2 debate with no deliberation profile hook leaves blind spots and wastes the profile machinery duet already has. (4) only after that should long-round scaling get attention; budget is already cumulative, and the deeper >5-round risk is convergence drift, not simple budget leakage.",
+  "round": 1,
+  "state": "initial"
+}

@@ -1,0 +1,114 @@
+{
+  "agent_name": "agent_b",
+  "agreed_with_peer": [
+    "a1",
+    "a3"
+  ],
+  "claims": [
+    {
+      "claim": "The highest-leverage structural defect is that max_budget is reused as a per-call cap on every LLM invocation rather than as a cumulative cap across a run. WorkflowContext.call_llm_structured does kwargs.setdefault('max_budget', self.max_budget) on every call, and the deliberation builder passes the same scalar into every agent and synthesis invocation. With the CLI default --max-budget=8.0 and max_rounds=5, worst-case real spend is (2*5+1)=11 calls * $8 = $88 per debate \u2014 and there is no chassis-level counter that detects this. Convergence false-positives produce a wrong answer; budget-cap leakage produces runaway cost, which is the more dangerous shipped failure mode at the user's stated 'max_rounds > 5' question.",
+      "claim_id": "b1",
+      "evidence_path": "llm_client/workflow/context.py:131-147; llm_client/workflow/context.py:99-115; llm_client/workflow/deliberate.py:446-453; llm_client/workflow/deliberate.py:504-511; llm_client/cli/deliberate.py:198-201",
+      "severity": "high"
+    },
+    {
+      "claim": "The convergence detector is not just polite-trusting (peer's framing) \u2014 it is structurally weaker than peer claim a1 states, because `agreed_with_peer` is a `list[str]` of free-text strings the same agent authors in the same response, and `detect_convergence` only checks set inclusion (`other_claim_ids.issubset(agreed_set)`), not that the listed IDs are actually current peer IDs. An agent can also silently retire a claim it raised last round; since the check inspects only `latest_positions`, dropped claims disappear from the convergence test entirely. Both failure modes converge spuriously without any politeness on the agent's part.",
+      "claim_id": "b2",
+      "evidence_path": "llm_client/workflow/deliberate.py:255-275; llm_client/workflow/deliberate.py:152-156; llm_client/workflow/deliberate.py:217-247",
+      "severity": "high"
+    },
+    {
+      "claim": "Round-1 is structurally non-independent because the LangGraph edges hard-wire agent_a -> agent_b -> round_increment, the entry_point is agent_a, and agent_a's position is written into latest_positions before agent_b's node fires. Therefore at round_num=1, agent_b's `peer_latest = latest.get(agent_a_name)` is populated with agent_a's just-written initial position. This is deterministic from the graph, not a policy choice \u2014 exactly what peer a3 claims, and the edge wiring in build_deliberation_workflow proves it.",
+      "claim_id": "b3",
+      "evidence_path": "llm_client/workflow/deliberate.py:683-693; llm_client/workflow/deliberate.py:431-476; llm_client/workflow/deliberate.py:9-13",
+      "severity": "warn"
+    },
+    {
+      "claim": "The deliberation chassis is missing the TaskFamily/profile extension point the duet has, despite the module docstring explicitly promising 'deliberation can also be specialized by profile when domain-specific Position fields are needed.' There is no DeliberationFamily, no deliberation registry, and Position is not subclassable through the builder \u2014 `build_deliberation_workflow` accepts no `task_family` parameter and hard-codes the generic `Position` model in both agent nodes and synthesis. The duet has duet_registry.py + TaskFamily and `build_duet_workflow(task_family=...)`; deliberation has no analog. This is the most concrete structural inconsistency between the two siblings.",
+      "claim_id": "b4",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:446-453; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/duet_registry.py:1-65; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet.py:842-883",
+      "severity": "warn"
+    },
+    {
+      "claim": "Synthesis is a separate context-bloat failure mode independent of convergence drift: the synthesis prompt dumps the full chronological position_history via json.dumps without truncation or summarization, into a single LLM call that reuses the same per-call max_budget. At max_rounds=5 with two agents, that's ~10 Position blobs (each with claims + evidence content_snippet + disagreements) in one prompt \u2014 so 'context bloat' from the user's question is real, just located in synthesis rather than in per-round agent prompts (which correctly only see peer_latest + own_prior).",
+      "claim_id": "b5",
+      "evidence_path": "llm_client/workflow/deliberate.py:370-400; llm_client/workflow/deliberate.py:490-519; llm_client/workflow/deliberate.py:304-352",
+      "severity": "warn"
+    },
+    {
+      "claim": "`evidence_path` is a single free-text string with zero structural sub-grammar \u2014 it accepts 'docs/plans/...md#section', 'file.py:LL-LL', or 'because I said so' equivalently. The schema's only enforcement is presence, not format. The duet profile `plan_doc_review` already uses 'list every cited file:line ... you could not open or whose claimed content you could not confirm' language as a prompt-time check, but neither workflow has a chassis-level path/line validator. Peer claim a2 is correct that presence != truthfulness; I add that even *format* isn't enforced, so an automated verifier doesn't have to do semantic checking to add value \u2014 even a file-exists check would catch most gaming.",
+      "claim_id": "b6",
+      "evidence_path": "llm_client/workflow/deliberate.py:104-109; llm_client/workflow/deliberate.py:127-138; llm_client/workflow/profiles/plan_doc_review.py:59-61; tests/test_workflow_schema_smoke.py:100-125",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/context.py:131-147; llm_client/workflow/deliberate.py:446-453; llm_client/cli/deliberate.py:198-201",
+      "my_counterclaim": "I agree the convergence rule is unsound (see my b2 which extends the diagnosis beyond politeness to free-text-ID gaming and silent claim retirement), but I disagree that it is the highest-risk flaw. Per-call budget reuse (b1) is more dangerous because a polite false-convergence at most ships a wrong synthesis; an uncapped budget at max_rounds=5+ ships an $80+ bill silently. The user's prompt explicitly asks 'what fails first at max_rounds > 5?' and the answer is cost, not correctness \u2014 convergence-audit is #2, not #1, on leverage.",
+      "peer_claim_id": "a1"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:389-390; llm_client/workflow/deliberate.py:490-519",
+      "my_counterclaim": "Peer says 'first structural failure is convergence drift plus synthesis-history scaling, not per-turn prompt bloat.' I half-agree: per-turn agent prompts correctly bound their context to peer_latest + own_prior (deliberate.py:329-352), so peer is right there. But synthesis IS a context-bloat failure mode, not just history scaling \u2014 the synthesis node calls one LLM with the entire position_history serialized via json.dumps and a per-call budget cap. At max_rounds=5, ~10 Position blobs (each with content_snippets) hit one prompt. So both 'cost runaway' (b1) and 'synthesis context bloat' (b5) fail before convergence drift bites; peer's ordering misranks them.",
+      "peer_claim_id": "a4"
+    },
+    {
+      "evidence_path": "llm_client/workflow/duet_registry.py:1-65; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet.py:842-883; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/deliberate.py:24-32",
+      "my_counterclaim": "Peer says 'the missing piece is not a third user-facing workflow but a reusable verifier/adjudicator stage.' I agree a verifier is valuable but disagree on framing: the more immediate structural debt is that the deliberation chassis has no TaskFamily-style profile extension point at all, despite the deliberate.py:24-32 docstring promising one. The duet ships duet_registry.py + TaskFamily; deliberation hard-codes generic Position and offers no task_family kwarg to build_deliberation_workflow. Add the profile hook first; then 'verifier' becomes a registered profile stage rather than a forked code path. Peer's verifier idea is right; the build order is wrong.",
+      "peer_claim_id": "a5"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/context.py:131-147",
+      "content_snippet": "def call_llm_structured(... **kwargs): ... kwargs.setdefault('max_budget', self.max_budget); return call_llm_structured(model, messages, response_model, **kwargs) \u2014 same scalar reused per invocation.",
+      "label": "Per-call budget reuse, not cumulative"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:446-453",
+      "content_snippet": "ctx.call_llm_structured(agent.model, messages, Position, timeout=..., codex_transport=..., cwd=task['workspace_path']) \u2014 no max_budget arg, so WorkflowContext.setdefault re-injects the full budget every call.",
+      "label": "Deliberation calls reuse same per-call budget on every agent + synthesis call"
+    },
+    {
+      "citation": "llm_client/cli/deliberate.py:198-201",
+      "content_snippet": "p.add_argument('--max-budget', type=float, default=8.0, help='USD budget for the entire run (default: 8.0; deliberation typically takes 4-8 LLM calls)') \u2014 help text says 'entire run' but plumbing makes it per-call.",
+      "label": "CLI default budget is per-call, not per-run"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:255-275",
+      "content_snippet": "agreed_set = set(pos.get('agreed_with_peer') or []); ... if not other_claim_ids.issubset(agreed_set): converged_signal = False \u2014 subset only, no schema constraint that agreed_with_peer values are real claim_ids from the peer.",
+      "label": "Convergence check uses set inclusion on free-text strings"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:683-693",
+      "content_snippet": "edges=[('agent_a','agent_b'), ('agent_b','round_increment'), ...], entry_point='agent_a' \u2014 sequential, so agent_b's round-1 turn sees agent_a's round-1 position in latest_positions.",
+      "label": "Edges hardwire agent_a then agent_b within one round"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:389-390",
+      "content_snippet": "'## Position history (chronological)' followed by `json.dumps(positions, indent=2)` \u2014 no truncation or summarization, full evidence + content_snippet payload.",
+      "label": "Synthesis dumps full chronology into one prompt"
+    },
+    {
+      "citation": "llm_client/workflow/duet_base.py:68-100",
+      "content_snippet": "@dataclass TaskFamily: name, plan_review_schema, implement_review_schema, plan_prompt_addendum, ..., context_loader \u2014 domain extension point. No DeliberationFamily exists.",
+      "label": "Duet has TaskFamily registry; deliberation does not"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:24-32",
+      "content_snippet": "'TaskFamily registry (Plan #31) \u2014 deliberation can also be specialized by profile when domain-specific Position fields are needed.' \u2014 but build_deliberation_workflow signature has no task_family parameter.",
+      "label": "Deliberation docstring promises profile specialization that isn't shipped"
+    }
+  ],
+  "open_questions": [
+    "Does llm_client.core.client enforce a per-trace_id cumulative spend cap at the kernel layer that would mask the workflow-layer leakage in b1? If yes, b1 downgrades from 'high' to 'warn'; needs a Read of llm_client/core/client.py.",
+    "If a DeliberationFamily extension point were added (b4), should the verifier/adjudicator stage peer proposes in a5 be a registered TaskFamily-style hook rather than a hard-coded third pattern? That would let plan_doc_review and twin_update plug in domain-specific verifiers without forking the chassis.",
+    "Does the convergence detector handle the case where `agreed_with_peer` contains duplicate claim_ids or fabricated IDs that don't appear in the peer's claims at all? Current `set(...).issubset(...)` ignores garbage entries \u2014 should fabricated IDs be a stalling signal?"
+  ],
+  "reviewer_model": "claude-code/opus",
+  "reviewer_summary": "Ranking by leverage (mine, defended explicitly against peer's): (1) Fix the per-call budget reuse in WorkflowContext (b1) \u2014 this is the *only* defect that turns 'max_rounds > 5' from a quality concern into a financial-safety concern, and the user's prompt asked specifically about max_rounds > 5. (2) Replace self-reported `agreed_with_peer` coverage with chassis-owned claim lineage that detects silent claim retirement, not just politeness (b2; extends peer a1). (3) Fix true round-1 independence by making agent_a and agent_b round-1 nodes parallel rather than sequential edges (b3; agrees with peer a3). (4) Add a DeliberationFamily/registry to match duet (b4; disagreement with peer a5 \u2014 extension point first, verifier as a registered stage second). (5) Truncate or summarize synthesis history (b5). (6) Validate evidence_path format at the chassis level \u2014 even file-exists is a win (b6; extends peer a2). The single highest-priority next improvement is converting `WorkflowContext.max_budget` from a per-call setdefault into a cumulative spend ledger keyed by trace_id, with a hard stop when the run total approaches the cap; this is small, mechanical, kernel-adjacent, and it gates everything else \u2014 a polite agent merely produces a bad synthesis, but an uncapped one burns dollars per debate. Peer's adjudicator/verifier stage is the right *second* move once cost-safety is real.</reviewer_summary>\n<parameter name=\"reviewer_model\">claude-code/opus",
+  "round": 1,
+  "state": "initial"
+}

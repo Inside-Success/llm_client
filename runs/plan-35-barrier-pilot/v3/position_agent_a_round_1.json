@@ -1,0 +1,94 @@
+{
+  "agent_name": "agent_a",
+  "agreed_with_peer": [],
+  "claims": [
+    {
+      "claim": "Highest-priority next improvement: turn `verifier_ledger` into a repair loop. Today the verifier writes unresolved citation/lineage issues to state and disk, but the next-round agent prompts never include those issues, so agents can only keep guessing until `max_rounds`.",
+      "claim_id": "A1_obligation_loop_top_priority",
+      "evidence_path": "llm_client/workflow/deliberate.py:386-419; llm_client/workflow/deliberate.py:570-607; llm_client/workflow/deliberate.py:705-713",
+      "severity": "high"
+    },
+    {
+      "claim": "The convergence detector is still not fully trustworthy against polite-agent false convergence. `detect_convergence` still treats empty `disagreed_with_peer` plus peer-claim coverage in `agreed_with_peer` as the positive signal; the ledger only vetoes unresolved citations or lineage flags, not substantive capitulation.",
+      "claim_id": "A2_convergence_self_reported",
+      "evidence_path": "llm_client/workflow/deliberate.py:232-247; llm_client/workflow/deliberate.py:275-310; llm_client/workflow/deliberate_verifier.py:123-136; llm_client/workflow/deliberate_verifier.py:363-373",
+      "severity": "high"
+    },
+    {
+      "claim": "Required `evidence_path` makes findings syntactically inspectable, not semantically falsifiable. The verifier resolves files and extracts snippets, but it never checks whether the snippet actually supports the claim, and `PositionEvidence.content_snippet` is defined yet unused by verification.",
+      "claim_id": "A3_evidence_semantic_gap",
+      "evidence_path": "llm_client/workflow/deliberate.py:117-129; llm_client/workflow/deliberate.py:146-165; llm_client/workflow/deliberate_verifier.py:318-373; llm_client/workflow/deliberate_verifier.py:381-417",
+      "severity": "high"
+    },
+    {
+      "claim": "The shipped deliberation chassis is structurally pair-only, not genuinely N-agent. CLI parsing, builder validation, and verifier peer-mapping all assume exactly two agents, so the topology cannot add a third substantive perspective where shared blind spots would matter most.",
+      "claim_id": "A4_pair_only_topology",
+      "evidence_path": "llm_client/cli/deliberate.py:32-60; llm_client/workflow/deliberate.py:742-745; llm_client/workflow/deliberate.py:768-825; llm_client/workflow/deliberate_verifier.py:582-588",
+      "severity": "warn"
+    },
+    {
+      "claim": "For `max_rounds > 5`, the first structural stress is more likely convergence drift plus terminal synthesis bloat than budget exhaustion. Per-round agent prompts stay bounded to peer-latest plus own-prior, and budget enforcement is trace-cumulative, but synthesis serializes the full `position_history` and agents never receive cumulative verifier state.",
+      "claim_id": "A5_rounds_gt5_drift_before_budget",
+      "evidence_path": "llm_client/workflow/deliberate.py:402-419; llm_client/workflow/deliberate.py:621-638; llm_client/workflow/deliberate.py:844-847; llm_client/workflow/context.py:131-147; llm_client/execution/call_contracts.py:136-145",
+      "severity": "warn"
+    },
+    {
+      "claim": "Asymmetric duet plus symmetric deliberation is a sensible base partition, but it is missing a third pattern: judge-guided audit/repair. Duet has reviewer-gated revise/block routing for implementation work; deliberation has symmetric peers plus a passive verifier; nothing currently routes independent adjudication back as required obligations.",
+      "claim_id": "A6_third_pattern_needed",
+      "evidence_path": "llm_client/workflow/duet.py:1-12; llm_client/workflow/duet.py:797-825; llm_client/workflow/deliberate.py:1-22; llm_client/workflow/deliberate.py:558-607; llm_client/workflow/deliberate.py:688-713",
+      "severity": "info"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:244-247",
+      "content_snippet": "\"converged\" if round >= 2 and every agent's latest position has an empty ``disagreed_with_peer`` AND covers every claim ID the peer last emitted in ``agreed_with_peer``",
+      "label": "Convergence Contract"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:300-307",
+      "content_snippet": "if ledger.has_unverified_in_round(latest_round) or ledger.has_lineage_flag_in_round(latest_round): converged_signal = False",
+      "label": "Verifier Only Vetoes"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:386-419",
+      "content_snippet": "Prompt includes \"Peer's most-recent position\" and \"Your prior position (last round)\" before the Position schema; no verifier ledger section is added.",
+      "label": "Next-Round Prompt Inputs"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:601-607",
+      "content_snippet": "return {\"verifier_ledger\": [e.to_dict() for e in new_ledger.entries], \"prior_positions_by_agent\": next_prior}",
+      "label": "Verifier State Output"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:363-373",
+      "content_snippet": "A resolvable citation returns status=\"verified\" with file_path, line_range, snippet, and notes; no claim-to-snippet truth check occurs.",
+      "label": "Semantic Verification Gap"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:117-129; llm_client/workflow/deliberate_verifier.py:381-417",
+      "content_snippet": "`PositionEvidence` defines `label`, `citation`, `content_snippet`, but `verify_position` only walks `claims` and `disagreed_with_peer` evidence_path values.",
+      "label": "Unused Evidence Payload"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:769-773",
+      "content_snippet": "\"Deliberation v1 requires exactly 2 agents; got {len(pair)}. N-agent (\u22653) is a future extension\"",
+      "label": "Exactly Two Agents"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:14-17; tests/test_workflow_schema_smoke.py:64-67; tests/test_workflow_schema_smoke.py:101-103",
+      "content_snippet": "The smoke tests assert only that the schema is accepted by real providers, not that citations are truthful or disagreements are substantively resolved.",
+      "label": "Schema Smoke Scope"
+    }
+  ],
+  "open_questions": [
+    "Should the next fix be a new adjudicator node that emits unresolved obligation IDs, or should the existing verifier node own that contract directly?",
+    "If three-agent support lands, should the third participant be another substantive debater or a dedicated skeptic/judge role?"
+  ],
+  "reviewer_model": "codex/gpt-5.4",
+  "reviewer_summary": "Ranking by leverage: (1) add verifier-feedback obligations to the next-round prompts and convergence state, (2) stop treating self-reported agreement as sufficient convergence evidence, (3) tighten semantic citation verification or actually consume `PositionEvidence`, (4) only then generalize to 3-agent, (5) optimize long-round synthesis/drift. The single highest-priority improvement is the obligation loop because it reuses the shipped verifier, directly reduces bogus-citation loops, makes polite false convergence harder, and gives long debates a stable memory of unresolved issues instead of forcing agents to infer why convergence did not fire.",
+  "round": 1,
+  "state": "initial"
+}
