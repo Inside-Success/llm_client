@@ -321,6 +321,8 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
     spurious = [item for item in annotations if item.get("kind") == "spurious"]
     uncertain = [item for item in annotations if item.get("kind") == "uncertain"]
     discussion_correctness = []
+    non_high_optimum = []
+    correctness_findings = payload.get("correctness_findings", [])
 
     lines = [
         f"Verdict: {payload['verdict']}",
@@ -330,19 +332,22 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
     for finding in payload.get("contract_violations", []):
         lines.append(f"- {finding['constraint']}: {finding['violation']}")
     for idx, finding in enumerate(payload.get("correctness_findings", [])):
-        if idx not in optimum_by_index and finding.get("severity") == "high":
-            lines.append(f"- {finding['severity']}: {finding['claim']}")
-        elif idx not in optimum_by_index:
+        if finding.get("severity") == "high":
+            if idx not in optimum_by_index:
+                lines.append(f"- {finding['severity']}: {finding['claim']}")
+        else:
             discussion_correctness.append(finding)
 
     lines.extend(["", "[OPTIMUM-GAP]"])
-    correctness_findings = payload.get("correctness_findings", [])
     malformed_optimum = []
     for idx, annotation in optimum_by_index.items():
         if idx >= len(correctness_findings):
             malformed_optimum.append(annotation)
             continue
         finding = correctness_findings[idx]
+        if finding.get("severity") != "high":
+            non_high_optimum.append(annotation)
+            continue
         lines.append(
             "- "
             + finding["claim"]
@@ -368,6 +373,12 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
             + annotation["claim"]
             + " Uncertain because: "
             + annotation["why_rejected_or_uncertain"]
+        )
+    for annotation in non_high_optimum:
+        lines.append(
+            "- "
+            + annotation["claim"]
+            + " Uncertain because: optimum_gap links to a non-high-severity correctness finding."
         )
     for finding in discussion_correctness:
         lines.append(
