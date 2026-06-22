@@ -47,6 +47,7 @@ ReviewCycleStopReason = Literal[
     "max_cycles",
     "budget_exhausted",
 ]
+RuntimeCacheCarveout = Literal["python_bytecode"]
 
 
 class ReviewCycleTask(BaseModel):
@@ -70,6 +71,13 @@ class ReviewCycleTask(BaseModel):
     allow_workspace_wide_edits: bool = Field(
         default=False,
         description="When false, any undeclared file edit fails the cycle.",
+    )
+    runtime_cache_carveouts: list[RuntimeCacheCarveout] = Field(
+        default_factory=lambda: ["python_bytecode"],
+        description=(
+            "Ignored runtime cache path classes excluded from undeclared-edit enforcement; "
+            "set to [] to treat every ignored cache write as a touched path."
+        ),
     )
 
     def run_dir(self) -> Path:
@@ -531,8 +539,10 @@ def _is_python_bytecode_cache(path: str) -> bool:
     return "__pycache__" in parts or path.endswith((".pyc", ".pyo"))
 
 
-def _exclude_runtime_cache_paths(paths: list[str]) -> list[str]:
-    """Remove local runtime cache churn from review-cycle edit enforcement."""
+def _exclude_runtime_cache_paths(paths: list[str], carveouts: list[RuntimeCacheCarveout]) -> list[str]:
+    """Remove task-declared local runtime cache churn from edit enforcement."""
+    if "python_bytecode" not in carveouts:
+        return paths
     return [path for path in paths if not _is_python_bytecode_cache(path)]
 
 
@@ -896,7 +906,7 @@ def run_review_cycle(
                 changed_ignored_paths(ignored_before, ignored_after),
                 runner_artifact_prefixes,
             )
-            changed_ignored = _exclude_runtime_cache_paths(changed_ignored)
+            changed_ignored = _exclude_runtime_cache_paths(changed_ignored, task.runtime_cache_carveouts)
             touched_paths = sorted(
                 set(git_changed_paths_from_ref(workspace, head_before))
                 | set(git_changed_paths(workspace))
@@ -911,7 +921,7 @@ def run_review_cycle(
                 changed_ignored_paths(ignored_before, ignored_after),
                 runner_artifact_prefixes,
             )
-            changed_ignored = _exclude_runtime_cache_paths(changed_ignored)
+            changed_ignored = _exclude_runtime_cache_paths(changed_ignored, task.runtime_cache_carveouts)
         extra_ignored_files = [
             path
             for path in changed_ignored

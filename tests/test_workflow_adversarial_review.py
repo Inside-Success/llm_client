@@ -248,6 +248,53 @@ def test_render_quality_optimal_sections_from_canonical_json() -> None:
     assert "non-high-severity correctness finding" in rendered
 
 
+def test_quality_optimal_profile_only_renders_high_severity_optimum_gaps() -> None:
+    review = AdversarialReview(
+        artifact_label="methodology.md",
+        verdict="concerns",
+        summary="summary",
+        correctness_findings=[
+            CorrectnessFinding(
+                file_path="methodology.md",
+                line=10,
+                claim="High-severity optimum gap belongs in the optimum section.",
+                severity="high",
+            ),
+            CorrectnessFinding(
+                file_path="methodology.md",
+                line=12,
+                claim="Warn-only gap must remain discussion-only.",
+                severity="warn",
+            ),
+        ],
+        profile_annotations=[
+            ReviewAnnotation(
+                annotation_id="og1",
+                kind="optimum_gap",
+                claim="High-severity linked gap",
+                linked_finding_index=0,
+                validity_loss_without_change="The paper cannot validate the central inference.",
+            ),
+            ReviewAnnotation(
+                annotation_id="og2",
+                kind="optimum_gap",
+                claim="Warn-only linked gap",
+                linked_finding_index=1,
+                validity_loss_without_change="This should not become an auto-applied optimum gap.",
+            ),
+        ],
+    )
+
+    rendered = render_quality_optimal_sections(review)
+    optimum_section = rendered.split("[OPTIMUM-GAP]", 1)[1].split("[SPURIOUS]", 1)[0]
+    uncertain_section = rendered.split("[UNCERTAIN]", 1)[1]
+
+    assert "High-severity optimum gap belongs in the optimum section." in optimum_section
+    assert "Warn-only linked gap" not in optimum_section
+    assert "Warn-only linked gap" in uncertain_section
+    assert "optimum_gap links to a non-high-severity correctness finding" in uncertain_section
+
+
 def test_render_quality_optimal_sections_routes_duplicate_optimum_gap_to_uncertain() -> None:
     review = AdversarialReview(
         artifact_label="methodology.md",

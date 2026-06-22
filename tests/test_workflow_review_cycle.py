@@ -464,8 +464,12 @@ def test_review_cycle_fails_on_undeclared_ignored_file_edit(tmp_path: Path) -> N
         raise AssertionError("expected ReviewCycleError")
 
 
-def test_review_cycle_ignores_runtime_bytecode_cache_churn(tmp_path: Path) -> None:
-    workspace = _init_repo(tmp_path)
+def test_review_cycle_runtime_cache_carve_out_is_task_declared(tmp_path: Path) -> None:
+    assert "runtime_cache_carveouts" in ReviewCycleTask.model_json_schema()["properties"]
+
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    workspace = _init_repo(allowed_root)
     (workspace / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
     subprocess.run(["git", "add", ".gitignore"], cwd=workspace, check=True)
     subprocess.run(["git", "commit", "-m", "ignore bytecode cache"], cwd=workspace, check=True, capture_output=True)
@@ -493,6 +497,42 @@ def test_review_cycle_ignores_runtime_bytecode_cache_churn(tmp_path: Path) -> No
 
     assert signoff.final_status == "no_diff"
     assert (workspace / "pkg" / "__pycache__" / "mod.cpython-312.pyc").is_file()
+
+    strict_root = tmp_path / "strict"
+    strict_root.mkdir()
+    strict_workspace = _init_repo(strict_root)
+    (strict_workspace / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=strict_workspace, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "ignore bytecode cache"],
+        cwd=strict_workspace,
+        check=True,
+        capture_output=True,
+    )
+    strict_task = ReviewCycleTask(
+        task_id="bytecode-cache-strict",
+        artifact_paths=["paper.md"],
+        workspace_path=str(strict_workspace),
+        out_dir=str(tmp_path / "run-bytecode-cache-strict"),
+        runtime_cache_carveouts=[],
+    )
+
+    def strict_implementer(
+        _task: ReviewCycleTask,
+        cycle: int,
+        classification: ActionableClassification,
+    ) -> ApplyAttempt:
+        cache_dir = strict_workspace / "pkg" / "__pycache__"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "mod.cpython-312.pyc").write_bytes(b"bytecode cache")
+        return ApplyAttempt(narrative="Runtime created bytecode cache.", cost_usd=0.1, model="impl")
+
+    try:
+        run_review_cycle(strict_task, reviewer=reviewer, implementer=strict_implementer)
+    except ReviewCycleError as exc:
+        assert "pkg/__pycache__/mod.cpython-312.pyc" in str(exc)
+    else:
+        raise AssertionError("expected ReviewCycleError")
 
 
 def test_review_cycle_fails_on_modified_preexisting_ignored_file(tmp_path: Path) -> None:
