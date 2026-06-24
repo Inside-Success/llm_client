@@ -33,7 +33,9 @@ Read these first when working under `llm_client/`:
 - `litellm_observer_callback.py` — LiteLLM callback for unmigrated projects
 - `experiment_summary.py` — Shared experiment bookkeeping
 
-Prompt assets live in `~/projects/prompts/` (external, shared across projects).
+Canonical prompt assets live in `~/projects/prompts/` (external, shared across
+projects). Package fallback copies for required built-ins may live under
+`llm_client/prompt_assets/` so clean installs can resolve core prompt refs.
 Override with `LLM_CLIENT_PROMPT_ASSET_ROOT` env var.
 
 ## Working Rules

@@ -1,0 +1,15 @@
+id: shared.review.adversarial_artifact.quality_optimal_whitepaper
+version: 1
+kind: chat_prompt
+status: canonical
+description: Quality-optimal methodology whitepaper review prompt for llm_client review-artifact.
+derived_from: shared.review.adversarial_artifact.generic@1
+tags:
+  - review
+  - adversarial
+  - methodology
+  - structured_output
+  - reusable
+template_path: template.yaml
+input_schema: llm_client.review_artifact_input.v1
+output_schema: llm_client.adversarial_review.v2
