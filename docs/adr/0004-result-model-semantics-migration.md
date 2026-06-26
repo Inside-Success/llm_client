@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-04-08
+Last verified: 2026-06-26
 Verification context: exact gpt-5.4 requests still resolve to codex/gpt-5.4 in routing traces through the typed provider-governance policy, the same routing traces still expose `provider_governance_events`, and direct Gemini thinking defaults are now governed by shared runtime config instead of a hardcoded zero-budget transport assumption
 
 ## Context

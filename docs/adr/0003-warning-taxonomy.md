@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-04-08
+Last verified: 2026-06-26
 Verification context: shared 429 cooldown warnings still emit stable `PROVIDER_GOVERNANCE_EVENT[cooldown_registered]` records, foundation-event logging still honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression, and the direct Gemini thinking-budget policy now fails through explicit config rather than a silent hardcoded zero-budget assumption
 
 ## Context

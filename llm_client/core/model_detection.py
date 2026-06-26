@@ -38,6 +38,18 @@ def _is_claude_model(model: str) -> bool:
     return "claude" in model.lower() or "anthropic" in model.lower()
 
 
+def _is_openai_reasoning_model(model: str) -> bool:
+    """Check if model is an OpenAI reasoning model that accepts reasoning_effort.
+
+    Covers the o-series (o1, o3, o4, o5...) and gpt-5.x reasoning variants.
+    Provider-prefixed forms (openrouter/openai/gpt-5.4-mini) are also matched
+    via the base name extracted after the last '/'.
+    """
+    import re
+    base = _base_model_name(model)
+    return bool(re.match(r"^o\d", base)) or bool(re.match(r"^gpt-5\.", base))
+
+
 def _is_thinking_model(model: str) -> bool:
     """Check if model needs thinking budget configuration.
 

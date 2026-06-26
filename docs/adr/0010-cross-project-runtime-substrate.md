@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-04-08
+Last verified: 2026-06-26
 Verification context: the shared substrate still owns typed provider-governance policy and explicit governance events, its observability layer still honors dynamic env-based logging suppression, and direct Gemini thinking defaults are now expressed as shared runtime policy instead of per-call hardcoding
 
 ## Context

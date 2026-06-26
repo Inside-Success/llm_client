@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-04-08
+Last verified: 2026-06-26
 Verification context: exact gpt-5.4 requests still canonicalize through the typed provider-governance policy instead of OpenRouter drift, shared 429 cooldown coordination still avoids duplicate retry waits or cooldown busy-spins while emitting stable governance warning records, and direct Gemini thinking models no longer depend on a hardcoded zero-budget completion default
 
 ## Context
