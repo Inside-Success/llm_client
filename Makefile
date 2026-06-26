@@ -160,6 +160,19 @@ log-cleanup:  ## Archive old JSONL logs (ARCHIVE_DAYS=90, DELETE_DAYS= optional,
 		$(if $(DELETE_DAYS),--delete-days $(DELETE_DAYS)) \
 		$(if $(DRY_RUN),--dry-run)
 
+# ─── Workbench ───────────────────────────────────────────────────────────────
+
+.PHONY: workbench-backend workbench-frontend workbench-install
+
+workbench-backend:  ## Start observability workbench backend (:5203)
+	cd workbench/backend && $(PYTHON) -m uvicorn server:app --host 0.0.0.0 --port 5203 --reload
+
+workbench-frontend:  ## Start observability workbench frontend (:5204)
+	cd workbench/frontend && npm run dev
+
+workbench-install:  ## Install workbench backend deps
+	$(PYTHON) -m pip install fastapi "uvicorn[standard]" --quiet
+
 # ─── Help ────────────────────────────────────────────────────────────────────
 
 .PHONY: help
