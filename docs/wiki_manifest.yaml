@@ -1,0 +1,17 @@
+---
+doc-role: wiki-manifest
+freshness: 2026-06-26
+---
+
+# Wiki Manifest — llm_client-reviewmain
+
+id: llm_client-reviewmain
+portfolio_tier: supporting
+description: >
+  llm_client-reviewmain
+
+sources:
+  - path: ../README.md
+    role: overview
+  - path: ../CLAUDE.md
+    role: instructions
