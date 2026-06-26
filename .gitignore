@@ -18,3 +18,12 @@ docs/archive/
 scripts/macos/
 .openclaw/
 .claude/hook_log.jsonl
+.codex
+.codex/
+
+# Local agent-collaboration run spillover. Curated evidence already tracked
+# under runs/ remains tracked; add new curated runs with git add -f.
+runs/**
+!runs/
+!runs/README.md
+scratch_duet_meta_test/

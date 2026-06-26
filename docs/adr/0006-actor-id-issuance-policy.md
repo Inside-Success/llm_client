@@ -4,6 +4,7 @@ Status: Accepted
 Date: 2026-02-23
 Last verified: 2026-04-05
 
+Verification context: Codex actor routing now canonicalizes exact gpt-5.4 requests before SDK dispatch
 ## Context
 
 Foundation events require `actor_id`, but issuance semantics were not formally

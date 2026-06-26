@@ -1,0 +1,119 @@
+{
+  "agent_name": "agent_b",
+  "agreed_with_peer": [
+    "a_round1_anchor",
+    "a_convergence_syntax",
+    "a_evidence_semantics",
+    "a_topology_profiles",
+    "a_rounds_drift"
+  ],
+  "claims": [
+    {
+      "claim": "The highest-leverage structural flaw is that the Plan #34 verifier ledger is write-only with respect to the LLM-facing surface: it gates the convergence router but is never injected into the next round's agent prompt or into the synthesis prompt. _position_prompt only renders peer_latest + own_prior (no ledger), and _synthesis_prompt only renders position_history (no ledger). Result: when an agent cites a non-existent path or silently renames a claim, the agent is never told and the synthesis narrative is written blind to that fact \u2014 the chassis silently refuses to converge but cannot teach the agents why. This is more leverage than fixing round-1 independence because it bites every round, not once.",
+      "claim_id": "b_verifier_writeonly",
+      "evidence_path": "llm_client/workflow/deliberate.py:339-402,405-435,585-606,655-682",
+      "severity": "high"
+    },
+    {
+      "claim": "The rule-based convergence detector rewards claim-count asymmetry, not just polite-agent behavior. The detector terminates when, for every agent, the OTHER agent's claim_ids are a subset of this agent's agreed_with_peer (line 285-289). The empty set is a subset of any set, so an agent that emits zero claims trivially satisfies the peer's coverage requirement, and only needs its OWN empty agreed_with_peer to converge. The only guard is the global all-empty 'stalled' check on line 261, which does not fire when one agent produced claims and the other produced none. Polite convergence on radically asymmetric engagement is therefore admissible by construction.",
+      "claim_id": "b_polite_asymmetric_claim_count",
+      "evidence_path": "llm_client/workflow/deliberate.py:260-294",
+      "severity": "high"
+    },
+    {
+      "claim": "Reusing Position as the synthesis output schema is a structural misfit that quietly limits the synthesis stage. _make_synthesis_node calls call_llm_structured with schema=Position, then post-hoc overwrites agent_name='synthesis' and round=state['round']. Position.disagreed_with_peer is a per-agent-against-one-peer construct (DisagreementAtom.peer_claim_id), not a 'residual disagreements between N agents' construct, and the schema has no slot for verifier-flagged unverified citations or lineage events. The code comment at line 590-592 acknowledges this is a stop-gap. The signoff DOES carry residual_disagreements (line 635-643) but that is reconstructed from latest_positions, not from synthesis output \u2014 so the synthesis LLM's structured output is half-ignored.",
+      "claim_id": "b_synthesis_schema_misfit",
+      "evidence_path": "llm_client/workflow/deliberate.py:132-143,585-606,611-647",
+      "severity": "warn"
+    },
+    {
+      "claim": "Round-1 asymmetry is factually present in the shipped topology (agent_a is the entry_point and writes first; agent_b's first call sees agent_a's round-1 position in peer_latest via _position_prompt). I corroborate agent_a's a_round1_anchor on facts, but I rank it below the verifier-feedback gap because the contamination is a one-shot priming on round 1 only, while the verifier-feedback gap re-applies every round.",
+      "claim_id": "b_round1_asymmetry_factual",
+      "evidence_path": "llm_client/workflow/deliberate.py:364-371,466-480,784-795",
+      "severity": "warn"
+    },
+    {
+      "claim": "Deliberation's builder advertises TaskFamily specialization in its module docstring but exposes no task_family parameter, in contrast to the duet which threads a TaskFamily through plan/implement/review prompts via _family_context_blocks and family.*_prompt_addendum. build_deliberation_workflow's signature accepts agents/max_rounds/synthesis_model but no profile/family argument, and _position_prompt has no addendum splice point. Domain specialization that already exists for duet (plan_doc_review, twin_update) is structurally unavailable to deliberation.",
+      "claim_id": "b_no_task_family_hook",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-31,339-402,690-740; llm_client/workflow/duet.py:465-506; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:20-47",
+      "severity": "warn"
+    },
+    {
+      "claim": "At max_rounds > 5, the first failure mode is unbounded verifier_ledger growth coupled with wall-clock blowup, not budget. The ledger is append-only across rounds (verify_round builds extended = VerifierLedger(entries=list(prior_ledger.entries)); extended.extend(new_entries)) and is persisted in full to verifier_ledger.json each round; per-stage timeout is 300s and there are 3 LLM calls/round (a, b, plus synthesis once at the end), so max_rounds=10 puts the wall-clock ceiling at ~50 minutes even if budget is fine. Per-turn LLM context, by contrast, only carries peer_latest + own_prior (one round of each), so context bloat at the LLM layer is bounded. I corroborate agent_a's a_rounds_drift on convergence drift, but my distinct failure mode is operator-visible ledger size and wall-clock, not drift.",
+      "claim_id": "b_max_rounds_failure_mode",
+      "evidence_path": "llm_client/workflow/deliberate.py:73,466-511; llm_client/workflow/deliberate_verifier.py:533-580",
+      "severity": "info"
+    },
+    {
+      "claim": "I partially disagree with peer's a_partition_third_pattern. The missing third pattern is not 'independent fan-out plus adjudication' as a separate workflow \u2014 it is verifier-as-feedback inside the existing symmetric chassis. The deliberate_verifier already produces a per-claim ledger with status and lineage_flag; what is missing is a feedback edge from the verifier node back into the next round's _position_prompt and into _synthesis_prompt. Adding a third top-level workflow before closing that loop adds surface area without solving the underlying signalling gap.",
+      "claim_id": "b_third_pattern_is_feedback_not_fanout",
+      "evidence_path": "llm_client/workflow/deliberate.py:525-576,655-682,765-797; llm_client/workflow/deliberate_verifier.py:96-139,468-530",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:339-402,405-435,655-682",
+      "my_counterclaim": "Round-1 asymmetry is real (I corroborate the facts) but is NOT the highest-leverage fix. It is a one-shot contamination at round 1; the verifier-output-never-reaches-the-LLM gap (b_verifier_writeonly) repeats every round and silently distorts both per-round revision and the final synthesis. Barriered round-1 protocol matters, but closing the verifier feedback loop dominates it on leverage.",
+      "peer_claim_id": "a_round1_anchor"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate_verifier.py:468-530,533-580; llm_client/workflow/deliberate.py:339-402,585-606",
+      "my_counterclaim": "Adding 'independent fan-out plus adjudication' as a third top-level workflow is premature. The verifier already exists and already implements per-claim adjudication and lineage tracking; what is missing is feedback edges from the verifier into the next-round agent prompt and into _synthesis_prompt. Add the feedback loop first; only then assess whether a separate fan-out+adjudicator pattern is still needed.",
+      "peer_claim_id": "a_partition_third_pattern"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:73,364-388,466-511; llm_client/workflow/deliberate_verifier.py:533-580",
+      "my_counterclaim": "I agree convergence drift dominates over raw budget, but the more operator-visible failure at max_rounds>5 is unbounded verifier_ledger growth (append-only across rounds, persisted in full each round) and 300s-per-stage timeout \u00d7 2 agent calls \u00d7 N rounds wall-clock blowup. Per-turn LLM context is bounded because _position_prompt only injects peer_latest + own_prior (one round each), not the full history.",
+      "peer_claim_id": "a_rounds_drift"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:339-402",
+      "content_snippet": "def _position_prompt(... own_prior, peer_latest) ... if peer_latest: ... '## Peer's most-recent position' ... json.dumps(peer_latest, indent=2)  # no ledger reference anywhere in this function",
+      "label": "Verifier ledger is never threaded into the agent prompt"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:585-606",
+      "content_snippet": "history = state.get('position_history') or []; messages = _synthesis_prompt(task, history, verdict)  # ledger entries from state['verifier_ledger'] are not passed",
+      "label": "Synthesis prompt sees only position_history, not the ledger"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:280-290",
+      "content_snippet": "agreed_set = set(pos.get('agreed_with_peer') or []); ... other_claim_ids = {c.get('claim_id') ...}; if not other_claim_ids.issubset(agreed_set): converged_signal = False  # if other_claim_ids is empty, issubset is True",
+      "label": "Convergence rule allows empty-claim agents to be 'covered' by empty agreed_with_peer"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:784-795",
+      "content_snippet": "edges=[('agent_a','agent_b'),('agent_b','verifier'),('verifier','round_increment'), ...], entry_point='agent_a'",
+      "label": "agent_a is the entry point and runs before agent_b on round 1"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:690-740",
+      "content_snippet": "def build_deliberation_workflow(*, run_dir, task, trace_id, max_budget, agents=None, max_rounds=3, task_prefix='deliberate', synthesis_model=None, checkpointer=None)  # no task_family parameter",
+      "label": "Duet has TaskFamily threading; deliberation builder has no equivalent"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:577-580",
+      "content_snippet": "extended = VerifierLedger(entries=list(prior_ledger.entries)); extended.extend(new_entries); return extended",
+      "label": "Verifier ledger is append-only across all rounds and persisted whole"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:589-606",
+      "content_snippet": "synthesis_position, _meta = ctx.call_llm_structured(synthesis_model, messages, Position, ...); payload = synthesis_position.model_dump(); payload['agent_name']='synthesis'; payload['round']=state.get('round',0)",
+      "label": "Synthesis schema is Position; output is partially discarded"
+    }
+  ],
+  "open_questions": [
+    "If the verifier ledger were rendered into the next-round agent prompt, what shape minimizes context bloat \u2014 a per-claim status summary, or only the unverified/lineage-flagged subset?",
+    "Should silent_retire+silent_rename feedback be shown only to the agent that committed it, or to both agents so the peer can hold the line?",
+    "Is the right shape for synthesis a dedicated SynthesisArtifact schema (with residual_disagreements + unresolved_evidence + ledger_summary), or just Position + a verifier-output appendix?",
+    "Does the polite-claim-count-asymmetry failure (b_polite_asymmetric_claim_count) need a hard 'each agent must produce >=1 grounded claim per round' rule, or is it sufficient to require coverage in BOTH directions with a non-empty floor?"
+  ],
+  "reviewer_model": "claude-code/opus",
+  "reviewer_summary": "Leverage ranking (highest first): (1) b_verifier_writeonly \u2014 close the verifier\u2192LLM feedback loop. Plan #34's ledger is currently used only as a boolean router gate; rendering it into _position_prompt for the next round and into _synthesis_prompt would convert it from a refuse-to-converge mechanism into an actual teaching signal that agents and synthesis can respond to. This re-applies every round and is strictly larger leverage than a one-shot round-1 barrier. (2) b_polite_asymmetric_claim_count \u2014 the convergence detector's subset-of-claim_ids rule lets an agent that emits zero claims be 'covered' by an empty agreed_with_peer; a non-empty floor or two-sided non-triviality check is a small change with high payoff. (3) a_round1_anchor (peer's #1) \u2014 factually correct, ranks #3 here because it is one-shot. (4) b_synthesis_schema_misfit \u2014 synthesis reusing Position quietly discards structured residuals. (5) a_topology_profiles / b_no_task_family_hook \u2014 agree, lower priority until the feedback loop is closed. (6) max_rounds>5 \u2014 wall-clock and ledger growth (b_max_rounds_failure_mode), not budget. Single highest-priority next improvement: wire the verifier_ledger into both _position_prompt (filtered to current-round unverified/lineage-flagged entries for the agent who owns each entry) and _synthesis_prompt (full ledger), and add a SynthesisArtifact schema slot for ledger_summary so the synthesis LLM cannot write a 'converged' narrative blind to unresolved evidence. Doing this before adding a third workflow or a third agent is correct because the verifier output is the only deterministic signal in the chassis and the agents currently cannot see it.",
+  "round": 1,
+  "state": "initial"
+}

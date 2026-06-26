@@ -13,6 +13,16 @@ Human-reviewed periodically.
 
 ---
 
+### 2026-04-05 — codex — integration-issue
+
+Exact `gpt-5.4` requests must canonicalize to the Codex SDK route, not
+OpenRouter. The earlier routing contract only recognized `codex/...`,
+`codex-mini-latest`, and `*-codex` family names, so bare or provider-prefixed
+`gpt-5.4` could slip into `openrouter/openai/gpt-5.4` and burn credits outside
+the subscription-backed Codex path. `llm_client` now treats exact `gpt-5.4`
+as a Codex alias across routing, agent detection, availability checks, and
+rate-limit provider classification.
+
 ### 2026-04-01 — claude-code — best-practice
 
 **Ecosystem audit findings (Phase 7 of infra sprint).**
@@ -69,19 +79,6 @@ re-submitting until budget exhaustion even after the validator signaled both
 control churn and forces finalization immediately. Verified in
 `tests/test_mcp_agent.py::test_repeated_submit_rejections_can_force_final_early`.
 
-### 2026-04-04 — codex — bug-pattern
-
-**Pending-atom submit rejections need a TODO-progress gate, not forced-final acceptance.**
-
-The DIGIMON overnight traces showed that the earlier shared fix was too broad:
-`pending_atoms` plus `requires_forced_terminal_path` does not mean "accept the
-best final answer now." It means the controller still has unresolved semantic
-work. Plan #91 changes the shared MCP runtime so this rejection family opens a
-TODO-progress retry gate in addition to the evidence gate. Repeated submit
-attempts are suppressed until TODO state changes, which prevents this family
-from escalating directly into `SUBMIT_FORCED_ACCEPT_FORCED_FINAL`. Verified in
-`tests/test_mcp_agent.py::test_pending_atom_submit_rejections_require_todo_progress_before_retry`.
-
 ### 2026-04-04 — codex — integration-issue
 
 The installed Codex SDK can fail on file-writing runs before llm_client
@@ -115,3 +112,71 @@ Current safe rule:
   `subprocess.run` monkeypatched and verifies the output file is read back
 - transport-selection tests alone are not enough; the concrete CLI helper must
   be exercised too
+
+### 2026-04-05 — codex — bug-pattern
+
+`io_log` must not cache `LLM_CLIENT_LOG_ENABLED` only at import time if tests
+or callers rely on env-based suppression after module import.
+
+Measured failure:
+- `tests/test_client.py::TestAsyncResponsesAPIRouting::test_async_gpt5_routes_to_aresponses`
+  could hang on a locked shared observability SQLite DB during
+  `log_foundation_event()`
+- the suite-level fixture set `LLM_CLIENT_LOG_ENABLED=0`, but foundation-event
+  writes still ran because `io_log._enabled` had already been initialized from
+  the old environment
+
+Current safe rule:
+- logging enablement should resolve dynamically from the environment unless an
+  explicit runtime/test override has been set on `io_log._enabled`
+- foundation-event logging must honor the same suppression contract as the rest
+  of `io_log`, otherwise async client verification can fail for unrelated
+  environmental DB contention
+
+### 2026-04-05 — codex — bug-pattern
+
+**OpenRouter routing should normalize explicit `google/...` provider ids the same way it already normalizes other provider-prefixed models.**
+
+`ac14` surfaced repeated provider-resolution failures from `MODEL=google/gemini-2.0-flash-001`.
+Under OpenRouter policy, `llm_client.core.routing.normalize_model_for_policy()`
+left `google/...` untouched, so the call reached LiteLLM without a provider
+route and failed as "LLM Provider NOT provided". Fix: normalize `google/...`
+to `openrouter/google/...` in the shared routing layer so stale but otherwise
+valid OpenRouter Google aliases do not fail late inside structured-call
+boundaries.
+
+### 2026-04-05 — codex — bug-pattern
+
+**In-process semaphores are not enough to stop shared quota bursts when multiple repos run concurrently; 429s need a cross-process provider cooldown.**
+
+The April 3 Gemini anomaly cluster hit several active projects at once, which
+means each process could respect its own semaphore and still collectively hammer
+the same provider quota. `llm_client.utils.rate_limit` now combines a lower
+default Google concurrency ceiling with a SQLite-backed shared cooldown window
+that every process/worktree checks before starting the next Gemini call. The
+execution kernel registers that cooldown on any 429-like failure, including
+quota-exhausted errors that are intentionally not retried.
+
+### 2026-04-05 — codex — bug-pattern
+
+**Bare `gemini-*` model ids are not stable provider identities and should be canonicalized before policy routing.**
+
+`theory-forge` surfaced a 100% failure lane on `gemini-2.5-flash` with
+`Google Cloud SDK not found`, which was not a real provider outage. The actual
+bug was that `normalize_model_for_policy()` handled `google/...` aliases but
+left bare `gemini-*` ids untouched, so LiteLLM guessed the wrong Google path.
+Fix: canonicalize bare Gemini ids to `gemini/<id>` before both direct and
+openrouter policy handling.
+
+### 2026-04-05 — codex — bug-pattern
+
+**Cross-process provider leases must be acquired after the local semaphore, not before it.**
+
+The first implementation of shared Gemini leases in `llm_client.utils.rate_limit`
+grabbed a SQLite-backed lease before the in-process semaphore. Under local
+concurrency, queued callers then consumed shared lease slots while they were
+still waiting inside the same process, which made the next waiter sleep until
+lease TTL expiry instead of real request completion. Fix: acquire the local
+provider semaphore first, then claim the shared lease immediately before the
+actual call window. This preserves the cross-process cap without turning local
+queueing into false shared saturation.

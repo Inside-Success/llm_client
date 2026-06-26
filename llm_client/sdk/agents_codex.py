@@ -40,7 +40,24 @@ from llm_client.sdk.agents_codex_process import (
 )
 from llm_client.core.client import Hooks, LLMCallResult
 from llm_client.core.data_types import TurnEvent
+from llm_client.execution.responses_runtime import _strict_json_schema
 from llm_client.execution.timeout_policy import normalize_timeout as _normalize_timeout
+
+
+def _strict_codex_output_schema(response_model: Any) -> dict[str, Any]:
+    """Return ``response_model``'s JSON schema in OpenAI strict-mode shape.
+
+    OpenAI's structured outputs API (used by the Codex SDK) rejects schemas
+    that lack ``additionalProperties: false`` on every object OR don't list
+    every property in ``required``. Pydantic v2's ``model_json_schema()``
+    omits both by default for fields with defaults. Wrapping with
+    ``_strict_json_schema()`` adds both recursively and inside ``$defs``.
+
+    This is the single integration point between the duet/deliberation
+    Pydantic schemas and the Codex SDK. Without it, calls fail with
+    ``invalid_json_schema`` errors at the provider boundary.
+    """
+    return _strict_json_schema(response_model.model_json_schema())
 
 logger = logging.getLogger(__name__)
 
@@ -997,7 +1014,7 @@ async def _acall_codex_structured(
             model,
             messages,
             timeout=timeout,
-            output_schema=response_model.model_json_schema(),
+            output_schema=_strict_codex_output_schema(response_model),
             **kwargs,
         )
         parsed = response_model.model_validate_json(llm_result.content)
@@ -1013,7 +1030,7 @@ async def _acall_codex_structured(
             model,
             messages,
             timeout=timeout,
-            output_schema=response_model.model_json_schema(),
+            output_schema=_strict_codex_output_schema(response_model),
             fallback_warning=warning,
             **kwargs,
         )
@@ -1048,7 +1065,7 @@ async def _acall_codex_structured(
             model,
             messages,
             timeout=timeout,
-            output_schema=response_model.model_json_schema(),
+            output_schema=_strict_codex_output_schema(response_model),
             fallback_warning=warning,
             **kwargs,
         )
@@ -1075,7 +1092,7 @@ def _call_codex_structured(
             model,
             messages,
             timeout=timeout,
-            output_schema=response_model.model_json_schema(),
+            output_schema=_strict_codex_output_schema(response_model),
             **kwargs,
         )
         parsed = response_model.model_validate_json(llm_result.content)
@@ -1091,7 +1108,7 @@ def _call_codex_structured(
             model,
             messages,
             timeout=timeout,
-            output_schema=response_model.model_json_schema(),
+            output_schema=_strict_codex_output_schema(response_model),
             fallback_warning=warning,
             **kwargs,
         )
@@ -1130,7 +1147,7 @@ def _call_codex_structured(
             model,
             messages,
             timeout=timeout,
-            output_schema=response_model.model_json_schema(),
+            output_schema=_strict_codex_output_schema(response_model),
             fallback_warning=warning,
             **kwargs,
         )

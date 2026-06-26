@@ -1,0 +1,124 @@
+{
+  "agent_name": "agent_b",
+  "agreed_with_peer": [
+    "A2_convergence_self_reported",
+    "A3_evidence_semantic_gap",
+    "A4_pair_only_topology",
+    "A6_third_pattern_needed"
+  ],
+  "claims": [
+    {
+      "claim": "Convergence detector still false-converges on polite agreement: round>=2 + empty disagreed_with_peer + agreed_with_peer covering peer claim_ids returns 'converged'; stalled fires only when ALL agents emit zero claims; the ledger veto only blocks on has_unverified_in_round / has_lineage_flag_in_round, neither of which fires when one well-formed (but possibly irrelevant) citation lands. Peer A2 reaches the same conclusion via a different framing.",
+      "claim_id": "b1_polite_convergence_loophole",
+      "evidence_path": "llm_client/workflow/deliberate.py:226-315",
+      "severity": "high"
+    },
+    {
+      "claim": "Required evidence_path is necessary-but-insufficient: _verify_one_citation returns status='verified' as soon as _resolve_path succeeds and _extract_snippet returns lines in range; claim text is never compared to snippet. Peer A3 strengthens this with a point I missed in round 1 \u2014 PositionEvidence.content_snippet is defined in the schema but verify_position only walks claims and disagreed_with_peer evidence_path values, so the schema's most directly falsifiable field is dead code.",
+      "claim_id": "b2_evidence_path_is_existence_not_support",
+      "evidence_path": "llm_client/workflow/deliberate_verifier.py:318-373;llm_client/workflow/deliberate_verifier.py:381-417;llm_client/workflow/deliberate.py:117-129",
+      "severity": "high"
+    },
+    {
+      "claim": "Single highest-priority improvement (reaffirmed, sharpened by peer A1+A3): upgrade the verifier from 'file resolves + line range in bounds' to '(claim, snippet) semantic-support check' AND start consuming PositionEvidence.content_snippet (compare agent-supplied snippet to actually-resolved snippet, flag drift). Emit two new ledger statuses: 'citation_does_not_support_claim' and 'snippet_drift'. This closes b1/b2/A2/A3 in one move because detect_convergence already refuses to fire 'converged' when has_unverified_in_round is true. Without this, peer's A1 obligation loop ships obligations like 'address this verified-but-irrelevant citation' which are not actionable signal.",
+      "claim_id": "b8_highest_leverage_next_improvement",
+      "evidence_path": "llm_client/workflow/deliberate.py:300-310;llm_client/workflow/deliberate_verifier.py:318-373;llm_client/workflow/deliberate_verifier.py:381-417;llm_client/workflow/deliberate.py:117-129",
+      "severity": "high"
+    },
+    {
+      "claim": "Direct disagreement with peer A1 on ordering, not on merit. Peer A1 is correct that verifier_ledger entries are written to state/disk but never injected into the next-round prompt (deliberate.py:386-419 confirms prompt embeds only peer-latest and own-prior). But shipping the obligation loop BEFORE fixing semantic verification means agents are told to 'resolve' obligations attached to status='verified' rows that already satisfy the existence-only contract. The obligation loop is the right SECOND step: (1) make ledger statuses semantically meaningful, then (2) pipe unresolved/non-supporting entries into prompts as required obligations. Reversing the order ships motion without signal.",
+      "claim_id": "b9_obligation_loop_is_second_priority_not_first",
+      "evidence_path": "llm_client/workflow/deliberate.py:386-419;llm_client/workflow/deliberate.py:570-607;llm_client/workflow/deliberate_verifier.py:363-373",
+      "severity": "high"
+    },
+    {
+      "claim": "Held from round 1, peer did not address: build_deliberation_workflow has no task_family parameter despite the module docstring claiming chassis parity with duet (Plan #31 TaskFamily registry). Domains wanting deliberation variants with extra Position fields must fork. Structural asymmetry \u2014 but lower leverage than b8/b9 because no shipped caller currently needs a non-generic deliberation schema.",
+      "claim_id": "b3_deliberation_has_no_taskfamily",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32;llm_client/workflow/deliberate.py:723-734;llm_client/workflow/duet.py:833-844",
+      "severity": "warn"
+    },
+    {
+      "claim": "Held from round 1, peer did not raise: synthesis defaults to claude-code/opus, which is exactly DEFAULT_AGENT_PAIR's agent_b model. In a default run the 'tiebreaker' shares model family with one participant, distorting residual_disagreements. This is independent of b8/A1 and remains uniquely my finding.",
+      "claim_id": "b4_synthesis_judge_is_an_interested_party",
+      "evidence_path": "llm_client/workflow/deliberate.py:66-69;llm_client/workflow/deliberate.py:779;llm_client/workflow/deliberate.py:612-641",
+      "severity": "warn"
+    },
+    {
+      "claim": "Held from round 1: _detect_silent_rename keys on first 80 chars of claim text. Symmetric leading-edit evasion not addressed by the trailing-edit comment. Lower leverage than b8/b9 because rename detection is a defense-in-depth layer that only matters once the convergence-detector itself stops trusting self-reported agreement.",
+      "claim_id": "b5_silent_rename_uses_brittle_prefix_key",
+      "evidence_path": "llm_client/workflow/deliberate_verifier.py:429-453",
+      "severity": "warn"
+    },
+    {
+      "claim": "Revised after peer A5: I partially concede. Per-round position prompts remain bounded (peer-latest + own-prior, deliberate.py:386-409), so 'context bloat' is not the per-round failure \u2014 my round-1 framing stands. BUT peer A5 correctly identifies a one-shot bloat point at synthesis: synthesize_findings_node serializes the full position_history. So at max_rounds>5 the failure shape is: (a) per-round ledger growth in verifier_ledger.json (verifier:559-606 appends, never compacts), (b) terminal synthesis-prompt bloat once history is 5+ rounds, (c) drift because agents never see cumulative verifier state. All three are real; budget exhaustion is not the first failure because max_budget is trace-cumulative.",
+      "claim_id": "b6_max_rounds_first_failure_revised",
+      "evidence_path": "llm_client/workflow/deliberate.py:386-409;llm_client/workflow/deliberate.py:621-638;llm_client/workflow/deliberate_verifier.py:559-606;llm_client/execution/call_contracts.py:136-145",
+      "severity": "warn"
+    },
+    {
+      "claim": "Held from round 1, converges with peer A6: duet (gated cycle) + deliberation (peer debate) is missing a third pattern \u2014 N peers + non-peer arbiter with terminate authority. Synthesis half-implements this but does not gate. Peer A6 frames it as 'judge-guided audit/repair' routing obligations back; same shape, different name. Lower leverage than b8/b9 because no current caller needs it.",
+      "claim_id": "b7_partition_missing_arbiter_pattern",
+      "evidence_path": "llm_client/workflow/duet.py:797-825;llm_client/workflow/deliberate.py:9-22;llm_client/workflow/deliberate.py:612-641",
+      "severity": "info"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:386-419;llm_client/workflow/deliberate_verifier.py:363-373;llm_client/workflow/deliberate.py:300-307",
+      "my_counterclaim": "Peer A1 is correct on the gap (verifier writes ledger entries that never reach next-round prompts, deliberate.py:386-419) but wrong on priority ranking. Piping obligations into prompts BEFORE upgrading what the ledger means produces feedback that says 'address this verified-but-existence-only citation' \u2014 agents have nothing actionable to do because the ledger row already says verified=true. Correct order: (1) b8 semantic-support verification so ledger statuses carry signal, (2) A1 obligation loop to route that signal back to agents. Reversing the order ships plumbing without payload.",
+      "peer_claim_id": "A1_obligation_loop_top_priority"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate_verifier.py:559-606;llm_client/workflow/deliberate.py:621-638;llm_client/execution/call_contracts.py:136-145",
+      "my_counterclaim": "Partial disagreement: peer A5 is right that budget is not the first failure (max_budget is trace-cumulative, call_contracts.py:136-145) and right that terminal synthesis serializes full position_history (deliberate.py:621-638). But A5 understates per-round ledger growth \u2014 verifier_ledger.json appends every citation entry every round and never compacts (verifier.py:559-606), so at max_rounds>5 ledger I/O and resolver hot-path cost grow O(rounds*claims_per_round). First failures, in order: (a) per-round ledger growth, (b) terminal synthesis bloat, (c) drift from agents lacking cumulative verifier state. Drift is third, not first.",
+      "peer_claim_id": "A5_rounds_gt5_drift_before_budget"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:275-310",
+      "content_snippet": "converged_signal = True\n    for agent_name, pos in latest_positions.items():\n        if pos.get(\"disagreed_with_peer\"):\n            converged_signal = False\n            break\n        agreed_set = set(pos.get(\"agreed_with_peer\") or [])\n        ...\n        if not other_claim_ids.issubset(agreed_set):\n            converged_signal = False",
+      "label": "convergence_rule_unchanged"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:363-373",
+      "content_snippet": "return LedgerEntry(agent_name=agent_name, round=round_num, claim_id=claim_id, evidence_path=citation.raw, status=\"verified\", file_path=str(resolved), line_range=citation.line_range, snippet=snippet, notes=notes)",
+      "label": "verifier_existence_only"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:117-129;llm_client/workflow/deliberate_verifier.py:381-417",
+      "content_snippet": "PositionEvidence requires content_snippet but verify_position iterates only claims and disagreed_with_peer; PositionEvidence.content_snippet is never compared to _extract_snippet output.",
+      "label": "content_snippet_unused"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:386-419",
+      "content_snippet": "Position-node prompt assembly embeds peer_latest and own_prior; no section reads from state[\"verifier_ledger\"].",
+      "label": "prompt_lacks_ledger_section"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:559-606",
+      "content_snippet": "extended = VerifierLedger(entries=list(prior_ledger.entries)); extended.extend(new_entries); return extended",
+      "label": "ledger_appends_never_compacts"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:621-638",
+      "content_snippet": "synthesize_findings_node materializes position_history across all rounds for the synthesis prompt \u2014 terminal one-shot bloat, not per-round.",
+      "label": "synthesis_history_serialization"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:66-69;llm_client/workflow/deliberate.py:779",
+      "content_snippet": "DEFAULT_AGENT_PAIR includes ('agent_b','claude-code/opus'); resolved_synthesis = synthesis_model or 'claude-code/opus' \u2014 same model family as one participant.",
+      "label": "synthesis_overlaps_default_agent"
+    }
+  ],
+  "open_questions": [
+    "Should the semantic-support check be deterministic (lexical/embedding overlap floor) or LLM-as-judge? Deterministic is cheaper and auditable; LLM-as-judge catches paraphrase but adds a per-claim provider call to every round.",
+    "If b8 lands first, does the obligation loop (peer A1) become trivial to add \u2014 just inject ledger entries with status in {'citation_does_not_support_claim','snippet_drift','unresolved'} into the next-round prompt as a required-obligations section?",
+    "Does verifier_ledger.json get replayed on checkpointer resume, or does initial_state={verifier_ledger:[]} (deliberate.py:847) reset it? Affects whether ledger growth is bounded per-run."
+  ],
+  "reviewer_model": "claude-code/opus",
+  "reviewer_summary": "Revised ranking after peer round 1 (residual disagreement with peer is explicit on A1 ordering and A5 first-failure shape, NOT papered over): (1) b8 semantic-support verification + consume PositionEvidence.content_snippet \u2014 strictly foundational because without it every downstream fix (convergence detector, obligation loop, rename detection) operates on a 'verified=file exists' substrate that carries no signal. (2) Peer A1 obligation loop \u2014 correct mechanism, must ship AFTER b8 so the obligations it routes carry meaning. (3) b4 synthesis-judge neutrality \u2014 independent fix peer didn't raise, distorts the only durable productive_disagreement artifact. (4) b3 deliberation-TaskFamily parity \u2014 structural docstring lie. (5) b5 80-char rename-prefix brittleness. (6) b6/A5 max_rounds>5 failure shape \u2014 per-round ledger growth first, terminal synthesis bloat second, drift third. (7) A4/b7 three-agent + arbiter pattern \u2014 future work. Single highest-priority improvement: b8. One-paragraph justification: the chassis's load-bearing groundedness contract is the required evidence_path field, but the verifier today only checks that the path resolves and that line range is in bounds \u2014 it never checks that the snippet supports the claim, and it never reads the schema's required content_snippet field. As a result, status='verified' carries no semantic signal, convergence_detector's ledger veto (deliberate.py:300-307) fires only on narrow has_unverified_in_round / has_lineage_flag_in_round cases, and the polite-agent false-convergence path stays open. Upgrading the verifier to emit 'citation_does_not_support_claim' and 'snippet_drift' statuses, and including content_snippet in the comparison, simultaneously hardens convergence detection (b1/A2), makes evidence_path actually falsifiable (b2/A3), and gives peer A1's proposed obligation loop something real to route. No other single change touches as many shipped failure modes.",
+  "round": 2,
+  "state": "revised"
+}

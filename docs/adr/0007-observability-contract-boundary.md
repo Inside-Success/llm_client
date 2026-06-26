@@ -1,8 +1,8 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-04-01
-Verification context: causal_parent_id decision provenance column added to io_log + text_runtime (Plan #54)
+Last verified: 2026-04-05
+Verification context: observability sinks now honor dynamic `LLM_CLIENT_LOG_ENABLED` env suppression unless an explicit runtime override is set, preventing stale import-time enablement from forcing unwanted foundation-event writes
 Date: 2026-02-23
 
 ## Context

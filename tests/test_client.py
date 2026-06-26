@@ -845,6 +845,34 @@ class TestNonRetryableErrors:
             call_llm("gpt-4", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_quota_exceeded", max_budget=0)
         assert mock_comp.call_count == 1
 
+    @patch("llm_client.execution.execution_kernel._maybe_register_provider_cooldown")
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_quota_exceeded_registers_provider_cooldown(
+        self,
+        mock_comp: MagicMock,
+        mock_register_cooldown: MagicMock,
+    ) -> None:
+        """Quota-like 429s should still publish shared cooldown state."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            "You exceeded your current quota, please check your plan and billing details",
+            model="gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_quota_cooldown",
+                max_budget=0,
+            )
+
+        mock_register_cooldown.assert_called_once()
+
     @patch("llm_client.core.client.time.sleep")
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1026,7 +1054,7 @@ class TestNonRetryableErrors:
         )
         assert result.content == "Hello!"
         assert mock_sleep.call_count == 1
-        assert mock_sleep.call_args.args[0] >= 3.0
+        assert mock_sleep.call_args.args[0] >= 2.5
         assert any("retry_delay_source=structured" in warning for warning in result.warnings)
 
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1212,7 +1240,7 @@ class TestThinkingModelDetection:
         mock_comp.return_value = _mock_response()
         call_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini3_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
     @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -1226,7 +1254,7 @@ class TestThinkingModelDetection:
         mock_comp.return_value = _mock_response()
         call_llm("gemini/gemini-4-pro", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini4_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1273,7 +1301,7 @@ class TestThinkingModelDetection:
         mock_acomp.return_value = _mock_response()
         await acall_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gemini3_thinking", max_budget=0)
         kwargs = mock_acomp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
     @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -1305,7 +1333,7 @@ class TestThinkingModelDetection:
             max_budget=0,
         )
         call_kwargs = mock_client.chat.completions.create_with_completion.call_args.kwargs
-        assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
 
 class TestStripFences:

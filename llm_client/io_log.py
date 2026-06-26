@@ -31,6 +31,7 @@ import logging
 import os
 import re
 import sqlite3
+import subprocess
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -39,7 +40,7 @@ from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
-_enabled: bool = os.environ.get("LLM_CLIENT_LOG_ENABLED", "1") == "1"
+_enabled: bool | None = None
 _data_root: Path = Path(os.environ.get("LLM_CLIENT_DATA_ROOT", str(Path.home() / "projects" / "data")))
 _project: str | None = os.environ.get("LLM_CLIENT_PROJECT")
 _db_path: Path = Path(os.environ.get("LLM_CLIENT_DB_PATH", str(Path.home() / "projects" / "data" / "llm_observability.db")))
@@ -203,14 +204,87 @@ def glob_jsonl_files(directory: Path, stem: str) -> list[Path]:
 
 
 def _get_project() -> str:
-    """Get project name, lazily resolving cwd if not configured."""
+    """Resolve a stable project name so observability rows group by repo, not worktree."""
+    global _project
     if _project is not None:
         return _project
-    return Path.cwd().name
+    cwd = Path.cwd()
+    detected = _detect_git_project(cwd)
+    if detected is not None:
+        _project = detected
+        return detected
+    return cwd.name
+
+
+def _detect_git_project(cwd: Path) -> str | None:
+    """Recover the canonical repo identity from Git so worktrees do not fork project stats."""
+
+    common_dir = _git_rev_parse_path(cwd, "--git-common-dir")
+    if common_dir is not None:
+        detected = _canonical_project_name(common_dir)
+        if detected is not None:
+            return detected
+
+    repo_root = _git_rev_parse_path(cwd, "--show-toplevel")
+    if repo_root is not None:
+        return _canonical_project_name(repo_root)
+    return None
+
+
+def _git_rev_parse_path(cwd: Path, flag: str) -> Path | None:
+    """Read Git metadata paths defensively so logging still works outside repositories."""
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", flag],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, NotADirectoryError, subprocess.CalledProcessError):
+        return None
+    raw_path = completed.stdout.strip()
+    if not raw_path:
+        return None
+    return Path(raw_path)
+
+
+def _canonical_project_name(path: Path) -> str | None:
+    """Normalize repo metadata paths into one durable project identifier."""
+
+    expanded = path.expanduser()
+    if expanded.name == ".git" and expanded.parent.name:
+        return expanded.parent.name
+    parts = expanded.parts
+    if len(parts) >= 2 and parts[-2].endswith("_worktrees"):
+        return parts[-2][: -len("_worktrees")]
+    if expanded.name:
+        return expanded.name
+    return None
 
 
 def _log_dir() -> Path:
     return _data_root / _get_project() / f"{_get_project()}_llm_client_data"
+
+
+def _env_logging_enabled() -> bool:
+    """Return logging-enabled state from the current environment."""
+
+    return os.environ.get("LLM_CLIENT_LOG_ENABLED", "1") == "1"
+
+
+def _logging_enabled() -> bool:
+    """Return the effective logging-enabled state.
+
+    Runtime/test overrides win when set explicitly. Otherwise, read the current
+    environment dynamically so test fixtures that patch `LLM_CLIENT_LOG_ENABLED`
+    after import still take effect.
+    """
+
+    if _enabled is not None:
+        return _enabled
+    return _env_logging_enabled()
 
 
 def configure(
@@ -305,7 +379,7 @@ def log_call(
 
     Never raises — observability must not break model execution.
     """
-    if not _enabled:
+    if not _logging_enabled():
         return
     try:
         d = _log_dir()
@@ -447,7 +521,7 @@ def log_embedding(
     trace_id: str | None = None,
 ) -> None:
     """Append one JSONL record for an embedding call. Never raises."""
-    if not _enabled:
+    if not _logging_enabled():
         return
     try:
         d = _log_dir()
@@ -497,7 +571,7 @@ def log_foundation_event(
     trace_id: str | None = None,
 ) -> None:
     """Append one FOUNDATION event record. Never raises by default."""
-    if not _enabled:
+    if not _logging_enabled():
         return
     try:
         from llm_client.foundation import validate_foundation_event
@@ -571,7 +645,7 @@ def log_tool_call_record(
     data-loss detection.
     """
 
-    if not _enabled:
+    if not _logging_enabled():
         return
     try:
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -1368,7 +1442,7 @@ def log_score(
     git_commit: str | None = None,
 ) -> None:
     """Write a rubric score to the observability DB. Never raises."""
-    if not _enabled:
+    if not _logging_enabled():
         return
     try:
         # Auto-capture git commit if not provided

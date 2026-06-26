@@ -20,24 +20,25 @@
 **Everything else — uncertainty, tool failure, partial results — is NOT a stop condition.**
 Log it in the sprint tracker and proceed with the safer option.
 
-**Always work in worktrees for Plan-level changes.** Commit at every verified milestone.
-**No active sprint.** Check `project-meta/docs/ops/CURRENT_AUTHORITY_STACK.md` for current execution context.
+**Always work in dedicated worktrees for Plan-level changes.** Do not edit the main checkout for plan execution.
+**Commit every verified milestone before moving to the next phase.** Uncommitted progress is not acceptable.
+**Between merges and pushes, stay in worktrees.** Merge from clean integration worktrees, then remove completed worktrees once the merged branch is published and verified.
+**Live Codex subprocess caveat:** keep code edits in the dedicated worktree, but run `review-cycle` dogfood in a standalone clone when the implementer uses Codex and linked-worktree config resolution hits stale common-checkout `.codex` state. Port the resulting artifact diff back to the worktree.
+**Document concerns and uncertainties in the active sprint tracker immediately, then continue with the safer option unless a real stop condition applies.**
+**Active sprint:** see `docs/ops/SPRINT_2026_04_05_PLAN25_PROVIDER_GOVERNANCE.md`.
 
 ---
 
 Shared LLM infrastructure for Brian's project ecosystem: completions, structured output, tool calling, embeddings, streaming, batch, agent SDK routing, MCP loops, retry/fallback, cost tracking, observability (JSONL + SQLite), model registry, and experiment logging. AGENTS.md is generated from this file via `render_agents_md.py`.
 
-Dead-code review is governed locally through `meta-process.yaml` and `dead_code_audit.json`. Real repo-local findings should be deleted or integrated; retained findings need explicit reviewed dispositions, not silent suppression.
-
 When working in this repo, read these first:
 
 1. [docs/plans/01_master-roadmap.md](docs/plans/01_master-roadmap.md)
 2. [docs/plans/CLAUDE.md](docs/plans/CLAUDE.md)
-3. [docs/HANDOFF.md](docs/HANDOFF.md)
-4. [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
-5. [docs/API_REFERENCE.html](docs/API_REFERENCE.html) for the generated browser reference
-6. [scripts/meta/generate_api_reference.py](scripts/meta/generate_api_reference.py) to regenerate the docs
-7. [OpenClaw success-criteria contract](.openclaw/success-criteria.yaml)
+3. [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
+4. [docs/API_REFERENCE.html](docs/API_REFERENCE.html) for the generated browser reference
+5. [scripts/meta/generate_api_reference.py](scripts/meta/generate_api_reference.py) to regenerate the docs
+6. [OpenClaw success-criteria contract](.openclaw/success-criteria.yaml)
 
 ---
 
@@ -59,9 +60,6 @@ make summary                 # Project stats
 # Development
 make status                  # git status --short --branch
 make help                    # List all targets
-make dead-code               # Run current dead-code scan
-make dead-code-audit         # Refresh reviewed dead-code inventory
-make dead-code-validate      # Validate reviewed dead-code dispositions
 
 # API Reference
 python scripts/meta/generate_api_reference.py --write  # Regenerate docs

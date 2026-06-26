@@ -1,0 +1,68 @@
+{
+  "artifact_label": "Plan #35 verifier-barrier interaction fix (commit 6838c1891)",
+  "contract_violations": [],
+  "correctness_findings": [
+    {
+      "claim": "lineage_detail string still says \"but peer's latest position has no such claim_id\" \u2014 but after the fix, peer_prior is the peer's round-(N-1) snapshot, not 'latest'. This text is persisted into verifier_ledger.json and consumed by synthesis/retro tooling, so any fabricated_peer_ref that does fire will mis-describe what was compared.",
+      "file_path": "llm_client/workflow/deliberate_verifier.py",
+      "line": 559,
+      "severity": "warn"
+    },
+    {
+      "claim": "round_num==1 branch hardcodes peer_prior={'claims': []} and ignores any data in prior_positions_by_agent. If verify_round is ever invoked with round_num=1 but a populated prior dict (replay/resume, retro_verify scripts, future graph that pre-seeds peer state), legitimate peer claim_ids are discarded and every reference is flagged fabricated. The branch is selected purely on round_num rather than on whether the dict actually has data.",
+      "file_path": "llm_client/workflow/deliberate_verifier.py",
+      "line": 617,
+      "severity": "warn"
+    },
+    {
+      "claim": "prior_positions_by_agent.get(peer_name) or {'claims': []} is asymmetric with own_prior handling on line 599 (left as None). Missing own_prior silently skips silent_rename/silent_retire (line 512 guard); missing peer_prior is materialized to an empty position and forces fabricated_peer_ref to fire for every reference. No justification given for opposite defaults on symmetric halves of the same dict \u2014 a state inconsistency dropping one agent's entry produces a flood of false fabrications while silently ignoring the symmetric own-lineage case.",
+      "file_path": "llm_client/workflow/deliberate_verifier.py",
+      "line": 630,
+      "severity": "warn"
+    },
+    {
+      "claim": "test_lineage_detects_fabricated_peer_ref passes prior_positions_by_agent={}, so peer_prior resolves to {'claims': []} under the new code. Under the OLD code peer_prior would have been latest_positions[agent_b] which contained b1; b99 is fabricated either way. Neither path exercises the rename-induced false positive (peer's prior had b1, peer's latest renamed it to b1_v2, agent agreed to b1). A future revert to latest_positions[peer] would still pass this test, so the suite does not guard against the regression the commit claims to fix.",
+      "file_path": "tests/test_workflow_deliberate_verifier.py",
+      "line": 251,
+      "severity": "high"
+    },
+    {
+      "claim": "Same gap as line 251: test_lineage_detects_fabricated_disagreement_target also uses prior_positions_by_agent={} and passes under either dispatch. No test in the file constructs the specific scenario the fix addresses (peer's prior snapshot contains the referenced claim_id while peer's latest position has renamed it). The commit message brags 'Tests unchanged ... same semantics' which is precisely the regression risk.",
+      "file_path": "tests/test_workflow_deliberate_verifier.py",
+      "line": 279,
+      "severity": "high"
+    }
+  ],
+  "nits": [
+    {
+      "claim": "Comment block on lines 624-629 largely restates the explanation from lines 601-612; could be collapsed.",
+      "location": "llm_client/workflow/deliberate_verifier.py:601-629",
+      "suggested_fix": ""
+    },
+    {
+      "claim": "_detect_fabricated_peer_refs docstring (lines 480-486) says callers 'must pass an empty dict (not None) for the round-1 case under the barrier' but the function still accepts None and returns []. The 'must' is a caller-side contract enforced only by verify_round; any other caller (retro scripts, future graph wiring) that passes None for round 1 will silently produce zero fabrications instead of the intended behavior.",
+      "location": "llm_client/workflow/deliberate_verifier.py:480-486",
+      "suggested_fix": ""
+    }
+  ],
+  "reviewer_model": "claude-code/opus",
+  "scope_drift_findings": [
+    "Empirical claims in the commit message about v1=4, v2=6 cross-leak counts and the cascade-vs-barrier counterfactual ('would have been 7 false positives without the fix') are not reproducibly demonstrated by anything in the commit diff itself \u2014 they require running both code paths against the same v3 trace, which the diff does not provide."
+  ],
+  "summary": "The fix is directionally correct: routing peer_prior through prior_positions_by_agent for round_num>=2 matches what the barrier guarantees agents actually saw, and the retro v3 ledger confirms fabricated_peer_ref=0 / silent_retire=7. However, real issues remain. (1) The lineage_detail message in _lineage_entries still says \"peer's latest position has no such claim_id\" \u2014 under the fix the comparison is against the peer's PRIOR snapshot, not \"latest\"; this stale message ships into verifier_ledger.json and downstream synthesis. (2) The author's claim \"Tests unchanged ... same semantics\" is the problem itself: the two fabricated_peer_ref tests pass prior_positions_by_agent={}, so peer_prior resolves to {'claims': []} under both old and new code. Neither test exercises the actual bug being fixed (peer renamed claim_ids so latest disagrees with prior); a revert to latest_positions[peer] would still pass the suite. (3) Asymmetric defensive handling: missing own_prior remains None (silent skip), missing peer_prior is materialized to {'claims': []} (forces fabrication firing). The round_num==1 branch unconditionally discards any populated prior_positions_by_agent, coupling correctness to one scheduling assumption.",
+  "unverified_claims": [
+    {
+      "claim": "'43/43 deliberation tests pass after the fix'",
+      "reason_unverified": "Did not execute the test suite; only inspected source. Existing tests still target round_num=2 with empty prior dict and should pass under the new code, but pass/fail not directly observed."
+    },
+    {
+      "claim": "'V3 self-deliberation surfaced 7 false positives on round 2 from this exact pattern' (code comment line 609 and commit body)",
+      "reason_unverified": "Confirmed post-fix retro ledger shows silent_retire=7 / fabricated_peer_ref=0 at round 2. The '7 false positives pre-fix' figure is not independently verifiable from artifacts in the diff; would need the pre-fix retro ledger for comparison."
+    },
+    {
+      "claim": "Citation 'arXiv:2603.28813' appears in llm_client/workflow/deliberate.py comment near line 503 and in the commit body as a 2026 controlled study.",
+      "reason_unverified": "arXiv ID 2603.28813 does not match any plausible YYMM scheme for May 2026 (would be 2605.xxxxx); the citation appears fabricated or mistranscribed. Cannot verify without web access."
+    }
+  ],
+  "verdict": "concerns"
+}

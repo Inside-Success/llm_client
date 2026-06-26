@@ -28,6 +28,24 @@ make worktree-remove BRANCH=plan-22-example
 Those entrypoints should be preferred over ad hoc local worktree commands when
 doing bounded implementation work in this repo.
 
+## Agent collaboration workflows
+
+This branch includes the Claude/Codex collaboration work that replaces manual
+paste-between-terminal loops with structured `llm_client` calls and on-disk
+artifacts:
+
+- `python -m llm_client duet-review --help` reviews an existing plan and,
+  optionally, the implementation diff against that plan.
+- `python -m llm_client review-artifact --help` performs a standalone
+  adversarial review of a patch, plan, decision, or text artifact. It is
+  designed to run in the background while the foreground agent keeps working.
+- `python -m llm_client deliberate-task --help` runs a two-agent symmetric
+  debate, usually `codex/gpt-5.4` plus `claude-code/opus`, with persisted
+  positions and synthesis.
+
+See [docs/guides/agent-collaboration.md](docs/guides/agent-collaboration.md)
+for install notes, command examples, and the tracked dogfood evidence map.
+
 ## Install
 
 ```bash
@@ -172,6 +190,17 @@ export ANTHROPIC_API_KEY=sk-ant-...    # Direct Anthropic
 | `LLM_CLIENT_REQUIRE_TAGS` | off | Strict enforcement of task/trace_id/max_budget |
 | `LLM_CLIENT_TIMEOUT_POLICY` | `allow` | `ban` to disable all per-call timeouts |
 | `LLM_CLIENT_LOG_ENABLED` | `1` | Disable logging with `0` |
+| `LLM_CLIENT_RATE_LIMIT_SHARED_ENABLED` | `1` | Enable cross-process shared provider leases |
+| `LLM_CLIENT_RATE_LIMIT_SHARED_LIMITS` | provider defaults | Override cross-process provider caps as JSON |
+| `LLM_CLIENT_RATE_LIMIT_COOLDOWN_FLOORS` | provider defaults | Override provider cooldown floors as JSON |
+| `LLM_CLIENT_RATE_LIMIT_STATE_PATH` | `~/projects/data/llm_rate_limit_state.sqlite3` | Shared SQLite state for cooldowns and leases |
+
+### Provider governance
+
+- Exact `gpt-5.4` requests canonicalize to `codex/gpt-5.4` before routing policy is applied.
+- Bare Gemini ids canonicalize to `gemini/<model>` before provider selection.
+- Gemini shared-cap and cooldown defaults come from the typed provider-governance policy, not scattered literals.
+- `result.routing_trace["provider_governance_events"]` records canonicalization decisions for click-through debugging and downstream operator tooling.
 
 ### Tool-call observability
 

@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-06-20
-Verification context: exhausted-model cooldown routing added to fallback kernel and call-plan suppression (2026-04-09)
+Last verified: 2026-04-08
+Verification context: exact gpt-5.4 requests still canonicalize through the typed provider-governance policy instead of OpenRouter drift, shared 429 cooldown coordination still avoids duplicate retry waits or cooldown busy-spins while emitting stable governance warning records, and direct Gemini thinking models no longer depend on a hardcoded zero-budget completion default
 
 ## Context
 

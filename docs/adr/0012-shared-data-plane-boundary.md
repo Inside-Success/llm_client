@@ -1,8 +1,8 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-04-01
-Verification context: causal_parent_id decision provenance column added to io_log + text_runtime (Plan #54)
+Last verified: 2026-04-05
+Verification context: shared observability storage now honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression unless explicitly overridden, preventing accidental writes into the shared SQLite data plane during disabled test lanes
 Date: 2026-03-17
 
 ## Context
