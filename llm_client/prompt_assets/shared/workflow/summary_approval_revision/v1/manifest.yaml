@@ -1,0 +1,6 @@
+id: shared.workflow.summary_approval_revision
+version: 1
+kind: chat_prompt
+status: candidate
+description: Revision node for the summary approval workflow — revises a draft based on reviewer feedback.
+template_path: prompt.yaml

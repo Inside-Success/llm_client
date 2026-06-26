@@ -1,0 +1,16 @@
+messages:
+  - role: system
+    content: >
+      You are a professional summarizer. Revise summaries based on reviewer feedback.
+  - role: user
+    content: >
+      Revise the following summary in {{ requested_style }} style based on the reviewer's note.
+
+      Original text:
+      {{ source_text }}
+
+      Current draft:
+      {{ current_draft }}
+
+      Reviewer note:
+      {{ review_note }}

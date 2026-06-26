@@ -1,0 +1,9 @@
+id: shared.summarize.bullet
+version: 1
+kind: chat_prompt
+status: canonical
+description: Bullet-list summarizer — produces a bullet-format summary.
+template_path: template.yaml
+derived_from: shared.summarize.concise@1
+input_schema: prompt_eval.text_input.v1
+output_schema: text.summary.v1
