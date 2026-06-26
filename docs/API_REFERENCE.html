@@ -1,4 +1,4 @@
-<!-- Generated: 2026-06-20T05:45:55Z -->
+<!-- Generated: 2026-06-26T08:37:45Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1254,7 +1254,7 @@ Install the optional dependency::
 <h4>Functions</h4>
 
 <details class="symbol" id="module-llm_client-langfuse_callbacks-configure_langfuse_callbacks">
-  <summary><code>configure_langfuse_callbacks</code> <span class="sig">() -&gt; bool</span></summary>
+  <summary><code>configure_langfuse_callbacks</code> <span class="sig">() -&gt; llm_client.langfuse_callbacks.LangfuseCallbackConfig</span></summary>
   <div class="symbol-body">
     <p class="summary">Register Langfuse in LiteLLM&#x27;s callback lists if env-configured.</p>
     <p class="meta">Source: <code>llm_client.langfuse_callbacks</code> functions</p>
@@ -1264,7 +1264,7 @@ Reads ``LITELLM_CALLBACKS`` for a comma-separated list of callback names.
 If ``langfuse`` is present, verifies the package is importable, then appends
 ``&quot;langfuse&quot;`` to ``litellm.success_callback`` and ``litellm.failure_callback``.
 
-Returns True if Langfuse callbacks were activated, False otherwise.
+Returns LangfuseCallbackConfig describing activation state.
 Idempotent -- safe to call multiple times.</pre>
   </div>
 </details>

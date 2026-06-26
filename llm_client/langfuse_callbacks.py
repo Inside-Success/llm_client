@@ -62,20 +62,21 @@ _initialized: bool = False
     producer="llm_client",
     consumers=["observability"],
 )
-def configure_langfuse_callbacks() -> bool:
+def configure_langfuse_callbacks() -> LangfuseCallbackConfig:
     """Register Langfuse in LiteLLM's callback lists if env-configured.
 
     Reads ``LITELLM_CALLBACKS`` for a comma-separated list of callback names.
     If ``langfuse`` is present, verifies the package is importable, then appends
     ``"langfuse"`` to ``litellm.success_callback`` and ``litellm.failure_callback``.
 
-    Returns True if Langfuse callbacks were activated, False otherwise.
+    Returns LangfuseCallbackConfig describing activation state.
     Idempotent -- safe to call multiple times.
     """
     global _initialized  # noqa: PLW0603
 
     if _initialized:
-        return _is_active()
+        active = _is_active()
+        return LangfuseCallbackConfig(enabled=active, host=os.environ.get("LANGFUSE_HOST"))
 
     _initialized = True
 
@@ -83,7 +84,7 @@ def configure_langfuse_callbacks() -> bool:
     requested = [cb.strip().lower() for cb in callbacks_env.split(",") if cb.strip()]
 
     if "langfuse" not in requested:
-        return False
+        return LangfuseCallbackConfig(enabled=False, host=None)
 
     try:
         import langfuse  # noqa: F401
@@ -92,7 +93,7 @@ def configure_langfuse_callbacks() -> bool:
             "LITELLM_CALLBACKS includes 'langfuse' but the langfuse package is not "
             "installed. Install it with: pip install llm-client[langfuse]"
         )
-        return False
+        return LangfuseCallbackConfig(enabled=False, host=None)
 
     import litellm
 
@@ -102,7 +103,7 @@ def configure_langfuse_callbacks() -> bool:
         litellm.failure_callback.append("langfuse")  # type: ignore[attr-defined]
 
     logger.info("Langfuse callbacks activated via LITELLM_CALLBACKS")
-    return True
+    return LangfuseCallbackConfig(enabled=True, host=os.environ.get("LANGFUSE_HOST"))
 
 
 def _is_active() -> bool:
