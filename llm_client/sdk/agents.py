@@ -27,13 +27,15 @@ from typing import Any, Awaitable, Callable, TypeVar, cast
 from pydantic import BaseModel
 
 from llm_client.core.client import Hooks, LLMCallResult
-from llm_client.execution.call_contracts import _is_codex_family_model
+from llm_client.execution.call_contracts import (
+    _is_codex_alias_model,
+    _is_codex_family_model,
+)
 from llm_client.execution.timeout_policy import normalize_timeout as _normalize_timeout
 
 _T = TypeVar("_T")
 
 logger = logging.getLogger(__name__)
-_CODEX_AGENT_ALIASES: frozenset[str] = frozenset({"codex-mini-latest"})
 _CODEX_TRANSPORT_FALLBACK_EXCEPTIONS = (TimeoutError, ConnectionError, OSError)
 
 
@@ -62,19 +64,19 @@ def _parse_agent_model(model: str) -> tuple[str, str | None]:
         "gpt-5.1-codex-mini" → ("codex", "gpt-5.1-codex-mini")
         "openai-agents/gpt-5" → ("openai-agents", "gpt-5")
     """
-    if "/" in model:
-        sdk, _, underlying = model.partition("/")
-        return (sdk.lower(), underlying)
     lower = model.lower()
     # Support Codex aliases like "codex-mini-latest" as shorthand for
     # sdk=codex, underlying_model=codex-mini-latest.
-    if lower in _CODEX_AGENT_ALIASES:
-        return ("codex", model)
+    if _is_codex_alias_model(model):
+        return ("codex", model.rsplit("/", 1)[-1])
     # Recognize Codex-family models by naming pattern (e.g. gpt-5.3-codex,
     # gpt-5.1-codex-mini). These are Codex SDK models that don't use the
     # "codex/" prefix convention.
     if _is_codex_family_model(model):
-        return ("codex", model)
+        return ("codex", model.rsplit("/", 1)[-1])
+    if "/" in model:
+        sdk, _, underlying = model.partition("/")
+        return (sdk.lower(), underlying)
     return (lower, None)
 
 
@@ -398,11 +400,40 @@ from llm_client.sdk.agents_codex import (  # noqa: F401
     _stream_codex,
     _strip_fences,
     _terminate_pid_tree,
+    log_codex_exec_session,
+    parse_codex_exec_events,
 )
 
 # ===========================================================================
 # Routing dispatchers — dispatch by SDK name
 # ===========================================================================
+
+
+def _normalize_workspace_kwargs(sdk_name: str, kwargs: dict[str, Any]) -> None:
+    """Alias ``cwd`` <-> ``working_directory`` across SDK boundaries.
+
+    The Claude Agent SDK reads ``cwd`` (claude_agent_sdk.ClaudeAgentOptions.cwd)
+    while the Codex SDK reads ``working_directory`` (agents_codex.py falls back
+    to ``os.getcwd()`` when missing). Callers like ``duet.py`` that thread one
+    canonical kwarg name shouldn't be silently dropped by whichever SDK doesn't
+    happen to recognize that spelling.
+
+    Aliases are applied only when the SDK-native key is absent so explicit
+    callers retain precedence. The normalization is in-place to keep the
+    routing layer thin.
+    """
+    if sdk_name == "codex":
+        if "cwd" in kwargs and "working_directory" not in kwargs:
+            kwargs["working_directory"] = kwargs.pop("cwd")
+        elif "cwd" in kwargs:
+            # Both present — drop the unused alias to avoid leaking
+            # claude-style kwargs into the codex adapter.
+            kwargs.pop("cwd", None)
+    elif sdk_name == "claude-code":
+        if "working_directory" in kwargs and "cwd" not in kwargs:
+            kwargs["cwd"] = kwargs.pop("working_directory")
+        elif "working_directory" in kwargs:
+            kwargs.pop("working_directory", None)
 
 
 def _route_call(
@@ -416,6 +447,7 @@ def _route_call(
     timeout = _normalize_timeout(timeout, caller="_route_call", logger=logger)
     on_turn = kwargs.pop("on_turn", None)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return _call_codex(model, messages, timeout=timeout, on_turn=on_turn, **kwargs)
     if sdk_name == "claude-code":
@@ -439,6 +471,7 @@ async def _route_acall(
     timeout = _normalize_timeout(timeout, caller="_route_acall", logger=logger)
     on_turn = kwargs.pop("on_turn", None)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return await _acall_codex(model, messages, timeout=timeout, on_turn=on_turn, **kwargs)
     if sdk_name == "claude-code":
@@ -462,6 +495,7 @@ def _route_call_structured(
     """Route a sync structured agent call to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_call_structured", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return _call_codex_structured(model, messages, response_model, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":
@@ -485,6 +519,7 @@ async def _route_acall_structured(
     """Route an async structured agent call to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_acall_structured", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return await _acall_codex_structured(model, messages, response_model, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":
@@ -508,6 +543,7 @@ def _route_stream(
     """Route a sync agent stream to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_stream", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return _stream_codex(model, messages, hooks=hooks, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":
@@ -531,6 +567,7 @@ async def _route_astream(
     """Route an async agent stream to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_astream", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return await _astream_codex(model, messages, hooks=hooks, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":

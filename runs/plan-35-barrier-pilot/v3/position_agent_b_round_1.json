@@ -1,0 +1,117 @@
+{
+  "agent_name": "agent_b",
+  "agreed_with_peer": [],
+  "claims": [
+    {
+      "claim": "The rule-based convergence detector can fire 'converged' on a polite-agreement collapse: it only requires round>=2, every agent's disagreed_with_peer empty, and each agent's agreed_with_peer covering the peer's claim_ids. There is no minimum-claim-count gate and the 'stalled' check fires only when ALL agents emit zero claims (line 261-262). So one agent emitting one trivial cited claim + the other listing that claim_id in agreed_with_peer with empty disagreed_with_peer returns 'converged' on round 2. The Plan #34 ledger gate only blocks this when there are unverified citations or lineage flags \u2014 neither fires when the agent emits one well-formed citation and no prior round exists for rename detection.",
+      "claim_id": "b1_polite_convergence_loophole",
+      "evidence_path": "llm_client/workflow/deliberate.py:226-315",
+      "severity": "high"
+    },
+    {
+      "claim": "The verifier upgrades evidence_path from 'bare str' to 'file:line that resolves and is in bounds', but does NOT check that the snippet actually supports the claim. _verify_one_citation returns status='verified' as soon as _resolve_path finds the file and _extract_snippet returns lines in range; claim text is never compared to snippet. An agent that emits claim='X is correct' with evidence_path='deliberate.py:1-2' (a docstring) gets a 'verified' ledger row. The schema's required evidence_path is necessary-but-insufficient for falsifiability.",
+      "claim_id": "b2_evidence_path_is_existence_not_support",
+      "evidence_path": "llm_client/workflow/deliberate_verifier.py:318-373",
+      "severity": "high"
+    },
+    {
+      "claim": "The deliberate.py docstring claims 'Shares chassis with the duet: TaskFamily registry (Plan #31)' but build_deliberation_workflow has no task_family parameter, no profile lookup, and instantiates the chassis Position directly. By contrast build_duet_workflow takes task_family='generic' and dispatches plan_review_schema/implement_review_schema per profile. Domains wanting a deliberation variant with extra Position fields must fork. Structural asymmetry: the docstring promises parity the implementation does not deliver.",
+      "claim_id": "b3_deliberation_has_no_taskfamily",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32;llm_client/workflow/deliberate.py:723-848;llm_client/workflow/duet.py:833-893",
+      "severity": "warn"
+    },
+    {
+      "claim": "Synthesis defaults to synthesis_model='claude-code/opus' (deliberate.py:779), which is exactly the model used as agent_b in DEFAULT_AGENT_PAIR. In a two-agent default run the 'tiebreaker' shares model family with one participant \u2014 distorting the residual_disagreements list. Cheap fix: require synthesis_model to differ from both participants' models, or supply a neutral third model by default.",
+      "claim_id": "b4_synthesis_judge_is_an_interested_party",
+      "evidence_path": "llm_client/workflow/deliberate.py:66-69;llm_client/workflow/deliberate.py:779;llm_client/workflow/deliberate.py:612-641",
+      "severity": "warn"
+    },
+    {
+      "claim": "_detect_silent_rename keys on the first 80 chars of claim text. Brittle in both directions: (a) two different claims sharing a templated opening get false-positively flagged; (b) a polite agent reworking the first 80 chars while keeping substance bypasses detection. The comment acknowledges the trailing-edit choice but not the symmetric leading-edit evasion.",
+      "claim_id": "b5_silent_rename_uses_brittle_prefix_key",
+      "evidence_path": "llm_client/workflow/deliberate_verifier.py:429-453",
+      "severity": "warn"
+    },
+    {
+      "claim": "The position prompt only embeds the peer's latest position and own prior \u2014 not the full history. Per-round prompt size is bounded, not linear. What DOES grow monotonically is verifier_ledger.json (verifier:604-606 appends per-citation entries every round, never compacts). First failure at max_rounds>5 is therefore ledger reinstantiation cost (deliberate.py:701-704) plus absence of per-round cost cap (max_budget is a single scalar, not divided by max_rounds). Fixing 'context bloat' is not the right next priority because there isn't any.",
+      "claim_id": "b6_max_rounds_first_failure_is_ledger_growth_not_prompt_bloat",
+      "evidence_path": "llm_client/workflow/deliberate.py:386-409;llm_client/workflow/deliberate_verifier.py:559-606;llm_client/workflow/deliberate.py:688-715",
+      "severity": "warn"
+    },
+    {
+      "claim": "Duet is asymmetric (gated cycle, duet.py:797-825). Deliberation is symmetric (peer debate, deliberate.py:9-22). Neither pattern covers N peers + a non-peer arbiter with explicit terminate authority \u2014 what synthesis half-implements but does not enforce. Right partition: three patterns (gated cycle, peer debate, arbiter-debate). Current synthesis merges findings but does not gate.",
+      "claim_id": "b7_partition_missing_arbiter_pattern",
+      "evidence_path": "llm_client/workflow/duet.py:797-825;llm_client/workflow/deliberate.py:9-22;llm_client/workflow/deliberate.py:612-641",
+      "severity": "info"
+    },
+    {
+      "claim": "Single highest-priority improvement: upgrade the verifier from 'file exists + line range in bounds' to claim-vs-snippet semantic-relevance verification \u2014 either a deterministic lexical-overlap floor or a small LLM-as-judge that scores each (claim, snippet) pair and emits a new ledger status 'citation_does_not_support_claim'. This closes b1 and b2 in one move because detect_convergence already refuses to fire 'converged' when has_unverified_in_round is true (deliberate.py:300-307). Strictly higher leverage than b3-b7 because all of those presuppose the chassis distinguishes 'cited' from 'supported by citation' \u2014 which today it does not.",
+      "claim_id": "b8_highest_leverage_next_improvement",
+      "evidence_path": "llm_client/workflow/deliberate.py:300-310;llm_client/workflow/deliberate_verifier.py:318-373;llm_client/workflow/deliberate_verifier.py:123-136",
+      "severity": "high"
+    }
+  ],
+  "confidence": "medium",
+  "disagreed_with_peer": [],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:275-310",
+      "content_snippet": "converged_signal = True\n    for agent_name, pos in latest_positions.items():\n        if pos.get(\"disagreed_with_peer\"):\n            converged_signal = False\n            break\n        agreed_set = set(pos.get(\"agreed_with_peer\") or [])\n        ...\n        if not other_claim_ids.issubset(agreed_set):\n            converged_signal = False",
+      "label": "convergence_detector_rule"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:260-262",
+      "content_snippet": "# Stalled: every agent emitted zero claims.\n    if all(not pos.get(\"claims\") for pos in latest_positions.values()):\n        return \"stalled\"",
+      "label": "stalled_requires_all_agents_empty"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:363-373",
+      "content_snippet": "return LedgerEntry(\n        agent_name=agent_name, round=round_num, claim_id=claim_id,\n        evidence_path=citation.raw, status=\"verified\",\n        file_path=str(resolved), line_range=citation.line_range,\n        snippet=snippet, notes=notes)",
+      "label": "verifier_verified_is_file_exists_plus_range"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:723-734",
+      "content_snippet": "def build_deliberation_workflow(*, run_dir, task, trace_id, max_budget,\n    agents=None, max_rounds=3, task_prefix='deliberate',\n    synthesis_model=None, checkpointer=None):",
+      "label": "deliberation_builder_lacks_task_family"
+    },
+    {
+      "citation": "llm_client/workflow/duet.py:833-844",
+      "content_snippet": "def build_duet_workflow(*, ..., task_family: str = 'generic', checkpointer=None):",
+      "label": "duet_builder_has_task_family"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:66-69;llm_client/workflow/deliberate.py:779",
+      "content_snippet": "DEFAULT_AGENT_PAIR = (('agent_a','codex/gpt-5.4'),('agent_b','claude-code/opus'))\n...\nresolved_synthesis = synthesis_model or 'claude-code/opus'",
+      "label": "synthesis_default_overlaps_default_agent"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:440-453",
+      "content_snippet": "prior_text_to_id = {(c.get('claim') or '')[:80]: cid for cid, c in prior.items()}\n    ...\n    for cid, c in current.items():\n        text = (c.get('claim') or '')[:80]",
+      "label": "rename_detector_80char_prefix"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:386-409",
+      "content_snippet": "if peer_latest: ... json.dumps(_anonymize_peer_for_prompt(peer_latest), indent=2)\n    if own_prior: ... json.dumps(own_prior, indent=2)",
+      "label": "prompt_only_latest_not_history"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:604-606",
+      "content_snippet": "extended = VerifierLedger(entries=list(prior_ledger.entries))\n    extended.extend(new_entries)\n    return extended",
+      "label": "ledger_appends_never_compacts"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:300-307",
+      "content_snippet": "if ledger is not None:\n    latest_round = ledger.latest_round()\n    if latest_round is not None:\n        if (ledger.has_unverified_in_round(latest_round)\n            or ledger.has_lineage_flag_in_round(latest_round)):\n            converged_signal = False",
+      "label": "convergence_honors_unverified"
+    }
+  ],
+  "open_questions": [
+    "Does tests/test_workflow_schema_smoke.py actually parametrize the deliberation Position schema, or only the duet PlanReview/ImplementReview schemas? The test file I read only parametrizes PlanReview, ImplementReview, TwinUpdatePlanReview, TwinUpdateImplementReview.",
+    "Is verifier_ledger growth bounded per-run by initial_state (deliberate.py:847 sets verifier_ledger=[]) or does a checkpointer-resumed run replay the full ledger?",
+    "Is the synthesis narrative or the residual_disagreements list in signoff.json the authoritative human-facing artifact when verdict='productive_disagreement'?"
+  ],
+  "reviewer_model": "claude-code/opus",
+  "reviewer_summary": "Ranking by leverage: (1) b1+b2 polite-convergence via existence-only citation verification is the load-bearing failure; both collapse into one fix. (2) b3 deliberation/TaskFamily asymmetry is a structural docstring lie. (3) b4 synthesis-as-interested-party distorts the only durable productive_disagreement artifact. (4) b5 80-char-prefix rename detection is porous adversarially. (5) b6 max_rounds>5 fails at ledger growth and unenforced per-round budget, NOT context bloat \u2014 fixing context bloat would be wrong priority. (6) b7 missing arbiter-debate third pattern is future-work, not current bug. Single highest-priority improvement (b8): upgrade verifier from file-exists-and-in-range to claim-vs-snippet semantic-relevance with a new 'citation_does_not_support_claim' ledger status that detect_convergence already honors via has_unverified_in_round. This single change closes b1 and b2 \u2014 the two highest-severity weaknesses \u2014 without touching topology or schema.",
+  "round": 1,
+  "state": "initial"
+}

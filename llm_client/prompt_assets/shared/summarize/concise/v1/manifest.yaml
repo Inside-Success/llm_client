@@ -1,0 +1,8 @@
+id: shared.summarize.concise
+version: 1
+kind: chat_prompt
+status: canonical
+description: Concise analyst summarizer — produces a compact summary in the requested style.
+template_path: template.yaml
+input_schema: prompt_eval.text_input.v1
+output_schema: text.summary.v1

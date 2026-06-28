@@ -60,6 +60,31 @@ def _import_sdk() -> tuple[Any, ...]:
 # ---------------------------------------------------------------------------
 
 
+# Short aliases accepted in the ``claude-code/<alias>`` model-string syntax.
+# The Claude Agent SDK's ``ClaudeAgentOptions.model`` parameter only accepts
+# full Anthropic model IDs (e.g. ``claude-opus-4-7``); bare strings like
+# ``"opus"`` are silently ignored and the session falls back to its default
+# model. This map resolves short aliases to the current canonical full IDs.
+# Anything that doesn't match a key passes through unchanged so callers can
+# still pin a specific dated model ID like ``claude-opus-4-1-20250805``.
+CLAUDE_CODE_MODEL_ALIASES: dict[str, str] = {
+    "opus": "claude-opus-4-7",
+    "sonnet": "claude-sonnet-4-6",
+    "haiku": "claude-haiku-4-5-20251001",
+}
+
+
+def _resolve_claude_code_model(underlying_model: str | None) -> str | None:
+    """Map a short alias (``opus``/``sonnet``/``haiku``) to a full Claude model ID.
+
+    Case-insensitive on the alias key; pass-through if the value already looks
+    like a full model ID (i.e. doesn't match a known alias).
+    """
+    if underlying_model is None:
+        return None
+    return CLAUDE_CODE_MODEL_ALIASES.get(underlying_model.lower(), underlying_model)
+
+
 def _build_agent_options(
     model: str,
     messages: list[dict[str, Any]],
@@ -83,6 +108,7 @@ def _build_agent_options(
     )
 
     _, underlying_model = _parse_agent_model(model)
+    underlying_model = _resolve_claude_code_model(underlying_model)
 
     sdk = _import_sdk()
     _, ClaudeAgentOptions, _, _, _, _ = sdk

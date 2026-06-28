@@ -1,0 +1,10 @@
+messages:
+  - role: system
+    content: >
+      You are a professional summarizer. Write clear, accurate summaries in the requested style.
+  - role: user
+    content: >
+      Summarize the following text in {{ requested_style }} style.
+
+      Text:
+      {{ source_text }}

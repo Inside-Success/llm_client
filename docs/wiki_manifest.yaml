@@ -1,17 +1,50 @@
----
-doc-role: wiki-manifest
-freshness: 2026-06-26
----
-
-# Wiki Manifest — llm_client-reviewmain
-
-id: llm_client-reviewmain
-portfolio_tier: supporting
-description: >
-  llm_client-reviewmain
-
-sources:
-  - path: ../README.md
-    role: overview
-  - path: ../CLAUDE.md
-    role: instructions
+version: 1
+project: llm_client
+publish:
+  - path: PROJECT.md
+    type: ProjectDossier
+    title: LLM Client Project Dossier
+    tags: [portfolio, shared-infrastructure, llm-tooling, dossier]
+  - path: README.md
+    type: ProjectOverview
+    title: LLM Client Overview
+    tags: [portfolio, shared-infrastructure, llm-tooling]
+  - path: docs/APPLIED_OBSERVABILITY_CASE.md
+    type: PortfolioGuide
+    title: LLM Client Applied Observability Case
+    tags: [portfolio, observability, llm-tooling]
+  - path: docs/METHODOLOGY.md
+    type: Methodology
+    title: LLM Client Methodology
+    tags: [portfolio, llm-tooling, methodology]
+  - path: docs/ARTIFACTS.md
+    type: ArtifactRegister
+    title: LLM Client Artifact Register
+    tags: [portfolio, llm-tooling, artifacts]
+  - path: docs/VALIDATION.md
+    type: Validation
+    title: LLM Client Validation Register
+    tags: [portfolio, llm-tooling, validation]
+  - path: docs/CONCERNS.md
+    type: ConcernRegister
+    title: LLM Client Concern Register
+    tags: [portfolio, llm-tooling, concerns]
+  - path: docs/adr/0015-portfolio-runtime-substrate-scope.md
+    type: ADR
+    title: Present LLM Client As Runtime Substrate Evidence
+    tags: [llm-tooling, shared-infrastructure, architecture]
+  - path: docs/REQUIREMENTS.md
+    type: Requirements
+    tags: [shared-infrastructure, requirements]
+  - path: docs/API_REFERENCE.md
+    type: APIReference
+    tags: [shared-infrastructure, api]
+  - path: docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md
+    type: ArchitectureDoc
+    tags: [shared-infrastructure, architecture]
+  - path: CHANGELOG.md
+    type: Changelog
+    tags: [shared-infrastructure, release-history]
+exclude:
+  - .pytest_cache/**
+  - docs/wiki_manifest.yaml

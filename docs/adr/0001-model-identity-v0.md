@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-04-04
-Verification context: schema_hash + response_format_type + causal_parent_id observability extended (Plan #54)
+Last verified: 2026-04-08
+Verification context: exact gpt-5.4 requests still canonicalize through the typed provider-governance policy to codex/gpt-5.4, routing traces still expose `provider_governance_events`, and direct Gemini thinking defaults are now shared-config driven instead of hardcoded to `budget_tokens=0`
 
 ## Context
 
@@ -51,4 +51,3 @@ Negative:
 
 After router extraction (`resolve_call -> ResolvedCallPlan`) and shared kernel
 work, propose a follow-up ADR to unify or deprecate ambiguous `model` usage.
-

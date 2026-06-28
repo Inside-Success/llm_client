@@ -1,0 +1,89 @@
+{
+  "agent_name": "agent_a",
+  "agreed_with_peer": [],
+  "claims": [
+    {
+      "claim": "The highest-risk flaw is the convergence rule: it trusts self-reported metadata (`agreed_with_peer` coverage plus empty `disagreed_with_peer`) instead of independently checking whether substantive disagreements were actually resolved, so polite agents can false-converge.",
+      "claim_id": "a1",
+      "evidence_path": "llm_client/workflow/deliberate.py:217-280; tests/test_workflow_deliberate.py:124-151",
+      "severity": "high"
+    },
+    {
+      "claim": "Required `evidence_path` fields improve syntax, not truthfulness: the shipped deliberation path never verifies that a cited file/line exists or supports the claim, so agents can satisfy the schema with bogus citations and still pass both unit tests and live strict-mode smoke tests.",
+      "claim_id": "a2",
+      "evidence_path": "llm_client/workflow/deliberate.py:95-160; llm_client/workflow/deliberate.py:431-476; tests/test_workflow_deliberate.py:182-197; tests/test_workflow_schema_smoke.py:14-17; tests/test_workflow_schema_smoke.py:100-125",
+      "severity": "high"
+    },
+    {
+      "claim": "The current two-agent topology already has a bigger blind spot than missing a third agent: round 1 is not truly independent, because `agent_b` runs after `agent_a` and can see `agent_a`'s first position before forming its own. I would fix true independent first-pass generation before adding agent 3.",
+      "claim_id": "a3",
+      "evidence_path": "llm_client/workflow/deliberate.py:9-17; llm_client/workflow/deliberate.py:431-445; llm_client/workflow/deliberate.py:666-693; tests/test_workflow_deliberate.py:205-209; tests/test_workflow_deliberate.py:245-255",
+      "severity": "warn"
+    },
+    {
+      "claim": "If `max_rounds` grows past 5, the first structural failure is convergence drift plus synthesis-history scaling, not per-turn prompt bloat: agent turns only see `peer_latest` and `own_prior`, but the workflow keeps appending full `position_history` and dumps the whole chronology into synthesis, while convergence only inspects the latest claim IDs.",
+      "claim_id": "a4",
+      "evidence_path": "llm_client/workflow/deliberate.py:201-202; llm_client/workflow/deliberate.py:304-362; llm_client/workflow/deliberate.py:471-500; llm_client/workflow/deliberate.py:217-280",
+      "severity": "warn"
+    },
+    {
+      "claim": "Asymmetric duet plus symmetric deliberation is a reasonable top-level partition; the missing piece is not a third user-facing workflow but a reusable verifier/adjudicator stage that both patterns can call when they need grounded resolution rather than self-reported agreement.",
+      "claim_id": "a5",
+      "evidence_path": "llm_client/workflow/duet.py:3-14; llm_client/workflow/duet.py:797-855; llm_client/workflow/deliberate.py:1-33; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/duet_base.py:1-12",
+      "severity": "info"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:225-227",
+      "content_snippet": "\"converged\" if round >= 2 and every agent's latest position has an empty `disagreed_with_peer` AND covers every claim ID the peer last emitted in `agreed_with_peer`.",
+      "label": "Convergence Rule Is Mechanical"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:333-361",
+      "content_snippet": "\"Reference peer claims by their claim_id when acknowledging or disagreeing.\" ... \"Return a Position JSON object ...\"",
+      "label": "Prompt Only Demands Claim-ID Referencing"
+    },
+    {
+      "citation": "tests/test_workflow_deliberate.py:205-209",
+      "content_snippet": "\"Neither has peer context on its own first call ... agent_b's first prompt may have agent_a's round-1 position.\"",
+      "label": "Round-1 Independence Is Already Compromised"
+    },
+    {
+      "citation": "tests/test_workflow_deliberate.py:182-197",
+      "content_snippet": "The tests only assert that missing `evidence_path` raises `ValidationError` for `PositionClaim` and `DisagreementAtom`.",
+      "label": "Evidence Path Is Presence-Checked, Not Verified"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:14-17",
+      "content_snippet": "\"minimum live-LLM round-trip ... asserts the call returns without a schema-validation error.\"",
+      "label": "Live Smoke Tests Only Prove Provider Schema Acceptance"
+    },
+    {
+      "citation": "llm_client/workflow/profiles/plan_doc_review.py:59-61",
+      "content_snippet": "\"list every cited file:line ... you could not open or whose claimed content you could not confirm.\"",
+      "label": "Plan-Doc Review Already Has Citation-Verification Vocabulary"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:389-390",
+      "content_snippet": "\"## Position history (chronological)\" followed by `json.dumps(positions, indent=2)`.",
+      "label": "Synthesis Gets Full Chronological History"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:638-642",
+      "content_snippet": "\"Deliberation v1 requires exactly 2 agents ... N-agent (\u22653) is a future extension.\"",
+      "label": "Builder Hard-Locks V1 To Exactly Two Agents"
+    }
+  ],
+  "open_questions": [
+    "Does `llm_client` core enforce a cumulative spend cap across all calls sharing one `trace_id`, or does the workflow layer's repeated reuse of the same `max_budget` rely entirely on lower-layer behavior?",
+    "Would a third agent still add net signal after fixing round-1 independence and adding audited claim resolution, or would it mostly add cost and more paths to bogus agreement metadata?",
+    "Should claim identity become chassis-owned across rounds (stable IDs / lineage) rather than agent-authored free text, to prevent renamed or silently dropped claims from disappearing out of the convergence check?"
+  ],
+  "reviewer_model": "codex/gpt-5.4",
+  "reviewer_summary": "Ranking by leverage: (1) replace self-reported convergence with an evidence-audited adjudication ledger, (2) verify citations rather than only requiring `evidence_path` strings, (3) fix true round-1 independence before expanding topology, (4) then address longer-run history/claim-drift scaling. The single highest-priority next improvement is an adjudicator/verifier stage that checks cited evidence and emits per-claim statuses such as supported/refuted/unverified; convergence should depend on that ledger instead of `agreed_with_peer`/`disagreed_with_peer`. That one change directly attacks the two most dangerous shipped failure modes: polite false convergence and bogus groundedness.",
+  "round": 1,
+  "state": "initial"
+}

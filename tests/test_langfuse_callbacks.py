@@ -42,7 +42,7 @@ class TestConfigureLangfuseCallbacks:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("LITELLM_CALLBACKS", None)
             result = configure_langfuse_callbacks()
-        assert result is False
+        assert result.enabled is False
         assert "langfuse" not in litellm.success_callback
         assert "langfuse" not in litellm.failure_callback
 
@@ -50,7 +50,7 @@ class TestConfigureLangfuseCallbacks:
         """When LITELLM_CALLBACKS is set but doesn't include langfuse, skip."""
         with patch.dict(os.environ, {"LITELLM_CALLBACKS": "prometheus,datadog"}):
             result = configure_langfuse_callbacks()
-        assert result is False
+        assert result.enabled is False
         assert "langfuse" not in litellm.success_callback
 
     def test_env_var_with_langfuse_but_not_installed(self) -> None:
@@ -62,7 +62,7 @@ class TestConfigureLangfuseCallbacks:
         ):
             # mock-ok: testing behavior when optional dependency is missing
             result = configure_langfuse_callbacks()
-        assert result is False
+        assert result.enabled is False
         assert "langfuse" not in litellm.success_callback
 
     def test_env_var_with_langfuse_installed_activates(self) -> None:
@@ -76,7 +76,7 @@ class TestConfigureLangfuseCallbacks:
             patch.dict("sys.modules", {"langfuse": fake_langfuse}),
         ):
             result = configure_langfuse_callbacks()
-        assert result is True
+        assert result.enabled is True
         assert "langfuse" in litellm.success_callback
         assert "langfuse" in litellm.failure_callback
 
@@ -104,7 +104,7 @@ class TestConfigureLangfuseCallbacks:
             patch.dict("sys.modules", {"langfuse": fake_langfuse}),
         ):
             result = configure_langfuse_callbacks()
-        assert result is True
+        assert result.enabled is True
         assert "langfuse" in litellm.success_callback
 
 

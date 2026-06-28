@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+import subprocess
 import tempfile
 import threading
 import time
@@ -70,6 +71,42 @@ def _isolate_io_log(tmp_path):
     io_log._last_cleanup_date = old_last_cleanup
 
 
+class TestGetProject:
+    def test_explicit_project_override_skips_git_lookup(self, monkeypatch):
+        io_log._project = "explicit_project"
+
+        def _unexpected_git(*args, **kwargs):
+            raise AssertionError("git lookup should not run when project is configured")
+
+        monkeypatch.setattr(io_log.subprocess, "run", _unexpected_git)
+
+        assert io_log._get_project() == "explicit_project"
+
+    def test_git_common_dir_maps_worktree_to_canonical_repo(self, monkeypatch):
+        io_log._project = None
+
+        def _fake_run(cmd, **kwargs):
+            assert cmd == ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]
+            return subprocess.CompletedProcess(cmd, 0, stdout="/tmp/llm_client/.git\n", stderr="")
+
+        monkeypatch.setattr(io_log.subprocess, "run", _fake_run)
+
+        assert io_log._get_project() == "llm_client"
+
+    def test_cwd_basename_used_when_git_metadata_unavailable(self, monkeypatch, tmp_path):
+        io_log._project = None
+        repo_free_dir = tmp_path / "scratch_project"
+        repo_free_dir.mkdir()
+        monkeypatch.chdir(repo_free_dir)
+
+        def _git_missing(*args, **kwargs):
+            raise subprocess.CalledProcessError(returncode=128, cmd=args[0])
+
+        monkeypatch.setattr(io_log.subprocess, "run", _git_missing)
+
+        assert io_log._get_project() == "scratch_project"
+
+
 # ---------------------------------------------------------------------------
 # log_call
 # ---------------------------------------------------------------------------
@@ -113,6 +150,47 @@ class TestLogCall:
         io_log.log_call(model="gpt-5", latency_s=1.0)
         log_file = _today_jsonl(tmp_path, "calls")
         assert not log_file.exists()
+
+    def test_foundation_event_respects_env_disable_set_after_import(self, tmp_path, monkeypatch):
+        io_log._enabled = None
+        monkeypatch.setenv("LLM_CLIENT_LOG_ENABLED", "0")
+
+        io_log.log_foundation_event(
+            caller="test",
+            task="disabled-foundation",
+            trace_id="trace-disabled-foundation",
+            event={
+                "event_id": "evt_disabled_foundation",
+                "event_type": "LLMCallLifecycle",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "run_id": "run_disabled_foundation",
+                "session_id": "sess_disabled_foundation",
+                "actor_id": "service:llm_client:call_runtime:1",
+                "operation": {"name": "call_llm", "version": None},
+                "inputs": {
+                    "artifact_ids": [],
+                    "params": {
+                        "task": "disabled-foundation",
+                        "trace_id": "trace-disabled-foundation",
+                        "call_kind": "text",
+                    },
+                    "bindings": {},
+                },
+                "outputs": {"artifact_ids": [], "payload_hashes": []},
+                "llm_call_lifecycle": {
+                    "call_id": "llmcall_disabled_foundation",
+                    "phase": "started",
+                    "call_kind": "text",
+                    "requested_model_id": "gpt-5-mini",
+                    "timeout_policy": "allow",
+                    "elapsed_s": 0.0,
+                },
+            },
+        )
+
+        foundation_jsonl = _today_jsonl(tmp_path, "foundation_events")
+        assert not foundation_jsonl.exists()
+        assert not (tmp_path / "test.db").exists()
 
     def test_trace_id_jsonl(self, tmp_path):
         result = _mock_result(content="hi", usage={})

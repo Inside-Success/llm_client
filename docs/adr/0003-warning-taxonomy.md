@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-04-04
-Verification context: schema_hash + response_format_type + causal_parent_id observability extended (Plan #54)
+Last verified: 2026-04-08
+Verification context: shared 429 cooldown warnings still emit stable `PROVIDER_GOVERNANCE_EVENT[cooldown_registered]` records, foundation-event logging still honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression, and the direct Gemini thinking-budget policy now fails through explicit config rather than a silent hardcoded zero-budget assumption
 
 ## Context
 
@@ -36,4 +36,3 @@ Negative:
 
 Add stable warning codes (`LLMC_WARN_*`) with structured metadata once
 router/kernel contracts are stabilized.
-

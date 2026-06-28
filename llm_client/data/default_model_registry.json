@@ -62,6 +62,23 @@
     },
     {
       "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1048576,
+      "cost": 7.0,
+      "intelligence": 44,
+      "litellm_id": "openrouter/google/gemini-3.1-pro-preview",
+      "name": "gemini-3.1-pro-preview",
+      "provider": "openrouter",
+      "speed": 72,
+      "structured_output": true,
+      "tags": [
+        "frontier",
+        "preview",
+        "1m-context",
+        "reasoning"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
       "context": 128000,
       "cost": 0.69,
       "intelligence": 41,
@@ -161,6 +178,41 @@
         "long-thinking",
         "deep-review"
       ]
+    },
+    {
+      "api_key_env": "OPENAI_API_KEY",
+      "context": 1050000,
+      "cost": 17.5,
+      "intelligence": 51,
+      "litellm_id": "gpt-5.5",
+      "name": "gpt-5.5",
+      "provider": "openai",
+      "speed": 40,
+      "structured_output": true,
+      "tags": [
+        "frontier",
+        "reasoning",
+        "deep-review",
+        "manual-selection"
+      ]
+    },
+    {
+      "api_key_env": "OPENAI_API_KEY",
+      "context": 1050000,
+      "cost": 105.0,
+      "intelligence": 55,
+      "litellm_id": "gpt-5.5-pro",
+      "name": "gpt-5.5-pro",
+      "provider": "openai",
+      "speed": 3,
+      "structured_output": true,
+      "tags": [
+        "frontier",
+        "long-thinking",
+        "deep-review",
+        "quality-optimal-review",
+        "manual-selection"
+      ]
     }
   ],
   "tasks": {
@@ -211,7 +263,10 @@
         "intelligence"
       ],
       "require": {
-        "min_intelligence": 48
+        "min_intelligence": 48,
+        "required_tags": [
+          "quality-optimal-review"
+        ]
       }
     },
     "extraction": {

@@ -1,0 +1,8 @@
+id: shared.investigation_pipeline.investigate_gap
+version: 1
+kind: chat_prompt
+status: canonical
+description: Gap-probe node — investigates a specific knowledge gap for a target entity.
+template_path: template.yaml
+input_schema: investigation.gap_probe_input.v1
+output_schema: investigation.collection_synthesis.v1

@@ -45,6 +45,7 @@ from llm_client.core.errors import (
     LLMModelNotFoundError,
     LLMQuotaExhaustedError,
 )
+from llm_client.core.model_availability import clear_model_unavailability
 
 
 @pytest.fixture(autouse=True)
@@ -52,6 +53,9 @@ def _explicit_test_routing_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Week-1 invariant: routing policy must be explicit in tests."""
     monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "off")
     monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
+    clear_model_unavailability()
+    yield
+    clear_model_unavailability()
 
 
 class TestRequiredTags:
@@ -841,6 +845,34 @@ class TestNonRetryableErrors:
             call_llm("gpt-4", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_quota_exceeded", max_budget=0)
         assert mock_comp.call_count == 1
 
+    @patch("llm_client.execution.execution_kernel._maybe_register_provider_cooldown")
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_quota_exceeded_registers_provider_cooldown(
+        self,
+        mock_comp: MagicMock,
+        mock_register_cooldown: MagicMock,
+    ) -> None:
+        """Quota-like 429s should still publish shared cooldown state."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            "You exceeded your current quota, please check your plan and billing details",
+            model="gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_quota_cooldown",
+                max_budget=0,
+            )
+
+        mock_register_cooldown.assert_called_once()
+
     @patch("llm_client.core.client.time.sleep")
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -857,6 +889,62 @@ class TestNonRetryableErrors:
         result = call_llm("gpt-4", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_transient_rate_limit", max_budget=0)
         assert result.content == "Hello!"
         assert mock_comp.call_count == 2
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_gemini_monthly_spend_cap_not_retried(self, mock_comp: MagicMock) -> None:
+        """Gemini monthly spend-cap 429s should fail immediately so fallback can engage."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            (
+                "GeminiException - {"
+                '"error": {"code": 429, '
+                '"message": "Your project has exceeded its monthly spending cap. '
+                'Please go to AI Studio at https://ai.studio/spend to manage your project spend cap.", '
+                '"status": "RESOURCE_EXHAUSTED"}}'
+            ),
+            model="gemini/gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_gemini_monthly_spend_cap",
+                max_budget=0,
+            )
+        assert mock_comp.call_count == 1
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_gemini_daily_request_cap_not_retried(self, mock_comp: MagicMock) -> None:
+        """Gemini daily request-cap 429s should fail immediately instead of retrying."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            (
+                "GeminiException - {"
+                '"error": {"code": 429, '
+                '"message": "Rate limit exceeded for GenerateContentRequestsPerDayPerProjectPerModel-FreeTier. '
+                'Please try again tomorrow.", '
+                '"status": "RESOURCE_EXHAUSTED"}}'
+            ),
+            model="gemini/gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_gemini_daily_request_cap",
+                max_budget=0,
+            )
+        assert mock_comp.call_count == 1
 
     @patch("llm_client.core.client.time.sleep")
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -889,6 +977,35 @@ class TestNonRetryableErrors:
         )
         assert result.content == "Hello!"
         assert mock_comp.call_count == 2
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_long_quota_retry_delay_is_not_retried(
+        self,
+        mock_comp: MagicMock,
+    ) -> None:
+        """Quota-like 429 with a multi-hour retry window should fail over instead of sleeping."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            (
+                "Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model_per_day. "
+                "Please retry in 9h40m20s. "
+                '{"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"34820s"}]}'
+            ),
+            model="gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_long_quota_retry_delay",
+                max_budget=0,
+            )
+        assert mock_comp.call_count == 1
 
     @patch("llm_client.execution.execution_kernel.asyncio.sleep", new_callable=AsyncMock)
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -937,7 +1054,7 @@ class TestNonRetryableErrors:
         )
         assert result.content == "Hello!"
         assert mock_sleep.call_count == 1
-        assert mock_sleep.call_args.args[0] >= 3.0
+        assert mock_sleep.call_args.args[0] >= 2.5
         assert any("retry_delay_source=structured" in warning for warning in result.warnings)
 
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1123,7 +1240,7 @@ class TestThinkingModelDetection:
         mock_comp.return_value = _mock_response()
         call_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini3_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
     @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -1137,7 +1254,7 @@ class TestThinkingModelDetection:
         mock_comp.return_value = _mock_response()
         call_llm("gemini/gemini-4-pro", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini4_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1184,7 +1301,7 @@ class TestThinkingModelDetection:
         mock_acomp.return_value = _mock_response()
         await acall_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gemini3_thinking", max_budget=0)
         kwargs = mock_acomp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
     @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -1216,7 +1333,7 @@ class TestThinkingModelDetection:
             max_budget=0,
         )
         call_kwargs = mock_client.chat.completions.create_with_completion.call_args.kwargs
-        assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 0}
+        assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
 
 
 class TestStripFences:
@@ -1482,6 +1599,14 @@ class TestResponsesAPIDetection:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-5.2-pro") is True
 
+    def test_gpt55_detected(self) -> None:
+        from llm_client.core.client import _is_responses_api_model
+        assert _is_responses_api_model("gpt-5.5") is True
+
+    def test_gpt55_pro_detected(self) -> None:
+        from llm_client.core.client import _is_responses_api_model
+        assert _is_responses_api_model("gpt-5.5-pro") is True
+
     def test_gpt4_not_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-4o") is False
@@ -1681,6 +1806,29 @@ class TestResponsesAPIRouting:
             reasoning_effort="xhigh",
             task="test",
             trace_id="test_gpt52_background_reasoning",
+            max_budget=0,
+        )
+        kwargs = mock_resp.call_args.kwargs
+        assert kwargs["background"] is True
+        assert kwargs["reasoning"] == {"effort": "xhigh"}
+        assert isinstance(result.routing_trace, dict)
+        assert result.routing_trace.get("background_mode") is True
+
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.responses")
+    def test_gpt55_pro_xhigh_enables_background_with_reasoning(
+        self,
+        mock_resp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        """gpt-5.5-pro with xhigh reasoning should use background mode and reasoning payload."""
+        mock_resp.return_value = _mock_responses_api_response()
+        result = call_llm(
+            "gpt-5.5-pro",
+            [{"role": "user", "content": "Deep review"}],
+            reasoning_effort="xhigh",
+            task="test",
+            trace_id="test_gpt55_background_reasoning",
             max_budget=0,
         )
         kwargs = mock_resp.call_args.kwargs

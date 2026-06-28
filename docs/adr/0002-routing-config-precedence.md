@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-04-04
-Verification context: schema_hash + response_format_type + causal_parent_id observability extended (Plan #54)
+Last verified: 2026-04-08
+Verification context: routing still canonicalizes exact gpt-5.4 requests through the typed provider-governance policy before direct or openrouter policy application, `routing_trace["provider_governance_events"]` still exposes those governance decisions explicitly, and direct Gemini thinking defaults are now resolved from shared config
 
 ## Context
 
@@ -41,4 +41,3 @@ Negative:
 
 Week 2+: extract pure routing resolver with typed output:
 `resolve_call(request, config) -> ResolvedCallPlan`.
-

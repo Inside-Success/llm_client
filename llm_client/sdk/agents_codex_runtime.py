@@ -350,8 +350,8 @@ async def _acall_codex_structured_inproc(
     codex_mod = _codex_mod()
     kwargs, tmp_dir = codex_mod._prepare_codex_mcp(kwargs)
     try:
-        from llm_client.execution.responses_runtime import _strict_json_schema
-        schema = _strict_json_schema(response_model.model_json_schema())
+        from llm_client.sdk.agents_codex import _strict_codex_output_schema
+        schema = _strict_codex_output_schema(response_model)
         prompt, codex_opts, thread_opts, turn_opts, sdk = codex_mod._build_codex_options(
             model, messages, output_schema=schema, **kwargs,
         )

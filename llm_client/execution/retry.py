@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from llm_client.core.data_types import LLMCallResult
-from llm_client.core.errors import LLMEmptyResponseError
+from llm_client.core.errors import LLMEmptyResponseError, _QUOTA_PATTERNS
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +74,7 @@ _EMPTY_TOOL_PROTOCOL_FINISH_REASONS = frozenset({
 # Patterns in error messages that indicate permanent failure (never retry).
 # Checked before _RETRYABLE_PATTERNS so they take precedence.
 _NON_RETRYABLE_PATTERNS = [
-    "quota",
-    "billing",
-    "insufficient",
-    "exceeded your current",
-    "plan and billing",
-    "account deactivated",
-    "account suspended",
+    *_QUOTA_PATTERNS,
 ]
 
 
@@ -121,12 +116,37 @@ def _error_status_code(error: Exception) -> int | None:
     return None
 
 
+def _is_rate_limit_error(error: Exception) -> bool:
+    """Return whether *error* represents a provider 429/rate-limit condition."""
+    try:
+        import litellm as _lt
+
+        rate_limit_type = getattr(_lt, "RateLimitError", None)
+        if isinstance(rate_limit_type, type) and issubclass(rate_limit_type, BaseException):
+            if isinstance(error, rate_limit_type):
+                return True
+    except ImportError:
+        pass
+
+    if _error_status_code(error) == 429:
+        return True
+
+    error_text = _error_text(error).lower()
+    if "ratelimit" in type(error).__name__.lower():
+        return True
+    return "rate limit" in error_text or "retrydelay" in error_text
+
+
 # ---------------------------------------------------------------------------
 # Retry delay helpers
 # ---------------------------------------------------------------------------
 
 
-def _coerce_retry_delay_seconds(raw_value: Any) -> float | None:
+def _coerce_retry_delay_seconds(
+    raw_value: Any,
+    *,
+    max_seconds: float | None = 600.0,
+) -> float | None:
     """Normalize a retry-delay value into seconds with sanity bounds."""
     if raw_value is None:
         return None
@@ -162,11 +182,16 @@ def _coerce_retry_delay_seconds(raw_value: Any) -> float | None:
         value *= 3600.0
     if value <= 0:
         return None
-    # Bound absurd delays while still honoring provider windows.
-    return min(value, 600.0)
+    if max_seconds is not None:
+        return min(value, max_seconds)
+    return value
 
 
-def _retry_delay_hint_seconds(error: Exception) -> float | None:
+def _retry_delay_hint_seconds(
+    error: Exception,
+    *,
+    max_seconds: float | None = 600.0,
+) -> float | None:
     """Parse provider retry-after hints from an error message (seconds)."""
     text = str(error)
     if not text:
@@ -180,16 +205,26 @@ def _retry_delay_hint_seconds(error: Exception) -> float | None:
         m = re.search(pat, text, flags=re.IGNORECASE)
         if not m:
             continue
-        hint = _coerce_retry_delay_seconds(f"{m.group(1)}{m.group(2) or 's'}")
+        hint = _coerce_retry_delay_seconds(
+            f"{m.group(1)}{m.group(2) or 's'}",
+            max_seconds=max_seconds,
+        )
         if hint is not None:
             return hint
     return None
 
 
-def _retry_delay_hint(error: Exception) -> tuple[float | None, str]:
+def _retry_delay_hint(
+    error: Exception,
+    *,
+    max_seconds: float | None = 600.0,
+) -> tuple[float | None, str]:
     """Return retry hint delay with source classification."""
     for attr in ("retry_after", "retry_after_seconds", "retry_after_s", "retry_delay"):
-        hint = _coerce_retry_delay_seconds(getattr(error, attr, None))
+        hint = _coerce_retry_delay_seconds(
+            getattr(error, attr, None),
+            max_seconds=max_seconds,
+        )
         if hint is not None:
             return hint, "structured"
 
@@ -199,14 +234,26 @@ def _retry_delay_hint(error: Exception) -> tuple[float | None, str]:
         header_value: Any = None
         if hasattr(headers, "get"):
             header_value = headers.get("retry-after") or headers.get("Retry-After")
-        hint = _coerce_retry_delay_seconds(header_value)
+        hint = _coerce_retry_delay_seconds(header_value, max_seconds=max_seconds)
         if hint is not None:
             return hint, "structured"
 
-    hint = _retry_delay_hint_seconds(error)
+    hint = _retry_delay_hint_seconds(error, max_seconds=max_seconds)
     if hint is not None:
         return hint, "parsed"
     return None, "none"
+
+
+def _max_in_call_retry_delay_seconds() -> float:
+    """Return the max provider hint to honor inside a single call attempt chain."""
+    raw = os.environ.get("LLM_CLIENT_MAX_IN_CALL_RETRY_DELAY_S")
+    if raw is None or not raw.strip():
+        return 120.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return 120.0
+    return 120.0 if value <= 0 else value
 
 
 # ---------------------------------------------------------------------------
@@ -256,12 +303,14 @@ def _is_retryable(error: Exception, extra_patterns: list[str] | None = None) -> 
 
         # RateLimitError (429) is ambiguous — could be transient rate limit
         # or permanent quota exhaustion. Check the message.
-        rate_limit_types = _litellm_error_types("RateLimitError")
-        if rate_limit_types and isinstance(error, rate_limit_types):
+        if _is_rate_limit_error(error):
             error_str = str(error).lower()
             # Provider-specified retry windows are considered retryable even
-            # when the message includes "quota" phrasing.
-            hint_delay, _hint_source = _retry_delay_hint(error)
+            # when the message includes "quota" phrasing, but only when the
+            # requested wait is short enough to make in-call retry sensible.
+            hint_delay, _hint_source = _retry_delay_hint(error, max_seconds=None)
+            if hint_delay is not None and any(p in error_str for p in _NON_RETRYABLE_PATTERNS):
+                return hint_delay <= _max_in_call_retry_delay_seconds()
             if hint_delay is not None:
                 return True
             if any(p in error_str for p in _NON_RETRYABLE_PATTERNS):

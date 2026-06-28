@@ -7,6 +7,8 @@ import logging
 import time
 from typing import Any, Awaitable, Callable, TypeVar
 
+from llm_client.core.model_availability import record_model_unavailability
+
 T = TypeVar("T")
 
 
@@ -16,6 +18,48 @@ def _error_text(exc: Exception) -> str:
     if text:
         return text
     return type(exc).__name__
+
+
+def _maybe_register_provider_cooldown(
+    *,
+    model: str,
+    exc: Exception,
+    warning_sink: list[str],
+    logger: logging.Logger,
+) -> float:
+    """Publish shared cooldown state for 429-like provider failures."""
+    try:
+        from llm_client.execution.retry import _is_rate_limit_error, _retry_delay_hint
+        from llm_client.utils import rate_limit as _rate_limit
+    except Exception:
+        return 0.0
+
+    if not _is_rate_limit_error(exc):
+        return 0.0
+
+    hint_delay, hint_source = _retry_delay_hint(exc)
+    source = hint_source if hint_source != "none" else "provider-floor"
+    applied_delay = _rate_limit.register_rate_limit_cooldown(
+        model,
+        hint_delay,
+        source=source,
+    )
+    if applied_delay <= 0:
+        return 0.0
+
+    provider = _rate_limit._get_provider(model)
+    warning_sink.append(
+        "PROVIDER_GOVERNANCE_EVENT[cooldown_registered]: "
+        f"provider={provider} delay_s={applied_delay:.1f} source={source}"
+    )
+    logger.warning(
+        "Registered shared provider cooldown for %s after %s: %.1fs (source=%s)",
+        provider,
+        type(exc).__name__,
+        applied_delay,
+        source,
+    )
+    return applied_delay
 
 
 def run_sync_with_retry(
@@ -39,14 +83,22 @@ def run_sync_with_retry(
         except Exception as exc:
             if on_error is not None:
                 on_error(exc, attempt)
+            registered_cooldown = _maybe_register_provider_cooldown(
+                model=model,
+                exc=exc,
+                warning_sink=warning_sink,
+                logger=logger,
+            )
             if maybe_retry_hook is not None and maybe_retry_hook(exc, attempt, max_retries):
                 continue
             if not should_retry(exc) or attempt >= max_retries:
                 raise
 
             delay, retry_delay_source = compute_delay(attempt, exc)
+            effective_delay = max(delay, registered_cooldown)
+            sleep_delay = max(0.0, effective_delay - registered_cooldown)
             if on_retry is not None:
-                on_retry(attempt, exc, delay)
+                on_retry(attempt, exc, effective_delay)
             warning_sink.append(
                 f"RETRY {attempt + 1}/{max_retries + 1}: "
                 f"{model} ({type(exc).__name__}: {_error_text(exc)}) "
@@ -57,11 +109,12 @@ def run_sync_with_retry(
                 caller,
                 attempt + 1,
                 max_retries + 1,
-                delay,
+                effective_delay,
                 retry_delay_source,
                 _error_text(exc),
             )
-            time.sleep(delay)
+            if sleep_delay > 0:
+                time.sleep(sleep_delay)
 
     raise RuntimeError("run_sync_with_retry exhausted without returning")
 
@@ -87,14 +140,22 @@ async def run_async_with_retry(
         except Exception as exc:
             if on_error is not None:
                 on_error(exc, attempt)
+            registered_cooldown = _maybe_register_provider_cooldown(
+                model=model,
+                exc=exc,
+                warning_sink=warning_sink,
+                logger=logger,
+            )
             if maybe_retry_hook is not None and maybe_retry_hook(exc, attempt, max_retries):
                 continue
             if not should_retry(exc) or attempt >= max_retries:
                 raise
 
             delay, retry_delay_source = compute_delay(attempt, exc)
+            effective_delay = max(delay, registered_cooldown)
+            sleep_delay = max(0.0, effective_delay - registered_cooldown)
             if on_retry is not None:
-                on_retry(attempt, exc, delay)
+                on_retry(attempt, exc, effective_delay)
             warning_sink.append(
                 f"RETRY {attempt + 1}/{max_retries + 1}: "
                 f"{model} ({type(exc).__name__}: {_error_text(exc)}) "
@@ -105,11 +166,12 @@ async def run_async_with_retry(
                 caller,
                 attempt + 1,
                 max_retries + 1,
-                delay,
+                effective_delay,
                 retry_delay_source,
                 _error_text(exc),
             )
-            await asyncio.sleep(delay)
+            if sleep_delay > 0:
+                await asyncio.sleep(sleep_delay)
 
     raise RuntimeError("run_async_with_retry exhausted without returning")
 
@@ -129,6 +191,13 @@ def run_sync_with_fallback(
             return execute_model(model_idx, current_model)
         except Exception as exc:
             last_error = exc
+            exhaustion_record = record_model_unavailability(current_model, exc)
+            if exhaustion_record is not None and warning_sink is not None:
+                warning_sink.append(
+                    "MODEL_UNAVAILABLE: "
+                    f"{exhaustion_record['model']} "
+                    f"({exhaustion_record['reason']}, cooldown_s={exhaustion_record['cooldown_s']})"
+                )
             if model_idx < len(models) - 1:
                 next_model = models[model_idx + 1]
                 if on_fallback is not None:
@@ -167,6 +236,13 @@ async def run_async_with_fallback(
             return await execute_model(model_idx, current_model)
         except Exception as exc:
             last_error = exc
+            exhaustion_record = record_model_unavailability(current_model, exc)
+            if exhaustion_record is not None and warning_sink is not None:
+                warning_sink.append(
+                    "MODEL_UNAVAILABLE: "
+                    f"{exhaustion_record['model']} "
+                    f"({exhaustion_record['reason']}, cooldown_s={exhaustion_record['cooldown_s']})"
+                )
             if model_idx < len(models) - 1:
                 next_model = models[model_idx + 1]
                 if on_fallback is not None:

@@ -60,6 +60,7 @@ class TaskRequirements(BaseModel):
     structured_output: bool = False
     min_intelligence: int = 0
     min_context: int = 0
+    required_tags: list[str] = []
 
 
 class TaskProfile(BaseModel):
@@ -519,6 +520,12 @@ def _model_qualifies_for_profile(
 ) -> bool:
     """Apply static requirement and availability checks for one model."""
     req = profile.require
+    required_tags = set(req.required_tags)
+    model_tags = set(model.tags)
+    if required_tags and not required_tags.issubset(model_tags):
+        return False
+    if not required_tags and "manual-selection" in model_tags:
+        return False
     if req.structured_output and not model.structured_output:
         return False
     if model.intelligence < req.min_intelligence:
