@@ -150,20 +150,6 @@
       ]
     },
     {
-      "api_key_env": "OPENROUTER_API_KEY",
-      "context": 2000000,
-      "cost": 0.28,
-      "intelligence": 39,
-      "litellm_id": "openrouter/x-ai/grok-4.1-fast",
-      "name": "grok-4.1-fast",
-      "provider": "openrouter",
-      "speed": 179,
-      "structured_output": true,
-      "tags": [
-        "2m-context"
-      ]
-    },
-    {
       "api_key_env": "OPENAI_API_KEY",
       "context": 128000,
       "cost": 94.5,
