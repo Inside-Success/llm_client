@@ -21,12 +21,13 @@ repo_root = _find_repo_root()
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-from enforced_planning import coordination_claims as _impl
+from enforced_planning import coordination_claims as _impl  # noqa: E402
 
 
 CLAIMS_DIR = _impl.CLAIMS_DIR
 DEFAULT_TTL_HOURS = _impl.DEFAULT_TTL_HOURS
 LIVE_STATUSES = _impl.LIVE_STATUSES
+COMPLETED_STATUSES = _impl.COMPLETED_STATUSES
 CLAIM_TYPES = _impl.CLAIM_TYPES
 STRICT_LIVE_METADATA_CLAIM_TYPES = _impl.STRICT_LIVE_METADATA_CLAIM_TYPES
 
@@ -109,6 +110,12 @@ def release_claim(*args: Any, **kwargs: Any) -> tuple[bool, str]:
     return _impl.release_claim(*args, **kwargs)
 
 
+def unregistered_claim_files() -> list[str]:
+    """Delegate unregistered-format claim detection while honoring script-level CLAIMS_DIR overrides."""
+    _sync_runtime_config()
+    return _impl.unregistered_claim_files()
+
+
 def prune_expired() -> int:
     """Delegate claim pruning while honoring script-level CLAIMS_DIR overrides."""
     _sync_runtime_config()
@@ -119,6 +126,12 @@ def prune_stale() -> tuple[int, list[str]]:
     """Delegate stale-claim pruning while honoring script-level CLAIMS_DIR overrides."""
     _sync_runtime_config()
     return _impl.prune_stale()
+
+
+def prune_completed() -> tuple[int, list[str]]:
+    """Delegate completed-claim pruning while honoring script-level CLAIMS_DIR overrides."""
+    _sync_runtime_config()
+    return _impl.prune_completed()
 
 
 def heartbeat_claims(*args: Any, **kwargs: Any) -> tuple[int, list[str], str, str]:

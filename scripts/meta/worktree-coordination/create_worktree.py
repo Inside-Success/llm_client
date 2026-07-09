@@ -127,7 +127,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--print-default-worktree-dir",
         action="store_true",
-        help="Print the canonical default *_worktrees directory for the repo and exit.",
+        help="Print the canonical default worktrees/ directory inside the repo and exit.",
     )
     return parser.parse_args(argv)
 
@@ -165,9 +165,9 @@ def resolve_main_repo_root(repo_root: Path) -> Path:
 
 
 def get_default_worktree_dir(repo_root: Path) -> Path:
-    """Return the canonical repo-level *_worktrees directory for this repo."""
+    """Return the canonical worktrees/ directory inside this repo."""
     main_repo_root = resolve_main_repo_root(repo_root.resolve())
-    return main_repo_root.parent / f"{main_repo_root.name}_worktrees"
+    return main_repo_root / "worktrees"
 
 
 def _load_claims_module() -> Any:
