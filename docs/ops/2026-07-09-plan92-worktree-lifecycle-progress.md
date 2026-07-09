@@ -10,14 +10,15 @@ then reduce historical worktree clutter without losing unique branch history.
 - [x] Installed creator defaults to `<repo>/worktrees/<branch>/`.
 - [x] `worktrees/` is ignored.
 - [x] Installed closeout refuses clean unmerged branches by default.
-- [ ] Governance slice is merged and pushed before its worktree is removed.
-- [ ] Historical worktree actions match the disposition report.
-- [ ] Unique historical branch tips remain resolvable.
-- [ ] Canonical checkout ends clean on `main` with `main == origin/main`.
+- [x] Governance slice is merged and pushed before its worktree is removed.
+- [x] Historical worktree actions match the disposition report.
+- [x] Unique historical branch tips remain resolvable.
+- [x] Canonical checkout ends clean on `main` with `main == origin/main`.
 
 ## Current phase
 
-Commit, merge, push, and close the governance lane before historical cleanup.
+Complete. This evidence lane is the final temporary checkout and closes through
+the installed merge gate after its completion record lands.
 
 ## Completed
 
@@ -53,10 +54,23 @@ Commit, merge, push, and close the governance lane before historical cleanup.
   checkout was deliberately retained when removal of its nested checkout
   exposed a tracked mode-`160000` gitlink; the parent was restored clean before
   this claimed follow-up was created.
+- 2026-07-09: Gitlink cleanup commit `0ba7a39` merged through PR #38 as
+  `617d0fc`; its claimed lane closed with merged disposition evidence and its
+  remote topic branch was deleted.
+- 2026-07-09: Removed the now-clean `llm_client-reviewmain` checkout, pruned the
+  missing temporary registration, switched the canonical root from
+  `fix/instructor-retry-unwrapping` to `main`, and preserved that unique branch
+  at both local and `origin/*` refs.
+- 2026-07-09: Deleted only five local branches proven ancestor-merged:
+  `brian/agent-collab-package`, `reconcile-main-with-origin-20260405`,
+  `merge-anomaly-phase18-20260405`, `merge-anomaly-phase20-20260405`, and the
+  subsequently discovered clean `codebase-memory-usage-ledger-20260709` lane.
+- 2026-07-09: Final reconciliation before this evidence lane: canonical root
+  clean on `main`, `main == origin/main == 617d0fc`, no missing registrations,
+  and all 13 deliberately retained non-ancestor branch tips still resolve.
 
 ## Next
 
-1. Remove the stale tracked gitlink through the claimed follow-up and PR flow.
-2. Remove the review-main checkout, restore the canonical root to `main`, and
-   delete only ancestor-merged local branches.
-3. Reconcile the final inventory and update project-meta coverage.
+1. Merge and close this final evidence lane through the installed gate.
+2. Re-grade project-meta Plan #212 lifecycle coverage from the live consumer
+   evidence.
