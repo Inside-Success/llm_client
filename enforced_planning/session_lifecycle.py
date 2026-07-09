@@ -9,15 +9,87 @@ from __future__ import annotations
 
 import os
 import subprocess
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
-from enforced_planning import coordination_claims, session_contracts
+from enforced_planning import coordination_claims, push_safety, session_contracts
 from enforced_planning import doc_authority
 from enforced_planning.worktree_paths import resolve_canonical_repo_root
+
+
+WORKTREE_LIFECYCLE_CONFIG_PATH = Path(__file__).with_name("worktree_lifecycle.yaml")
+
+
+def _load_worktree_lifecycle_policy(path: Path) -> tuple[str, frozenset[str], frozenset[str], frozenset[str]]:
+    """Load and validate the configurable disposition vocabulary."""
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+        raise ValueError(f"Invalid worktree lifecycle config schema: {path}")
+    dispositions = raw.get("dispositions")
+    if not isinstance(dispositions, dict):
+        raise ValueError(f"Missing dispositions mapping in worktree lifecycle config: {path}")
+
+    merged = dispositions.get("merged")
+    if not isinstance(merged, str) or not merged.strip():
+        raise ValueError(f"Worktree lifecycle config requires a non-empty merged disposition: {path}")
+
+    def _string_set(field: str) -> frozenset[str]:
+        values = dispositions.get(field)
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"Worktree lifecycle config requires a non-empty {field} list: {path}")
+        if any(not isinstance(value, str) or not value.strip() for value in values):
+            raise ValueError(f"Worktree lifecycle config {field} must contain strings: {path}")
+        normalized = frozenset(value.strip().lower() for value in values)
+        if len(normalized) != len(values):
+            raise ValueError(f"Worktree lifecycle config {field} contains blanks or duplicates: {path}")
+        return normalized
+
+    non_closeable = _string_set("non_closeable")
+    recovery_required = _string_set("recovery_required")
+    discard_authorized = _string_set("discard_requires_authorization")
+    groups = ({merged.strip().lower()}, set(non_closeable), set(recovery_required), set(discard_authorized))
+    flattened = set().union(*groups)
+    if sum(len(group) for group in groups) != len(flattened):
+        raise ValueError(f"Worktree lifecycle disposition groups overlap: {path}")
+    return merged.strip().lower(), non_closeable, recovery_required, discard_authorized
+
+
+(
+    MERGED_DISPOSITION,
+    NON_CLOSEABLE_DISPOSITIONS,
+    RECOVERY_REQUIRED_DISPOSITIONS,
+    DISCARD_AUTHORIZATION_DISPOSITIONS,
+) = _load_worktree_lifecycle_policy(WORKTREE_LIFECYCLE_CONFIG_PATH)
+WORKTREE_DISPOSITIONS = frozenset(
+    {MERGED_DISPOSITION}
+    | set(NON_CLOSEABLE_DISPOSITIONS)
+    | set(RECOVERY_REQUIRED_DISPOSITIONS)
+    | set(DISCARD_AUTHORIZATION_DISPOSITIONS)
+)
+
+
+@dataclass(frozen=True)
+class CloseoutPreflight:
+    """Validated branch state that licenses one closeout mutation sequence."""
+
+    disposition: str
+    branch_exists: bool
+    default_branch: str | None
+    merged_to_default: bool | None
+    default_remote_ref: str | None
+    default_branch_pushed: bool | None
+    recovery_ref: str | None
+    force_delete_branch: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe representation for CLI payloads and audit records."""
+
+        return asdict(self)
 
 
 def _split_cli_values(values: list[str] | None) -> list[str]:
@@ -267,6 +339,162 @@ def _branch_exists(repo_root: Path, branch: str) -> bool:
     return result.returncode == 0
 
 
+def _ref_exists(repo_root: Path, ref: str) -> bool:
+    """Return whether one Git ref resolves to a commit."""
+
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _is_ancestor(repo_root: Path, ancestor_ref: str, descendant_ref: str) -> bool:
+    """Return whether ``ancestor_ref`` is integrated into ``descendant_ref``."""
+
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor_ref, descendant_ref],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _validate_closeout_preflight(
+    *,
+    repo_root: Path,
+    branch: str | None,
+    disposition: str,
+    disposition_reason: str | None,
+    recovery_ref: str | None,
+    allow_discard_unique: bool,
+    delete_branch: bool,
+) -> CloseoutPreflight:
+    """Validate merge or explicit recovery evidence before any closeout mutation."""
+
+    normalized_disposition = disposition.strip().lower()
+    if normalized_disposition not in WORKTREE_DISPOSITIONS:
+        supported = ", ".join(sorted(WORKTREE_DISPOSITIONS))
+        raise ValueError(
+            f"Unsupported worktree disposition '{disposition}'. Supported values: {supported}"
+        )
+    if normalized_disposition in NON_CLOSEABLE_DISPOSITIONS:
+        raise ValueError(
+            f"Disposition '{normalized_disposition}' does not permit session-close; "
+            "keep or hand off the lane instead."
+        )
+    if not branch:
+        raise ValueError("session-close requires a branch for merge/disposition validation")
+
+    branch_exists = _branch_exists(repo_root, branch)
+    if not branch_exists:
+        return CloseoutPreflight(
+            disposition=normalized_disposition,
+            branch_exists=False,
+            default_branch=None,
+            merged_to_default=None,
+            default_remote_ref=None,
+            default_branch_pushed=None,
+            recovery_ref=recovery_ref,
+            force_delete_branch=False,
+        )
+
+    default_branch = push_safety.resolve_default_branch(repo_root)
+    if not default_branch:
+        raise ValueError(
+            "Unable to resolve the canonical default branch; configure origin/HEAD "
+            "or create a local main/master ref before closeout."
+        )
+    if branch == default_branch:
+        raise ValueError(
+            f"Refusing to close the canonical default branch '{default_branch}' as a task lane."
+        )
+
+    branch_ref = f"refs/heads/{branch}"
+    default_ref = f"refs/heads/{default_branch}"
+    merged_to_default = _is_ancestor(repo_root, branch_ref, default_ref)
+    default_remote_ref = f"refs/remotes/origin/{default_branch}"
+    default_branch_pushed = (
+        _is_ancestor(repo_root, default_ref, default_remote_ref)
+        if _ref_exists(repo_root, default_remote_ref)
+        else None
+    )
+    if normalized_disposition == MERGED_DISPOSITION:
+        if not merged_to_default:
+            raise ValueError(
+                f"Branch '{branch}' is clean but not integrated into canonical default "
+                f"branch '{default_branch}'. Merge it first or supply an explicit "
+                "non-merge disposition with required evidence."
+            )
+        if default_branch_pushed is False:
+            raise ValueError(
+                f"Canonical default branch '{default_branch}' has commits not present in "
+                f"'{default_remote_ref}'. Push the default branch before closeout."
+            )
+        return CloseoutPreflight(
+            disposition=normalized_disposition,
+            branch_exists=True,
+            default_branch=default_branch,
+            merged_to_default=True,
+            default_remote_ref=default_remote_ref,
+            default_branch_pushed=default_branch_pushed,
+            recovery_ref=None,
+            force_delete_branch=False,
+        )
+
+    if normalized_disposition not in (
+        RECOVERY_REQUIRED_DISPOSITIONS | DISCARD_AUTHORIZATION_DISPOSITIONS
+    ):
+        raise ValueError(f"Disposition '{normalized_disposition}' is not a terminal closeout state.")
+    if merged_to_default:
+        raise ValueError(
+            f"Branch '{branch}' is already integrated into '{default_branch}'; "
+            f"use disposition '{MERGED_DISPOSITION}'."
+        )
+    if not disposition_reason or not disposition_reason.strip():
+        raise ValueError(
+            f"Disposition '{normalized_disposition}' requires --disposition-reason."
+        )
+
+    normalized_recovery_ref = recovery_ref.strip() if recovery_ref else None
+    if normalized_disposition in DISCARD_AUTHORIZATION_DISPOSITIONS:
+        if not allow_discard_unique:
+            raise ValueError(
+                f"Disposition '{normalized_disposition}' requires --allow-discard-unique because "
+                "the branch is not integrated into the canonical default branch."
+            )
+    elif normalized_disposition in RECOVERY_REQUIRED_DISPOSITIONS:
+        if not normalized_recovery_ref:
+            raise ValueError(
+                f"Disposition '{normalized_disposition}' requires --recovery-ref "
+                "that durably contains the task branch tip."
+            )
+        if normalized_recovery_ref in {branch, branch_ref}:
+            raise ValueError("Recovery ref must be independent of the local task branch.")
+        if not _ref_exists(repo_root, normalized_recovery_ref):
+            raise ValueError(f"Recovery ref '{normalized_recovery_ref}' does not resolve to a commit.")
+        if not _is_ancestor(repo_root, branch_ref, normalized_recovery_ref):
+            raise ValueError(
+                f"Recovery ref '{normalized_recovery_ref}' does not contain branch '{branch}'."
+            )
+
+    return CloseoutPreflight(
+        disposition=normalized_disposition,
+        branch_exists=True,
+        default_branch=default_branch,
+        merged_to_default=False,
+        default_remote_ref=default_remote_ref,
+        default_branch_pushed=default_branch_pushed,
+        recovery_ref=normalized_recovery_ref,
+        force_delete_branch=delete_branch,
+    )
+
+
 def _remove_worktree_path(repo_root: Path, worktree_path: Path) -> str:
     """Remove one worktree path from a safe root-anchored control session."""
 
@@ -289,15 +517,16 @@ def _remove_worktree_path(repo_root: Path, worktree_path: Path) -> str:
     return "removed"
 
 
-def _delete_branch(repo_root: Path, branch: str | None) -> str:
+def _delete_branch(repo_root: Path, branch: str | None, *, force: bool = False) -> str:
     """Delete one local branch after worktree cleanup."""
 
     if not branch:
         return "not_requested"
     if not _branch_exists(repo_root, branch):
         return "already_missing"
+    delete_flag = "-D" if force else "-d"
     result = subprocess.run(
-        ["git", "branch", "-D", branch],
+        ["git", "branch", delete_flag, branch],
         cwd=str(repo_root),
         capture_output=True,
         text=True,
@@ -590,6 +819,10 @@ def close_session(
     branch: str | None = None,
     note: str | None = None,
     delete_branch: bool = True,
+    disposition: str = MERGED_DISPOSITION,
+    disposition_reason: str | None = None,
+    recovery_ref: str | None = None,
+    allow_discard_unique: bool = False,
 ) -> dict[str, Any]:
     """Finish, clean up, and release one claimed lane as a single sanctioned flow.
 
@@ -617,7 +850,27 @@ def close_session(
                 f"Uncommitted state:\n{dirty_details}"
             )
 
+    preflight = _validate_closeout_preflight(
+        repo_root=repo_root,
+        branch=resolved_branch,
+        disposition=disposition,
+        disposition_reason=disposition_reason,
+        recovery_ref=recovery_ref,
+        allow_discard_unique=allow_discard_unique,
+        delete_branch=delete_branch,
+    )
+
     payload["status"] = "closing"
+    payload["repo_root"] = str(repo_root)
+    payload["disposition"] = preflight.disposition
+    payload["disposition_reason"] = (
+        disposition_reason.strip() if disposition_reason and disposition_reason.strip() else None
+    )
+    payload["recovery_ref"] = preflight.recovery_ref
+    payload["default_branch"] = preflight.default_branch
+    payload["merged_to_default"] = preflight.merged_to_default
+    payload["default_remote_ref"] = preflight.default_remote_ref
+    payload["default_branch_pushed"] = preflight.default_branch_pushed
     payload["updated_at"] = updated_at
     payload["notes"] = note or "closing claimed lane via canonical session-close flow"
     _write_claim_payload(claim_file, payload)
@@ -638,9 +891,25 @@ def close_session(
     if worktree_path or claim.worktree_path:
         worktree_action = _remove_worktree_path(repo_root, resolved_worktree_path)
     if delete_branch:
-        branch_action = _delete_branch(repo_root, resolved_branch)
+        branch_action = _delete_branch(
+            repo_root,
+            resolved_branch,
+            force=preflight.force_delete_branch,
+        )
 
-    coordination_claims.release_claim(agent, project, scope)
+    closed_at = datetime.now(timezone.utc).isoformat()
+    payload["status"] = "completed"
+    payload["closed_at"] = closed_at
+    payload["updated_at"] = closed_at
+    payload["notes"] = note or (
+        f"closed claimed lane with disposition={preflight.disposition}"
+        + (
+            f"; reason={disposition_reason.strip()}"
+            if disposition_reason and disposition_reason.strip()
+            else ""
+        )
+    )
+    _write_claim_payload(claim_file, payload)
 
     if tracker_path_text:
         tracker_path = Path(tracker_path_text).expanduser()
@@ -648,8 +917,8 @@ def close_session(
             session_contracts.update_session_tracker(
                 tracker_path,
                 current_phase="closed",
-                notes=note or "session closed and claimed worktree cleaned up",
-                updated_at=datetime.now(timezone.utc).isoformat(),
+                notes=payload["notes"],
+                updated_at=closed_at,
             )
 
     return {
@@ -657,6 +926,7 @@ def close_session(
         "worktree_action": worktree_action,
         "branch_action": branch_action,
         "released": True,
+        **preflight.to_dict(),
         "tracker_path": tracker_path_text,
     }
 

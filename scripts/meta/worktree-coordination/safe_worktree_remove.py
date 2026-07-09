@@ -27,7 +27,7 @@ SCRIPT_ROOT = Path(__file__).resolve().parents[2]
 if str(SCRIPT_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_ROOT))
 
-from enforced_planning import coordination_claims
+from enforced_planning import coordination_claims  # noqa: E402
 
 
 # Session marker settings
