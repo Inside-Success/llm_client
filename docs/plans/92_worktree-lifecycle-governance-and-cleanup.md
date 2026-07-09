@@ -1,6 +1,6 @@
 # Plan #92: Worktree lifecycle governance and cleanup
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** project-meta Plan #212; enforced-planning Plan #59
@@ -78,8 +78,8 @@ Cleanup must reduce checkout clutter without destroying unique branch history.
 | 3 | Install the canonical worktree lifecycle framework and ignore `worktrees/`. | Complete |
 | 4 | Add consumer controls for location, vocabulary, and CLI propagation. | Complete |
 | 5 | Merge and push the governance slice; close its worktree through the new gate. | Complete |
-| 6 | Remove clean historical checkouts while retaining unique branches. | In progress |
-| 7 | Restore the canonical checkout to `main` and verify the final inventory. | Pending |
+| 6 | Remove clean historical checkouts while retaining unique branches. | Complete |
+| 7 | Restore the canonical checkout to `main` and verify the final inventory. | Complete |
 
 ---
 
@@ -104,14 +104,14 @@ Cleanup must reduce checkout clutter without destroying unique branch history.
 
 ## Acceptance Criteria
 
-| Criterion | Evidence class | Target grade | Pass condition |
+| Criterion | Evidence class | Grade | Result |
 |---|---|---:|---|
-| New default is in-repo and ignored | test | A | Consumer test and `.gitignore` assertion pass |
-| Clean unmerged closeout fails before mutation | test | A | Canonical real-Git negative control remains green after install |
-| Merged and pushed closeout succeeds | observed | B | This plan's own worktree closes and retains completed claim evidence |
-| Every historical checkout has a disposition | observed | B | Final inventory reconciles to the report |
-| Unique historical commits remain recoverable | observed | B | Preserved local/remote branches still resolve after checkout removal |
-| Canonical checkout is clean `main` | observed | B | Branch/status and `main == origin/main` checks pass |
+| New default is in-repo and ignored | test | A | Three consumer tests pass; creator resolves `<repo>/worktrees` |
+| Clean unmerged closeout fails before mutation | test | A | Canonical 44-test real-Git lifecycle/installer set passes |
+| Merged and pushed closeout succeeds | observed | B | Governance and gitlink lanes closed with merged disposition evidence |
+| Every historical checkout has a disposition | observed | B | Report reconciled; 20 clean historical checkouts removed and one missing registration pruned |
+| Unique historical commits remain recoverable | observed | B | All 13 non-ancestor branch tips resolve after checkout removal |
+| Canonical checkout is clean `main` | observed | B | Root is clean `main`; `main == origin/main == 617d0fc` before final evidence merge |
 
 ---
 
