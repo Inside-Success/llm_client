@@ -45,9 +45,18 @@ Commit, merge, push, and close the governance lane before historical cleanup.
 - 2026-07-09: A broad `make lint` probe reports 317 existing errors across
   product and test code. The exact Plan #92 consumer/installer closure is green;
   repository-wide lint debt is tracked separately as LLM-001.
+- 2026-07-09: Governance commit `ab0193e` merged through PR #37; `origin/main`
+  advanced to `52ca5f7`. The claimed governance worktree and both temporary
+  remote branches were removed after merge evidence passed the new gate.
+- 2026-07-09: Revalidated and removed 18 clean historical checkouts. All 13
+  non-ancestor branches still resolve. The parent `llm_client-reviewmain`
+  checkout was deliberately retained when removal of its nested checkout
+  exposed a tracked mode-`160000` gitlink; the parent was restored clean before
+  this claimed follow-up was created.
 
 ## Next
 
-1. Commit, push, merge, and close this lane through the new gate.
-2. Execute the recorded historical checkout removals, preserving unique refs.
+1. Remove the stale tracked gitlink through the claimed follow-up and PR flow.
+2. Remove the review-main checkout, restore the canonical root to `main`, and
+   delete only ancestor-merged local branches.
 3. Reconcile the final inventory and update project-meta coverage.
