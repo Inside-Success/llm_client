@@ -219,6 +219,10 @@ SESSION_NEXT ?=
 SESSION_DEPENDS ?=
 SESSION_STOP_CONDITIONS ?=
 SESSION_NOTE ?=
+WORKTREE_DISPOSITION ?= merged
+WORKTREE_DISPOSITION_REASON ?=
+WORKTREE_RECOVERY_REF ?=
+WORKTREE_ALLOW_DISCARD_UNIQUE ?=
 REVIEW_SCOPE ?=
 REVIEW_NOTES ?=
 RECIPIENT ?=
@@ -371,6 +375,10 @@ endif
 		--scope "$(BRANCH)" \
 		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
 		--branch "$(BRANCH)" \
+		--disposition "$(WORKTREE_DISPOSITION)" \
+		--disposition-reason "$(WORKTREE_DISPOSITION_REASON)" \
+		--recovery-ref "$(WORKTREE_RECOVERY_REF)" \
+		$(if $(filter 1 true yes,$(WORKTREE_ALLOW_DISCARD_UNIQUE)),--allow-discard-unique,) \
 		$(if $(SESSION_NOTE),--note "$(SESSION_NOTE)",)
 
 worktree-list:  ## Show claimed worktree coordination status

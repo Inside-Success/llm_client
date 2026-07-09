@@ -21,7 +21,7 @@ REPO_ROOT = _find_repo_root()
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from enforced_planning import session_lifecycle
+from enforced_planning import session_lifecycle  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -32,6 +32,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--worktree-path")
     parser.add_argument("--branch")
     parser.add_argument("--note")
+    parser.add_argument(
+        "--disposition",
+        default=session_lifecycle.MERGED_DISPOSITION,
+        choices=sorted(session_lifecycle.WORKTREE_DISPOSITIONS),
+        help="Recorded lane outcome; merged is the safe default closeout path.",
+    )
+    parser.add_argument("--disposition-reason")
+    parser.add_argument("--recovery-ref")
+    parser.add_argument(
+        "--allow-discard-unique",
+        action="store_true",
+        help="Explicitly authorize unique-commit deletion for disposition=abandoned.",
+    )
     parser.add_argument("--keep-branch", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
@@ -47,13 +60,18 @@ def main(argv: list[str] | None = None) -> int:
         branch=args.branch,
         note=args.note,
         delete_branch=not args.keep_branch,
+        disposition=args.disposition,
+        disposition_reason=args.disposition_reason,
+        recovery_ref=args.recovery_ref,
+        allow_discard_unique=args.allow_discard_unique,
     )
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(
             f"{payload['action']}: worktree={payload['worktree_action']} "
-            f"branch={payload['branch_action']} released={payload['released']}"
+            f"branch={payload['branch_action']} disposition={payload['disposition']} "
+            f"released={payload['released']}"
         )
     return 0
 

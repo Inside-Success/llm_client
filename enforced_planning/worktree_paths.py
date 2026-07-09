@@ -7,22 +7,34 @@ from pathlib import Path
 
 def detect_workspace_root(project_root: Path) -> Path:
     """Resolve the shared workspace root from main or worktree checkouts."""
-    if project_root.parent.name.endswith("_worktrees"):
-        return project_root.parent.parent
-    return project_root.parent
+
+    resolved_project_root = project_root.resolve()
+    parent = resolved_project_root.parent
+    if parent.name == "worktrees":
+        return parent.parent.parent
+    if parent.name.endswith("_worktrees"):
+        return parent.parent
+    return resolved_project_root.parent
 
 
 def resolve_canonical_repo_root(repo_root: Path) -> Path:
     """Return the canonical repo root for a main checkout or worktree clone."""
     resolved_repo_root = repo_root.resolve()
     parent = resolved_repo_root.parent
+
+    if parent.name == "worktrees":
+        canonical_repo_root = parent.parent.resolve()
+        if (canonical_repo_root / ".git").exists():
+            return canonical_repo_root
+        return resolved_repo_root
+
     if not parent.name.endswith("_worktrees"):
         return resolved_repo_root
 
     workspace_root = parent.parent
     canonical_name = parent.name.removesuffix("_worktrees")
     canonical_repo_root = (workspace_root / canonical_name).resolve()
-    if canonical_repo_root.exists():
+    if (canonical_repo_root / ".git").exists():
         return canonical_repo_root
     return resolved_repo_root
 
