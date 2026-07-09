@@ -21,7 +21,7 @@ no pre-existing file change.
 | `_worktrees/llm_client-gemini-schema-study` | `gemini-schema-study` | not ancestor | 0 | `origin/gemini-schema-study` | Remove checkout; retain branch |
 | `_worktrees/llm_client-gemini31-parity` | detached `37623ec` | ancestor | 0 | `main` | Remove checkout |
 | `llm_client-reviewmain` | `main` | exact `main` | 0 | `origin/main` | Remove after nested checkout; switch canonical root to `main` |
-| `llm_client-reviewmain/worktrees/codex-review-prompts-as-assets-20260624` | `codex/review-prompts-as-assets-20260624` | not ancestor | 4 | matching `origin/*` branch | Remove checkout; retain branch |
+| `llm_client-reviewmain/worktrees/codex-review-prompts-as-assets-20260624` | `codex/review-prompts-as-assets-20260624` | not ancestor | 4 | matching `origin/*` branch | Checkout removed; retain branch; remove stale tracked gitlink |
 | `llm_client/worktrees/worktree-lifecycle-governance-20260709` | active Plan #92 | based on `main` | 0 before work | pushed topic branch, then merged `main` | Keep until merged/pushed; close through gate |
 | `llm_client_worktrees/agent-collab-package` | `brian/agent-collab-package` | ancestor | 0 | `main` and matching `origin/*` | Remove checkout; delete merged local branch |
 | `llm_client_worktrees/codex/recovered-control-churn-outcomes-20260622` | same | not ancestor | 1 | matching `origin/*` branch | Remove checkout; retain branch |
@@ -46,3 +46,12 @@ intent/code review before merge or abandonment. Four additional retained
 branches have no unique patch but are not ancestors and should be explicitly
 closed only after confirming their historical purpose. This plan removes their
 idle checkouts but deliberately does not guess those branch decisions.
+
+## Cleanup discovery
+
+The nested review checkout was not merely an ignored directory: commit
+`87ff8a3` had added it to `main` as a mode-`160000` gitlink at tip `1f5d6b7`.
+Removing the registered checkout correctly made its parent checkout show a
+tracked deletion. The parent was restored instead of force-removed; Plan #92's
+claimed follow-up removes the dead gitlink while the named local and remote
+branch continue to retain the unique commits.

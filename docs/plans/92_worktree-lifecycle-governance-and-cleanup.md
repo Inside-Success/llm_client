@@ -62,6 +62,7 @@ Cleanup must reduce checkout clutter without destroying unique branch history.
 - `scripts/meta/worktree-coordination/create_worktree.py`
 - `scripts/meta/worktree-coordination/safe_worktree_remove.py`
 - `tests/test_worktree_lifecycle_governance.py`
+- `worktrees/codex-review-prompts-as-assets-20260624` (remove stale gitlink)
 - `docs/ops/2026-07-09-worktree-disposition-report.md`
 - `docs/ops/2026-07-09-plan92-worktree-lifecycle-progress.md`
 - `docs/plans/CLAUDE.md`
@@ -76,8 +77,8 @@ Cleanup must reduce checkout clutter without destroying unique branch history.
 | 2 | Record intended disposition before cleanup. | Complete |
 | 3 | Install the canonical worktree lifecycle framework and ignore `worktrees/`. | Complete |
 | 4 | Add consumer controls for location, vocabulary, and CLI propagation. | Complete |
-| 5 | Merge and push the governance slice; close its worktree through the new gate. | Pending |
-| 6 | Remove clean historical checkouts while retaining unique branches. | Pending |
+| 5 | Merge and push the governance slice; close its worktree through the new gate. | Complete |
+| 6 | Remove clean historical checkouts while retaining unique branches. | In progress |
 | 7 | Restore the canonical checkout to `main` and verify the final inventory. | Pending |
 
 ---
@@ -124,6 +125,9 @@ Cleanup must reduce checkout clutter without destroying unique branch history.
   cleanup; equivalence proves content integration, not author intent.
 - The one missing temporary checkout is pruned only after its registration is
   recorded.
+- The nested review checkout was also committed as a mode-`160000` gitlink.
+  Its branch tip remains retained; the dead gitlink is removed from `main` as a
+  tracked cleanup artifact.
 - Consumer verification checks the exact worktree-only installer closure. A
   broader ad hoc scan of unrelated legacy `scripts/meta` files is outside this
   plan and is not presented as a failure of the propagated surface.
