@@ -75,17 +75,17 @@ No stale branch is merged wholesale.
 | Branch | Decision | Confidence | Execution |
 |---|---|---:|---|
 | `fix/instructor-retry-unwrapping` | Retain for `secure-trace-browser-salvage` | High | Retained |
-| `gemini-schema-study` | Superseded; delete local and feature-remote refs | Very high | Pending |
+| `gemini-schema-study` | Superseded; delete local and feature-remote refs | Very high | Executed |
 | `codex/review-prompts-as-assets-20260624` | Retain for `adversarial-review-prompt-asset-migration` | High | Retained |
-| `codex/recovered-control-churn-outcomes-20260622` | Rejected by current failure-taxonomy contract; delete | High | Pending |
-| `codex/submit-retry-state-progress-20260622` | Rejected by Plan #91 evidence contract; delete | High | Pending |
-| `merge-plan-91-into-main-20260405` | Superseded; delete local and feature-remote refs | Very high | Pending |
+| `codex/recovered-control-churn-outcomes-20260622` | Rejected by current failure-taxonomy contract; delete | High | Executed |
+| `codex/submit-retry-state-progress-20260622` | Rejected by Plan #91 evidence contract; delete | High | Executed |
+| `merge-plan-91-into-main-20260405` | Superseded; delete local and feature-remote refs | Very high | Executed |
 | `plan-22-run-progress-observability` | Retain for `durable-run-progress-v2` | High | Retained |
-| `plan-52-llm-client-dead-code` | Archive immutable tip; delete branch refs | High | Pending |
-| `anomaly-phase18-worktree-projects` | Runtime behavior superseded; delete local ref | High | Pending |
-| `anomaly-phase19-gpt54-codex` | Exact patch on `main`; delete local ref | High | Pending |
-| `merge-anomaly-phase19-20260405` | Duplicate integration copy; delete branch refs | High | Pending |
-| `anomaly-phase20-gemini-shared-cap` | Exact patches on `main`; delete branch refs | High | Pending |
+| `plan-52-llm-client-dead-code` | Archive immutable tip; delete branch refs | High | Executed |
+| `anomaly-phase18-worktree-projects` | Runtime behavior superseded; delete feature refs | High | Executed |
+| `anomaly-phase19-gpt54-codex` | Exact patch on `main`; delete feature refs | High | Executed |
+| `merge-anomaly-phase19-20260405` | Duplicate integration copy; delete branch refs | High | Executed |
+| `anomaly-phase20-gemini-shared-cap` | Exact patches on `main`; delete branch refs | High | Executed |
 | `plan26-observability-config-truthfulness` | Retain for `observability-config-truthfulness-v2` | High | Retained |
 
 ### Review findings that constrain salvage
@@ -106,3 +106,21 @@ No stale branch is merged wholesale.
 - Focused current-main verification executed 73 tests across Gemini schema,
   provider routing/cooldowns, adversarial review, failure taxonomy, Plan #91,
   and progress observability; all passed.
+
+### Execution evidence
+
+- Nine reviewed local branches and their nine same-named feature-remote refs
+  were deleted. No target tip changed between review and deletion.
+- Plan #52 tip `94b59d7` is retained by the pushed annotated tag
+  `archive/plan-52-llm-client-dead-code-20260709` before its branch refs were
+  deleted.
+- The separately named, unreviewed remote backup refs for anomaly phases 18
+  and 19 remain untouched.
+- Seven stale legacy coordination claims associated with deleted or retained
+  reviewed branches were released after their owner sessions were confirmed
+  stale.
+- The four forward-port branches still resolve at their reviewed tips:
+  `fix/instructor-retry-unwrapping@3def0e3`,
+  `codex/review-prompts-as-assets-20260624@1f5d6b7`,
+  `plan-22-run-progress-observability@c3746d2`, and
+  `plan26-observability-config-truthfulness@86733ac`.
