@@ -35,6 +35,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_NAME = "llm_client"
 DEFAULT_HTML_PATH = REPO_ROOT / "docs" / "API_REFERENCE.html"
 DEFAULT_MD_PATH = REPO_ROOT / "docs" / "API_REFERENCE.md"
+GENERATED_TIMESTAMP_RE = re.compile(
+    r"<!-- Generated: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z -->"
+)
+RUNTIME_ADDRESS_RE = re.compile(r" at 0x[0-9a-fA-F]+(?=>)")
 
 ROOT_MODULE_NAME = PACKAGE_NAME
 OPEN_MODULES = {
@@ -120,9 +124,12 @@ def load_module(name: str) -> ModuleType:
 def module_source_path(name: str) -> Path | None:
     """Return the source file path for one module if it can be located."""
     spec = importlib.util.find_spec(name)
-    if spec is None or spec.origin in (None, "built-in", "namespace"):
+    if spec is None:
         return None
-    return Path(spec.origin)
+    origin = spec.origin
+    if origin is None or origin in {"built-in", "namespace"}:
+        return None
+    return Path(origin)
 
 
 def module_docstring_text(module: ModuleType) -> str:
@@ -147,7 +154,7 @@ def signature_text(obj: Any) -> str:
             sig = inspect.signature(obj)
         except (TypeError, ValueError):
             return "(signature unavailable)"
-    return str(sig)
+    return RUNTIME_ADDRESS_RE.sub("", str(sig))
 
 
 def public_names(module: ModuleType) -> list[str]:
@@ -867,13 +874,32 @@ def generate_documents(package_name: str) -> tuple[str, str]:
     root_doc = module_docs[0]
     html_text = render_html(root_doc, module_docs[1:])
     markdown_text = render_markdown_index(root_doc, module_docs)
-    return markdown_text, html_text
+    return stable_output_text(markdown_text), stable_output_text(html_text)
 
 
 def write_text(path: Path, content: str) -> None:
     """Write text to a file, creating the parent directory when needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    path.write_text(stable_output_text(content), encoding="utf-8")
+
+
+def stable_output_text(content: str) -> str:
+    """Remove trailing horizontal whitespace while preserving final newline state."""
+
+    final_newline = content.endswith("\n")
+    normalized = "\n".join(line.rstrip() for line in content.splitlines())
+    return normalized + ("\n" if final_newline else "")
+
+
+def comparison_text(content: str) -> str:
+    """Remove volatile generator timestamps before drift comparison.
+
+    The timestamp remains useful to readers, but it is not derived from the
+    package surface and therefore cannot be part of a deterministic sync gate.
+    """
+
+    normalized = stable_output_text(content)
+    return GENERATED_TIMESTAMP_RE.sub("<!-- Generated: <timestamp> -->", normalized)
 
 
 def compare_or_write(*, markdown_path: Path, html_path: Path, markdown_text: str, html_text: str, check: bool) -> int:
@@ -882,11 +908,15 @@ def compare_or_write(*, markdown_path: Path, html_path: Path, markdown_text: str
         problems: list[str] = []
         if not markdown_path.exists():
             problems.append(f"missing markdown output: {markdown_path}")
-        elif markdown_path.read_text(encoding="utf-8") != markdown_text:
+        elif comparison_text(markdown_path.read_text(encoding="utf-8")) != comparison_text(
+            markdown_text
+        ):
             problems.append(f"stale markdown output: {markdown_path}")
         if not html_path.exists():
             problems.append(f"missing html output: {html_path}")
-        elif html_path.read_text(encoding="utf-8") != html_text:
+        elif comparison_text(html_path.read_text(encoding="utf-8")) != comparison_text(
+            html_text
+        ):
             problems.append(f"stale html output: {html_path}")
         if problems:
             print("API reference docs are out of sync:")

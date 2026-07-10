@@ -1,8 +1,8 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-04-05
-Verification context: stream and lifecycle observability now respect dynamic `LLM_CLIENT_LOG_ENABLED` env suppression, so disabled observability lanes do not still emit foundation events because of stale import-time logger state
+Last verified: 2026-07-09
+Verification context: the new transcript-evidence ledger is separate from stream lifecycle state and does not reinterpret a missing transcript result as a provider stall; existing stream lifecycle semantics are unchanged
 Date: 2026-03-22
 
 ## Context

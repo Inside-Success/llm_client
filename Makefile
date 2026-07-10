@@ -8,10 +8,14 @@ PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; elif [
 DAYS ?= 7
 PROJECT ?=
 LIMIT ?= 20
+SURFACE ?= codebase-memory
+TOOL_USAGE_CLIENT ?= both
+TOOL_USAGE_DB ?=
+SKIP_MALFORMED ?=
 
 # ─── Observability ───────────────────────────────────────────────────────────
 
-.PHONY: cost cost-by-project cost-by-model cost-by-task errors recent traces summary
+.PHONY: cost cost-by-project cost-by-model cost-by-task errors recent traces summary tool-usage-import tool-usage-report
 
 cost:  ## Total spend (DAYS=7 default, PROJECT= optional)
 	@$(PYTHON) -m llm_client cost --group-by project --days $(DAYS) \
@@ -100,6 +104,16 @@ summary:  ## Quick dashboard: spend, calls, errors, top models (DAYS=7)
 		FROM llm_calls WHERE task != 'test' AND timestamp >= ? GROUP BY model ORDER BY 2 DESC LIMIT 5\"\"\", (cutoff,)).fetchall(); \
 	[print(f'  \$${r[1]:>8.2f}  {r[2]:>6} calls  {r[0]}') for r in rows]"
 
+tool-usage-import:  ## Import structured agent calls (SURFACE=codebase-memory)
+	@$(PYTHON) -m llm_client tool-usage import --surface "$(SURFACE)" \
+		--client "$(TOOL_USAGE_CLIENT)" \
+		$(if $(TOOL_USAGE_DB),--db "$(TOOL_USAGE_DB)") \
+		$(if $(SKIP_MALFORMED),--skip-malformed-files)
+
+tool-usage-report:  ## Report agent tool usage (SURFACE=codebase-memory)
+	@$(PYTHON) -m llm_client tool-usage report --surface "$(SURFACE)" \
+		$(if $(TOOL_USAGE_DB),--db "$(TOOL_USAGE_DB)")
+
 # ─── Development ─────────────────────────────────────────────────────────────
 
 .PHONY: test test-verbose test-integration lint typecheck check install dead-code dead-code-audit dead-code-validate
@@ -185,7 +199,7 @@ help:  ## Show all targets
 		awk -F ':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Observability:"
-	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(cost|errors|recent|traces|summary)' | \
+	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(cost|errors|recent|traces|summary|tool-usage)' | \
 		awk -F ':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Maintenance:"
@@ -196,7 +210,7 @@ help:  ## Show all targets
 	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(worktree|worktree-list|worktree-remove)' | \
 		awk -F ':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Options: DAYS=7 PROJECT= LIMIT=20 MAX_SIZE_MB=100 ARCHIVE_DAYS=90 DRY_RUN= DELETE_DAYS="
+	@echo "Options: DAYS=7 PROJECT= LIMIT=20 SURFACE=codebase-memory TOOL_USAGE_CLIENT=both TOOL_USAGE_DB= SKIP_MALFORMED= MAX_SIZE_MB=100 ARCHIVE_DAYS=90 DRY_RUN= DELETE_DAYS="
 
 # >>> META-PROCESS WORKTREE TARGETS >>>
 WORKTREE_CREATE_SCRIPT := scripts/meta/worktree-coordination/create_worktree.py
