@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-10T05:44:12Z -->
+<!-- Generated: 2026-07-10T06:17:01Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1382,11 +1382,15 @@ the normal path and will NOT be double-logged — the callback checks for the
 </details>
 
 <details class="symbol" id="module-llm_client-model_policy_audit-scan_paths">
-  <summary><code>scan_paths</code> <span class="sig">(roots: Iterable[pathlib.Path], *, include_docs: bool = False, include_tests: bool = False, require_llm_client: bool = False) -&gt; list[llm_client.model_policy_audit.PolicyViolation]</span></summary>
+  <summary><code>scan_paths</code> <span class="sig">(roots: Iterable[pathlib.Path], *, include_docs: bool = False, include_tests: bool = False, require_llm_client: bool = False, registration_only: bool = False) -&gt; list[llm_client.model_policy_audit.PolicyViolation]</span></summary>
   <div class="symbol-body">
-    <p class="summary">No docstring available.</p>
+    <p class="summary">Scan paths for model-policy violations.</p>
     <p class="meta">Source: <code>llm_client.model_policy_audit</code> functions</p>
-    <pre class="doc">No docstring available.</pre>
+    <pre class="doc">Scan paths for model-policy violations.
+
+``registration_only`` is the fast path for cross-workspace llm_client
+adoption audits: it checks only production Python files for direct provider
+SDK usage and intentionally skips raw model literal scanning.</pre>
   </div>
 </details>
 

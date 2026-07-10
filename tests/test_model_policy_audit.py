@@ -190,3 +190,39 @@ def test_require_llm_client_allows_registration_exception(tmp_path: Path) -> Non
     violations = scan_paths([project], require_llm_client=True)
 
     assert violations == []
+
+
+def test_registration_only_flags_provider_but_not_raw_model_literal(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "service.py"
+    source.write_text(
+        'from openai import OpenAI\n'
+        'MODEL = "openrouter/openai/gpt-5-mini"\n',
+        encoding="utf-8",
+    )
+
+    full_violations = scan_paths([project], require_llm_client=True)
+    registration_violations = scan_paths([project], registration_only=True)
+
+    assert [violation.kind for violation in full_violations] == [
+        "direct_provider_sdk",
+        "raw_model_literal",
+    ]
+    assert [violation.kind for violation in registration_violations] == [
+        "direct_provider_sdk",
+    ]
+    assert registration_violations[0].model == "openai"
+
+
+def test_registration_only_skips_non_python_config_files(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    config = project / "config.yaml"
+    config.write_text(
+        'fallback_model: "openrouter/openai/gpt-5-mini"\n',
+        encoding="utf-8",
+    )
+
+    assert scan_paths([project], registration_only=True) == []
+    assert scan_paths([project])[0].kind == "unaccepted_model_override"

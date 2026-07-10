@@ -252,13 +252,26 @@ def scan_paths(
     include_docs: bool = False,
     include_tests: bool = False,
     require_llm_client: bool = False,
+    registration_only: bool = False,
 ) -> list[PolicyViolation]:
+    """Scan paths for model-policy violations.
+
+    ``registration_only`` is the fast path for cross-workspace llm_client
+    adoption audits: it checks only production Python files for direct provider
+    SDK usage and intentionally skips raw model literal scanning.
+    """
+
+    if registration_only:
+        require_llm_client = True
+
     violations: list[PolicyViolation] = []
     for path in _iter_candidate_files(
         roots,
         include_docs=include_docs,
         include_tests=include_tests,
-        ):
+    ):
+        if registration_only and path.suffix != ".py":
+            continue
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except UnicodeDecodeError:
@@ -289,6 +302,8 @@ def scan_paths(
                         )
                     )
                     continue
+            if registration_only:
+                continue
             call_match = CALL_RE.search(code_segment)
             if call_match and _looks_like_model_id(call_match.group("model")):
                 model = call_match.group("model")
@@ -365,6 +380,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Flag direct provider SDK usage unless a registration exception is recorded",
     )
+    parser.add_argument(
+        "--registration-only",
+        action="store_true",
+        help="Fast path: only audit direct provider SDK registration, not raw model literals",
+    )
     args = parser.parse_args(argv)
 
     roots = [Path(item).resolve() for item in args.paths]
@@ -373,6 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         include_docs=args.include_docs,
         include_tests=args.include_tests,
         require_llm_client=args.require_llm_client,
+        registration_only=args.registration_only,
     )
     if not violations:
         print("MODEL POLICY OK")
