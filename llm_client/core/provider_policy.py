@@ -179,6 +179,16 @@ def get_provider_governance_policy() -> ProviderGovernancePolicy:
                 route_class="agent_sdk",
                 reason="Exact gpt-5.4 aliases must use the Codex SDK lane.",
             ),
+            "minimax-m3": ExactAliasRule(
+                canonical_model="openrouter/minimax/minimax-m3",
+                route_class="openrouter",
+                reason="Bare MiniMax-M3 aliases use the shared OpenRouter default route.",
+            ),
+            "minimax/minimax-m3": ExactAliasRule(
+                canonical_model="openrouter/minimax/minimax-m3",
+                route_class="openrouter",
+                reason="Direct MiniMax-M3 aliases use the shared OpenRouter default route.",
+            ),
         },
         direct_prefix_templates=(
             PrefixTemplateRule(
@@ -190,7 +200,17 @@ def get_provider_governance_policy() -> ProviderGovernancePolicy:
         ),
         explicit_provider_routes=(
             ExplicitProviderRouteRule(
-                providers=("openai", "anthropic", "deepseek", "x-ai", "xai", "mistral", "mistralai", "google"),
+                providers=(
+                    "openai",
+                    "anthropic",
+                    "deepseek",
+                    "x-ai",
+                    "xai",
+                    "mistral",
+                    "mistralai",
+                    "google",
+                    "minimax",
+                ),
                 target_prefix="openrouter",
                 route_class="openrouter",
                 reason="These provider-qualified ids route through OpenRouter under openrouter policy.",
@@ -226,6 +246,12 @@ def get_provider_governance_policy() -> ProviderGovernancePolicy:
                 template="openrouter/mistralai/{model}",
                 route_class="openrouter",
                 reason="Bare Mistral ids route through OpenRouter under openrouter policy.",
+            ),
+            PrefixTemplateRule(
+                prefixes=("minimax-",),
+                template="openrouter/minimax/{model}",
+                route_class="openrouter",
+                reason="Bare MiniMax ids route through OpenRouter under openrouter policy.",
             ),
         ),
         provider_defaults={

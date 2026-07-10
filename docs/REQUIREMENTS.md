@@ -63,7 +63,11 @@ Task profiles: `extraction`, `budget_extraction`, `graph_building`,
 `fast_extraction`, `bulk_cheap`, `synthesis`, `deep_review`,
 `code_generation`, `judging`, `agent_reasoning`.
 
-Default for bulk/fast work: `gemini/gemini-2.5-flash-lite`.
+Default for shared task-based work: `openrouter/minimax/minimax-m3`.
+Projects that select another model directly or through `override_model`,
+`fallback_model`, `fallback_models`, or `benchmark_model` must record a local
+`model_override_acceptance` entry with `accepted_by` and `reason`, or use the
+explicit emergency bypass comment accepted by the model-policy audit.
 
 ## Observability
 

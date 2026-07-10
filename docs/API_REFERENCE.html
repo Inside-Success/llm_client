@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-10T00:50:00Z -->
+<!-- Generated: 2026-07-10T01:29:27Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1441,13 +1441,15 @@ Attributes:
     <tr><th>Name</th><th>Value</th><th>Type</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>ALLOW_LINE_TOKENS</code></td><td><code>(&#x27;model-policy: allow-raw-model&#x27;, &#x27;override_model&#x27;, &#x27;fallback_model&#x27;, &#x27;fallback_models&#x27;, &#x27;benchmark_model&#x27;)</code></td><td>tuple</td></tr>
+    <tr><td><code>ALLOW_LINE_TOKENS</code></td><td><code>(&#x27;model-policy: allow-raw-model&#x27;,)</code></td><td>tuple</td></tr>
 <tr><td><code>CALL_RE</code></td><td><code>re.compile(&#x27;\\b(?:a?call_llm(?:_structured|_with_tools|_batch)?|stream_llm|astream_llm)\\(\\s*([\&#x27;\\&quot;])(?P&lt;model&gt;[^\&#x27;\\&quot;]+)\\1&#x27;)</code></td><td>Pattern</td></tr>
 <tr><td><code>CODE_EXTENSIONS</code></td><td><code>{&#x27;.ini&#x27;, &#x27;.json&#x27;, &#x27;.py&#x27;, &#x27;.toml&#x27;, &#x27;.yaml&#x27;, &#x27;.yml&#x27;}</code></td><td>set</td></tr>
+<tr><td><code>DEFAULT_MODEL_IDS</code></td><td><code>frozenset({&#x27;minimax-m3&#x27;, &#x27;minimax/minimax-m3&#x27;, &#x27;openrouter/minimax/minimax-m3&#x27;})</code></td><td>frozenset</td></tr>
 <tr><td><code>DOC_DIR_NAMES</code></td><td><code>{&#x27;docs&#x27;, &#x27;investigations&#x27;}</code></td><td>set</td></tr>
 <tr><td><code>EXCLUDED_DIR_NAMES</code></td><td><code>{&#x27;.git&#x27;, &#x27;.mypy_cache&#x27;, &#x27;.pytest_cache&#x27;, &#x27;.venv&#x27;, &#x27;__pycache__&#x27;, &#x27;build&#x27;, &#x27;dist&#x27;, &#x27;node_modules&#x27;}</code></td><td>set</td></tr>
 <tr><td><code>LOW_SIGNAL_DIR_NAMES</code></td><td><code>{&#x27;PROJECTS_DEFERRED&#x27;, &#x27;archive&#x27;, &#x27;deprecated&#x27;, &#x27;worktrees&#x27;}</code></td><td>set</td></tr>
 <tr><td><code>MODEL_LITERAL_RE</code></td><td><code>re.compile(&#x27;([\&#x27;\\&quot;])(?P&lt;model&gt;[^\&#x27;\\&quot;]+)\\1&#x27;)</code></td><td>Pattern</td></tr>
+<tr><td><code>MODEL_OVERRIDE_FIELD_RE</code></td><td><code>re.compile(&#x27;\\b(?:override_model|fallback_model|fallback_models|benchmark_model)\\b&#x27;)</code></td><td>Pattern</td></tr>
 <tr><td><code>TEST_DIR_NAMES</code></td><td><code>{&#x27;fixtures&#x27;, &#x27;testdata&#x27;, &#x27;tests&#x27;}</code></td><td>set</td></tr>
   </tbody>
 </table>

@@ -158,6 +158,38 @@ def test_resolve_call_normalizes_google_gemini_alias_to_openrouter() -> None:
     assert plan.routing_trace["normalized_to"] == "openrouter/google/gemini-2.0-flash-001"
 
 
+def test_resolve_call_normalizes_minimax_m3_alias_to_openrouter_default() -> None:
+    """MiniMax-M3 aliases should canonicalize to the shared default route."""
+    cfg = ClientConfig(routing_policy="openrouter")
+
+    plan = resolve_call(CallRequest(model="MiniMax-M3"), cfg)
+
+    assert plan.primary_model == "openrouter/minimax/minimax-m3"
+    assert plan.routing_trace["normalized_from"] == "MiniMax-M3"
+    assert plan.routing_trace["normalized_to"] == "openrouter/minimax/minimax-m3"
+    assert plan.routing_trace["provider_governance_events"] == [
+        {
+            "event": "model_canonicalized",
+            "reason": "Bare MiniMax-M3 aliases use the shared OpenRouter default route.",
+            "route_class": "openrouter",
+            "canonical_model": "openrouter/minimax/minimax-m3",
+            "from": "MiniMax-M3",
+            "to": "openrouter/minimax/minimax-m3",
+        }
+    ]
+
+
+def test_resolve_call_normalizes_direct_minimax_m3_alias_to_openrouter_default() -> None:
+    """Direct MiniMax-M3 aliases should use the shared OpenRouter default."""
+    cfg = ClientConfig(routing_policy="openrouter")
+
+    plan = resolve_call(CallRequest(model="minimax/MiniMax-M3"), cfg)
+
+    assert plan.primary_model == "openrouter/minimax/minimax-m3"
+    assert plan.routing_trace["normalized_from"] == "minimax/MiniMax-M3"
+    assert plan.routing_trace["normalized_to"] == "openrouter/minimax/minimax-m3"
+
+
 def test_resolve_call_normalizes_bare_gemini_model_id() -> None:
     """Bare Gemini ids should canonicalize before provider routing kicks in."""
     cfg = ClientConfig(routing_policy="openrouter")
