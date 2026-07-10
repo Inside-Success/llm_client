@@ -1,6 +1,6 @@
 # Plan #93: Agent tool-usage ledger
 
-**Status:** In Progress
+**Status:** Complete — scoped verification; repository-wide dependency and Ruff baselines remain open
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -84,15 +84,35 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
 
 ## Acceptance Criteria
 
-- [ ] All required tests pass.
-- [ ] Parser errors fail with file and line context; no string-count fallback exists.
-- [ ] SQLite schema contains no raw content/path/session columns.
-- [ ] A real local import returns more than zero structured codebase-memory calls.
-- [ ] A second real import inserts zero duplicates.
-- [ ] JSON report explicitly separates returned, transport-error,
+- [x] All required tests pass.
+- [x] Parser errors fail with file and line context; no string-count fallback exists.
+- [x] SQLite schema contains no raw content/path/session columns.
+- [x] A real local import returns more than zero structured codebase-memory calls.
+- [x] A second real import inserts zero duplicates.
+- [x] JSON report explicitly separates returned, transport-error,
       application-error, and missing outcomes and says helpfulness is unmeasured.
-- [ ] Focused Ruff and mypy checks pass.
-- [ ] Generated API reference is current.
+- [x] Focused Ruff and mypy checks pass.
+- [x] Generated API reference is current.
+
+## Verification Evidence
+
+- 81 focused observability, CLI, defaults, I/O-log, and API-generation tests
+  pass.
+- Focused Ruff and mypy checks pass for every changed Python surface.
+- API reference regeneration is deterministic and `--write` followed by
+  `--check` passes.
+- A privacy-preserving import scanned 3,005 transcript files, explicitly
+  skipped 32 malformed files, found 1,366 structured events, and retained
+  1,336 unique calls after collapsing duplicate transcript representations.
+- Repeating the identical import inserted zero new rows and classified all
+  1,366 observations as duplicates.
+- The report contains 1,209 returned, 118 application-error, 6
+  transport-error, and 3 missing outcomes; helpfulness remains `unmeasured`.
+- Repository-wide `make check` stops on 317 pre-existing Ruff findings tracked
+  by LLM-001. Full `pytest -q` stops during collection because the current
+  environment lacks the optional `langgraph` dependency. Neither failure is
+  in a changed or directly dependent surface, so they are recorded rather than
+  silently waived.
 
 ## Notes
 
