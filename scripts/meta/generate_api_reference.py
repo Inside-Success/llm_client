@@ -40,6 +40,13 @@ GENERATED_TIMESTAMP_RE = re.compile(
 )
 RUNTIME_ADDRESS_RE = re.compile(r" at 0x[0-9a-fA-F]+(?=>)")
 
+# Executing ``scripts/meta/generate_api_reference.py`` otherwise puts the
+# script directory, not the checkout root, first on ``sys.path``. In an
+# editable install that can silently document a different checkout.
+repo_root_text = str(REPO_ROOT)
+if not sys.path or sys.path[0] != repo_root_text:
+    sys.path.insert(0, repo_root_text)
+
 ROOT_MODULE_NAME = PACKAGE_NAME
 OPEN_MODULES = {
     "llm_client",
@@ -840,10 +847,10 @@ def render_html(root_doc: ModuleDoc, module_docs: list[ModuleDoc]) -> str:
 
     <h2 id="start-here">Start Here</h2>
     <ol>
-      <li><a href="{html.escape((REPO_ROOT / 'README.md').as_uri())}">README.md</a> for installation, usage, routing, and examples.</li>
-      <li><a href="{html.escape((REPO_ROOT / 'AGENTS.md').as_uri())}">AGENTS.md</a> for repo operating rules and architectural boundaries.</li>
-      <li><a href="{html.escape((REPO_ROOT / 'docs' / 'plans' / '01_master-roadmap.md').as_uri())}">docs/plans/01_master-roadmap.md</a> for the current long-term program state.</li>
-      <li><a href="{html.escape((REPO_ROOT / 'docs' / 'ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md').as_uri())}">docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md</a> for the shared ecosystem boundary model.</li>
+      <li><a href="../README.md">README.md</a> for installation, usage, routing, and examples.</li>
+      <li><a href="../AGENTS.md">AGENTS.md</a> for repo operating rules and architectural boundaries.</li>
+      <li><a href="plans/01_master-roadmap.md">docs/plans/01_master-roadmap.md</a> for the current long-term program state.</li>
+      <li><a href="ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md">docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md</a> for the shared ecosystem boundary model.</li>
     </ol>
 
     {render_root_surface(root_doc)}
@@ -856,11 +863,11 @@ def render_html(root_doc: ModuleDoc, module_docs: list[ModuleDoc]) -> str:
 
     <h2 id="source-truth">Source Of Truth</h2>
     <ol>
-      <li><a href="{html.escape((REPO_ROOT / 'pyproject.toml').as_uri())}">pyproject.toml</a> is authoritative for package metadata and extras.</li>
+      <li><a href="../pyproject.toml">pyproject.toml</a> is authoritative for package metadata and extras.</li>
       <li>Module docstrings and public function signatures are authoritative for code behavior.</li>
       <li>The roadmap and ADRs are authoritative for architectural boundaries.</li>
     </ol>
-    <p class="summary">Canonical markdown companion: <a href="{html.escape((REPO_ROOT / 'docs' / 'API_REFERENCE.md').as_uri())}">docs/API_REFERENCE.md</a>.</p>
+    <p class="summary">Canonical markdown companion: <a href="API_REFERENCE.md">docs/API_REFERENCE.md</a>.</p>
   </main>
 </body>
 </html>

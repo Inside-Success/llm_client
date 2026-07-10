@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-10T00:38:53Z -->
+<!-- Generated: 2026-07-10T00:50:00Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -164,10 +164,10 @@
 
     <h2 id="start-here">Start Here</h2>
     <ol>
-      <li><a href="file:///home/brian/projects/llm_client/worktrees/plan-93-review-fixes-20260709/README.md">README.md</a> for installation, usage, routing, and examples.</li>
-      <li><a href="file:///home/brian/projects/llm_client/worktrees/plan-93-review-fixes-20260709/AGENTS.md">AGENTS.md</a> for repo operating rules and architectural boundaries.</li>
-      <li><a href="file:///home/brian/projects/llm_client/worktrees/plan-93-review-fixes-20260709/docs/plans/01_master-roadmap.md">docs/plans/01_master-roadmap.md</a> for the current long-term program state.</li>
-      <li><a href="file:///home/brian/projects/llm_client/worktrees/plan-93-review-fixes-20260709/docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md">docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md</a> for the shared ecosystem boundary model.</li>
+      <li><a href="../README.md">README.md</a> for installation, usage, routing, and examples.</li>
+      <li><a href="../AGENTS.md">AGENTS.md</a> for repo operating rules and architectural boundaries.</li>
+      <li><a href="plans/01_master-roadmap.md">docs/plans/01_master-roadmap.md</a> for the current long-term program state.</li>
+      <li><a href="ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md">docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md</a> for the shared ecosystem boundary model.</li>
     </ol>
 
 
@@ -1811,9 +1811,9 @@ even before anyone queries the observability DB.</pre>
 <details class="symbol" id="module-llm_client-observability-persist_usage_events">
   <summary><code>persist_usage_events</code> <span class="sig">(*, events: Sequence[llm_client.observability.agent_tool_usage.AgentToolUsageEvent], db_path: pathlib.Path) -&gt; int</span></summary>
   <div class="symbol-body">
-    <p class="summary">Insert events transactionally and return the number of new rows.</p>
+    <p class="summary">Persist events and return new-row count, maturing provisional rows.</p>
     <p class="meta">Source: <code>llm_client.observability.agent_tool_usage</code> functions</p>
-    <pre class="doc">Insert events transactionally and return the number of new rows.</pre>
+    <pre class="doc">Persist events and return new-row count, maturing provisional rows.</pre>
   </div>
 </details>
 
@@ -1955,7 +1955,7 @@ where post-processing silently drops content.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-ToolUsageImportSummary">
-  <summary><code>ToolUsageImportSummary</code> <span class="sig">(*, files_scanned: int, files_skipped: int, coverage_complete: bool, parse_error_file_hashes: tuple[str, ...], sessions_with_calls: int, events_found: int, inserted: int, duplicates: int, by_client: dict[str, int], by_outcome: dict[str, int]) -&gt; None</span></summary>
+  <summary><code>ToolUsageImportSummary</code> <span class="sig">(*, files_scanned: int, files_skipped: int, coverage_complete: bool, parse_error_file_hashes: tuple[str, ...], sessions_with_calls: int, events_found: int, inserted: int, updated: int, duplicates: int, by_client: dict[str, int], by_outcome: dict[str, int]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Aggregate result of one transcript import pass.</p>
     <p class="meta">Source: <code>llm_client.observability.agent_tool_usage</code> class</p>
@@ -8708,9 +8708,9 @@ whole malformed files; exclusions are then reported as path hashes and
 <details class="symbol" id="module-llm_client-observability-agent_tool_usage-persist_usage_events">
   <summary><code>persist_usage_events</code> <span class="sig">(*, events: Sequence[llm_client.observability.agent_tool_usage.AgentToolUsageEvent], db_path: pathlib.Path) -&gt; int</span></summary>
   <div class="symbol-body">
-    <p class="summary">Insert events transactionally and return the number of new rows.</p>
+    <p class="summary">Persist events and return new-row count, maturing provisional rows.</p>
     <p class="meta">Source: <code>llm_client.observability.agent_tool_usage</code> functions</p>
-    <pre class="doc">Insert events transactionally and return the number of new rows.</pre>
+    <pre class="doc">Persist events and return new-row count, maturing provisional rows.</pre>
   </div>
 </details>
 
@@ -8751,7 +8751,7 @@ whole malformed files; exclusions are then reported as path hashes and
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-agent_tool_usage-ToolUsageImportSummary">
-  <summary><code>ToolUsageImportSummary</code> <span class="sig">(*, files_scanned: int, files_skipped: int, coverage_complete: bool, parse_error_file_hashes: tuple[str, ...], sessions_with_calls: int, events_found: int, inserted: int, duplicates: int, by_client: dict[str, int], by_outcome: dict[str, int]) -&gt; None</span></summary>
+  <summary><code>ToolUsageImportSummary</code> <span class="sig">(*, files_scanned: int, files_skipped: int, coverage_complete: bool, parse_error_file_hashes: tuple[str, ...], sessions_with_calls: int, events_found: int, inserted: int, updated: int, duplicates: int, by_client: dict[str, int], by_outcome: dict[str, int]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Aggregate result of one transcript import pass.</p>
     <p class="meta">Source: <code>llm_client.observability.agent_tool_usage</code> class</p>
@@ -12908,11 +12908,11 @@ use this when the plan claims a level it hasn&#x27;t actually earned.</pre>
 
     <h2 id="source-truth">Source Of Truth</h2>
     <ol>
-      <li><a href="file:///home/brian/projects/llm_client/worktrees/plan-93-review-fixes-20260709/pyproject.toml">pyproject.toml</a> is authoritative for package metadata and extras.</li>
+      <li><a href="../pyproject.toml">pyproject.toml</a> is authoritative for package metadata and extras.</li>
       <li>Module docstrings and public function signatures are authoritative for code behavior.</li>
       <li>The roadmap and ADRs are authoritative for architectural boundaries.</li>
     </ol>
-    <p class="summary">Canonical markdown companion: <a href="file:///home/brian/projects/llm_client/worktrees/plan-93-review-fixes-20260709/docs/API_REFERENCE.md">docs/API_REFERENCE.md</a>.</p>
+    <p class="summary">Canonical markdown companion: <a href="API_REFERENCE.md">docs/API_REFERENCE.md</a>.</p>
   </main>
 </body>
 </html>
