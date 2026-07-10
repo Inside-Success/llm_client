@@ -64,6 +64,17 @@ Use the audit in visibility mode before turning it into a CI gate:
 python -m llm_client.model_policy_audit --require-llm-client path/to/project
 ```
 
+For cross-workspace registration classification, use the faster registration
+path:
+
+```bash
+python -m llm_client.model_policy_audit --registration-only path/to/project
+```
+
+`--registration-only` implies `--require-llm-client`, scans only production
+Python files, and skips raw model-literal findings so provider-SDK migration can
+be triaged separately from model-string cleanup.
+
 `--require-llm-client` flags direct provider SDK usage such as `openai`,
 `anthropic`, `litellm`, `google.genai`, LangChain provider wrappers, and similar
 SDK surfaces in production Python files. It does not change the existing raw
