@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-10T05:31:47Z -->
+<!-- Generated: 2026-07-10T05:44:12Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1382,7 +1382,7 @@ the normal path and will NOT be double-logged — the callback checks for the
 </details>
 
 <details class="symbol" id="module-llm_client-model_policy_audit-scan_paths">
-  <summary><code>scan_paths</code> <span class="sig">(roots: Iterable[pathlib.Path], *, include_docs: bool = False, include_tests: bool = False) -&gt; list[llm_client.model_policy_audit.PolicyViolation]</span></summary>
+  <summary><code>scan_paths</code> <span class="sig">(roots: Iterable[pathlib.Path], *, include_docs: bool = False, include_tests: bool = False, require_llm_client: bool = False) -&gt; list[llm_client.model_policy_audit.PolicyViolation]</span></summary>
   <div class="symbol-body">
     <p class="summary">No docstring available.</p>
     <p class="meta">Source: <code>llm_client.model_policy_audit</code> functions</p>
@@ -1446,6 +1446,8 @@ Attributes:
 <tr><td><code>CALL_RE</code></td><td><code>re.compile(&#x27;\\b(?:a?call_llm(?:_structured|_with_tools|_batch)?|stream_llm|astream_llm)\\(\\s*([\&#x27;\\&quot;])(?P&lt;model&gt;[^\&#x27;\\&quot;]+)\\1&#x27;)</code></td><td>Pattern</td></tr>
 <tr><td><code>CODE_EXTENSIONS</code></td><td><code>{&#x27;.ini&#x27;, &#x27;.json&#x27;, &#x27;.py&#x27;, &#x27;.toml&#x27;, &#x27;.yaml&#x27;, &#x27;.yml&#x27;}</code></td><td>set</td></tr>
 <tr><td><code>DEFAULT_MODEL_IDS</code></td><td><code>frozenset({&#x27;minimax-m3&#x27;, &#x27;minimax/minimax-m3&#x27;, &#x27;openrouter/minimax/minimax-m3&#x27;})</code></td><td>frozenset</td></tr>
+<tr><td><code>DIRECT_PROVIDER_CALL_PATTERNS</code></td><td><code>&lt;tuple&gt;</code></td><td>tuple</td></tr>
+<tr><td><code>DIRECT_PROVIDER_IMPORT_RE</code></td><td><code>re.compile(&#x27;^\\s*(?:import\\s+(?P&lt;import_module&gt;openai|anthropic|litellm|cohere|mistralai|groq|ollama|google\\.generativeai|google\\.genai)(?:\\s|,|$)|from\\s+(?P&lt;from_module&gt;openai|anthropic|litellm|cohere|mist)</code></td><td>Pattern</td></tr>
 <tr><td><code>DOC_DIR_NAMES</code></td><td><code>{&#x27;docs&#x27;, &#x27;investigations&#x27;}</code></td><td>set</td></tr>
 <tr><td><code>EXCLUDED_DIR_NAMES</code></td><td><code>{&#x27;.git&#x27;, &#x27;.mypy_cache&#x27;, &#x27;.pytest_cache&#x27;, &#x27;.venv&#x27;, &#x27;__pycache__&#x27;, &#x27;build&#x27;, &#x27;dist&#x27;, &#x27;node_modules&#x27;}</code></td><td>set</td></tr>
 <tr><td><code>LOW_SIGNAL_DIR_NAMES</code></td><td><code>{&#x27;PROJECTS_DEFERRED&#x27;, &#x27;archive&#x27;, &#x27;deprecated&#x27;, &#x27;worktrees&#x27;}</code></td><td>set</td></tr>

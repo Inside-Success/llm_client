@@ -57,6 +57,39 @@ MODEL_OVERRIDE_FIELD_RE = re.compile(
 
 BANNED_MODEL_PATTERNS = frozenset({"fable"})
 
+DIRECT_PROVIDER_IMPORT_RE = re.compile(
+    r"^\s*(?:"
+    r"import\s+(?P<import_module>"
+    r"openai|anthropic|litellm|cohere|mistralai|groq|ollama|"
+    r"google\.generativeai|google\.genai"
+    r")(?:\s|,|$)"
+    r"|from\s+(?P<from_module>"
+    r"openai|anthropic|litellm|cohere|mistralai|groq|ollama|"
+    r"google\.generativeai|google\.genai|"
+    r"langchain_openai|langchain_anthropic|"
+    r"llama_index\.llms\.openai|llama_index\.llms\.anthropic"
+    r")\s+import\b"
+    r"|from\s+google\s+import\s+genai\b"
+    r")"
+)
+
+DIRECT_PROVIDER_CALL_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"\bopenai\.(?:ChatCompletion\.create|Completion\.create|chat\.completions\.create)\s*\("
+        ),
+        "openai",
+    ),
+    (re.compile(r"\banthropic\.(?:Anthropic|AsyncAnthropic)\s*\("), "anthropic"),
+    (re.compile(r"\blitellm\.a?completion\s*\("), "litellm"),
+    (
+        re.compile(r"\b(?:google\.)?genai\.(?:Client|GenerativeModel)\s*\("),
+        "google.genai",
+    ),
+    (re.compile(r"\bChatOpenAI\s*\("), "langchain_openai"),
+    (re.compile(r"\bChatAnthropic\s*\("), "langchain_anthropic"),
+)
+
 DEFAULT_MODEL_IDS = frozenset(
     {
         "openrouter/minimax/minimax-m3",
@@ -145,6 +178,35 @@ def _has_override_acceptance(lines: list[str]) -> bool:
     )
 
 
+def _has_registration_exception(lines: list[str]) -> bool:
+    """Return whether a file records a reviewed llm_client registration exception."""
+
+    joined = "\n".join(lines)
+    return (
+        "llm_client_registration_exception" in joined
+        and "accepted_by" in joined
+        and "reason" in joined
+        and "category" in joined
+    )
+
+
+def _direct_provider_reference(code_segment: str) -> str | None:
+    """Return the direct provider SDK reference in a Python code segment."""
+
+    import_match = DIRECT_PROVIDER_IMPORT_RE.search(code_segment)
+    if import_match:
+        if import_match.group("import_module"):
+            return import_match.group("import_module")
+        if import_match.group("from_module"):
+            return import_match.group("from_module")
+        return "google.genai"
+
+    for pattern, provider in DIRECT_PROVIDER_CALL_PATTERNS:
+        if pattern.search(code_segment):
+            return provider
+    return None
+
+
 def _should_skip_file(
     path: Path,
     *,
@@ -189,18 +251,20 @@ def scan_paths(
     *,
     include_docs: bool = False,
     include_tests: bool = False,
+    require_llm_client: bool = False,
 ) -> list[PolicyViolation]:
     violations: list[PolicyViolation] = []
     for path in _iter_candidate_files(
         roots,
         include_docs=include_docs,
         include_tests=include_tests,
-    ):
+        ):
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except UnicodeDecodeError:
             continue
         has_override_acceptance = _has_override_acceptance(lines)
+        has_registration_exception = _has_registration_exception(lines)
         for line_no, line in enumerate(lines, start=1):
             if any(token in line for token in ALLOW_LINE_TOKENS):
                 continue
@@ -208,6 +272,23 @@ def scan_paths(
             stripped = code_segment.strip()
             if not stripped:
                 continue
+            if (
+                require_llm_client
+                and path.suffix == ".py"
+                and not has_registration_exception
+            ):
+                provider = _direct_provider_reference(code_segment)
+                if provider is not None:
+                    violations.append(
+                        PolicyViolation(
+                            path=str(path),
+                            line=line_no,
+                            kind="direct_provider_sdk",
+                            model=provider,
+                            text=stripped,
+                        )
+                    )
+                    continue
             call_match = CALL_RE.search(code_segment)
             if call_match and _looks_like_model_id(call_match.group("model")):
                 model = call_match.group("model")
@@ -279,6 +360,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--strict", action="store_true", help="Exit non-zero on violations")
     parser.add_argument("--include-docs", action="store_true", help="Scan docs/investigations")
     parser.add_argument("--include-tests", action="store_true", help="Scan tests and fixtures")
+    parser.add_argument(
+        "--require-llm-client",
+        action="store_true",
+        help="Flag direct provider SDK usage unless a registration exception is recorded",
+    )
     args = parser.parse_args(argv)
 
     roots = [Path(item).resolve() for item in args.paths]
@@ -286,6 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         roots,
         include_docs=args.include_docs,
         include_tests=args.include_tests,
+        require_llm_client=args.require_llm_client,
     )
     if not violations:
         print("MODEL POLICY OK")

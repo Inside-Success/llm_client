@@ -117,3 +117,76 @@ def test_scan_paths_allows_inline_bypass_comment(tmp_path: Path) -> None:
     violations = scan_paths([project])
 
     assert violations == []
+
+
+def test_require_llm_client_flags_direct_provider_import(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "service.py"
+    source.write_text(
+        'from openai import OpenAI\n'
+        'client = OpenAI()\n',
+        encoding="utf-8",
+    )
+
+    assert scan_paths([project]) == []
+
+    violations = scan_paths([project], require_llm_client=True)
+
+    assert len(violations) == 1
+    assert violations[0].kind == "direct_provider_sdk"
+    assert violations[0].model == "openai"
+
+
+def test_require_llm_client_flags_direct_litellm_call(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "service.py"
+    source.write_text(
+        'import litellm\n'
+        'response = litellm.completion(model="gpt-5-mini", messages=[])\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project], require_llm_client=True)
+
+    assert [violation.kind for violation in violations] == [
+        "direct_provider_sdk",
+        "direct_provider_sdk",
+    ]
+    assert [violation.model for violation in violations] == ["litellm", "litellm"]
+
+
+def test_require_llm_client_allows_llm_client_usage(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "service.py"
+    source.write_text(
+        'from llm_client import call_llm, get_model\n'
+        'model = get_model("default_intelligent")\n'
+        'call_llm(model, messages, task="demo", trace_id="t", max_budget=0)\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project], require_llm_client=True)
+
+    assert violations == []
+
+
+def test_require_llm_client_allows_registration_exception(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "provider_demo.py"
+    source.write_text(
+        'llm_client_registration_exception = {\n'
+        '    "accepted_by": "brian",\n'
+        '    "reason": "provider SDK documentation sample",\n'
+        '    "category": "provider_sdk_demo",\n'
+        '}\n'
+        'from openai import OpenAI\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project], require_llm_client=True)
+
+    assert violations == []
