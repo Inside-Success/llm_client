@@ -1,0 +1,26 @@
+updated: "2026-07-09T18:00:24-07:00"
+project: llm_client
+scope: repo
+status: closed
+git_commit: "48e2c95790b8396ef40356fb097428c61cf0cf80"
+git_branch: main
+summary: "Closed Plans #92 and #93 after branch cleanup, independent ledger review, canonical verification, and durable verification-gap logging."
+next_action: "None; session closed."
+completed:
+  - "Plan #92 worktree lifecycle governance and reviewed branch dispositions merged through PRs #38-#40."
+  - "Plan #93 privacy-preserving agent tool-usage ledger merged through PRs #41-#43."
+  - "Provisional missing tool outcomes now mature exactly once to terminal evidence; inserted, updated, and duplicate observations remain distinct."
+  - "API reference generation now documents the invoking checkout and emits portable relative links."
+  - "Independent verification gaps and lifecycle-tool policy friction were merged into project-meta through PRs #11-#13."
+  - "All session-owned claims, feature branches, remote refs, and worktrees were removed."
+sanity_checks:
+  - cmd: "python -m pytest -q tests/test_agent_tool_usage.py tests/test_cli_smoke.py tests/test_api_reference_generation.py"
+    expect: "12 tests pass"
+  - cmd: "python scripts/meta/generate_api_reference.py --check"
+    expect: "API reference docs are in sync"
+  - cmd: "ruff check scripts/meta/generate_api_reference.py tests/test_api_reference_generation.py llm_client/observability/agent_tool_usage.py llm_client/cli/tool_usage.py tests/test_agent_tool_usage.py"
+    expect: "exits 0"
+  - cmd: "mypy --strict --follow-imports=silent llm_client/observability/agent_tool_usage.py llm_client/cli/tool_usage.py"
+    expect: "exits 0"
+  - cmd: "make check"
+    expect: "currently stops at the documented 317-finding Ruff baseline tracked by LLM-001"
