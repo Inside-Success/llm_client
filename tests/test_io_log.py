@@ -1508,3 +1508,55 @@ class TestDateBasedLogRotation:
 
         monkeypatch.setenv("LLM_CLIENT_LOG_RETENTION_DAYS", "invalid")
         assert io_log._get_log_retention_days() == 30  # fallback
+
+
+# ---------------------------------------------------------------------------
+# get_cost under concurrent threads (Session-26 field failure regression)
+# ---------------------------------------------------------------------------
+
+
+class TestGetCostThreadSafety:
+    def test_concurrent_reads_and_writes_do_not_raise(self):
+        """check_budget calls get_cost on every budgeted call; under a
+        ThreadPoolExecutor an unlocked read racing a locked write on the one
+        shared sqlite connection raised InterfaceError ('bad parameter or
+        other API misuse'). The read now serializes on the write lock."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        io_log.log_call(
+            model="gpt-5",
+            result=_mock_result(cost=0.001),
+            latency_s=0.1,
+            trace_id="threads/seed",
+            task="t",
+        )
+
+        errors: list[BaseException] = []
+
+        def reader(i: int) -> None:
+            try:
+                for _ in range(25):
+                    io_log.get_cost(trace_id="threads/seed")
+            except BaseException as exc:
+                errors.append(exc)
+
+        def writer(i: int) -> None:
+            try:
+                for j in range(25):
+                    io_log.log_call(
+                        model="gpt-5",
+                        result=_mock_result(cost=0.001),
+                        latency_s=0.1,
+                        trace_id=f"threads/w{i}/{j}",
+                        task="t",
+                    )
+            except BaseException as exc:
+                errors.append(exc)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for i in range(4):
+                pool.submit(reader, i)
+                pool.submit(writer, i)
+
+        assert not errors, f"concurrent get_cost/log_call raised: {errors[:3]}"
+        assert io_log.get_cost(trace_id="threads/seed") > 0

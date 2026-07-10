@@ -21,6 +21,7 @@ from pydantic import BaseModel, ValidationError
 import hashlib as _hashlib
 import json as _json
 import logging as _logging
+import threading as _threading
 
 from llm_client.parsing_utils import safe_json_loads as _safe_json_loads
 
@@ -28,6 +29,44 @@ T = TypeVar("T", bound=BaseModel)
 
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
+
+_INSTRUCTOR_INIT_LOCK = _threading.Lock()
+
+
+def _ensure_instructor_registry_loaded() -> None:
+    """Eagerly load instructor's default (provider, mode) handlers.
+
+    Call under ``_INSTRUCTOR_INIT_LOCK``. instructor's global ``mode_registry``
+    lazy-loads handlers NON-atomically (``_lazy_loaders.pop`` -> module import
+    -> ``_handlers`` store): a second thread arriving inside that window finds
+    the key in neither dict and fails with ``RegistryError: Mode.TOOLS is not
+    registered for provider Provider.OPENAI`` (the concurrent
+    ``call_llm_structured``-under-ThreadPoolExecutor failure). Loading the
+    handlers eagerly turns every later per-call registry lookup into a plain
+    dict read, which is thread-safe.
+    """
+    try:
+        from instructor.v2.core.mode import Mode
+        from instructor.v2.core.providers import Provider
+        from instructor.v2.core.registry import mode_registry
+    except ImportError:
+        # instructor without the v2 lazy registry: nothing to warm.
+        return
+    # from_litellm patches with its defaults (Provider.OPENAI, Mode.TOOLS).
+    mode_registry.get_handlers(Provider.OPENAI, Mode.TOOLS)
+
+
+def _instructor_from_litellm(create_fn: Any) -> Any:
+    """Thread-safe ``instructor.from_litellm``.
+
+    Serializes client construction and handler-registry warmup so concurrent
+    structured calls from threads cannot race the lazy registry.
+    """
+    import instructor
+
+    with _INSTRUCTOR_INIT_LOCK:
+        _ensure_instructor_registry_loaded()
+        return instructor.from_litellm(create_fn)
 
 
 def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
@@ -621,9 +660,7 @@ def _call_llm_structured_impl(
                 _native_schema_failed = True
 
         if not supports_schema or _native_schema_failed:
-            import instructor
-
-            client = instructor.from_litellm(litellm.completion)
+            client = _instructor_from_litellm(litellm.completion)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,
@@ -1222,9 +1259,7 @@ async def _acall_llm_structured_impl(
                 _native_schema_failed = True
 
         if not supports_schema or _native_schema_failed:
-            import instructor
-
-            client = instructor.from_litellm(litellm.acompletion)
+            client = _instructor_from_litellm(litellm.acompletion)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,

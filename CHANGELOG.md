@@ -118,6 +118,27 @@ All notable changes to `llm-client` are documented in this file.
   (override with `LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT=1`) to avoid known
   platform-side rejections when web search tooling is implicitly enabled.
 
+### Fixed
+
+- Cost computation now prefers provider-reported actual cost over estimation,
+  ordered: (1) provider-reported (`_hidden_params["response_cost"]` /
+  `usage.cost` — OpenRouter returns real billed cost) tagged
+  `provider_reported`, (2) `litellm.completion_cost` tagged `computed`,
+  (3) flat per-token floor tagged `fallback_estimate` (unchanged last resort).
+  The completions path (`cost_utils._compute_cost`) and the Responses API path
+  (`responses_runtime._compute_responses_cost`) now share the same ordering
+  (the Responses path previously preferred the estimate over the provider
+  figure).
+- Concurrent `call_llm_structured` from `ThreadPoolExecutor` no longer fails
+  with instructor `RegistryError: Mode.TOOLS is not registered for provider
+  Provider.OPENAI`: instructor's global mode registry lazy-loads handlers
+  non-atomically, so racing threads could observe a half-initialized registry.
+  Instructor client construction now serializes under a process-wide lock and
+  eagerly warms the default handlers (`_instructor_from_litellm`).
+- `get_cost` (the `check_budget` hot-path read) now serializes on the io_log
+  write lock; previously an unlocked read racing a write on the shared sqlite
+  connection raised `sqlite3.InterfaceError` under threaded callers.
+
 ## 0.7.0 - 2026-02-23
 
 ### Breaking Changes

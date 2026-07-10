@@ -45,8 +45,34 @@ def _extract_usage(response: Any) -> dict[str, Any]:
     return result
 
 
+def _provider_reported_cost(response: Any) -> float | None:
+    """Actual provider-billed cost when the response carries one (e.g. OpenRouter).
+
+    litellm surfaces it as ``response._hidden_params["response_cost"]`` and/or
+    ``usage.cost``. Only a real positive number counts — any other shape means
+    "not reported" (mock/absent attributes must never masquerade as cost).
+    """
+    hidden = getattr(response, "_hidden_params", None)
+    if isinstance(hidden, dict):
+        value = hidden.get("response_cost")
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            return float(value)
+    usage = getattr(response, "usage", None)
+    value = getattr(usage, "cost", None) if usage is not None else None
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        return float(value)
+    return None
+
+
 def _compute_cost(response: Any) -> tuple[float, str]:
-    """Compute cost via litellm.completion_cost, with explicit source tagging."""
+    """Compute cost with explicit source tagging, preferring real cost over estimation.
+
+    Ordering: (1) provider-reported actual cost when the response carries one,
+    (2) litellm.completion_cost, (3) flat per-token floor (warned, last resort).
+    """
+    provider_cost = _provider_reported_cost(response)
+    if provider_cost is not None:
+        return provider_cost, "provider_reported"
     try:
         cost = float(litellm.completion_cost(completion_response=response))
         return cost, "computed"
