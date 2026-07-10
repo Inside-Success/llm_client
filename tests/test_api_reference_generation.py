@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,45 @@ def test_generator_emits_docstrings_and_signatures() -> None:
     assert "Persistent I/O logging for LLM calls and embeddings." in html_text
     assert "render_prompt" in html_text
     assert "call_llm" in html_text
+
+
+def test_generator_uses_its_checkout_and_emits_portable_links(tmp_path: Path) -> None:
+    """An installed/shadow package must not replace the checkout being documented."""
+
+    shadow_package = tmp_path / "llm_client"
+    shadow_package.mkdir()
+    (shadow_package / "__init__.py").write_text(
+        '"""Shadow package that must not be documented."""\n',
+        encoding="utf-8",
+    )
+    html_path = tmp_path / "API_REFERENCE.html"
+    markdown_path = tmp_path / "API_REFERENCE.md"
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(GENERATOR_PATH),
+            "--write",
+            "--html-path",
+            str(html_path),
+            "--markdown-path",
+            str(markdown_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=str(tmp_path),
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    html_text = html_path.read_text(encoding="utf-8")
+    assert "llm_client.observability.agent_tool_usage" in html_text
+    assert "Shadow package that must not be documented" not in html_text
+    assert "file://" not in html_text
+    assert 'href="../README.md"' in html_text
 
 
 def test_generator_check_detects_drift() -> None:

@@ -122,6 +122,12 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
   --follow-imports=silent llm_client/observability/agent_tool_usage.py
   llm_client/cli/tool_usage.py`; plain strict mypy traverses the known
   repository-wide baseline and is not evidence for this slice.
+- A post-merge canonical check exposed that the API generator could import the
+  editable-installed canonical checkout while running from a feature worktree,
+  and embedded absolute worktree `file://` links. The generator now puts its
+  own repository root first on `sys.path`, emits repository-relative links, and
+  has a shadow-package negative control proving it documents the invoking
+  checkout.
 
 ## Notes
 
