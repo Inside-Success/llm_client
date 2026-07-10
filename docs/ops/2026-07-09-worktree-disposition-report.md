@@ -65,3 +65,62 @@ the canonical `/home/brian/projects/llm_client` checkout. It was clean on
 non-ancestor branches in the decision queue still resolved. The final evidence
 lane is temporary and is removed through the same merge gate after this report
 lands.
+
+## Branch review decisions
+
+The 13 retained non-ancestor branches were reviewed read-only against
+`main@a73031f`. The user approved execution of all high-confidence decisions.
+No stale branch is merged wholesale.
+
+| Branch | Decision | Confidence | Execution |
+|---|---|---:|---|
+| `fix/instructor-retry-unwrapping` | Retain for `secure-trace-browser-salvage` | High | Retained |
+| `gemini-schema-study` | Superseded; delete local and feature-remote refs | Very high | Executed |
+| `codex/review-prompts-as-assets-20260624` | Retain for `adversarial-review-prompt-asset-migration` | High | Retained |
+| `codex/recovered-control-churn-outcomes-20260622` | Rejected by current failure-taxonomy contract; delete | High | Executed |
+| `codex/submit-retry-state-progress-20260622` | Rejected by Plan #91 evidence contract; delete | High | Executed |
+| `merge-plan-91-into-main-20260405` | Superseded; delete local and feature-remote refs | Very high | Executed |
+| `plan-22-run-progress-observability` | Retain for `durable-run-progress-v2` | High | Retained |
+| `plan-52-llm-client-dead-code` | Archive immutable tip; delete branch refs | High | Executed |
+| `anomaly-phase18-worktree-projects` | Runtime behavior superseded; delete feature refs | High | Executed |
+| `anomaly-phase19-gpt54-codex` | Exact patch on `main`; delete feature refs | High | Executed |
+| `merge-anomaly-phase19-20260405` | Duplicate integration copy; delete branch refs | High | Executed |
+| `anomaly-phase20-gemini-shared-cap` | Exact patches on `main`; delete branch refs | High | Executed |
+| `plan26-observability-config-truthfulness` | Retain for `observability-config-truthfulness-v2` | High | Retained |
+
+### Review findings that constrain salvage
+
+- The trace-browser branch exposes raw trace content through an unauthenticated
+  `0.0.0.0`/CORS-`*` backend and accepts result URLs without a safe-scheme
+  allowlist. Its useful UI/schema work requires redaction, bounded previews,
+  deterministic aggregation, access controls, and tests before porting.
+- The prompt-assets branch targets package fallback while the current resolver
+  prefers the external canonical prompts store. Only the prompt-extraction
+  intent should be ported; its wiki-manifest and ignore commits are stale.
+- Durable run-progress remains a real missing generic capability, but the old
+  implementation permits orphan progress rows, can erase a stage with
+  `stage=None`, and conflicts with current observability schemas.
+- The observability-config backup addresses real import-time configuration and
+  test-isolation gaps. Its documentation is stale and dynamic SQLite path
+  switching requires a concurrency audit before porting.
+- Focused current-main verification executed 73 tests across Gemini schema,
+  provider routing/cooldowns, adversarial review, failure taxonomy, Plan #91,
+  and progress observability; all passed.
+
+### Execution evidence
+
+- Nine reviewed local branches and their nine same-named feature-remote refs
+  were deleted. No target tip changed between review and deletion.
+- Plan #52 tip `94b59d7` is retained by the pushed annotated tag
+  `archive/plan-52-llm-client-dead-code-20260709` before its branch refs were
+  deleted.
+- The separately named, unreviewed remote backup refs for anomaly phases 18
+  and 19 remain untouched.
+- Seven stale legacy coordination claims associated with deleted or retained
+  reviewed branches were released after their owner sessions were confirmed
+  stale.
+- The four forward-port branches still resolve at their reviewed tips:
+  `fix/instructor-retry-unwrapping@3def0e3`,
+  `codex/review-prompts-as-assets-20260624@1f5d6b7`,
+  `plan-22-run-progress-observability@c3746d2`, and
+  `plan26-observability-config-truthfulness@86733ac`.
