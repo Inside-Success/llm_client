@@ -55,6 +55,8 @@ MODEL_OVERRIDE_FIELD_RE = re.compile(
     r"\b(?:override_model|fallback_model|fallback_models|benchmark_model)\b"
 )
 
+BANNED_MODEL_PATTERNS = frozenset({"fable"})
+
 DEFAULT_MODEL_IDS = frozenset(
     {
         "openrouter/minimax/minimax-m3",
@@ -87,10 +89,14 @@ def _looks_like_model_id(value: str) -> bool:
         "openrouter/",
         "openai/",
         "anthropic/",
+        "deepseek/",
         "gemini/",
         "google/",
+        "inception/",
         "ollama/",
+        "qwen/",
         "x-ai/",
+        "z-ai/",
         "codex/",
         "claude-code/",
         "minimax/",
@@ -114,6 +120,13 @@ def _is_default_model_id(value: str) -> bool:
     """Return whether a literal names the current ecosystem default model."""
 
     return value.strip().lower() in DEFAULT_MODEL_IDS
+
+
+def _is_banned_model_id(value: str) -> bool:
+    """Return whether a model literal is denied regardless of override metadata."""
+
+    lower = value.strip().lower()
+    return any(pattern in lower for pattern in BANNED_MODEL_PATTERNS)
 
 
 def _has_override_acceptance(lines: list[str]) -> bool:
@@ -197,7 +210,19 @@ def scan_paths(
                 continue
             call_match = CALL_RE.search(code_segment)
             if call_match and _looks_like_model_id(call_match.group("model")):
-                if _is_default_model_id(call_match.group("model")):
+                model = call_match.group("model")
+                if _is_banned_model_id(model):
+                    violations.append(
+                        PolicyViolation(
+                            path=str(path),
+                            line=line_no,
+                            kind="banned_model_literal",
+                            model=model,
+                            text=stripped,
+                        )
+                    )
+                    continue
+                if _is_default_model_id(model):
                     continue
                 if has_override_acceptance:
                     continue
@@ -206,7 +231,7 @@ def scan_paths(
                         path=str(path),
                         line=line_no,
                         kind="direct_call_literal",
-                        model=call_match.group("model"),
+                        model=model,
                         text=stripped,
                     )
                 )
@@ -215,6 +240,17 @@ def scan_paths(
                 model = literal_match.group("model")
                 if not _looks_like_model_id(model):
                     continue
+                if _is_banned_model_id(model):
+                    violations.append(
+                        PolicyViolation(
+                            path=str(path),
+                            line=line_no,
+                            kind="banned_model_literal",
+                            model=model,
+                            text=stripped,
+                        )
+                    )
+                    break
                 if _is_default_model_id(model):
                     continue
                 if has_override_acceptance:

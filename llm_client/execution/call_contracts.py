@@ -592,6 +592,11 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "fable": (
+        "openrouter/anthropic/claude-opus-4.8 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
+        "Fable-family models are banned by ecosystem policy. Do not use them for "
+        "new calls, even with ordinary model_override_acceptance metadata.",
+    ),
     "gpt-4o-mini": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",
         "GPT-4o-mini (intel 30, $0.15/$0.60) is outclassed by DeepSeek V3.2 "

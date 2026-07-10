@@ -132,6 +132,43 @@ class TestGetModel:
         model = get_model("extraction", available_only=False, use_performance=False)
         assert model == "openrouter/minimax/minimax-m3"
 
+    def test_tier_selectors_resolve_expected_models(self):
+        """Tier selectors should express speed/cost/intelligence policy directly."""
+        expected = {
+            "ultra_fast_low_intel": "openrouter/inception/mercury-2",
+            "ultra_cheap_low_intel": "openrouter/openai/gpt-5-nano",
+            "fast_cheap_mid": "openrouter/deepseek/deepseek-v4-flash",
+            "fast_mid": "openrouter/openai/gpt-5.4-nano",
+            "default_intelligent": "openrouter/minimax/minimax-m3",
+            "fast_intelligent": "openrouter/z-ai/glm-5.2",
+            "very_intelligent": "openrouter/x-ai/grok-4.5",
+            "max_intelligence": "openrouter/anthropic/claude-opus-4.8",
+        }
+
+        for task, model_id in expected.items():
+            assert get_model(task, available_only=False, use_performance=False) == model_id
+
+    def test_legacy_task_selectors_remain_compatible(self):
+        """Task-shaped selectors stay as compatibility aliases to MiniMax-M3."""
+        legacy_tasks = [
+            "agent_reasoning",
+            "budget_extraction",
+            "bulk_cheap",
+            "code_generation",
+            "deep_review",
+            "extraction",
+            "fast_extraction",
+            "graph_building",
+            "judging",
+            "synthesis",
+        ]
+
+        for task in legacy_tasks:
+            assert (
+                get_model(task, available_only=False, use_performance=False)
+                == "openrouter/minimax/minimax-m3"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Performance-based demotion
@@ -455,7 +492,13 @@ class TestConfigLoading:
         assert match["api_key_env"] == "OPENROUTER_API_KEY"
         assert match["structured_output"] is True
         assert "default" in match["tags"]
+        assert "tier-default-intelligent" in match["tags"]
         assert "quality-optimal-review" in match["tags"]
+
+    def test_packaged_registry_has_no_fable_models(self):
+        models = _DEFAULT_CONFIG["models"]
+        assert all("fable" not in m["litellm_id"].lower() for m in models)
+        assert all("fable" not in m["name"].lower() for m in models)
 
     def test_parse_packaged_default_config_rejects_invalid_json(self):
         with pytest.raises(RuntimeError, match="Invalid packaged model registry JSON"):
