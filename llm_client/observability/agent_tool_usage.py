@@ -116,6 +116,7 @@ class ToolUsageImportSummary(BaseModel):
     sessions_with_calls: int
     events_found: int
     inserted: int
+    updated: int
     duplicates: int
     by_client: dict[str, int]
     by_outcome: dict[str, int]
@@ -174,6 +175,15 @@ class _CompletedCall:
     input_size_bytes: int
     output_size_bytes: int
     sequence: int
+
+
+@dataclass(frozen=True, slots=True)
+class _PersistenceCounts:
+    """Classify observations as new rows, matured rows, or duplicates."""
+
+    inserted: int
+    updated: int
+    duplicates: int
 
 
 _SCHEMA_SQL = """
@@ -456,7 +466,7 @@ def import_transcripts(
                 raise
             parse_error_file_hashes.append(_hash_text(str(path.resolve())))
 
-    inserted = persist_usage_events(events=events, db_path=db_path)
+    persistence = _persist_usage_events(events=events, db_path=db_path)
     by_client = _count_values(event.client for event in events)
     by_outcome = _count_values(event.outcome for event in events)
     summary = ToolUsageImportSummary(
@@ -466,8 +476,9 @@ def import_transcripts(
         parse_error_file_hashes=tuple(sorted(parse_error_file_hashes)),
         sessions_with_calls=len({event.session_id_hash for event in events}),
         events_found=len(events),
-        inserted=inserted,
-        duplicates=len(events) - inserted,
+        inserted=persistence.inserted,
+        updated=persistence.updated,
+        duplicates=persistence.duplicates,
         by_client=by_client,
         by_outcome=by_outcome,
     )
@@ -480,44 +491,87 @@ def persist_usage_events(
     events: Sequence[AgentToolUsageEvent],
     db_path: Path,
 ) -> int:
-    """Insert events transactionally and return the number of new rows."""
+    """Persist events and return new-row count, maturing provisional rows."""
+
+    return _persist_usage_events(events=events, db_path=db_path).inserted
+
+
+def _persist_usage_events(
+    *,
+    events: Sequence[AgentToolUsageEvent],
+    db_path: Path,
+) -> _PersistenceCounts:
+    """Persist events while allowing only ``missing`` to mature to terminal."""
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     imported_at = datetime.now(timezone.utc).isoformat()
+    inserted = 0
+    updated = 0
+    duplicates = 0
     with sqlite3.connect(db_path) as db:
         db.executescript(_SCHEMA_SQL)
-        before = db.total_changes
-        db.executemany(
-            """
-            INSERT OR IGNORE INTO agent_tool_usage (
-                event_id, occurred_at, client, project, tool_surface, operation,
-                outcome, duration_ms, session_id_hash, cwd_hash, source_file_hash,
-                source_format, input_size_bytes, output_size_bytes, imported_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    event.event_id,
-                    event.occurred_at,
-                    event.client,
-                    event.project,
-                    event.tool_surface,
-                    event.operation,
-                    event.outcome,
-                    event.duration_ms,
-                    event.session_id_hash,
-                    event.cwd_hash,
-                    event.source_file_hash,
-                    event.source_format,
-                    event.input_size_bytes,
-                    event.output_size_bytes,
-                    imported_at,
+        for event in events:
+            current = db.execute(
+                "SELECT outcome FROM agent_tool_usage WHERE event_id = ?",
+                (event.event_id,),
+            ).fetchone()
+            if current is None:
+                db.execute(
+                    """
+                    INSERT INTO agent_tool_usage (
+                        event_id, occurred_at, client, project, tool_surface, operation,
+                        outcome, duration_ms, session_id_hash, cwd_hash, source_file_hash,
+                        source_format, input_size_bytes, output_size_bytes, imported_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event.event_id,
+                        event.occurred_at,
+                        event.client,
+                        event.project,
+                        event.tool_surface,
+                        event.operation,
+                        event.outcome,
+                        event.duration_ms,
+                        event.session_id_hash,
+                        event.cwd_hash,
+                        event.source_file_hash,
+                        event.source_format,
+                        event.input_size_bytes,
+                        event.output_size_bytes,
+                        imported_at,
+                    ),
                 )
-                for event in events
-            ],
-        )
-        inserted = db.total_changes - before
-    return inserted
+                inserted += 1
+                continue
+
+            if current[0] == "missing" and event.outcome != "missing":
+                cursor = db.execute(
+                    """
+                    UPDATE agent_tool_usage
+                    SET outcome = ?, duration_ms = ?, source_file_hash = ?,
+                        source_format = ?, output_size_bytes = ?, imported_at = ?
+                    WHERE event_id = ? AND outcome = 'missing'
+                    """,
+                    (
+                        event.outcome,
+                        event.duration_ms,
+                        event.source_file_hash,
+                        event.source_format,
+                        event.output_size_bytes,
+                        imported_at,
+                        event.event_id,
+                    ),
+                )
+                if cursor.rowcount == 1:
+                    updated += 1
+                    continue
+            duplicates += 1
+    return _PersistenceCounts(
+        inserted=inserted,
+        updated=updated,
+        duplicates=duplicates,
+    )
 
 
 def build_usage_report(*, db_path: Path, tool_surface: str) -> ToolUsageReport:

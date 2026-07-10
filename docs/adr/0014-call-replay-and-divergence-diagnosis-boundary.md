@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-09
-Verification context: transcript-backed tool usage preserves the client-observed boundary by distinguishing returned, transport-error, application-error, and missing outcomes while explicitly leaving correctness and helpfulness unmeasured; it does not claim call replay
+Verification context: transcript-backed tool usage preserves the client-observed boundary by distinguishing returned, transport-error, application-error, and provisional missing outcomes, allowing only missing-to-terminal maturation while explicitly leaving correctness and helpfulness unmeasured; it does not claim call replay
 
 ## Context
 

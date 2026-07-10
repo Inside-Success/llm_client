@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-09
-Verification context: the transcript-backed agent tool-usage importer records explicit transport/application outcomes without emitting or recategorizing runtime warnings; existing warning taxonomy behavior is unchanged
+Verification context: the transcript-backed agent tool-usage importer records explicit transport/application outcomes and may mature provisional `missing` evidence without emitting or recategorizing runtime warnings; existing warning taxonomy behavior is unchanged
 
 ## Context
 
