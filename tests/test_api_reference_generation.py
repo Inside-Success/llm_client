@@ -96,3 +96,54 @@ def test_generator_check_detects_drift() -> None:
 
         assert check_proc.returncode == 1, check_proc.stdout + check_proc.stderr
         assert "stale html output" in check_proc.stdout
+
+
+def test_check_ignores_only_volatile_generated_timestamp(tmp_path: Path) -> None:
+    """A new wall-clock timestamp must not make unchanged docs look stale."""
+
+    generator = load_generator_module()
+    markdown_path = tmp_path / "API_REFERENCE.md"
+    html_path = tmp_path / "API_REFERENCE.html"
+    markdown_path.write_text(
+        "# API\n<!-- Generated: 2026-01-01T00:00:00Z -->\nbody\n",
+        encoding="utf-8",
+    )
+    html_path.write_text(
+        "<!-- Generated: 2026-01-01T00:00:00Z -->\n<html>body</html>\n",
+        encoding="utf-8",
+    )
+
+    result = generator.compare_or_write(
+        markdown_path=markdown_path,
+        html_path=html_path,
+        markdown_text="# API\n<!-- Generated: 2026-01-02T00:00:00Z -->\nbody\n",
+        html_text="<!-- Generated: 2026-01-02T00:00:00Z -->\n<html>body</html>\n",
+        check=True,
+    )
+
+    assert result == 0
+
+
+def test_signature_text_removes_process_specific_function_address() -> None:
+    """Callable defaults must not make generated signatures change per process."""
+
+    generator = load_generator_module()
+
+    def callback() -> None:
+        return None
+
+    def callable_with_default(selected=callback) -> None:
+        del selected
+
+    rendered = generator.signature_text(callable_with_default)
+
+    assert "0x" not in rendered
+    assert "<function" in rendered
+
+
+def test_stable_output_text_removes_trailing_whitespace() -> None:
+    """Generated reference files must pass git diff whitespace checks."""
+
+    generator = load_generator_module()
+
+    assert generator.stable_output_text("one  \n  \ntwo\t\n") == "one\n\ntwo\n"

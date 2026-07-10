@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-06-26
-Verification context: replayable routing traces still expose provider-governance events, observability logging still honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression so disabled lanes do not fail on unrelated shared SQLite foundation-event writes, and the Gemini schema study now provides replayable evidence for direct-vs-OpenRouter structured behavior
+Last verified: 2026-07-09
+Verification context: transcript-backed tool usage preserves the client-observed boundary by distinguishing returned, transport-error, application-error, and missing outcomes while explicitly leaving correctness and helpfulness unmeasured; it does not claim call replay
 
 ## Context
 

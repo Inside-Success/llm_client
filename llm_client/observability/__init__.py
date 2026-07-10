@@ -1,5 +1,17 @@
 """Observability module boundaries (events, experiments, query, replay)."""
 
+from llm_client.observability.agent_tool_usage import (
+    AgentToolUsageEvent,
+    ToolSurfaceMatcher,
+    ToolUsageImportSummary,
+    ToolUsageReport,
+    TranscriptParseError,
+    build_usage_report,
+    import_transcripts,
+    parse_claude_transcript,
+    parse_codex_transcript,
+    persist_usage_events,
+)
 from llm_client.observability.events import (
     ActiveFeatureProfile,
     configure_logging,
@@ -47,6 +59,7 @@ from llm_client.observability.replay import (
 from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
 
 __all__ = [
+    "AgentToolUsageEvent",
     "ActiveFeatureProfile",
     "ActiveExperimentRun",
     "ExperimentRun",
@@ -59,6 +72,7 @@ __all__ = [
     "configure_experiment_enforcement",
     "configure_feature_profile",
     "configure_logging",
+    "build_usage_report",
     "enforce_agent_spec",
     "experiment_run",
     "format_call_diff",
@@ -76,13 +90,21 @@ __all__ = [
     "get_runs",
     "get_trace_tree",
     "import_jsonl",
+    "import_transcripts",
     "log_embedding",
     "log_experiment_aggregate",
     "log_foundation_event",
     "log_tool_call",
     "log_item",
     "lookup_result",
+    "parse_claude_transcript",
+    "parse_codex_transcript",
+    "persist_usage_events",
     "replay_call_snapshot",
     "start_run",
     "ToolCallResult",
+    "ToolSurfaceMatcher",
+    "ToolUsageImportSummary",
+    "ToolUsageReport",
+    "TranscriptParseError",
 ]

@@ -48,8 +48,16 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
 - `Makefile` (modify)
 - `tests/test_agent_tool_usage.py` (create)
 - `tests/test_cli_smoke.py` (modify)
+- `scripts/meta/generate_api_reference.py` (modify — deterministic check-mode repair)
+- `tests/test_api_reference_generation.py` (modify)
 - `Makefile` (modify)
 - `docs/API_REFERENCE.md` and `docs/API_REFERENCE.html` (regenerate)
+- `docs/adr/0003-warning-taxonomy.md` (re-verify unchanged warning boundary)
+- `docs/adr/0007-observability-contract-boundary.md` (update verification context)
+- `docs/adr/0010-cross-project-runtime-substrate.md` (update verification context)
+- `docs/adr/0012-shared-data-plane-boundary.md` (update verification context)
+- `docs/adr/0013-stream-lifecycle-heartbeat-observability.md` (re-verify unchanged stream boundary)
+- `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md` (update verification context)
 - this plan and `docs/plans/CLAUDE.md`
 
 ## Plan
