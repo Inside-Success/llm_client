@@ -57,3 +57,36 @@ Do not force benchmark baselines, provider SDK demos, fixture strings, or
 workspace-agent SDK lanes through the same raw-model tier selector. Those still
 belong under `llm_client` governance, but they need explicit exception classes
 rather than pretending all model strings mean the same thing.
+
+Use the audit in visibility mode before turning it into a CI gate:
+
+```bash
+python -m llm_client.model_policy_audit --require-llm-client path/to/project
+```
+
+`--require-llm-client` flags direct provider SDK usage such as `openai`,
+`anthropic`, `litellm`, `google.genai`, LangChain provider wrappers, and similar
+SDK surfaces in production Python files. It does not change the existing raw
+model literal audit.
+
+If a file must call a provider SDK directly, record an explicit exception in
+that file:
+
+```python
+llm_client_registration_exception = {
+    "accepted_by": "brian",
+    "reason": "provider SDK documentation sample; not production execution",
+    "category": "provider_sdk_demo",
+}
+```
+
+Recommended exception categories:
+
+- `benchmark_baseline` — external model baseline where using `llm_client` would
+  change the benchmark surface.
+- `fixture` — inert test fixture or golden sample, not executable production
+  routing.
+- `provider_sdk_demo` — documentation/demo code for a provider SDK.
+- `llm_client_internal` — code inside `llm_client` or a sanctioned adapter layer.
+- `migration_pending` — temporary production exception with a tracked migration
+  issue and expiry.
