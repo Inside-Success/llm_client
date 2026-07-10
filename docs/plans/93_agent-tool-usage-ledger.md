@@ -79,6 +79,7 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
 | definition/mention negative control | repeated names without structured calls count as zero |
 | privacy sentinel | raw argument/result/path/session content is absent from SQLite |
 | idempotent import | second import inserts zero rows |
+| outcome maturation | a later result replaces provisional `missing` evidence exactly once |
 | report contract | client/operation/month/outcome/session/latency totals are correct and helpfulness is `unmeasured` |
 | CLI smoke | import/report help surfaces remain callable |
 
@@ -99,8 +100,8 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
 - 81 focused observability, CLI, defaults, I/O-log, and API-generation tests
   pass.
 - Focused Ruff and mypy checks pass for every changed Python surface.
-- API reference regeneration is deterministic and `--write` followed by
-  `--check` passes.
+- API reference regeneration followed by `--check` passes in the declared
+  repository command environment.
 - A privacy-preserving import scanned 3,005 transcript files, explicitly
   skipped 32 malformed files, found 1,366 structured events, and retained
   1,336 unique calls after collapsing duplicate transcript representations.
@@ -113,6 +114,14 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
   environment lacks the optional `langgraph` dependency. Neither failure is
   in a changed or directly dependent surface, so they are recorded rather than
   silently waived.
+- Independent pre-landing review found that `INSERT OR IGNORE` froze a call as
+  `missing` when a later transcript import contained its result. The persistence
+  contract now permits only `missing` to mature to a terminal outcome, reports
+  updates separately from duplicates, and has a three-import negative control.
+- The reproducible focused type command is `mypy --strict
+  --follow-imports=silent llm_client/observability/agent_tool_usage.py
+  llm_client/cli/tool_usage.py`; plain strict mypy traverses the known
+  repository-wide baseline and is not evidence for this slice.
 
 ## Notes
 

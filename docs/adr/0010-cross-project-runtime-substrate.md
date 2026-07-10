@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-17
 Last verified: 2026-07-09
-Verification context: the shared substrate now exposes generic Codex/Claude structured tool-usage import and reporting, keeping cross-project observability in `llm_client` rather than a project-specific policy script
+Verification context: the shared substrate now exposes generic Codex/Claude structured tool-usage import and reporting, including explicit inserted/updated/duplicate counts as provisional calls mature, while keeping cross-project observability in `llm_client` rather than a project-specific policy script
 
 ## Context
 

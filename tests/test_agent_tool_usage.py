@@ -316,8 +316,10 @@ def test_import_is_private_idempotent_and_reportable(tmp_path: Path) -> None:
     assert first.sessions_with_calls == 3
     assert first.events_found == 6
     assert first.inserted == 6
+    assert first.updated == 0
     assert first.duplicates == 0
     assert second.inserted == 0
+    assert second.updated == 0
     assert second.duplicates == 6
 
     db_bytes = db_path.read_bytes()
@@ -365,6 +367,61 @@ def test_import_is_private_idempotent_and_reportable(tmp_path: Path) -> None:
     assert report.helpfulness_status == "unmeasured"
     assert report.helpfulness_rated_calls == 0
     assert "does not establish helpfulness" in report.helpfulness_note
+
+
+def test_missing_call_matures_when_a_later_import_contains_its_result(
+    tmp_path: Path,
+) -> None:
+    """Do not freeze an in-progress transcript call as permanently missing."""
+
+    path = tmp_path / "active.jsonl"
+    call = {
+        "timestamp": "2026-07-09T12:00:00Z",
+        "type": "response_item",
+        "payload": {
+            "type": "function_call",
+            "name": "mcp__codebase-memory__search_graph",
+            "call_id": "maturing-call",
+            "arguments": "{}",
+        },
+    }
+    result = {
+        "timestamp": "2026-07-09T12:00:01Z",
+        "type": "response_item",
+        "payload": {
+            "type": "function_call_output",
+            "call_id": "maturing-call",
+            "output": '{"ok":true}',
+        },
+    }
+    db_path = tmp_path / "usage.sqlite3"
+
+    _write_jsonl(path, [call])
+    first = import_transcripts(
+        codex_roots=(path,),
+        claude_roots=(),
+        db_path=db_path,
+        matcher=_matcher(),
+    )
+    _write_jsonl(path, [call, result])
+    second = import_transcripts(
+        codex_roots=(path,),
+        claude_roots=(),
+        db_path=db_path,
+        matcher=_matcher(),
+    )
+    third = import_transcripts(
+        codex_roots=(path,),
+        claude_roots=(),
+        db_path=db_path,
+        matcher=_matcher(),
+    )
+
+    assert (first.inserted, first.updated, first.duplicates) == (1, 0, 0)
+    assert (second.inserted, second.updated, second.duplicates) == (0, 1, 0)
+    assert (third.inserted, third.updated, third.duplicates) == (0, 0, 1)
+    report = build_usage_report(db_path=db_path, tool_surface="codebase-memory")
+    assert report.by_outcome == {"returned": 1}
 
 
 def test_malformed_transcript_fails_with_file_and_line(tmp_path: Path) -> None:
