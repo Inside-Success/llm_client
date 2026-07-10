@@ -4195,6 +4195,12 @@ class TestModelDeprecation:
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*mistral"):
             call_llm("mistral/mistral-large-latest", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_mistral", max_budget=0)
 
+    def test_fable_raises(self):
+        """Fable-family models are policy-banned, not generic accepted overrides."""
+        from llm_client.core.errors import DeprecatedModelError
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*fable"):
+            call_llm("anthropic/claude-fable-5", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_fable", max_budget=0)
+
     def test_hard_block_not_bypassed_by_strict_env(self, monkeypatch):
         """Hard-blocked models raise even without LLM_CLIENT_STRICT_MODELS=1."""
         from llm_client.core.errors import DeprecatedModelError
