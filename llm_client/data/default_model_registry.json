@@ -2,6 +2,25 @@
   "models": [
     {
       "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1000000,
+      "cost": 0.75,
+      "intelligence": 56,
+      "litellm_id": "openrouter/minimax/minimax-m3",
+      "name": "minimax-m3",
+      "provider": "openrouter",
+      "speed": 160,
+      "structured_output": true,
+      "tags": [
+        "frontier",
+        "1m-context",
+        "agentic",
+        "coding",
+        "default",
+        "quality-optimal-review"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
       "context": 128000,
       "cost": 0.32,
       "intelligence": 42,
@@ -208,7 +227,10 @@
         "intelligence"
       ],
       "require": {
-        "min_intelligence": 42
+        "min_intelligence": 42,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "budget_extraction": {
@@ -220,7 +242,10 @@
       ],
       "require": {
         "min_intelligence": 40,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "bulk_cheap": {
@@ -230,7 +255,10 @@
         "speed"
       ],
       "require": {
-        "min_intelligence": 25
+        "min_intelligence": 25,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "code_generation": {
@@ -240,7 +268,10 @@
         "speed"
       ],
       "require": {
-        "min_intelligence": 38
+        "min_intelligence": 38,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "deep_review": {
@@ -251,7 +282,8 @@
       "require": {
         "min_intelligence": 48,
         "required_tags": [
-          "quality-optimal-review"
+          "quality-optimal-review",
+          "default"
         ]
       }
     },
@@ -263,7 +295,10 @@
       ],
       "require": {
         "min_intelligence": 35,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "fast_extraction": {
@@ -275,7 +310,10 @@
       ],
       "require": {
         "min_intelligence": 35,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "graph_building": {
@@ -286,7 +324,10 @@
       ],
       "require": {
         "min_intelligence": 30,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "judging": {
@@ -297,7 +338,10 @@
       ],
       "require": {
         "min_intelligence": 30,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "synthesis": {
@@ -307,7 +351,10 @@
         "-cost"
       ],
       "require": {
-        "min_intelligence": 40
+        "min_intelligence": 40,
+        "required_tags": [
+          "default"
+        ]
       }
     }
   }

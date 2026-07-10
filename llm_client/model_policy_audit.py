@@ -49,10 +49,18 @@ LOW_SIGNAL_DIR_NAMES = {
 
 ALLOW_LINE_TOKENS = (
     "model-policy: allow-raw-model",
-    "override_model",
-    "fallback_model",
-    "fallback_models",
-    "benchmark_model",
+)
+
+MODEL_OVERRIDE_FIELD_RE = re.compile(
+    r"\b(?:override_model|fallback_model|fallback_models|benchmark_model)\b"
+)
+
+DEFAULT_MODEL_IDS = frozenset(
+    {
+        "openrouter/minimax/minimax-m3",
+        "minimax/minimax-m3",
+        "minimax-m3",
+    }
 )
 
 CALL_RE = re.compile(
@@ -85,6 +93,7 @@ def _looks_like_model_id(value: str) -> bool:
         "x-ai/",
         "codex/",
         "claude-code/",
+        "minimax/",
     )
     bare_prefixes = (
         "gpt-",
@@ -92,12 +101,35 @@ def _looks_like_model_id(value: str) -> bool:
         "claude-",
         "grok-",
         "deepseek-",
+        "minimax-",
         "o1-",
         "o3-",
     )
     if any(lower.startswith(prefix) and len(lower) > len(prefix) for prefix in provider_prefixes):
         return True
     return lower.startswith(bare_prefixes)
+
+
+def _is_default_model_id(value: str) -> bool:
+    """Return whether a literal names the current ecosystem default model."""
+
+    return value.strip().lower() in DEFAULT_MODEL_IDS
+
+
+def _has_override_acceptance(lines: list[str]) -> bool:
+    """Return whether a file records human acceptance for model overrides.
+
+    The scanner is intentionally conservative: an override record must be
+    explicit and include who accepted it and why. Expiry and richer provenance
+    can be added by consumer policy without weakening this base check.
+    """
+
+    joined = "\n".join(lines)
+    return (
+        "model_override_acceptance" in joined
+        and "accepted_by" in joined
+        and "reason" in joined
+    )
 
 
 def _should_skip_file(
@@ -155,6 +187,7 @@ def scan_paths(
             lines = path.read_text(encoding="utf-8").splitlines()
         except UnicodeDecodeError:
             continue
+        has_override_acceptance = _has_override_acceptance(lines)
         for line_no, line in enumerate(lines, start=1):
             if any(token in line for token in ALLOW_LINE_TOKENS):
                 continue
@@ -164,6 +197,10 @@ def scan_paths(
                 continue
             call_match = CALL_RE.search(code_segment)
             if call_match and _looks_like_model_id(call_match.group("model")):
+                if _is_default_model_id(call_match.group("model")):
+                    continue
+                if has_override_acceptance:
+                    continue
                 violations.append(
                     PolicyViolation(
                         path=str(path),
@@ -178,11 +215,20 @@ def scan_paths(
                 model = literal_match.group("model")
                 if not _looks_like_model_id(model):
                     continue
+                if _is_default_model_id(model):
+                    continue
+                if has_override_acceptance:
+                    continue
+                violation_kind = (
+                    "unaccepted_model_override"
+                    if MODEL_OVERRIDE_FIELD_RE.search(code_segment)
+                    else "raw_model_literal"
+                )
                 violations.append(
                     PolicyViolation(
                         path=str(path),
                         line=line_no,
-                        kind="raw_model_literal",
+                        kind=violation_kind,
                         model=model,
                         text=stripped,
                     )

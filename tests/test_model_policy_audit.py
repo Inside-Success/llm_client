@@ -21,7 +21,7 @@ def test_scan_paths_flags_direct_literal_call(tmp_path: Path) -> None:
     assert violations[0].kind == "direct_call_literal"
 
 
-def test_scan_paths_allows_override_fields(tmp_path: Path) -> None:
+def test_scan_paths_flags_unaccepted_override_fields(tmp_path: Path) -> None:
     project = tmp_path / "proj"
     project.mkdir()
     config = project / "config.yaml"
@@ -33,7 +33,57 @@ def test_scan_paths_allows_override_fields(tmp_path: Path) -> None:
 
     violations = scan_paths([project])
 
+    assert len(violations) == 1
+    assert violations[0].kind == "unaccepted_model_override"
+
+
+def test_scan_paths_allows_human_accepted_override_fields(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    config = project / "config.yaml"
+    config.write_text(
+        'selection_task: graph_building\n'
+        'fallback_model: "openrouter/openai/gpt-5-mini"\n'
+        'model_override_acceptance:\n'
+        '  accepted_by: brian\n'
+        '  reason: "temporary fallback while MiniMax-M3 provider reliability is measured"\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project])
+
     assert violations == []
+
+
+def test_scan_paths_allows_default_minimax_literal(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "service.py"
+    source.write_text(
+        'from llm_client import call_llm\n'
+        'call_llm("openrouter/minimax/minimax-m3", messages)\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project])
+
+    assert violations == []
+
+
+def test_scan_paths_flags_direct_minimax_override(tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    source = project / "service.py"
+    source.write_text(
+        'MODEL = "minimax/MiniMax-M2.7"\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project])
+
+    assert len(violations) == 1
+    assert violations[0].model == "minimax/MiniMax-M2.7"
+    assert violations[0].kind == "raw_model_literal"
 
 
 def test_scan_paths_allows_inline_bypass_comment(tmp_path: Path) -> None:
