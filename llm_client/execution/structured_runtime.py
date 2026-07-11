@@ -22,12 +22,29 @@ import hashlib as _hashlib
 import json as _json
 import logging as _logging
 
+from llm_client.core.models import supports_structured_output as _registry_supports_structured_output
 from llm_client.parsing_utils import safe_json_loads as _safe_json_loads
 
 T = TypeVar("T", bound=BaseModel)
 
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
+
+
+def _model_supports_native_schema(model: str) -> bool:
+    """Native json_schema capability: llm_client registry first, litellm fallback.
+
+    The curated model registry is authoritative for models it knows — litellm's
+    capability map lags new OpenRouter releases and was silently rerouting
+    schema-capable models (deepseek-v4-flash, minimax-m3) onto the instructor
+    fallback. Unknown models still defer to litellm.
+    """
+    import litellm
+
+    registry_capability = _registry_supports_structured_output(model)
+    if registry_capability is not None:
+        return registry_capability
+    return bool(litellm.supports_response_schema(model=model))
 
 
 def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
@@ -468,7 +485,7 @@ def _call_llm_structured_impl(
                 ),
             ))
 
-        supports_schema = litellm.supports_response_schema(model=current_model)
+        supports_schema = _model_supports_native_schema(current_model)
         _native_schema_failed = False
         if supports_schema:
             schema = _strict_json_schema(response_model.model_json_schema())
@@ -1069,7 +1086,7 @@ async def _acall_llm_structured_impl(
                 ),
             ))
 
-        supports_schema = litellm.supports_response_schema(model=current_model)
+        supports_schema = _model_supports_native_schema(current_model)
         _native_schema_failed = False
         if supports_schema:
             schema = _strict_json_schema(response_model.model_json_schema())
