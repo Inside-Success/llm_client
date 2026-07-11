@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-10T06:17:01Z -->
+<!-- Generated: 2026-07-11T14:19:48Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -7579,6 +7579,22 @@ Args:
 Returns:
     List of dicts with: task, model, call_count, total_cost,
     avg_latency_s, error_rate, avg_tokens.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-core-models-supports_structured_output">
+  <summary><code>supports_structured_output</code> <span class="sig">(litellm_id: str) -&gt; bool | None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Registry-declared native structured-output (json_schema) capability.</p>
+    <p class="meta">Source: <code>llm_client.core.models</code> functions</p>
+    <pre class="doc">Registry-declared native structured-output (json_schema) capability.
+
+Returns the registry&#x27;s ``structured_output`` value for a known model, or
+``None`` for models not in the registry. The execution runtime treats the
+registry as authoritative for curated models and falls back to litellm&#x27;s
+capability map only for unknown ids — litellm&#x27;s map lags new OpenRouter
+releases (e.g. deepseek-v4-flash, minimax-m3 were marked unsupported),
+which silently rerouted schema-capable models onto the instructor path.</pre>
   </div>
 </details>
 

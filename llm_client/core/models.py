@@ -493,6 +493,24 @@ def supports_tool_calling(litellm_id: str) -> bool:
     return True  # unknown models assumed capable
 
 
+def supports_structured_output(litellm_id: str) -> bool | None:
+    """Registry-declared native structured-output (json_schema) capability.
+
+    Returns the registry's ``structured_output`` value for a known model, or
+    ``None`` for models not in the registry. The execution runtime treats the
+    registry as authoritative for curated models and falls back to litellm's
+    capability map only for unknown ids — litellm's map lags new OpenRouter
+    releases (e.g. deepseek-v4-flash, minimax-m3 were marked unsupported),
+    which silently rerouted schema-capable models onto the instructor path.
+    """
+    config = _load_config()
+    for m in config["models"]:
+        entry = m if isinstance(m, dict) else m.model_dump()
+        if entry.get("litellm_id") == litellm_id:
+            return bool(entry.get("structured_output", False))
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

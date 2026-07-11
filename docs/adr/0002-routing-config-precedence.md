@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-06-26
-Verification context: routing still canonicalizes exact gpt-5.4 requests through the typed provider-governance policy before direct or openrouter policy application, `routing_trace["provider_governance_events"]` still exposes those governance decisions explicitly, and direct Gemini thinking defaults are now resolved from shared config
+Last verified: 2026-07-11
+Verification context: structured runtime now resolves native json_schema capability from the curated model registry first (litellm map only for unregistered ids) — a capability-lookup change only; model identity fields, routing precedence, warning taxonomy, background polling, replay boundary, and cross-project substrate contracts are unchanged and covered by the passing structured-output + contract test suites (72 structured tests; 1526 total pass, 9 pre-existing baseline failures)
 
 ## Context
 
