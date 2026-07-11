@@ -137,6 +137,7 @@ from llm_client.core.errors import (
 )
 
 from llm_client.utils.rate_limit import configure as configure_rate_limit
+from llm_client.utils.logging_setup import setup_logging
 from llm_client.observability import (
     ActiveFeatureProfile,
     ActiveExperimentRun,
@@ -200,7 +201,7 @@ from llm_client.prompt_assets import (
     resolve_prompt_asset,
 )
 from llm_client.prompts import render_prompt
-# Relocated (Plan #17): agent_spec → project-meta, validators → agentic_scaffolding
+# Relocated: agent_spec → prompt_eval, validators → agentic_scaffolding
 
 if _TYPE_CHECKING:
     from llm_client.difficulty import (
@@ -235,9 +236,11 @@ from llm_client.tools.tool_utils import (
 )
 from llm_client.tools.decorator import (
     ToolInfo,
-    ToolRegistry as ToolDecoratorRegistry,
+    ToolRegistry,
+    ToolRegistry as ToolDecoratorRegistry,  # backwards compat alias
     ToolResult,
-    registry as tool_registry,
+    registry,
+    registry as tool_registry,  # backwards compat alias
     tool,
 )
 
@@ -383,8 +386,11 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "tool",
     "ToolResult",
     "ToolInfo",
+    "ToolRegistry",
+    "registry",
     "ToolDecoratorRegistry",
     "tool_registry",
+    "setup_logging",
 )
 
 _COMPAT_HOLD_EXPORTS: tuple[str, ...] = (
@@ -413,7 +419,7 @@ _COMPAT_HOLD_EXPORTS: tuple[str, ...] = (
     "get_active_llm_calls",
     "get_background_mode_adoption",
     "get_completed_traces",
-    # Relocated (Plan #17): agent_spec, validators
+    # Relocated: agent_spec, validators
     "callable_to_openai_tool",
     "prepare_direct_tools",
     "PlanningConfig",
@@ -508,7 +514,7 @@ def __getattr__(name: str) -> object:
         "load_gate_policy": "prompt_eval.experiment_eval",
         "build_gate_signals": "prompt_eval.experiment_eval",
         "evaluate_gate_policy": "prompt_eval.experiment_eval",
-        "load_agent_spec": "project-meta (scripts/meta/agent_spec.py)",
+        "load_agent_spec": "prompt_eval.agent_spec",
         "experiment_run": "prompt_eval.experiment_eval",
     }
     if name in _EXTRACTED_FUNCTIONS:

@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-04-08
-Verification context: the shared substrate still owns typed provider-governance policy and explicit governance events, its observability layer still honors dynamic env-based logging suppression, and direct Gemini thinking defaults are now expressed as shared runtime policy instead of per-call hardcoding
+Last verified: 2026-07-09
+Verification context: the shared substrate now exposes generic Codex/Claude structured tool-usage import and reporting, including explicit inserted/updated/duplicate counts as provisional calls mature, while keeping cross-project observability in `llm_client` rather than a project-specific policy script
 
 ## Context
 

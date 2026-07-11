@@ -2,7 +2,64 @@
   "models": [
     {
       "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1000000,
+      "cost": 0.22,
+      "intelligence": 44,
+      "litellm_id": "openrouter/minimax/minimax-m3",
+      "name": "minimax-m3",
+      "provider": "openrouter",
+      "speed": 95,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "agentic",
+        "coding",
+        "default",
+        "default-intelligent",
+        "quality-optimal-review",
+        "tier-default-intelligent"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
       "context": 128000,
+      "cost": 0.14,
+      "intelligence": 25,
+      "litellm_id": "openrouter/inception/mercury-2",
+      "name": "mercury-2",
+      "provider": "openrouter",
+      "speed": 928,
+      "structured_output": true,
+      "tags": [
+        "coding",
+        "low-intelligence",
+        "schema-aligned-json",
+        "tier-ultra-fast-low-intel",
+        "ultra-fast"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1000000,
+      "cost": 0.06,
+      "intelligence": 40,
+      "litellm_id": "openrouter/deepseek/deepseek-v4-flash",
+      "name": "deepseek-v4-flash",
+      "provider": "openrouter",
+      "speed": 110,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "cheap",
+        "coding",
+        "open-weight",
+        "reasoning",
+        "tier-fast-cheap-mid"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1000000,
       "cost": 0.32,
       "intelligence": 42,
       "litellm_id": "openrouter/deepseek/deepseek-chat",
@@ -11,8 +68,8 @@
       "speed": 36,
       "structured_output": true,
       "tags": [
-        "open-weight",
-        "cheap"
+        "cheap",
+        "open-weight"
       ]
     },
     {
@@ -26,9 +83,9 @@
       "speed": 207,
       "structured_output": true,
       "tags": [
+        "demoted-broken-structured-output",
         "mid-tier",
-        "structured-output-degraded-2026-03-25",
-        "demoted-broken-structured-output"
+        "structured-output-degraded-2026-03-25"
       ]
     },
     {
@@ -63,17 +120,17 @@
     {
       "api_key_env": "OPENROUTER_API_KEY",
       "context": 1048576,
-      "cost": 7.0,
-      "intelligence": 44,
+      "cost": 1.74,
+      "intelligence": 46,
       "litellm_id": "openrouter/google/gemini-3.1-pro-preview",
       "name": "gemini-3.1-pro-preview",
       "provider": "openrouter",
-      "speed": 72,
+      "speed": 142,
       "structured_output": true,
       "tags": [
+        "1m-context",
         "frontier",
         "preview",
-        "1m-context",
         "reasoning"
       ]
     },
@@ -116,18 +173,20 @@
       "speed": 141,
       "structured_output": true,
       "tags": [
-        "cheapest-openai"
+        "cheapest-openai",
+        "low-intelligence",
+        "tier-ultra-cheap-low-intel"
       ]
     },
     {
       "api_key_env": "OPENROUTER_API_KEY",
       "context": 400000,
-      "cost": 1.69,
-      "intelligence": 44,
+      "cost": 0.65,
+      "intelligence": 40,
       "litellm_id": "openrouter/openai/gpt-5.4-mini",
       "name": "gpt-5.4-mini",
       "provider": "openrouter",
-      "speed": 130,
+      "speed": 161,
       "structured_output": true,
       "tags": [
         "reliable-structured",
@@ -137,30 +196,110 @@
     {
       "api_key_env": "OPENROUTER_API_KEY",
       "context": 400000,
-      "cost": 0.46,
-      "intelligence": 33,
+      "cost": 0.18,
+      "intelligence": 38,
       "litellm_id": "openrouter/openai/gpt-5.4-nano",
       "name": "gpt-5.4-nano",
       "provider": "openrouter",
-      "speed": 150,
+      "speed": 163,
       "structured_output": true,
       "tags": [
         "cheap",
-        "strong-tool-calling"
+        "strong-tool-calling",
+        "tier-fast-mid"
       ]
     },
     {
       "api_key_env": "OPENROUTER_API_KEY",
-      "context": 2000000,
-      "cost": 0.28,
-      "intelligence": 39,
-      "litellm_id": "openrouter/x-ai/grok-4.1-fast",
-      "name": "grok-4.1-fast",
+      "context": 1000000,
+      "cost": 0.9,
+      "intelligence": 51,
+      "litellm_id": "openrouter/z-ai/glm-5.2",
+      "name": "glm-5.2",
       "provider": "openrouter",
-      "speed": 179,
+      "speed": 201,
       "structured_output": true,
       "tags": [
-        "2m-context"
+        "1m-context",
+        "coding",
+        "frontier",
+        "reasoning",
+        "tier-fast-intelligent"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1000000,
+      "cost": 1.43,
+      "intelligence": 46,
+      "litellm_id": "openrouter/qwen/qwen3.7-max",
+      "name": "qwen3.7-max",
+      "provider": "openrouter",
+      "speed": 205,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "agentic",
+        "coding",
+        "tier-fast-intelligent"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 500000,
+      "cost": 1.35,
+      "intelligence": 54,
+      "litellm_id": "openrouter/x-ai/grok-4.5",
+      "name": "grok-4.5",
+      "provider": "openrouter",
+      "speed": 87,
+      "structured_output": true,
+      "tags": [
+        "coding",
+        "frontier",
+        "manual-selection",
+        "reasoning",
+        "tier-very-intelligent"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1000000,
+      "cost": 3.85,
+      "intelligence": 56,
+      "litellm_id": "openrouter/anthropic/claude-opus-4.8",
+      "name": "claude-opus-4.8",
+      "provider": "openrouter",
+      "speed": 63,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "deep-review",
+        "frontier",
+        "long-thinking",
+        "manual-selection",
+        "quality-optimal-review",
+        "tier-max-intelligence"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1050000,
+      "cost": 4.35,
+      "intelligence": 55,
+      "litellm_id": "openrouter/openai/gpt-5.5",
+      "name": "gpt-5.5",
+      "provider": "openrouter",
+      "speed": 70,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "deep-review",
+        "frontier",
+        "long-thinking",
+        "manual-selection",
+        "reasoning",
+        "tier-max-intelligence"
       ]
     },
     {
@@ -174,24 +313,180 @@
       "speed": 5,
       "structured_output": true,
       "tags": [
+        "deep-review",
+        "frontier",
+        "long-thinking"
+      ]
+    },
+    {
+      "api_key_env": "OPENAI_API_KEY",
+      "context": 1050000,
+      "cost": 17.5,
+      "intelligence": 51,
+      "litellm_id": "gpt-5.5",
+      "name": "gpt-5.5-direct",
+      "provider": "openai",
+      "speed": 40,
+      "structured_output": true,
+      "tags": [
+        "deep-review",
+        "frontier",
+        "manual-selection",
+        "reasoning"
+      ]
+    },
+    {
+      "api_key_env": "OPENAI_API_KEY",
+      "context": 1050000,
+      "cost": 105.0,
+      "intelligence": 55,
+      "litellm_id": "gpt-5.5-pro",
+      "name": "gpt-5.5-pro",
+      "provider": "openai",
+      "speed": 3,
+      "structured_output": true,
+      "tags": [
+        "deep-review",
         "frontier",
         "long-thinking",
-        "deep-review"
+        "manual-selection",
+        "quality-optimal-review"
       ]
     }
   ],
   "tasks": {
+    "ultra_fast_low_intel": {
+      "description": "Maximum throughput for low-stakes transforms, routing, and tiny rewrites.",
+      "prefer": [
+        "speed",
+        "-cost",
+        "intelligence"
+      ],
+      "require": {
+        "min_intelligence": 20,
+        "required_tags": [
+          "tier-ultra-fast-low-intel"
+        ]
+      }
+    },
+    "ultra_cheap_low_intel": {
+      "description": "Minimum cost for disposable low-stakes classification and extraction.",
+      "prefer": [
+        "-cost",
+        "speed",
+        "intelligence"
+      ],
+      "require": {
+        "min_intelligence": 20,
+        "required_tags": [
+          "tier-ultra-cheap-low-intel"
+        ]
+      }
+    },
+    "fast_cheap_mid": {
+      "description": "Bulk work with a real reasoning floor and aggressive cost control.",
+      "prefer": [
+        "-cost",
+        "speed",
+        "intelligence"
+      ],
+      "require": {
+        "min_intelligence": 38,
+        "structured_output": true,
+        "required_tags": [
+          "tier-fast-cheap-mid"
+        ]
+      }
+    },
+    "fast_mid": {
+      "description": "General fast lane when latency matters more than deep reasoning.",
+      "prefer": [
+        "speed",
+        "-cost",
+        "intelligence"
+      ],
+      "require": {
+        "min_intelligence": 35,
+        "structured_output": true,
+        "required_tags": [
+          "tier-fast-mid"
+        ]
+      }
+    },
+    "default_intelligent": {
+      "description": "Shared default for ordinary high-quality project work.",
+      "prefer": [
+        "intelligence",
+        "-cost",
+        "speed"
+      ],
+      "require": {
+        "min_intelligence": 40,
+        "structured_output": true,
+        "required_tags": [
+          "tier-default-intelligent"
+        ]
+      }
+    },
+    "fast_intelligent": {
+      "description": "High-quality reasoning while keeping latency practical.",
+      "prefer": [
+        "intelligence",
+        "speed",
+        "-cost"
+      ],
+      "require": {
+        "min_intelligence": 45,
+        "structured_output": true,
+        "required_tags": [
+          "tier-fast-intelligent"
+        ]
+      }
+    },
+    "very_intelligent": {
+      "description": "Strong frontier reasoning for difficult work before max-cost escalation.",
+      "prefer": [
+        "-cost",
+        "intelligence",
+        "speed"
+      ],
+      "require": {
+        "min_intelligence": 53,
+        "structured_output": true,
+        "required_tags": [
+          "tier-very-intelligent"
+        ]
+      }
+    },
+    "max_intelligence": {
+      "description": "Highest non-banned reasoning tier; explicit use only.",
+      "prefer": [
+        "intelligence",
+        "-cost",
+        "speed"
+      ],
+      "require": {
+        "min_intelligence": 55,
+        "structured_output": true,
+        "required_tags": [
+          "tier-max-intelligence"
+        ]
+      }
+    },
     "agent_reasoning": {
-      "description": "Complex multi-step reasoning",
+      "description": "Compatibility selector; prefer default_intelligent for new code.",
       "prefer": [
         "intelligence"
       ],
       "require": {
-        "min_intelligence": 42
+        "min_intelligence": 42,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "budget_extraction": {
-      "description": "Budget-sensitive structured extraction with a quality floor",
+      "description": "Compatibility selector; prefer fast_cheap_mid or default_intelligent for new code.",
       "prefer": [
         "-cost",
         "intelligence",
@@ -199,51 +494,67 @@
       ],
       "require": {
         "min_intelligence": 40,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "bulk_cheap": {
-      "description": "High-volume, cost-sensitive",
+      "description": "Compatibility selector; prefer ultra_cheap_low_intel or fast_cheap_mid for new code.",
       "prefer": [
         "-cost",
         "speed"
       ],
       "require": {
-        "min_intelligence": 25
+        "min_intelligence": 25,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "code_generation": {
-      "description": "Writing and reviewing code",
+      "description": "Compatibility selector; prefer default_intelligent or fast_intelligent for new code.",
       "prefer": [
         "intelligence",
         "speed"
       ],
       "require": {
-        "min_intelligence": 38
+        "min_intelligence": 38,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "deep_review": {
-      "description": "Research-grade architectural review (long-thinking)",
+      "description": "Compatibility selector; prefer very_intelligent or max_intelligence for explicit escalations.",
       "prefer": [
         "intelligence"
       ],
       "require": {
-        "min_intelligence": 48
+        "min_intelligence": 44,
+        "required_tags": [
+          "quality-optimal-review",
+          "default"
+        ]
       }
     },
     "extraction": {
-      "description": "Structured output with Pydantic",
+      "description": "Compatibility selector; prefer default_intelligent or fast_cheap_mid for new code.",
       "prefer": [
         "intelligence",
         "-cost"
       ],
       "require": {
         "min_intelligence": 35,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "fast_extraction": {
-      "description": "Fast structured extraction for high-throughput prompt iteration",
+      "description": "Compatibility selector; prefer fast_mid or fast_cheap_mid for new code.",
       "prefer": [
         "speed",
         "intelligence",
@@ -251,39 +562,51 @@
       ],
       "require": {
         "min_intelligence": 35,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "graph_building": {
-      "description": "Knowledge graph construction",
+      "description": "Compatibility selector; prefer default_intelligent for graph construction.",
       "prefer": [
         "-cost",
         "speed"
       ],
       "require": {
         "min_intelligence": 30,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "judging": {
-      "description": "LLM-as-judge rubric scoring of task outputs",
+      "description": "Compatibility selector; prefer default_intelligent or very_intelligent based on stakes.",
       "prefer": [
         "-cost",
         "intelligence"
       ],
       "require": {
         "min_intelligence": 30,
-        "structured_output": true
+        "structured_output": true,
+        "required_tags": [
+          "default"
+        ]
       }
     },
     "synthesis": {
-      "description": "Research synthesis, reports",
+      "description": "Compatibility selector; prefer default_intelligent or fast_intelligent for new code.",
       "prefer": [
         "intelligence",
         "-cost"
       ],
       "require": {
-        "min_intelligence": 40
+        "min_intelligence": 40,
+        "required_tags": [
+          "default"
+        ]
       }
     }
   }

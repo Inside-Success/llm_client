@@ -1,0 +1,8 @@
+id: shared.investigation_pipeline.goal_decompose
+version: 1
+kind: chat_prompt
+status: canonical
+description: Decomposes a journalist's research query into a structured investigation scope.
+template_path: template.yaml
+input_schema: investigation.goal_decompose_input.v1
+output_schema: investigation.goal_scope.v1

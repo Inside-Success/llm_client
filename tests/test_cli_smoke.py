@@ -13,6 +13,13 @@ CLI_CMDS = [
     ["adoption", "--help"],
     ["backfill", "--help"],
     ["tool-lint", "--help"],
+    ["tool-usage", "--help"],
+    ["tool-usage", "import", "--help"],
+    ["tool-usage", "report", "--help"],
+    ["review-artifact", "--help"],
+    ["review-cycle", "--help"],
+    ["duet-review", "--help"],
+    ["deliberate-task", "--help"],
 ]
 
 

@@ -41,55 +41,39 @@ class TestGetModel:
     def test_extraction_returns_highest_intelligence_structured(self):
         # available_only=False so we don't need env vars set
         model = get_model("extraction", available_only=False, use_performance=False)
-        # gpt-5.2-pro has intelligence=50 and structured_output=True (highest)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_bulk_cheap_returns_cheapest(self):
         model = get_model("bulk_cheap", available_only=False, use_performance=False)
-        # gpt-5-nano is cheapest at $0.14 (via OpenRouter)
-        assert model == "openrouter/openai/gpt-5-nano"
+        assert model == "openrouter/minimax/minimax-m3"
 
-    def test_budget_extraction_prefers_deepseek_over_lower_floor_graph_model(self):
+    def test_budget_extraction_prefers_shared_minimax_default(self):
         model = get_model("budget_extraction", available_only=False)
-        # budget_extraction adds a quality floor (intel>=40) before optimizing
-        # cost, which excludes grok-4.1-fast (intel=39) and picks deepseek-chat.
-        assert model == "openrouter/deepseek/deepseek-chat"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_fast_extraction_prefers_fastest_structured_model_over_static_candidates(self):
         model = get_model("fast_extraction", available_only=False, use_performance=False)
-        # fast_extraction requires structured_output + intel>=35, then prefers
-        # speed before intelligence/cost. Registry ranks may change as models
-        # evolve; verify the selection has structured_output and meets intel floor.
-        assert model is not None
-        assert "gemini" in model or "gpt" in model or "deepseek" in model
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_graph_building_returns_cheapest_structured(self):
         model = get_model("graph_building", available_only=False)
-        # cheapest with structured_output and intel>=30:
-        # gpt-5-nano (intel=27) fails intel check
-        # gemini-2.5-flash-lite (intel=28) fails intel check
-        # grok-4.1-fast (intel=39, cost=0.28) or deepseek (intel=42, cost=0.32)
-        # grok-4.1-fast at $0.28 wins (via OpenRouter)
-        assert model == "openrouter/x-ai/grok-4.1-fast"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_agent_reasoning_filters_high_intelligence(self):
         model = get_model("agent_reasoning", available_only=False)
-        # min_intelligence=42, prefer intelligence
-        # gpt-5.2-pro (50), gemini-3-flash (46), gpt-5 (45), deepseek (42)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_synthesis_prefers_intelligence_then_cost(self):
         model = get_model("synthesis", available_only=False)
-        # min_intelligence=40, prefer intelligence then -cost
-        # gpt-5.2-pro (50), gemini-3-flash (46), gpt-5 (45), deepseek (42)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_code_generation_prefers_intelligence_then_speed(self):
         model = get_model("code_generation", available_only=False)
-        # min_intelligence=38, prefer intelligence then speed
-        # gpt-5.2-pro (50, speed=5), gemini-3-flash (46, speed=207)
-        # gpt-5.2-pro wins on intelligence even though slower
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
+
+    def test_deep_review_selects_shared_minimax_default(self):
+        model = get_model("deep_review", available_only=False, use_performance=False)
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_unknown_task_raises_keyerror(self):
         with pytest.raises(KeyError, match="Unknown task"):
@@ -127,7 +111,7 @@ class TestGetModel:
             for k in ["OPENAI_API_KEY", "GEMINI_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY"]:
                 os.environ.pop(k, None)
             model = get_model("bulk_cheap", available_only=True, use_performance=False)
-            assert model == "openrouter/openai/gpt-5-nano"
+            assert model == "openrouter/minimax/minimax-m3"
 
     def test_available_only_no_keys_raises(self):
         env_clear = {
@@ -146,7 +130,44 @@ class TestGetModel:
     def test_use_performance_false_ignores_db(self):
         """use_performance=False returns same as static selection."""
         model = get_model("extraction", available_only=False, use_performance=False)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
+
+    def test_tier_selectors_resolve_expected_models(self):
+        """Tier selectors should express speed/cost/intelligence policy directly."""
+        expected = {
+            "ultra_fast_low_intel": "openrouter/inception/mercury-2",
+            "ultra_cheap_low_intel": "openrouter/openai/gpt-5-nano",
+            "fast_cheap_mid": "openrouter/deepseek/deepseek-v4-flash",
+            "fast_mid": "openrouter/openai/gpt-5.4-nano",
+            "default_intelligent": "openrouter/minimax/minimax-m3",
+            "fast_intelligent": "openrouter/z-ai/glm-5.2",
+            "very_intelligent": "openrouter/x-ai/grok-4.5",
+            "max_intelligence": "openrouter/anthropic/claude-opus-4.8",
+        }
+
+        for task, model_id in expected.items():
+            assert get_model(task, available_only=False, use_performance=False) == model_id
+
+    def test_legacy_task_selectors_remain_compatible(self):
+        """Task-shaped selectors stay as compatibility aliases to MiniMax-M3."""
+        legacy_tasks = [
+            "agent_reasoning",
+            "budget_extraction",
+            "bulk_cheap",
+            "code_generation",
+            "deep_review",
+            "extraction",
+            "fast_extraction",
+            "graph_building",
+            "judging",
+            "synthesis",
+        ]
+
+        for task in legacy_tasks:
+            assert (
+                get_model(task, available_only=False, use_performance=False)
+                == "openrouter/minimax/minimax-m3"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -195,37 +216,32 @@ class TestPerformanceDemotion:
         for _ in range(error_count):
             io_log.log_call(model=model, error=RuntimeError("fail"), latency_s=0.5, task=task)
 
-    def test_demotes_high_error_rate_model(self):
-        """Model with >15% error rate gets demoted behind alternatives."""
-        # gpt-5.2-pro (intel=50) normally wins extraction
-        # Give it 50% error rate
-        self._insert_calls("gpt-5.2-pro", "extraction", 5, 5)
-        # Insert reliable data for an alternative
+    def test_single_default_model_is_not_demoted_without_policy_candidate(self):
+        """Observed reliability cannot promote a model outside task policy."""
+        self._insert_calls("openrouter/minimax/minimax-m3", "extraction", 5, 5)
         self._insert_calls("gemini/gemini-2.5-flash", "extraction", 20, 0)
 
         model = get_model("extraction", available_only=False)
-        # gpt-5.2-pro should be demoted due to high error rate
-        assert model != "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_no_demotion_below_min_calls(self):
         """Models with fewer than min_calls aren't penalized."""
-        # gpt-5.2-pro has 100% error rate but only 3 calls
-        self._insert_calls("gpt-5.2-pro", "extraction", 0, 3)
+        self._insert_calls("openrouter/minimax/minimax-m3", "extraction", 0, 3)
 
         model = get_model("extraction", available_only=False, min_calls=10)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_no_demotion_below_threshold(self):
         """Models with error rate below threshold aren't penalized."""
-        # gpt-5.2-pro has 10% error rate (below 15% threshold)
-        self._insert_calls("gpt-5.2-pro", "extraction", 18, 2)
+        self._insert_calls("openrouter/minimax/minimax-m3", "extraction", 18, 2)
 
         model = get_model("extraction", available_only=False)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_all_unreliable_preserves_prefer_order(self):
         """When ALL qualifying models are unreliable, original prefer order is kept."""
         # All models that qualify for extraction (structured_output + intel>=35)
+        self._insert_calls("openrouter/minimax/minimax-m3", "extraction", 5, 10)
         self._insert_calls("gpt-5.2-pro", "extraction", 5, 10)
         self._insert_calls("gemini/gemini-2.5-flash", "extraction", 5, 10)
         self._insert_calls("openrouter/openai/gpt-5", "extraction", 5, 10)
@@ -242,25 +258,24 @@ class TestPerformanceDemotion:
         """Models with no performance data are not penalized."""
         # No data inserted — all models have no performance history
         model = get_model("extraction", available_only=False)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_custom_threshold(self):
         """Custom error_threshold is respected."""
-        # gpt-5.2-pro has 10% error rate
-        self._insert_calls("gpt-5.2-pro", "extraction", 18, 2)
+        self._insert_calls("openrouter/minimax/minimax-m3", "extraction", 18, 2)
         self._insert_calls("gemini/gemini-2.5-flash", "extraction", 20, 0)
 
         # Default threshold (15%) — not demoted
         model = get_model("extraction", available_only=False, error_threshold=0.15)
-        assert model == "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
-        # Stricter threshold (5%) — demoted
+        # Stricter threshold (5%) still cannot promote a non-default candidate.
         model = get_model("extraction", available_only=False, error_threshold=0.05)
-        assert model != "gpt-5.2-pro"
+        assert model == "openrouter/minimax/minimax-m3"
 
     def test_apply_performance_overlay_returns_demotion_metadata(self):
         """The empirical overlay should expose which candidates were demoted and why."""
-        self._insert_calls("gpt-5.2-pro", "extraction", 5, 5)
+        self._insert_calls("openrouter/minimax/minimax-m3", "extraction", 5, 5)
         self._insert_calls("gemini/gemini-3-flash-preview", "extraction", 20, 0)
 
         profile = _load_task_profile(_DEFAULT_CONFIG, "extraction")
@@ -279,10 +294,12 @@ class TestPerformanceDemotion:
 
         ordered_ids = [m.litellm_id for m in overlay.ordered_candidates]
         demoted_ids = [m.litellm_id for m in overlay.demoted_candidates]
-        assert "gpt-5.2-pro" in demoted_ids
-        assert "gpt-5.2-pro" not in ordered_ids[:len(ordered_ids) - len(demoted_ids)]
-        assert overlay.observations["gpt-5.2-pro"].call_count == 10
-        assert overlay.observations["gpt-5.2-pro"].error_rate == pytest.approx(0.5)
+        assert "openrouter/minimax/minimax-m3" in demoted_ids
+        assert "openrouter/minimax/minimax-m3" not in ordered_ids[
+            : len(ordered_ids) - len(demoted_ids)
+        ]
+        assert overlay.observations["openrouter/minimax/minimax-m3"].call_count == 10
+        assert overlay.observations["openrouter/minimax/minimax-m3"].error_rate == pytest.approx(0.5)
 
     def test_apply_performance_overlay_is_neutral_without_data(self):
         """No observations should leave the static order untouched."""
@@ -463,6 +480,25 @@ class TestConfigLoading:
         assert match["provider"] == "openrouter"
         assert match["api_key_env"] == "OPENROUTER_API_KEY"
         assert match["structured_output"] is True
+
+    def test_packaged_registry_includes_minimax_m3_default(self):
+        models = _DEFAULT_CONFIG["models"]
+        match = next(
+            (m for m in models if m["litellm_id"] == "openrouter/minimax/minimax-m3"),
+            None,
+        )
+        assert match is not None
+        assert match["provider"] == "openrouter"
+        assert match["api_key_env"] == "OPENROUTER_API_KEY"
+        assert match["structured_output"] is True
+        assert "default" in match["tags"]
+        assert "tier-default-intelligent" in match["tags"]
+        assert "quality-optimal-review" in match["tags"]
+
+    def test_packaged_registry_has_no_fable_models(self):
+        models = _DEFAULT_CONFIG["models"]
+        assert all("fable" not in m["litellm_id"].lower() for m in models)
+        assert all("fable" not in m["name"].lower() for m in models)
 
     def test_parse_packaged_default_config_rejects_invalid_json(self):
         with pytest.raises(RuntimeError, match="Invalid packaged model registry JSON"):

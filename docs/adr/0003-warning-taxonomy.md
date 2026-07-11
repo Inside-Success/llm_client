@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-04-08
-Verification context: shared 429 cooldown warnings still emit stable `PROVIDER_GOVERNANCE_EVENT[cooldown_registered]` records, foundation-event logging still honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression, and the direct Gemini thinking-budget policy now fails through explicit config rather than a silent hardcoded zero-budget assumption
+Last verified: 2026-07-09
+Verification context: the transcript-backed agent tool-usage importer records explicit transport/application outcomes and may mature provisional `missing` evidence without emitting or recategorizing runtime warnings; existing warning taxonomy behavior is unchanged
 
 ## Context
 

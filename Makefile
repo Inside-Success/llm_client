@@ -4,14 +4,18 @@
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-PYTHON := python
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; elif [ -x .venv/Scripts/python.exe ]; then echo .venv/Scripts/python.exe; else echo python; fi)
 DAYS ?= 7
 PROJECT ?=
 LIMIT ?= 20
+SURFACE ?= codebase-memory
+TOOL_USAGE_CLIENT ?= both
+TOOL_USAGE_DB ?=
+SKIP_MALFORMED ?=
 
 # ─── Observability ───────────────────────────────────────────────────────────
 
-.PHONY: cost cost-by-project cost-by-model cost-by-task errors recent traces summary
+.PHONY: cost cost-by-project cost-by-model cost-by-task errors recent traces summary tool-usage-import tool-usage-report
 
 cost:  ## Total spend (DAYS=7 default, PROJECT= optional)
 	@$(PYTHON) -m llm_client cost --group-by project --days $(DAYS) \
@@ -100,9 +104,19 @@ summary:  ## Quick dashboard: spend, calls, errors, top models (DAYS=7)
 		FROM llm_calls WHERE task != 'test' AND timestamp >= ? GROUP BY model ORDER BY 2 DESC LIMIT 5\"\"\", (cutoff,)).fetchall(); \
 	[print(f'  \$${r[1]:>8.2f}  {r[2]:>6} calls  {r[0]}') for r in rows]"
 
+tool-usage-import:  ## Import structured agent calls (SURFACE=codebase-memory)
+	@$(PYTHON) -m llm_client tool-usage import --surface "$(SURFACE)" \
+		--client "$(TOOL_USAGE_CLIENT)" \
+		$(if $(TOOL_USAGE_DB),--db "$(TOOL_USAGE_DB)") \
+		$(if $(SKIP_MALFORMED),--skip-malformed-files)
+
+tool-usage-report:  ## Report agent tool usage (SURFACE=codebase-memory)
+	@$(PYTHON) -m llm_client tool-usage report --surface "$(SURFACE)" \
+		$(if $(TOOL_USAGE_DB),--db "$(TOOL_USAGE_DB)")
+
 # ─── Development ─────────────────────────────────────────────────────────────
 
-.PHONY: test test-verbose test-integration lint typecheck check install
+.PHONY: test test-verbose test-integration lint typecheck check install dead-code dead-code-audit dead-code-validate
 
 test:  ## Run all tests
 	python -m pytest tests/ -q
@@ -125,7 +139,16 @@ typecheck:  ## Run mypy type checking
 check: lint typecheck test  ## Run all quality checks
 
 install:  ## Install in editable mode with dev deps
-	pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[dev]"
+
+dead-code:  ## Run dead code detection
+	@$(PYTHON) scripts/meta/check_dead_code.py
+
+dead-code-audit:  ## Refresh reviewed dead-code audit file
+	@$(PYTHON) scripts/meta/audit_dead_code.py --write
+
+dead-code-validate:  ## Validate reviewed dead-code dispositions
+	@$(PYTHON) scripts/meta/validate_dead_code_audit.py
 
 # ─── Maintenance ─────────────────────────────────────────────────────────────
 
@@ -151,6 +174,19 @@ log-cleanup:  ## Archive old JSONL logs (ARCHIVE_DAYS=90, DELETE_DAYS= optional,
 		$(if $(DELETE_DAYS),--delete-days $(DELETE_DAYS)) \
 		$(if $(DRY_RUN),--dry-run)
 
+# ─── Workbench ───────────────────────────────────────────────────────────────
+
+.PHONY: workbench-backend workbench-frontend workbench-install
+
+workbench-backend:  ## Start observability workbench backend (:5203)
+	cd workbench/backend && $(PYTHON) -m uvicorn server:app --host 0.0.0.0 --port 5203 --reload
+
+workbench-frontend:  ## Start observability workbench frontend (:5204)
+	cd workbench/frontend && npm run dev
+
+workbench-install:  ## Install workbench backend deps
+	$(PYTHON) -m pip install fastapi "uvicorn[standard]" --quiet
+
 # ─── Help ────────────────────────────────────────────────────────────────────
 
 .PHONY: help
@@ -159,11 +195,11 @@ help:  ## Show all targets
 	@echo "llm_client — runtime substrate for multi-provider LLM calls"
 	@echo ""
 	@echo "Development:"
-	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(test|lint|typecheck|check|install)' | \
+	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(test|lint|typecheck|check|install|dead-code|dead-code-audit|dead-code-validate)' | \
 		awk -F ':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Observability:"
-	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(cost|errors|recent|traces|summary)' | \
+	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(cost|errors|recent|traces|summary|tool-usage)' | \
 		awk -F ':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Maintenance:"
@@ -174,23 +210,54 @@ help:  ## Show all targets
 	@grep -E '^[a-z].*:.*## ' $(MAKEFILE_LIST) | grep -E '^(worktree|worktree-list|worktree-remove)' | \
 		awk -F ':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Options: DAYS=7 PROJECT= LIMIT=20 MAX_SIZE_MB=100 ARCHIVE_DAYS=90 DRY_RUN= DELETE_DAYS="
+	@echo "Options: DAYS=7 PROJECT= LIMIT=20 SURFACE=codebase-memory TOOL_USAGE_CLIENT=both TOOL_USAGE_DB= SKIP_MALFORMED= MAX_SIZE_MB=100 ARCHIVE_DAYS=90 DRY_RUN= DELETE_DAYS="
 
 # >>> META-PROCESS WORKTREE TARGETS >>>
 WORKTREE_CREATE_SCRIPT := scripts/meta/worktree-coordination/create_worktree.py
 WORKTREE_REMOVE_SCRIPT := scripts/meta/worktree-coordination/safe_worktree_remove.py
-WORKTREE_CLAIMS_SCRIPT := scripts/meta/worktree-coordination/check_claims.py
+WORKTREE_CLAIMS_SCRIPT := scripts/meta/worktree-coordination/../check_coordination_claims.py
+WORKTREE_SESSION_START_SCRIPT := scripts/meta/worktree-coordination/../session_start.py
+WORKTREE_SESSION_HEARTBEAT_SCRIPT := scripts/meta/worktree-coordination/../session_heartbeat.py
+WORKTREE_SESSION_STATUS_SCRIPT := scripts/meta/worktree-coordination/../session_status.py
+WORKTREE_SESSION_FINISH_SCRIPT := scripts/meta/worktree-coordination/../session_finish.py
+WORKTREE_SESSION_CLOSE_SCRIPT := scripts/meta/worktree-coordination/../session_close.py
+WORKTREE_REVIEW_CLAIM_SCRIPT := scripts/meta/worktree-coordination/create_review_claim.py
+WORKTREE_RAISE_CONCERN_SCRIPT := scripts/meta/worktree-coordination/raise_concern.py
 WORKTREE_DIR ?= $(shell python "$(WORKTREE_CREATE_SCRIPT)" --repo-root . --print-default-worktree-dir)
 WORKTREE_START_POINT ?= HEAD
+WORKTREE_PROJECT ?= $(notdir $(CURDIR))
+WORKTREE_AGENT ?= $(shell if [ -n "$$CODEX_THREAD_ID" ]; then printf codex; elif [ -n "$$CLAUDE_SESSION_ID" ] || [ -n "$$CLAUDE_CODE_SSE_PORT" ]; then printf claude-code; elif [ -n "$$OPENCLAW_SESSION_ID" ] || [ -n "$$OPENCLAW_RUN_ID" ]; then printf openclaw; fi)
+SESSION_GOAL ?=
+SESSION_PHASE ?=
+SESSION_NEXT ?=
+SESSION_DEPENDS ?=
+SESSION_STOP_CONDITIONS ?=
+SESSION_NOTE ?=
+WORKTREE_DISPOSITION ?= merged
+WORKTREE_DISPOSITION_REASON ?=
+WORKTREE_RECOVERY_REF ?=
+WORKTREE_ALLOW_DISCARD_UNIQUE ?=
+REVIEW_SCOPE ?=
+REVIEW_NOTES ?=
+RECIPIENT ?=
 
-.PHONY: worktree worktree-list worktree-remove
+.PHONY: worktree worktree-list worktree-remove session-start session-heartbeat session-status session-finish session-close review-claim raise-concern
 
-worktree:  ## Create claimed worktree (BRANCH=name TASK="..." [PLAN=N])
+worktree:  ## Create claimed worktree (BRANCH=name TASK="..." [PLAN=N] [AGENT=name])
 ifndef BRANCH
 	$(error BRANCH is required. Usage: make worktree BRANCH=plan-42-feature TASK="Describe the task")
 endif
 ifndef TASK
 	$(error TASK is required. Usage: make worktree BRANCH=plan-42-feature TASK="Describe the task")
+endif
+ifndef SESSION_GOAL
+	$(error SESSION_GOAL is required. Name the broader objective, not the local branch)
+endif
+ifndef SESSION_PHASE
+	$(error SESSION_PHASE is required. Describe the current execution phase)
+endif
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
 endif
 	@if [ ! -f "$(WORKTREE_CREATE_SCRIPT)" ]; then \
 		echo "Missing worktree coordination module: $(WORKTREE_CREATE_SCRIPT)"; \
@@ -202,15 +269,131 @@ endif
 		echo "Install or sync the sanctioned worktree-coordination module before using make worktree."; \
 		exit 1; \
 	fi
-	@python "$(WORKTREE_CLAIMS_SCRIPT)" --claim --id "$(BRANCH)" --task "$(TASK)" $(if $(PLAN),--plan $(PLAN),)
+	@if [ ! -f "$(WORKTREE_SESSION_START_SCRIPT)" ]; then \
+		echo "Missing session lifecycle module: $(WORKTREE_SESSION_START_SCRIPT)"; \
+		echo "Install or sync the sanctioned session lifecycle module before using make worktree."; \
+		exit 1; \
+	fi
+	@python "$(WORKTREE_CLAIMS_SCRIPT)" --claim \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--scope "$(BRANCH)" \
+		--intent "$(TASK)" \
+		--claim-type program \
+		--branch "$(BRANCH)" \
+		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
+		$(if $(PLAN),--plan "Plan #$(PLAN)",)
 	@mkdir -p "$(WORKTREE_DIR)"
 	@if ! python "$(WORKTREE_CREATE_SCRIPT)" --repo-root . --path "$(WORKTREE_DIR)/$(BRANCH)" --branch "$(BRANCH)" --start-point "$(WORKTREE_START_POINT)"; then \
-		python "$(WORKTREE_CLAIMS_SCRIPT)" --release --id "$(BRANCH)" --force >/dev/null 2>&1 || true; \
+		python "$(WORKTREE_CLAIMS_SCRIPT)" --release --agent "$(WORKTREE_AGENT)" --project "$(WORKTREE_PROJECT)" --scope "$(BRANCH)" >/dev/null 2>&1 || true; \
+		exit 1; \
+	fi
+	@if ! python "$(WORKTREE_SESSION_START_SCRIPT)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--scope "$(BRANCH)" \
+		--intent "$(TASK)" \
+		--repo-root "$(CURDIR)" \
+		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
+		--branch "$(BRANCH)" \
+		--broader-goal "$(SESSION_GOAL)" \
+		--current-phase "$(SESSION_PHASE)" \
+		$(if $(PLAN),--plan "Plan #$(PLAN)",) \
+		$(if $(SESSION_NEXT),--next-phase "$(SESSION_NEXT)",) \
+		$(if $(SESSION_DEPENDS),--depends-on "$(SESSION_DEPENDS)",) \
+		$(if $(SESSION_STOP_CONDITIONS),--stop-condition "$(SESSION_STOP_CONDITIONS)",) \
+		$(if $(SESSION_NOTE),--notes "$(SESSION_NOTE)",); then \
+		git worktree remove --force "$(WORKTREE_DIR)/$(BRANCH)" >/dev/null 2>&1 || true; \
+		git branch -D "$(BRANCH)" >/dev/null 2>&1 || true; \
+		python "$(WORKTREE_CLAIMS_SCRIPT)" --release --agent "$(WORKTREE_AGENT)" --project "$(WORKTREE_PROJECT)" --scope "$(BRANCH)" >/dev/null 2>&1 || true; \
 		exit 1; \
 	fi
 	@echo ""
 	@echo "Worktree created at $(WORKTREE_DIR)/$(BRANCH)"
 	@echo "Claim created for branch $(BRANCH)"
+	@echo "Session contract started for $(SESSION_GOAL)"
+
+session-start:  ## Create or refresh the active session contract for BRANCH=name
+ifndef BRANCH
+	$(error BRANCH is required. Usage: make session-start BRANCH=plan-42-feature TASK="..." SESSION_GOAL="..." SESSION_PHASE="...")
+endif
+ifndef TASK
+	$(error TASK is required. Usage: make session-start BRANCH=plan-42-feature TASK="...")
+endif
+ifndef SESSION_GOAL
+	$(error SESSION_GOAL is required. Name the broader objective, not the local branch)
+endif
+ifndef SESSION_PHASE
+	$(error SESSION_PHASE is required. Describe the current execution phase)
+endif
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
+endif
+	@python "$(WORKTREE_SESSION_START_SCRIPT)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--scope "$(BRANCH)" \
+		--intent "$(TASK)" \
+		--repo-root "$(CURDIR)" \
+		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
+		--branch "$(BRANCH)" \
+		--broader-goal "$(SESSION_GOAL)" \
+		--current-phase "$(SESSION_PHASE)" \
+		$(if $(PLAN),--plan "Plan #$(PLAN)",) \
+		$(if $(SESSION_NEXT),--next-phase "$(SESSION_NEXT)",) \
+		$(if $(SESSION_DEPENDS),--depends-on "$(SESSION_DEPENDS)",) \
+		$(if $(SESSION_STOP_CONDITIONS),--stop-condition "$(SESSION_STOP_CONDITIONS)",) \
+		$(if $(SESSION_NOTE),--notes "$(SESSION_NOTE)",)
+
+session-heartbeat:  ## Refresh heartbeat and optional phase for BRANCH=name
+ifndef BRANCH
+	$(error BRANCH is required. Usage: make session-heartbeat BRANCH=plan-42-feature)
+endif
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
+endif
+	@python "$(WORKTREE_SESSION_HEARTBEAT_SCRIPT)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--scope "$(BRANCH)" \
+		--branch "$(BRANCH)" \
+		$(if $(SESSION_PHASE),--current-phase "$(SESSION_PHASE)",)
+
+session-status:  ## Show live session summaries for this repo
+	@python "$(WORKTREE_SESSION_STATUS_SCRIPT)" --project "$(WORKTREE_PROJECT)"
+
+session-finish:  ## Finish the session for BRANCH=name; blocks if the worktree is dirty
+ifndef BRANCH
+	$(error BRANCH is required. Usage: make session-finish BRANCH=plan-42-feature)
+endif
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
+endif
+	@python "$(WORKTREE_SESSION_FINISH_SCRIPT)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--scope "$(BRANCH)" \
+		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
+		$(if $(SESSION_NOTE),--note "$(SESSION_NOTE)",)
+
+session-close:  ## Close the claimed lane for BRANCH=name: cleanup worktree + branch + claim together
+ifndef BRANCH
+	$(error BRANCH is required. Usage: make session-close BRANCH=plan-42-feature)
+endif
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
+endif
+	@python "$(WORKTREE_SESSION_CLOSE_SCRIPT)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--scope "$(BRANCH)" \
+		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
+		--branch "$(BRANCH)" \
+		--disposition "$(WORKTREE_DISPOSITION)" \
+		--disposition-reason "$(WORKTREE_DISPOSITION_REASON)" \
+		--recovery-ref "$(WORKTREE_RECOVERY_REF)" \
+		$(if $(filter 1 true yes,$(WORKTREE_ALLOW_DISCARD_UNIQUE)),--allow-discard-unique,) \
+		$(if $(SESSION_NOTE),--note "$(SESSION_NOTE)",)
 
 worktree-list:  ## Show claimed worktree coordination status
 	@if [ ! -f "$(WORKTREE_CLAIMS_SCRIPT)" ]; then \
@@ -224,11 +407,59 @@ worktree-remove:  ## Safely remove worktree for BRANCH=name
 ifndef BRANCH
 	$(error BRANCH is required. Usage: make worktree-remove BRANCH=plan-42-feature)
 endif
-	@if [ ! -f "$(WORKTREE_REMOVE_SCRIPT)" ]; then \
-		echo "Missing worktree coordination module: $(WORKTREE_REMOVE_SCRIPT)"; \
-		echo "Install or sync the sanctioned worktree-coordination module before using make worktree-remove."; \
+	@if [ ! -f "$(WORKTREE_SESSION_CLOSE_SCRIPT)" ]; then \
+		echo "Missing session lifecycle module: $(WORKTREE_SESSION_CLOSE_SCRIPT)"; \
+		echo "Install or sync the sanctioned session lifecycle module before using make worktree-remove."; \
 		exit 1; \
 	fi
-	@python "$(WORKTREE_REMOVE_SCRIPT)" "$(WORKTREE_DIR)/$(BRANCH)"
-	@python "$(WORKTREE_CLAIMS_SCRIPT)" --release --id "$(BRANCH)" --force >/dev/null 2>&1 || true
+	@$(MAKE) session-close BRANCH="$(BRANCH)" $(if $(SESSION_NOTE),SESSION_NOTE="$(SESSION_NOTE)",)
+
+review-claim:  ## Create a review claim for TARGET_BRANCH=name WRITE_PATHS="a|b" TASK="..."
+ifndef TARGET_BRANCH
+	$(error TARGET_BRANCH is required. Usage: make review-claim TARGET_BRANCH=plan-42-feature WRITE_PATHS="src/foo.py|tests/test_foo.py" TASK="Review concern")
+endif
+ifndef WRITE_PATHS
+	$(error WRITE_PATHS is required. Provide one or more repo-relative paths separated by '|')
+endif
+ifndef TASK
+	$(error TASK is required. Describe the review intent)
+endif
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
+endif
+	@python "$(WORKTREE_REVIEW_CLAIM_SCRIPT)" \
+		--repo-root "$(CURDIR)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--target-branch "$(TARGET_BRANCH)" \
+		--intent "$(TASK)" \
+		--write-path "$(WRITE_PATHS)" \
+		$(if $(PLAN),--plan "Plan #$(PLAN)",) \
+		$(if $(REVIEW_SCOPE),--scope "$(REVIEW_SCOPE)",) \
+		$(if $(REVIEW_NOTES),--notes "$(REVIEW_NOTES)",)
+
+raise-concern:  ## Route concern to TARGET_BRANCH via PR comment or local inbox
+ifndef TARGET_BRANCH
+	$(error TARGET_BRANCH is required. Usage: make raise-concern TARGET_BRANCH=plan-42-feature SUBJECT="..." MESSAGE="...")
+endif
+ifndef SUBJECT
+	$(error SUBJECT is required. Usage: make raise-concern TARGET_BRANCH=plan-42-feature SUBJECT="..." MESSAGE="...")
+endif
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
+endif
+ifndef MESSAGE
+ifndef MESSAGE_FILE
+	$(error MESSAGE or MESSAGE_FILE is required. Provide inline content or a path to a concern file)
+endif
+endif
+	@python "$(WORKTREE_RAISE_CONCERN_SCRIPT)" \
+		--repo-root "$(CURDIR)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--project "$(WORKTREE_PROJECT)" \
+		--target-branch "$(TARGET_BRANCH)" \
+		--subject "$(SUBJECT)" \
+		$(if $(MESSAGE),--content "$(MESSAGE)",) \
+		$(if $(MESSAGE_FILE),--content-file "$(MESSAGE_FILE)",) \
+		$(if $(RECIPIENT),--recipient "$(RECIPIENT)",)
 # <<< META-PROCESS WORKTREE TARGETS <<<

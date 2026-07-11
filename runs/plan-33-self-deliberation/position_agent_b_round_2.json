@@ -1,0 +1,116 @@
+{
+  "agent_name": "agent_b",
+  "agreed_with_peer": [
+    "a1",
+    "a2",
+    "a3",
+    "a4"
+  ],
+  "claims": [
+    {
+      "claim": "Retracting my round-1 'highest-priority' framing of budget-cap leakage. Confirmed via direct read that `_check_budget(trace_id, max_budget)` loads cumulative spend by `trace_id` and runs before dispatch in `call_llm_structured`; `WorkflowContext` reuses one `trace_id` and one `max_budget` across every agent and synthesis call, so the cap IS cumulative per run. Residual risk is bounded overshoot of one in-flight call (the check is pre-dispatch, not post-charge), which is 'info'-level cost-safety hygiene, not a 'high'-leverage chassis defect. Peer a1 is right that this is lower-priority than unaudited convergence and unverified citations.",
+      "claim_id": "b1_revised",
+      "evidence_path": "llm_client/execution/call_contracts.py:136-145; llm_client/execution/structured_runtime.py:219-233; llm_client/workflow/context.py:131-147",
+      "severity": "info"
+    },
+    {
+      "claim": "The convergence detector is structurally weaker than 'polite agents'. `agreed_with_peer` is `list[str]` of free-text strings the same agent authored in the same response, `detect_convergence` only checks `other_claim_ids.issubset(agreed_set)`, and there is no validator that the listed strings are real current peer claim_ids. Combined with the fact that the check inspects only `latest_positions`, an agent can silently retire a previously-disputed claim and the detector treats it as resolved. Both failure modes converge spuriously without any politeness on the agent's part \u2014 extending peer a1's diagnosis.",
+      "claim_id": "b2",
+      "evidence_path": "llm_client/workflow/deliberate.py:255-275; llm_client/workflow/deliberate.py:152-156; llm_client/workflow/deliberate.py:217-247",
+      "severity": "high"
+    },
+    {
+      "claim": "Round-1 non-independence is deterministic from the graph: edges are `agent_a -> agent_b -> round_increment`, `entry_point='agent_a'`, and `agent_a`'s position is written into `latest_positions` before `agent_b`'s node fires. At round_num=1, `agent_b`'s `peer_latest = latest.get(agent_a_name)` is the just-written agent_a round-1 position. Fixing this via parallel round-1 node execution is strictly higher-leverage than adding a third symmetric debater (per peer a3).",
+      "claim_id": "b3",
+      "evidence_path": "llm_client/workflow/deliberate.py:683-693; llm_client/workflow/deliberate.py:431-476; llm_client/workflow/deliberate.py:9-13",
+      "severity": "warn"
+    },
+    {
+      "claim": "Deliberation has no TaskFamily/profile extension point despite the module docstring promising 'deliberation can also be specialized by profile when domain-specific Position fields are needed'. `build_deliberation_workflow` accepts no `task_family` parameter and hard-codes generic `Position` in both agent and synthesis nodes; there is no `DeliberationFamily`, no `deliberation_registry`, no analog of `duet_registry.get_task_family(...)` used in `build_duet_workflow`. This is real shipped debt and the right home for the adjudicator stage from peer a1: the verifier should be a registered family hook, not a single hardcoded chassis node, so plan_doc_review and twin_update can supply domain-specific verifiers.",
+      "claim_id": "b4",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/duet_registry.py:1-65; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet.py:842-883",
+      "severity": "warn"
+    },
+    {
+      "claim": "Synthesis is a distinct context-bloat failure mode from convergence drift. The synthesis prompt dumps the entire `position_history` via `json.dumps(positions, indent=2)` into one LLM call \u2014 at max_rounds=5 with two agents that is ~10 Position blobs, each with claims, evidence content_snippets, and disagreements. Per-round agent prompts correctly bound to `peer_latest + own_prior`, so 'context bloat' lives in synthesis, not in per-round nodes (refines peer a4's framing).",
+      "claim_id": "b5",
+      "evidence_path": "llm_client/workflow/deliberate.py:370-400; llm_client/workflow/deliberate.py:389-390; llm_client/workflow/deliberate.py:490-519",
+      "severity": "warn"
+    },
+    {
+      "claim": "`evidence_path` is a bare `str` with no sub-grammar \u2014 'docs/x.md#sec', 'file.py:10-20', and 'because I said so' are all schema-valid. Even a no-LLM format/existence check (file resolves, line range parses, line range within file length) would catch most gaming without semantic verification. This makes the adjudicator from peer a1 cheap to start: a syntactic+filesystem v1 is high-value-low-cost; LLM-semantic content matching is v2.",
+      "claim_id": "b6",
+      "evidence_path": "llm_client/workflow/deliberate.py:104-109; llm_client/workflow/deliberate.py:127-138; llm_client/workflow/profiles/plan_doc_review.py:59-61; tests/test_workflow_schema_smoke.py:100-125",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/duet_registry.py:1-65; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet.py:842-883; llm_client/workflow/deliberate.py:24-32; llm_client/workflow/deliberate.py:592-643; llm_client/workflow/profiles/plan_doc_review.py:59-61",
+      "my_counterclaim": "Real disagreement on build order. Peer says 'fix adjudication correctness first; profile parity second, otherwise new profiles inherit broken semantics.' I counter: the adjudicator IS the natural first DeliberationFamily hook. Building it as a hardcoded chassis node now forces a retrofit later when plan_doc_review wants to open-and-verify file:line and twin_update wants to cross-check identifier presence in two repos \u2014 those are domain-specific verifiers, not generic. The cheap path is: add DeliberationFamily + a `verifier` hook in the same change that introduces the adjudicator, with a 'generic' family supplying the syntactic+filesystem default. Peer's ordering pays the integration cost twice; mine pays it once. Residual disagreement, not papered over.",
+      "peer_claim_id": "a5"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:217-280; llm_client/workflow/deliberate.py:255-275; llm_client/workflow/deliberate.py:104-109",
+      "my_counterclaim": "Agreement-with-extension, not full agreement. Peer a1 is the right #1, but the framing leaves two non-cosmetic requirements implicit: (i) the adjudicator must detect *silent claim retirement* across rounds, not just verify claims present in the latest round \u2014 peer says 'preserve lineage'; I'm saying lineage detection must produce a stalling signal, not merely a record (b2); and (ii) v1 should be the cheap syntactic+filesystem check, not LLM-semantic adjudication, because the cheap check kills the largest class of gaming at a fraction of the cost (b6). Without (i), an agent can win convergence by dropping its losing claim. Without (ii), v1 never ships.",
+      "peer_claim_id": "a1"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/execution/call_contracts.py:136-145",
+      "content_snippet": "def check_budget(trace_id, max_budget): if max_budget<=0: return; spent=_io_log.get_cost(trace_id=trace_id); if spent>=max_budget: raise LLMBudgetExceededError(...) \u2014 cumulative, not per-call.",
+      "label": "Cumulative-by-trace_id budget enforcement (confirms peer a1's counter to my b1)"
+    },
+    {
+      "citation": "llm_client/execution/structured_runtime.py:233",
+      "content_snippet": "_check_budget(trace_id, max_budget) is called immediately after _require_tags and before public_kwargs/snapshot/dispatch.",
+      "label": "check_budget is invoked before every structured dispatch"
+    },
+    {
+      "citation": "llm_client/workflow/context.py:144-146",
+      "content_snippet": "kwargs.setdefault('task', self.task); kwargs.setdefault('trace_id', self.trace_id); kwargs.setdefault('max_budget', self.max_budget) \u2014 same trace_id everywhere => cumulative cap.",
+      "label": "WorkflowContext reuses one trace_id and one max_budget across all calls"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:255-275",
+      "content_snippet": "agreed_set = set(pos.get('agreed_with_peer') or []); if not other_claim_ids.issubset(agreed_set): converged_signal = False \u2014 no validator that strings are real peer claim_ids.",
+      "label": "Convergence is set-inclusion on free-text strings"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:683-693",
+      "content_snippet": "edges=[('agent_a','agent_b'), ('agent_b','round_increment'), ...], entry_point='agent_a' \u2014 agent_b round-1 sees agent_a's just-written round-1 position.",
+      "label": "Round-1 edges are sequential, not parallel"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:389-390",
+      "content_snippet": "'## Position history (chronological)' followed by json.dumps(positions, indent=2) \u2014 no truncation or summarization.",
+      "label": "Synthesis dumps full chronology"
+    },
+    {
+      "citation": "llm_client/workflow/duet.py:842-883",
+      "content_snippet": "build_duet_workflow(... task_family='generic' ...) resolves via get_task_family(task_family); build_deliberation_workflow (deliberate.py:592-643) has no equivalent kwarg and hard-codes Position.",
+      "label": "Deliberation has no task_family parameter; duet does"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:24-32",
+      "content_snippet": "'TaskFamily registry (Plan #31) \u2014 deliberation can also be specialized by profile when domain-specific Position fields are needed.' \u2014 promise without implementation.",
+      "label": "Deliberation docstring promises profile specialization that isn't shipped"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:104-109",
+      "content_snippet": "PositionClaim: claim_id: str; claim: str; severity; evidence_path: str \u2014 no pattern, no validator.",
+      "label": "evidence_path has no sub-grammar"
+    }
+  ],
+  "open_questions": [
+    "Should the adjudicator be a hardcoded chassis stage (peer a1's implicit shape) or a registered DeliberationFamily hook (my b4 framing)? If domain-specific verifiers exist (plan_doc_review wants 'open the file and confirm the line'; twin_update wants 'this name exists in both repos'), the registered-hook shape composes better \u2014 but it's more interface design upfront.",
+    "For v1 of the adjudicator: syntactic+filesystem only (file resolves, line range parses, line range within file length) or LLM-semantic content matching? Cheap v1 is probably enough to kill the largest gaming class.",
+    "Should silent claim retirement (an agent dropping a previously-disputed claim in round N+1) be a stalling signal or forced re-litigation? The current detector ignores it entirely (b2)."
+  ],
+  "reviewer_model": "claude-code/opus",
+  "reviewer_summary": "Revised ranking after verifying peer a1's counter to my round-1 b1. CONCEDED: budget IS cumulative-by-trace_id at the kernel (call_contracts.py:136-145, invoked at structured_runtime.py:233, with WorkflowContext reusing one trace_id at context.py:144-146). My round-1 b1 'highest-priority' framing was wrong; downgraded to 'info'. NEW ranking by leverage: (1) Chassis-owned adjudicator/verifier that drives convergence from independently-checked evidence rather than self-reported agreement (peer a1, extended by my b2+b6) \u2014 single highest-priority next improvement; v1 should be syntactic+filesystem, not LLM-semantic. (2) True round-1 independence via parallel agent nodes (b3 \u2261 a3). (3) Synthesis history compression/summarization (b5; refines a4). (4) Add DeliberationFamily/registry so the adjudicator is a registered hook rather than a hardcoded node (b4) \u2014 residual disagreement with peer a5 on BUILD ORDER preserved: I argue 'add the registry in the same change as the adjudicator so plan_doc_review/twin_update can supply domain verifiers'; peer argues 'correctness first, extensibility later'. SINGLE HIGHEST-PRIORITY NEXT IMPROVEMENT: a chassis-owned adjudication stage that (a) opens cited file:line ranges and marks each claim supported/refuted/unverified, (b) tracks claim lineage across rounds so silent retirement is a stalling signal rather than a free pass, and (c) drives `converged` from the ledger instead of from `agreed_with_peer` set-inclusion. This attacks the root structural defect \u2014 the same agents currently make the claims AND certify resolution \u2014 and subsumes b2, b6, and most of a1/a2 in one focused change. The residual disagreement (b4 vs a5) is about whether that adjudicator ships as a hardcoded node or a registered DeliberationFamily hook; I prefer the latter to avoid a second integration pass when domain profiles need domain-specific verifiers.",
+  "round": 2,
+  "state": "revised"
+}

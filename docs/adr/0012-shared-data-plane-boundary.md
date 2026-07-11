@@ -1,8 +1,8 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-04-05
-Verification context: shared observability storage now honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression unless explicitly overridden, preventing accidental writes into the shared SQLite data plane during disabled test lanes
+Last verified: 2026-07-09
+Verification context: the agent tool-usage ledger stores only compact call metadata, mutable outcome class for provisional-to-terminal maturation, sizes, repository labels, and provenance hashes; raw transcript payloads and paths remain outside the shared observability database
 Date: 2026-03-17
 
 ## Context

@@ -233,11 +233,13 @@ _GPT5_REASONING_GATED_SAMPLING = {
     "gpt-5.1",
     "gpt-5.2",
     "gpt-5.2-pro",
+    "gpt-5.5",
+    "gpt-5.5-pro",
     "gpt-5.1-chat-latest",
     "gpt-5.2-chat-latest",
 }
 # Models that support long-thinking (5-10 min) and need background polling
-_LONG_THINKING_MODELS = {"gpt-5.2-pro"}
+_LONG_THINKING_MODELS = {"gpt-5.2-pro", "gpt-5.5-pro"}
 _LONG_THINKING_REASONING_EFFORTS = {"high", "xhigh"}
 _GPT5_SAMPLING_PARAMS = ("temperature", "top_p", "logprobs", "top_logprobs")
 _UNSUPPORTED_PARAM_POLICY_ENV = "LLM_CLIENT_UNSUPPORTED_PARAM_POLICY"
@@ -590,6 +592,11 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "fable": (
+        "openrouter/anthropic/claude-opus-4.8 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
+        "Fable-family models are banned by ecosystem policy. Do not use them for "
+        "new calls, even with ordinary model_override_acceptance metadata.",
+    ),
     "gpt-4o-mini": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",
         "GPT-4o-mini (intel 30, $0.15/$0.60) is outclassed by DeepSeek V3.2 "

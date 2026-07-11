@@ -1,0 +1,8 @@
+id: shared.investigation_pipeline.corroborate_extract
+version: 1
+kind: chat_prompt
+status: canonical
+description: Corroboration extraction node — extracts structured corroboration outcome from an agent report.
+template_path: template.yaml
+input_schema: investigation.corroborate_extract_input.v1
+output_schema: investigation.corroborate_extract_output.v1

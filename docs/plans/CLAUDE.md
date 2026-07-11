@@ -2,6 +2,40 @@
 
 Track all implementation work here.
 
+## Agent collaboration stack (Plans #29-35)
+
+The implementer/reviewer duet shipped across four plans plus six followup
+commits, with each plan dogfooded against the prior one's outputs (the
+artifacts live in `runs/`):
+
+- **Plan #29** — chassis: LangGraph stages, schemas, routers, persistence.
+- **Plan #30** — hardening: cwd threading, grounded schemas, `duet-review` CLI.
+- **Plan #31** — `TaskFamily` abstraction: chassis split from profiles; `generic` + `plan_doc_review` profiles.
+- **Plan #32** — `twin_update` profile: PCM v2 layers + Twin Fidelity rubric axes + proof authority contract.
+
+Entry point for callers: `python -m llm_client duet-review --help`.
+Module docstring at `llm_client/workflow/duet.py` summarizes the full
+architecture and points to each plan's design rationale.
+
+The sibling deliberation stack is now implemented through Plans #33-35:
+
+- **Plan #33** — symmetric two-agent debate via `python -m llm_client deliberate-task`.
+- **Plan #34** — verifier/adjudicator ledger for claim evidence and lineage.
+- **Plan #35** — within-round barrier protocol and peer anonymization, with
+  tracked dogfood evidence in `runs/plan-35-barrier-pilot/`.
+
+Start with `docs/guides/agent-collaboration.md` when packaging or demoing the
+Claude/Codex collaboration surfaces.
+
+Plan #36 is the consolidation layer on top of those primitives: canonical
+standalone review profiles, the `quality_optimal_whitepaper` review profile,
+the synchronous `review-cycle` runner, OpenClaw scheduling boundaries, and
+legacy dialogue-code archival.
+
+Plan #37 is the long-running execution spine for Plan #36. Use it as the
+tracker when running continuously: it defines stop conditions, phase gates,
+adversarial-review checkpoints, test commands, and completion criteria.
+
 ## Gap Summary
 
 | # | Name | Priority | Status | Blocks |
@@ -29,11 +63,26 @@ Track all implementation work here.
 | 21 | [Runtime Durability Follow-Ups From Grounded Research](21_runtime_durability_followups_from_grounded_research.md) | High | ✅ Complete | - |
 | 22 | [Capability Ownership And Sanctioned Worktree Alignment](22_capability-ownership-and-sanctioned-worktree-alignment.md) | High | ✅ Complete | 21 |
 | 23 | [Authoritative coordination wave-1 rollout](23_authoritative-coordination-wave-1-rollout.md) | Critical | ✅ Complete | - |
-| 24 | [Workflow Kit Manifest, Validator, and Runtime Adapter Proving Slice](24_workflow-kit-manifest-validator-and-runtime-adapter-proving-slice.md) | — | Cancelled — execution strategy layer reassigned to agentic_scaffolding; packaging scope deferred to PROJECTS_DEFERRED. See `project-meta/docs/ops/ADR-2026-04-04-workflow-portability-revised-execution-strategies.md` (2026-04-04). | — |
+| 24 | [Workflow Kit Manifest, Validator, and Runtime Adapter Proving Slice](24_workflow-kit-manifest-validator-and-runtime-adapter-proving-slice.md) | — | ❓  | — |
 | 25 | [Provider Governance and Shared Coordination](25_provider-governance-and-shared-coordination.md) | Critical | 📋 Planned | llm_client PR #24 merge for the latest Gemini coordination baseline |
 | 26 | [Gemini Strict-Schema Behavior Study](26_gemini-strict-schema-behavior-study.md) | High | ✅ Complete | - |
 | 27 | [Direct Gemini Thinking Budget Policy](27_direct-gemini-thinking-budget-policy.md) | High | ✅ Complete | 26 |
 | 28 | [OpenRouter Gemini 3.1 Pro Registry And Tyler Validation](28_openrouter-gemini31-pro-registry-and-tyler-validation.md) | High | ✅ Complete | 26, 27 |
+| 29 | [Implementer/Reviewer Duet Workflow](29_implementer_reviewer_duet.md) | Medium | ✅ Complete | - |
+| 30 | [Duet Autonomous Hardening](30_duet_autonomous_hardening.md) | High | ✅ Complete | 29 |
+| 31 | [TaskFamily Abstraction for the Duet Chassis](31_task_family_abstraction.md) | High | ✅ Complete | 30 |
+| 32 | [twin_update Profile](32_twin_update_profile.md) | High | ✅ Complete | 31 |
+| 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | 🚧 In Progress | 31 |
+| 34 | [Deliberation Verifier / Adjudicator Stage](34_deliberation_verifier_adjudicator.md) | High | ✅ Complete | 33 |
+| 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | 📋 In Progress (Phases 1-4 shipped; Phase 5 skipped per plan; Phase 6 awaiting Brian decision) | 34 |
+| 36 | [Intermodel Review Consolidation and Whitepaper Loop](36_intermodel_review_consolidation.md) | Critical | ✅ Complete (private-only accepted) | Existing repo stays private unless reopened for public release |
+| 37 | [Long-Running Execution Spine for Intermodel Review](37_long_running_intermodel_review_execution.md) | Critical | ✅ Complete (private-only accepted) | 36 |
+| 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | 🚧 In Progress | - |
+| 93 | [Agent tool-usage ledger](93_agent-tool-usage-ledger.md) | High | ✅ Complete | project-meta Plan #213 reporting and comparative selection evaluation |
+| 92 | [Worktree Lifecycle Governance and Cleanup](92_worktree-lifecycle-governance-and-cleanup.md) | Critical | ✅ Complete | Merge-or-disposition enforcement live; historical checkout cleanup reconciled |
+| 94 | [Model Tier Taxonomy and Fable Ban](94_model-tier-taxonomy-and-fable-ban.md) | High | 🚧 In Progress (implemented; focused verified; helper timeout) | Cross-project model-selection cleanup |
+| 95 | [Require llm_client Registration Audit](95_require-llm-client-registration-audit.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project enforcement of shared LLM routing |
+| 96 | [Registration-Only Audit Fast Path](96_registration-only-audit-fastpath.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project llm_client registration classification |
 
 
 ## Status Key
