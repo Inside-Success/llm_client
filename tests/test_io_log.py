@@ -731,6 +731,9 @@ class TestSQLiteDB:
         assert "prompt_ref" in llm_cols
         assert "call_fingerprint" in llm_cols
         assert "call_snapshot" in llm_cols
+        assert "logical_call_id" in llm_cols
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        assert "structured_attempt_events" in tables
 
 
 # ---------------------------------------------------------------------------

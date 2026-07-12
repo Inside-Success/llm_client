@@ -374,6 +374,7 @@ def log_call(
     response_format_type: str | None = None,
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
+    logical_call_id: str | None = None,
 ) -> None:
     """Append one call record with optional prompt asset identity.
 
@@ -469,6 +470,7 @@ def log_call(
             "schema_hash": schema_hash,
             "response_format_type": response_format_type,
             "validation_errors": validation_errors,
+            "logical_call_id": logical_call_id,
         }
         _append_jsonl(d, "calls", record)
 
@@ -500,6 +502,7 @@ def log_call(
             response_format_type=response_format_type,
             validation_errors=validation_errors,
             causal_parent_id=causal_parent_id,
+            logical_call_id=logical_call_id,
         )
     except Exception:
         # Never break LLM calls for logging
@@ -734,7 +737,28 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     trace_id TEXT,
     prompt_ref TEXT,
     call_fingerprint TEXT,
-    call_snapshot TEXT
+    call_snapshot TEXT,
+    logical_call_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS structured_attempt_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    timestamp TEXT NOT NULL,
+    project TEXT,
+    logical_call_id TEXT NOT NULL,
+    trace_id TEXT NOT NULL,
+    task TEXT NOT NULL,
+    attempt_ordinal INTEGER NOT NULL,
+    model TEXT NOT NULL,
+    execution_path TEXT NOT NULL,
+    schema_hash TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    raw_sha256 TEXT,
+    raw_artifact_ref TEXT,
+    failure_class TEXT,
+    validation_issues TEXT NOT NULL,
+    recovery_decision TEXT
 );
 
 CREATE TABLE IF NOT EXISTS embeddings (
@@ -904,6 +928,10 @@ CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
 CREATE INDEX IF NOT EXISTS idx_calls_trace_id ON llm_calls(trace_id);
 CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref);
 CREATE INDEX IF NOT EXISTS idx_calls_fingerprint ON llm_calls(call_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id);
+CREATE INDEX IF NOT EXISTS idx_structured_attempt_call ON structured_attempt_events(logical_call_id, id);
+CREATE INDEX IF NOT EXISTS idx_structured_attempt_trace ON structured_attempt_events(trace_id);
+CREATE INDEX IF NOT EXISTS idx_structured_attempt_class ON structured_attempt_events(failure_class);
 CREATE INDEX IF NOT EXISTS idx_emb_timestamp ON embeddings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_emb_model ON embeddings(model);
 CREATE INDEX IF NOT EXISTS idx_emb_task ON embeddings(task);
@@ -1002,6 +1030,9 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
     if "causal_parent_id" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN causal_parent_id TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_causal_parent_id ON llm_calls(causal_parent_id)")
+    if "logical_call_id" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN logical_call_id TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id)")
 
     # task_scores: add git_commit if missing
     scores_cols = {r[1] for r in conn.execute("PRAGMA table_info(task_scores)").fetchall()}
@@ -1127,6 +1158,72 @@ def _run_db_write(write_fn: Any) -> None:
             attempt += 1
 
 
+def write_structured_attempt_event(event: dict[str, Any]) -> None:
+    """Persist one metadata-only structured attempt event and fail on write errors."""
+
+    if not _logging_enabled():
+        return
+
+    def _write(db: sqlite3.Connection) -> None:
+        db.execute(
+            """INSERT INTO structured_attempt_events
+               (event_id, timestamp, project, logical_call_id, trace_id, task,
+                attempt_ordinal, model, execution_path, schema_hash, event_type,
+                raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                recovery_decision)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                event["event_id"], event["timestamp"], _get_project(),
+                event["logical_call_id"], event["trace_id"], event["task"],
+                event["attempt_ordinal"], event["model"], event["execution_path"],
+                event["schema_hash"], event["event_type"], event.get("raw_sha256"),
+                event.get("raw_artifact_ref"), event.get("failure_class"),
+                json.dumps(event.get("validation_issues", []), default=str),
+                event.get("recovery_decision"),
+            ),
+        )
+
+    _run_db_write(_write)
+
+
+def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]:
+    """Read one logical call's append-only structured attempt history."""
+
+    rows = _get_db().execute(
+        """SELECT event_id, timestamp, logical_call_id, trace_id, task,
+                  attempt_ordinal, model, execution_path, schema_hash, event_type,
+                  raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                  recovery_decision
+           FROM structured_attempt_events
+           WHERE logical_call_id = ? ORDER BY id""",
+        (logical_call_id,),
+    ).fetchall()
+    keys = (
+        "event_id", "timestamp", "logical_call_id", "trace_id", "task",
+        "attempt_ordinal", "model", "execution_path", "schema_hash", "event_type",
+        "raw_sha256", "raw_artifact_ref", "failure_class", "validation_issues",
+        "recovery_decision",
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(zip(keys, row, strict=True))
+        item["validation_issues"] = json.loads(item["validation_issues"] or "[]")
+        result.append(item)
+    return result
+
+
+def read_structured_attempt_call_ids(trace_id: str) -> list[str]:
+    """Return structured logical-call ids for a trace in first-event order."""
+
+    rows = _get_db().execute(
+        """SELECT logical_call_id, MIN(id) AS first_id
+           FROM structured_attempt_events WHERE trace_id = ?
+           GROUP BY logical_call_id ORDER BY first_id""",
+        (trace_id,),
+    ).fetchall()
+    return [str(row[0]) for row in rows]
+
+
 def _write_call_to_db(
     *,
     timestamp: str,
@@ -1155,6 +1252,7 @@ def _write_call_to_db(
     response_format_type: str | None = None,
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
+    logical_call_id: str | None = None,
 ) -> None:
     """Insert a call record into SQLite. Never raises."""
     try:
@@ -1171,8 +1269,8 @@ def _write_call_to_db(
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    causal_parent_id, logical_call_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, _get_project(), model,
                     json.dumps(messages, default=str) if messages else None,
@@ -1184,7 +1282,7 @@ def _write_call_to_db(
                     json.dumps(call_snapshot, default=str) if call_snapshot is not None else None,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id,
+                    causal_parent_id, logical_call_id,
                 ),
             )
 

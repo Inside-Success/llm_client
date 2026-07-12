@@ -57,6 +57,13 @@ from llm_client.observability.replay import (
     replay_call_snapshot,
 )
 from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
+from llm_client.observability.structured_attempts import (
+    StructuredAttemptEvent,
+    StructuredValidationIssue,
+    get_structured_attempt_events,
+    get_structured_attempt_histories,
+    record_structured_attempt_event,
+)
 
 __all__ = [
     "AgentToolUsageEvent",
@@ -107,4 +114,9 @@ __all__ = [
     "ToolUsageImportSummary",
     "ToolUsageReport",
     "TranscriptParseError",
+    "StructuredAttemptEvent",
+    "StructuredValidationIssue",
+    "get_structured_attempt_events",
+    "get_structured_attempt_histories",
+    "record_structured_attempt_event",
 ]
