@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-11
+Last verified: 2026-07-12
 Verification context: structured attempt failures are typed ledger events rather than warnings; trace-scoped history queries add no warning category, and focused persistence controls pass.
 
 ## Context

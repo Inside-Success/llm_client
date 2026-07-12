@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-11
+Last verified: 2026-07-12
 Verification context: structured attempt events add logical-call/attempt identity without changing `LLMCallResult.model`, requested/resolved model semantics, or routing traces; focused native-schema controls pass.
 
 ## Context

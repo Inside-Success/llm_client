@@ -135,6 +135,27 @@ Coverage after Slice 1: L97-1=A, L97-2=A, L97-3=A, L97-4=A, L97-5=A,
 L97-6=A on the native-schema scope. Instructor, Responses API, and DIGIMON trace
 projection remain explicitly outside this slice.
 
+### Live-boundary correction
+
+DIGIMON E2E trace `f3226e67597d4ac6b2d9f067c994253f` exposed a coverage
+gap in the original fixtures: LiteLLM can raise `JSONSchemaValidationError`
+*before* `completion`/`acompletion` returns, while retaining the generated body
+on `exception.raw_response`. The original tests returned a provider response and
+triggered Pydantic validation inside `llm_client`; they therefore did not cover
+this dependency-owned validation boundary. Live histories showed attempt ordinal
+2 succeeding with ordinals 0 and 1 absent.
+
+The native sync and async closures now recognize the typed LiteLLM exception and
+persist `received(raw hash) → validation_failed(schema_validation) →
+recovery_decided` before the shared retry engine continues. New sync and async
+fixtures raise the real exception type and prove exact `0 failure → 1 success`
+readback. `tests/test_structured_attempts.py` now passes 7/7 and Ruff passes.
+
+The earlier A grade for L97-1/L97-2 was premature because it was verified by a
+post-return proxy. With the pre-return exception controls added, those grades are
+restored for the two observed native-schema failure boundaries; additional
+provider exception types remain subject to the explicitly bounded taxonomy.
+
 Pre-landing review disposition:
 
 - Fixed the accidental whole-file formatter expansion; the runtime diff is now

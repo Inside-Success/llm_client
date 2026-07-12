@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-11
+Last verified: 2026-07-12
 Verification context: structured-output retry observability and trace-scoped history lookup are implemented once in the shared runtime; focused controls prove the cross-project substrate rather than an application-local logger.
 
 ## Context

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import litellm
 import pytest
 from pydantic import ValidationError
 
@@ -196,6 +197,63 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
     assert final_call == (rows[0],)
 
 
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.completion")
+def test_native_schema_runtime_persists_litellm_pre_return_validation_failure(
+    mock_completion: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """A LiteLLM validation exception cannot disappear before ledger capture."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = '{"action":"answer","rationale":"Enough evidence."}'
+    choice.finish_reason = "stop"
+    response.choices = [choice]
+    response.usage.prompt_tokens = 1
+    response.usage.completion_tokens = 1
+    response.usage.total_tokens = 2
+    mock_completion.side_effect = [
+        litellm.JSONSchemaValidationError(
+            model="deepseek/deepseek-chat",
+            llm_provider="openrouter",
+            raw_response='```json\n{"action":"answer"}\n```',
+            schema="{}",
+        ),
+        response,
+    ]
+
+    call_llm_structured(
+        "deepseek/deepseek-chat",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-litellm-schema-retry",
+        max_budget=0,
+        num_retries=1,
+        base_delay=0,
+    )
+
+    logical_call_id = io_log._get_db().execute(
+        "SELECT logical_call_id FROM structured_attempt_events WHERE trace_id=? LIMIT 1",
+        ("trace-litellm-schema-retry",),
+    ).fetchone()[0]
+    history = get_structured_attempt_events(logical_call_id)
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "received"),
+        (0, "validation_failed"),
+        (0, "recovery_decided"),
+        (1, "received"),
+        (1, "validated"),
+    ]
+    assert history[1].failure_class == "schema_validation"
+    assert history[1].validation_issues[0].code == "provider_json_schema_validation"
+
+
 @pytest.mark.asyncio
 # mock-ok: provider responses are controlled; the real async retry runtime and SQLite ledger are under test.
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -263,3 +321,61 @@ async def test_async_native_schema_runtime_preserves_failed_attempt(
         .fetchone()
     )
     assert final_call == (logical_call_id,)
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_async_runtime_persists_litellm_pre_return_validation_failure(
+    mock_completion: AsyncMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The async path captures the exact pre-return failure seen in live traces."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = '{"action":"answer","rationale":"Enough evidence."}'
+    choice.finish_reason = "stop"
+    response.choices = [choice]
+    response.usage.prompt_tokens = 1
+    response.usage.completion_tokens = 1
+    response.usage.total_tokens = 2
+    mock_completion.side_effect = [
+        litellm.JSONSchemaValidationError(
+            model="deepseek/deepseek-chat",
+            llm_provider="openrouter",
+            raw_response='```json\n{"action":"answer"}\n```',
+            schema="{}",
+        ),
+        response,
+    ]
+
+    await acall_llm_structured(
+        "deepseek/deepseek-chat",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-async-litellm-schema-retry",
+        max_budget=0,
+        num_retries=1,
+        base_delay=0,
+    )
+
+    logical_call_id = io_log._get_db().execute(
+        "SELECT logical_call_id FROM structured_attempt_events WHERE trace_id=? LIMIT 1",
+        ("trace-async-litellm-schema-retry",),
+    ).fetchone()[0]
+    assert [
+        (event.attempt_ordinal, event.event_type)
+        for event in get_structured_attempt_events(logical_call_id)
+    ] == [
+        (0, "received"),
+        (0, "validation_failed"),
+        (0, "recovery_decided"),
+        (1, "received"),
+        (1, "validated"),
+    ]

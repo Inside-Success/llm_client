@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-11
+Last verified: 2026-07-12
 Verification context: attempt observability records the model/path selected by existing explicit routing policy; it does not change call/config precedence, and focused structured-runtime controls pass under explicit routing fixtures.
 
 ## Context

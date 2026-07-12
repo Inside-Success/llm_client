@@ -146,12 +146,13 @@ def _attempt_event(
     event_type: AttemptEventType,
     raw_content: str | None = None,
     validation_error: ValidationError | None = None,
+    failure_class: AttemptFailureClass | None = None,
+    validation_issues: tuple[StructuredValidationIssue, ...] = (),
     recovery_decision: RecoveryDecision | None = None,
 ) -> StructuredAttemptEvent:
     """Build one typed native-schema attempt event without storing raw content."""
 
-    issues: tuple[StructuredValidationIssue, ...] = ()
-    failure_class: AttemptFailureClass | None = None
+    issues = validation_issues
     if validation_error is not None:
         failure_class = _validation_failure_class(validation_error)
         issues = tuple(
@@ -180,6 +181,65 @@ def _attempt_event(
         validation_issues=issues,
         recovery_decision=recovery_decision,
     )
+
+
+def _provider_schema_validation_raw(error: Exception) -> str | None:
+    """Return raw content carried by LiteLLM's pre-return schema exception.
+
+    LiteLLM may validate ``response_format`` internally and raise before
+    ``completion`` returns. That exception still represents a provider generation
+    attempt and carries the original response on ``raw_response``. Restrict the
+    extraction to LiteLLM's typed exception so unrelated errors with similarly
+    named attributes cannot be misclassified as generation attempts.
+    """
+
+    import litellm
+
+    error_type = getattr(litellm, "JSONSchemaValidationError", None)
+    if not isinstance(error_type, type) or not isinstance(error, error_type):
+        return None
+    raw_response = getattr(error, "raw_response", None)
+    return raw_response if isinstance(raw_response, str) else None
+
+
+def _record_provider_schema_validation_failure(
+    *,
+    error: Exception,
+    logical_call_id: str,
+    trace_id: str,
+    task: str,
+    attempt: int,
+    model: str,
+    schema_hash: str,
+    max_retries: int,
+) -> bool:
+    """Persist a LiteLLM pre-return validation failure as a complete attempt."""
+
+    raw_content = _provider_schema_validation_raw(error)
+    if raw_content is None:
+        return False
+    record_structured_attempt_event(_attempt_event(
+        logical_call_id=logical_call_id, trace_id=trace_id, task=task,
+        attempt=attempt, model=model, schema_hash=schema_hash,
+        event_type="received", raw_content=raw_content,
+    ))
+    record_structured_attempt_event(_attempt_event(
+        logical_call_id=logical_call_id, trace_id=trace_id, task=task,
+        attempt=attempt, model=model, schema_hash=schema_hash,
+        event_type="validation_failed", failure_class="schema_validation",
+        validation_issues=(StructuredValidationIssue(
+            location=(),
+            code="provider_json_schema_validation",
+            message="Provider response failed LiteLLM JSON Schema validation.",
+        ),),
+    ))
+    record_structured_attempt_event(_attempt_event(
+        logical_call_id=logical_call_id, trace_id=trace_id, task=task,
+        attempt=attempt, model=model, schema_hash=schema_hash,
+        event_type="recovery_decided",
+        recovery_decision="retry" if attempt < max_retries else "exhausted",
+    ))
+    return True
 
 
 def _base_model_name(model: str) -> str:
@@ -671,6 +731,12 @@ def _call_llm_structured_impl(
                     )
                     return parsed, llm_result
                 except Exception as exc:
+                    _record_provider_schema_validation_failure(
+                        error=exc, logical_call_id=_logical_call_id,
+                        trace_id=trace_id, task=task, attempt=attempt,
+                        model=current_model, schema_hash=_schema_hash,
+                        max_retries=r.max_retries,
+                    )
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
                         error=exc,
@@ -1296,6 +1362,12 @@ async def _acall_llm_structured_impl(
                     )
                     return parsed, llm_result
                 except Exception as exc:
+                    _record_provider_schema_validation_failure(
+                        error=exc, logical_call_id=_logical_call_id,
+                        trace_id=trace_id, task=task, attempt=attempt,
+                        model=current_model, schema_hash=_schema_hash_async,
+                        max_retries=r.max_retries,
+                    )
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
                         error=exc,
