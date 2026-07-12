@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-11
-Verification context: structured runtime now resolves native json_schema capability from the curated model registry first (litellm map only for unregistered ids) — a capability-lookup change only; model identity fields, routing precedence, warning taxonomy, background polling, replay boundary, and cross-project substrate contracts are unchanged and covered by the passing structured-output + contract test suites (72 structured tests; 1526 total pass, 9 pre-existing baseline failures)
+Verification context: experiment provenance now supplies truthful changed-file/category context for divergence diagnosis and marks collection failure as unknown; replay payload semantics are unchanged (68 focused tests passed, 1 skipped)
 
 ## Context
 

@@ -3,6 +3,7 @@
 import json
 import os
 import sqlite3
+import subprocess
 import time
 from pathlib import Path
 
@@ -17,7 +18,7 @@ def _can_import_agent_spec() -> bool:
         from llm_client.agent_spec import load_agent_spec
         # The error stub raises ImportError when called; try calling with a
         # dummy path to see if it's the real function or the stub.
-        import tempfile, json
+        import tempfile
         p = Path(tempfile.mktemp(suffix=".json"))
         p.write_text(json.dumps({"tools": [], "contracts": []}))
         try:
@@ -298,6 +299,58 @@ class TestStartRun:
         assert prov["prompt_template_sha256"] == "deadbeef"
         assert prov["git_commit"] == "abc123"
         assert "git_dirty" in prov
+        db.close()
+
+    def test_auto_provenance_reports_dirty_worktree(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+        )
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+        (repo / "baseline.py").write_text("VALUE = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "baseline.py"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "baseline"], cwd=repo, check=True)
+        (repo / "changed.py").write_text("VALUE = 2\n", encoding="utf-8")
+        (repo / "tests").mkdir()
+        (repo / "tests" / "test_changed.py").write_text("assert True\n", encoding="utf-8")
+        monkeypatch.chdir(repo)
+
+        io_log.start_run(dataset="X", model="Y", run_id="dirty_provenance")
+
+        db = sqlite3.connect(str(tmp_path / "test.db"))
+        row = db.execute(
+            "SELECT provenance FROM experiment_runs WHERE run_id = 'dirty_provenance'"
+        ).fetchone()
+        assert row is not None
+        prov = json.loads(row[0])
+        assert prov["git_dirty"] is True
+        assert prov["changed_files"] == ["changed.py", "tests/test_changed.py"]
+        assert prov["diff_categories"] == ["code", "tests"]
+        db.close()
+
+    def test_auto_provenance_does_not_claim_clean_when_collection_fails(
+        self, tmp_path, monkeypatch
+    ):
+        # mock-ok: the negative control must force an otherwise environment-specific Git failure.
+        def fail_collection():
+            raise RuntimeError("git unavailable")
+
+        monkeypatch.setattr(
+            "llm_client.utils.git_utils.get_working_tree_files", fail_collection
+        )
+
+        io_log.start_run(dataset="X", model="Y", run_id="unknown_provenance")
+
+        db = sqlite3.connect(str(tmp_path / "test.db"))
+        row = db.execute(
+            "SELECT provenance FROM experiment_runs WHERE run_id = 'unknown_provenance'"
+        ).fetchone()
+        assert row is not None
+        prov = json.loads(row[0])
+        assert prov["git_dirty"] is None
+        assert prov["git_provenance_error"] == "RuntimeError"
         db.close()
 
     def test_feature_profile_in_provenance(self, tmp_path):

@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-09
-Verification context: the agent tool-usage ledger stores only compact call metadata, mutable outcome class for provisional-to-terminal maturation, sizes, repository labels, and provenance hashes; raw transcript payloads and paths remain outside the shared observability database
+Verification context: experiment provenance retains compact repository-relative changed paths/categories and an explicit collection-error class; no raw payload or bulk-artifact boundary changed (68 focused tests passed, 1 skipped)
 Date: 2026-03-17
 
 ## Context

@@ -31,7 +31,7 @@ def activate_experiment_run(run_id: str) -> ActiveExperimentRun:
 def _build_auto_run_provenance(*, git_commit: str | None) -> dict[str, Any]:
     """Build automatic provenance metadata for an experiment run."""
     provenance: dict[str, Any] = {
-        "git_dirty": False,
+        "git_dirty": None,
         "changed_files": [],
         "diff_categories": [],
     }
@@ -42,8 +42,12 @@ def _build_auto_run_provenance(*, git_commit: str | None) -> dict[str, Any]:
         provenance["git_dirty"] = is_git_dirty()
         provenance["changed_files"] = changed_files
         provenance["diff_categories"] = sorted(classify_diff_files(changed_files))
-    except Exception:
-        logger.debug("observability.experiments._build_auto_run_provenance failed", exc_info=True)
+    except Exception as exc:
+        provenance["git_provenance_error"] = type(exc).__name__
+        logger.warning(
+            "observability.experiments._build_auto_run_provenance failed",
+            exc_info=True,
+        )
 
     if git_commit:
         provenance["git_commit"] = git_commit
@@ -991,4 +995,3 @@ from llm_client.observability.comparison import (  # noqa: E402, F401
     compare_cohorts,
     compare_runs,
 )
-

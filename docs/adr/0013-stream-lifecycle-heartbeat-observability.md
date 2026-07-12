@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-09
-Verification context: the transcript-evidence ledger is separate from stream lifecycle state, treats a missing transcript result as provisional import evidence that may later mature, and does not reinterpret it as a provider stall; existing stream lifecycle semantics are unchanged
+Verification context: experiment Git-provenance collection now fails visibly instead of claiming a clean tree; stream lifecycle semantics and heartbeat state are unchanged (68 focused tests passed, 1 skipped)
 Date: 2026-03-22
 
 ## Context

@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-09
-Verification context: canonical observability now includes a dedicated transcript-evidence ledger under `llm_client/observability/`; its schema stores normalized metadata and hashes, permits only provisional `missing` outcomes to mature, and excludes arguments, results, transcript text, raw paths, and unhashed session identifiers
+Verification context: canonical experiment provenance now records real dirty paths/categories and records unknown plus an error class when collection fails; compatibility-facade persistence is covered by focused real-repository controls (68 passed, 1 skipped)
 Date: 2026-02-23
 
 ## Context
