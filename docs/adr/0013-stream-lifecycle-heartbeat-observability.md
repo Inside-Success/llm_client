@@ -1,8 +1,8 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-07-09
-Verification context: experiment Git-provenance collection now fails visibly instead of claiming a clean tree; stream lifecycle semantics and heartbeat state are unchanged (68 focused tests passed, 1 skipped)
+Last verified: 2026-07-12
+Verification context: structured attempt lifecycle events and trace-scoped queries remain limited to non-streaming native-schema calls; stream lifecycle/heartbeat semantics are unchanged.
 Date: 2026-03-22
 
 ## Context

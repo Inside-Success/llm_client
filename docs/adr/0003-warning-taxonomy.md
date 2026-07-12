@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-11
-Verification context: experiment Git provenance now reports real changed paths and records unknown on collection failure; warning categories remain unchanged. Focused provenance/experiment tests pass (68 passed, 1 skipped).
+Last verified: 2026-07-12
+Verification context: structured attempt failures are typed ledger events rather than warnings; trace-scoped history queries add no warning category, and focused persistence controls pass.
 
 ## Context
 
