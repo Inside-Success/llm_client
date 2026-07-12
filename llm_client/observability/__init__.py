@@ -61,6 +61,7 @@ from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
     StructuredValidationIssue,
     get_structured_attempt_events,
+    get_structured_attempt_histories,
     record_structured_attempt_event,
 )
 
@@ -116,5 +117,6 @@ __all__ = [
     "StructuredAttemptEvent",
     "StructuredValidationIssue",
     "get_structured_attempt_events",
+    "get_structured_attempt_histories",
     "record_structured_attempt_event",
 ]

@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-17
 Last verified: 2026-07-11
-Verification context: structured-output retry observability is implemented once in the shared runtime and queryable across projects; sync/async fail→retry→success controls prove the common substrate rather than an application-local logger.
+Verification context: structured-output retry observability and trace-scoped history lookup are implemented once in the shared runtime; focused controls prove the cross-project substrate rather than an application-local logger.
 
 ## Context
 

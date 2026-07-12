@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
     get_structured_attempt_events,
+    get_structured_attempt_histories,
     record_structured_attempt_event,
 )
 
@@ -99,6 +100,7 @@ def test_failed_attempt_survives_successful_retry_in_order() -> None:
     assert observed[1].failure_class == "missing_required"
     assert observed[0].raw_sha256 == "a" * 64
     assert not hasattr(observed[0], "raw_content")
+    assert list(get_structured_attempt_histories("trace-1")) == ["call-1"]
 
 
 def test_attempt_event_rejects_unknown_taxonomy() -> None:
@@ -183,10 +185,14 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
         (1, "validated"),
     ]
     assert history[1].failure_class == "missing_required"
-    final_call = io_log._get_db().execute(
-        "SELECT logical_call_id FROM llm_calls WHERE trace_id=? ORDER BY id DESC LIMIT 1",
-        ("trace-runtime-retry",),
-    ).fetchone()
+    final_call = (
+        io_log._get_db()
+        .execute(
+            "SELECT logical_call_id FROM llm_calls WHERE trace_id=? ORDER BY id DESC LIMIT 1",
+            ("trace-runtime-retry",),
+        )
+        .fetchone()
+    )
     assert final_call == (rows[0],)
 
 
@@ -248,8 +254,12 @@ async def test_async_native_schema_runtime_preserves_failed_attempt(
         "received",
         "validated",
     ]
-    final_call = io_log._get_db().execute(
-        "SELECT logical_call_id FROM llm_calls WHERE trace_id=? ORDER BY id DESC LIMIT 1",
-        ("trace-async-runtime-retry",),
-    ).fetchone()
+    final_call = (
+        io_log._get_db()
+        .execute(
+            "SELECT logical_call_id FROM llm_calls WHERE trace_id=? ORDER BY id DESC LIMIT 1",
+            ("trace-async-runtime-retry",),
+        )
+        .fetchone()
+    )
     assert final_call == (logical_call_id,)

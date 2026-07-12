@@ -116,3 +116,14 @@ def get_structured_attempt_events(logical_call_id: str) -> list[StructuredAttemp
         StructuredAttemptEvent.model_validate(row)
         for row in _io_log.read_structured_attempt_events(logical_call_id)
     ]
+
+
+def get_structured_attempt_histories(
+    trace_id: str,
+) -> dict[str, list[StructuredAttemptEvent]]:
+    """Return ordered attempt histories for every structured call in one trace."""
+
+    return {
+        call_id: get_structured_attempt_events(call_id)
+        for call_id in _io_log.read_structured_attempt_call_ids(trace_id)
+    }

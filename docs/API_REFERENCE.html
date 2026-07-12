@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-12T15:47:39Z -->
+<!-- Generated: 2026-07-12T15:49:50Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1206,6 +1206,15 @@ data-loss detection.</pre>
   </div>
 </details>
 
+<details class="symbol" id="module-llm_client-io_log-read_structured_attempt_call_ids">
+  <summary><code>read_structured_attempt_call_ids</code> <span class="sig">(trace_id: str) -&gt; list[str]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return structured logical-call ids for a trace in first-event order.</p>
+    <p class="meta">Source: <code>llm_client.io_log</code> functions</p>
+    <pre class="doc">Return structured logical-call ids for a trace in first-event order.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-io_log-read_structured_attempt_events">
   <summary><code>read_structured_attempt_events</code> <span class="sig">(logical_call_id: str) -&gt; list[dict[str, typing.Any]]</span></summary>
   <div class="symbol-body">
@@ -1730,6 +1739,15 @@ The log format is the task-graph `ExperimentRecord` JSONL, where
     <p class="summary">Return the complete ordered event history for one logical call.</p>
     <p class="meta">Source: <code>llm_client.observability.structured_attempts</code> functions</p>
     <pre class="doc">Return the complete ordered event history for one logical call.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-observability-get_structured_attempt_histories">
+  <summary><code>get_structured_attempt_histories</code> <span class="sig">(trace_id: str) -&gt; dict[str, list[llm_client.observability.structured_attempts.StructuredAttemptEvent]]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return ordered attempt histories for every structured call in one trace.</p>
+    <p class="meta">Source: <code>llm_client.observability.structured_attempts</code> functions</p>
+    <pre class="doc">Return ordered attempt histories for every structured call in one trace.</pre>
   </div>
 </details>
 
@@ -9587,6 +9605,15 @@ metadata plane; the event carries a content hash and optional artifact reference
     <p class="summary">Return the complete ordered event history for one logical call.</p>
     <p class="meta">Source: <code>llm_client.observability.structured_attempts</code> functions</p>
     <pre class="doc">Return the complete ordered event history for one logical call.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-observability-structured_attempts-get_structured_attempt_histories">
+  <summary><code>get_structured_attempt_histories</code> <span class="sig">(trace_id: str) -&gt; dict[str, list[llm_client.observability.structured_attempts.StructuredAttemptEvent]]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return ordered attempt histories for every structured call in one trace.</p>
+    <p class="meta">Source: <code>llm_client.observability.structured_attempts</code> functions</p>
+    <pre class="doc">Return ordered attempt histories for every structured call in one trace.</pre>
   </div>
 </details>
 

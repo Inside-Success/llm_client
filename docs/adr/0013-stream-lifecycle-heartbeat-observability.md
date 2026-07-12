@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-12
-Verification context: structured attempt lifecycle events are limited to non-streaming native-schema calls; stream lifecycle/heartbeat semantics are unchanged.
+Verification context: structured attempt lifecycle events and trace-scoped queries remain limited to non-streaming native-schema calls; stream lifecycle/heartbeat semantics are unchanged.
 Date: 2026-03-22
 
 ## Context

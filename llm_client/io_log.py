@@ -1212,6 +1212,18 @@ def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]
     return result
 
 
+def read_structured_attempt_call_ids(trace_id: str) -> list[str]:
+    """Return structured logical-call ids for a trace in first-event order."""
+
+    rows = _get_db().execute(
+        """SELECT logical_call_id, MIN(id) AS first_id
+           FROM structured_attempt_events WHERE trace_id = ?
+           GROUP BY logical_call_id ORDER BY first_id""",
+        (trace_id,),
+    ).fetchall()
+    return [str(row[0]) for row in rows]
+
+
 def _write_call_to_db(
     *,
     timestamp: str,
