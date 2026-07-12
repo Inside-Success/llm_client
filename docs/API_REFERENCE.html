@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-11T14:19:48Z -->
+<!-- Generated: 2026-07-12T00:30:08Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -10526,12 +10526,30 @@ spans.  When False, skips them with a warning.</pre>
 </details>
 
 <details class="module" id="module-llm_client-utils-git_utils">
-  <summary><span class="module-name">llm_client.utils.git_utils</span> <span class="module-summary">Git utilities for llm_client observability.</span></summary>
+  <summary><span class="module-name">llm_client.utils.git_utils</span> <span class="module-summary">Git utilities for truthful llm_client experiment provenance.</span></summary>
   <div class="module-body">
-    <p class="summary">Git utilities for llm_client observability.</p>
-<pre class="doc">Git utilities for llm_client observability.</pre>
+    <p class="summary">Git utilities for truthful llm_client experiment provenance.</p>
+<pre class="doc">Git utilities for truthful llm_client experiment provenance.</pre>
 
 <h4>Functions</h4>
+
+<details class="symbol" id="module-llm_client-utils-git_utils-classify_diff_files">
+  <summary><code>classify_diff_files</code> <span class="sig">(files: collections.abc.Sequence[str]) -&gt; set[str]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Classify changed paths into compact experiment-comparison categories.</p>
+    <p class="meta">Source: <code>llm_client.utils.git_utils</code> functions</p>
+    <pre class="doc">Classify changed paths into compact experiment-comparison categories.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-utils-git_utils-get_diff_files">
+  <summary><code>get_diff_files</code> <span class="sig">(base_commit: str, candidate_commit: str) -&gt; list[str]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return paths changed between two commits, failing loud for invalid revisions.</p>
+    <p class="meta">Source: <code>llm_client.utils.git_utils</code> functions</p>
+    <pre class="doc">Return paths changed between two commits, failing loud for invalid revisions.</pre>
+  </div>
+</details>
 
 <details class="symbol" id="module-llm_client-utils-git_utils-get_git_head">
   <summary><code>get_git_head</code> <span class="sig">() -&gt; str | None</span></summary>
@@ -10539,6 +10557,24 @@ spans.  When False, skips them with a warning.</pre>
     <p class="summary">Return the current git HEAD commit hash, or None if not in a repo.</p>
     <p class="meta">Source: <code>llm_client.utils.git_utils</code> functions</p>
     <pre class="doc">Return the current git HEAD commit hash, or None if not in a repo.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-utils-git_utils-get_working_tree_files">
+  <summary><code>get_working_tree_files</code> <span class="sig">() -&gt; list[str]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return tracked and untracked paths changed from ``HEAD`` in the current worktree.</p>
+    <p class="meta">Source: <code>llm_client.utils.git_utils</code> functions</p>
+    <pre class="doc">Return tracked and untracked paths changed from ``HEAD`` in the current worktree.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-utils-git_utils-is_git_dirty">
+  <summary><code>is_git_dirty</code> <span class="sig">() -&gt; bool</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return whether the current worktree has tracked or untracked changes.</p>
+    <p class="meta">Source: <code>llm_client.utils.git_utils</code> functions</p>
+    <pre class="doc">Return whether the current worktree has tracked or untracked changes.</pre>
   </div>
 </details>
 
