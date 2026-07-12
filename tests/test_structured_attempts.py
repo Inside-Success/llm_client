@@ -324,6 +324,7 @@ async def test_async_native_schema_runtime_preserves_failed_attempt(
 
 
 @pytest.mark.asyncio
+# mock-ok: typed provider exception is controlled; real async retry and SQLite ledger are under test.
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
 async def test_async_runtime_persists_litellm_pre_return_validation_failure(
