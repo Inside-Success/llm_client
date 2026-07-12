@@ -270,7 +270,7 @@ def _call_llm_structured_impl(
     _is_agent_model = _client._is_agent_model
     _finalize_result = _client._finalize_result
     _build_routing_trace = _client._build_routing_trace
-    _log_call_event = _client._log_call_event
+    _base_log_call_event = _client._log_call_event
     _effective_retry = _client._effective_retry
     _resolve_api_base_for_model = _client._resolve_api_base_for_model
     _background_mode_for_model = _client._background_mode_for_model
@@ -307,6 +307,9 @@ def _call_llm_structured_impl(
         task, trace_id, max_budget, caller="call_llm_structured",
     )
     _logical_call_id = uuid4().hex
+    def _log_call_event(**event: Any) -> None:
+        """Bind every terminal structured-call row to its attempt history."""
+        _base_log_call_event(**event, logical_call_id=_logical_call_id)
     timeout = _normalize_timeout(
         timeout,
         caller="call_llm_structured",
@@ -890,7 +893,7 @@ async def _acall_llm_structured_impl(
     _is_agent_model = _client._is_agent_model
     _finalize_result = _client._finalize_result
     _build_routing_trace = _client._build_routing_trace
-    _log_call_event = _client._log_call_event
+    _base_log_call_event = _client._log_call_event
     _effective_retry = _client._effective_retry
     _resolve_api_base_for_model = _client._resolve_api_base_for_model
     _background_mode_for_model = _client._background_mode_for_model
@@ -929,6 +932,9 @@ async def _acall_llm_structured_impl(
         task, trace_id, max_budget, caller="acall_llm_structured",
     )
     _logical_call_id = uuid4().hex
+    def _log_call_event(**event: Any) -> None:
+        """Bind every terminal structured-call row to its attempt history."""
+        _base_log_call_event(**event, logical_call_id=_logical_call_id)
     timeout = _normalize_timeout(
         timeout,
         caller="acall_llm_structured",

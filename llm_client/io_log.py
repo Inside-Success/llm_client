@@ -374,6 +374,7 @@ def log_call(
     response_format_type: str | None = None,
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
+    logical_call_id: str | None = None,
 ) -> None:
     """Append one call record with optional prompt asset identity.
 
@@ -469,6 +470,7 @@ def log_call(
             "schema_hash": schema_hash,
             "response_format_type": response_format_type,
             "validation_errors": validation_errors,
+            "logical_call_id": logical_call_id,
         }
         _append_jsonl(d, "calls", record)
 
@@ -500,6 +502,7 @@ def log_call(
             response_format_type=response_format_type,
             validation_errors=validation_errors,
             causal_parent_id=causal_parent_id,
+            logical_call_id=logical_call_id,
         )
     except Exception:
         # Never break LLM calls for logging
@@ -734,7 +737,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     trace_id TEXT,
     prompt_ref TEXT,
     call_fingerprint TEXT,
-    call_snapshot TEXT
+    call_snapshot TEXT,
+    logical_call_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS structured_attempt_events (
@@ -924,6 +928,7 @@ CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
 CREATE INDEX IF NOT EXISTS idx_calls_trace_id ON llm_calls(trace_id);
 CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref);
 CREATE INDEX IF NOT EXISTS idx_calls_fingerprint ON llm_calls(call_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_call ON structured_attempt_events(logical_call_id, id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_trace ON structured_attempt_events(trace_id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_class ON structured_attempt_events(failure_class);
@@ -1025,6 +1030,9 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
     if "causal_parent_id" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN causal_parent_id TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_causal_parent_id ON llm_calls(causal_parent_id)")
+    if "logical_call_id" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN logical_call_id TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id)")
 
     # task_scores: add git_commit if missing
     scores_cols = {r[1] for r in conn.execute("PRAGMA table_info(task_scores)").fetchall()}
@@ -1232,6 +1240,7 @@ def _write_call_to_db(
     response_format_type: str | None = None,
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
+    logical_call_id: str | None = None,
 ) -> None:
     """Insert a call record into SQLite. Never raises."""
     try:
@@ -1248,8 +1257,8 @@ def _write_call_to_db(
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    causal_parent_id, logical_call_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, _get_project(), model,
                     json.dumps(messages, default=str) if messages else None,
@@ -1261,7 +1270,7 @@ def _write_call_to_db(
                     json.dumps(call_snapshot, default=str) if call_snapshot is not None else None,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id,
+                    causal_parent_id, logical_call_id,
                 ),
             )
 

@@ -183,6 +183,11 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
         (1, "validated"),
     ]
     assert history[1].failure_class == "missing_required"
+    final_call = io_log._get_db().execute(
+        "SELECT logical_call_id FROM llm_calls WHERE trace_id=? ORDER BY id DESC LIMIT 1",
+        ("trace-runtime-retry",),
+    ).fetchone()
+    assert final_call == (rows[0],)
 
 
 @pytest.mark.asyncio
@@ -243,3 +248,8 @@ async def test_async_native_schema_runtime_preserves_failed_attempt(
         "received",
         "validated",
     ]
+    final_call = io_log._get_db().execute(
+        "SELECT logical_call_id FROM llm_calls WHERE trace_id=? ORDER BY id DESC LIMIT 1",
+        ("trace-async-runtime-retry",),
+    ).fetchone()
+    assert final_call == (logical_call_id,)

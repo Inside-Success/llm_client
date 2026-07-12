@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-11
-Verification context: attempt events add schema/model/path metadata, raw hashes, typed validation issues, and optional artifact references for divergence diagnosis without truncating or inlining replay payloads; existing call snapshots remain unchanged.
+Verification context: attempt events add schema/model/path metadata, raw hashes, typed validation issues, optional artifact references, and an exact final-call `logical_call_id` binding for divergence diagnosis without truncating or inlining replay payloads; existing call snapshots remain unchanged.
 
 ## Context
 

@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-12
-Verification context: canonical typed attempt models live under `observability/`; the `io_log` compatibility backend persists metadata-only append events and propagates integrity-write failures. DB readback plus sync/async retry controls pass.
+Verification context: canonical typed attempt models live under `observability/`; the `io_log` compatibility backend persists metadata-only append events, binds them to the final call row by `logical_call_id`, and propagates integrity-write failures. DB readback plus sync/async retry controls pass.
 Date: 2026-02-23
 
 ## Context

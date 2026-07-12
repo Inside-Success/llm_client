@@ -141,10 +141,9 @@ Pre-landing review disposition:
   111 additive lines rather than hundreds of unrelated whitespace changes.
 - Added justified provider-mock annotations; the retry engine and real temporary
   SQLite database remain unmocked.
-- Open follow-up: the event ledger has its own `logical_call_id`, but the final
-  `llm_calls` row does not yet carry that id. Slice 1 readback is lossless by
-  event id/trace; exact final-row binding is required before DIGIMON projection
-  and remains a Plan #110 Slice 3 blocker.
+- Resolved the exact binding follow-up: every terminal structured `llm_calls`
+  row now carries the same `logical_call_id` as its attempt events. Sync and
+  async controls assert equality rather than joining ambiguously on task/trace.
 
 ## Failure handling
 
