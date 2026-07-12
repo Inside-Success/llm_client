@@ -112,6 +112,40 @@ failure class is `missing_required` or `schema_validation`; allowed recovery is
 Coverage: A=0, B=1, C=1, D=4, F=0. No hard gate is enabled until both signs
 of each relevant control pass.
 
+## Slice 1 progress — 2026-07-12
+
+Implemented an append-only `structured_attempt_events` child ledger for native
+JSON-schema sync and async calls. Each provider response emits `received` with a
+raw SHA-256 before validation. Validation then emits `validated`, or
+`validation_failed` with typed Pydantic issues followed by `recovery_decided`.
+The persistence seam deliberately propagates database errors; explicit disabled
+observability remains an intentional no-op.
+
+Observed no-network controls:
+
+- `pytest -q tests/test_structured_attempts.py --no-cov` → `5 passed`.
+- Both sync and async missing-`rationale` fixtures produce exactly
+  `received → validation_failed(missing_required) → recovery_decided(retry) →
+  received → validated`.
+- Metadata readback retains raw SHA-256 but exposes no `raw_content` field.
+- Unknown taxonomy values fail Pydantic validation and a simulated database
+  failure propagates.
+
+Coverage after Slice 1: L97-1=A, L97-2=A, L97-3=A, L97-4=A, L97-5=A,
+L97-6=A on the native-schema scope. Instructor, Responses API, and DIGIMON trace
+projection remain explicitly outside this slice.
+
+Pre-landing review disposition:
+
+- Fixed the accidental whole-file formatter expansion; the runtime diff is now
+  111 additive lines rather than hundreds of unrelated whitespace changes.
+- Added justified provider-mock annotations; the retry engine and real temporary
+  SQLite database remain unmocked.
+- Open follow-up: the event ledger has its own `logical_call_id`, but the final
+  `llm_calls` row does not yet carry that id. Slice 1 readback is lossless by
+  event id/trace; exact final-row binding is required before DIGIMON projection
+  and remains a Plan #110 Slice 3 blocker.
+
 ## Failure handling
 
 | Failure | Action |

@@ -737,6 +737,26 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     call_snapshot TEXT
 );
 
+CREATE TABLE IF NOT EXISTS structured_attempt_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    timestamp TEXT NOT NULL,
+    project TEXT,
+    logical_call_id TEXT NOT NULL,
+    trace_id TEXT NOT NULL,
+    task TEXT NOT NULL,
+    attempt_ordinal INTEGER NOT NULL,
+    model TEXT NOT NULL,
+    execution_path TEXT NOT NULL,
+    schema_hash TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    raw_sha256 TEXT,
+    raw_artifact_ref TEXT,
+    failure_class TEXT,
+    validation_issues TEXT NOT NULL,
+    recovery_decision TEXT
+);
+
 CREATE TABLE IF NOT EXISTS embeddings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -904,6 +924,9 @@ CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
 CREATE INDEX IF NOT EXISTS idx_calls_trace_id ON llm_calls(trace_id);
 CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref);
 CREATE INDEX IF NOT EXISTS idx_calls_fingerprint ON llm_calls(call_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_structured_attempt_call ON structured_attempt_events(logical_call_id, id);
+CREATE INDEX IF NOT EXISTS idx_structured_attempt_trace ON structured_attempt_events(trace_id);
+CREATE INDEX IF NOT EXISTS idx_structured_attempt_class ON structured_attempt_events(failure_class);
 CREATE INDEX IF NOT EXISTS idx_emb_timestamp ON embeddings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_emb_model ON embeddings(model);
 CREATE INDEX IF NOT EXISTS idx_emb_task ON embeddings(task);
@@ -1125,6 +1148,60 @@ def _run_db_write(write_fn: Any) -> None:
             )
             time.sleep(delay_s)
             attempt += 1
+
+
+def write_structured_attempt_event(event: dict[str, Any]) -> None:
+    """Persist one metadata-only structured attempt event and fail on write errors."""
+
+    if not _logging_enabled():
+        return
+
+    def _write(db: sqlite3.Connection) -> None:
+        db.execute(
+            """INSERT INTO structured_attempt_events
+               (event_id, timestamp, project, logical_call_id, trace_id, task,
+                attempt_ordinal, model, execution_path, schema_hash, event_type,
+                raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                recovery_decision)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                event["event_id"], event["timestamp"], _get_project(),
+                event["logical_call_id"], event["trace_id"], event["task"],
+                event["attempt_ordinal"], event["model"], event["execution_path"],
+                event["schema_hash"], event["event_type"], event.get("raw_sha256"),
+                event.get("raw_artifact_ref"), event.get("failure_class"),
+                json.dumps(event.get("validation_issues", []), default=str),
+                event.get("recovery_decision"),
+            ),
+        )
+
+    _run_db_write(_write)
+
+
+def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]:
+    """Read one logical call's append-only structured attempt history."""
+
+    rows = _get_db().execute(
+        """SELECT event_id, timestamp, logical_call_id, trace_id, task,
+                  attempt_ordinal, model, execution_path, schema_hash, event_type,
+                  raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                  recovery_decision
+           FROM structured_attempt_events
+           WHERE logical_call_id = ? ORDER BY id""",
+        (logical_call_id,),
+    ).fetchall()
+    keys = (
+        "event_id", "timestamp", "logical_call_id", "trace_id", "task",
+        "attempt_ordinal", "model", "execution_path", "schema_hash", "event_type",
+        "raw_sha256", "raw_artifact_ref", "failure_class", "validation_issues",
+        "recovery_decision",
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(zip(keys, row, strict=True))
+        item["validation_issues"] = json.loads(item["validation_issues"] or "[]")
+        result.append(item)
+    return result
 
 
 def _write_call_to_db(

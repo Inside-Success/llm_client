@@ -1,8 +1,8 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-07-09
-Verification context: canonical experiment provenance now records real dirty paths/categories and records unknown plus an error class when collection fails; compatibility-facade persistence is covered by focused real-repository controls (68 passed, 1 skipped)
+Last verified: 2026-07-12
+Verification context: canonical typed attempt models live under `observability/`; the `io_log` compatibility backend persists metadata-only append events and propagates integrity-write failures. DB readback plus sync/async retry controls pass.
 Date: 2026-02-23
 
 ## Context

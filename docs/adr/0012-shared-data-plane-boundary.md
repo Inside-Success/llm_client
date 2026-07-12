@@ -1,8 +1,8 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-09
-Verification context: experiment provenance retains compact repository-relative changed paths/categories and an explicit collection-error class; no raw payload or bulk-artifact boundary changed (68 focused tests passed, 1 skipped)
+Last verified: 2026-07-12
+Verification context: attempt events persist raw-content SHA-256 plus an optional artifact reference and do not inline raw response bodies, preserving the control-plane/bulk-data boundary; focused readback controls pass.
 Date: 2026-03-17
 
 ## Context

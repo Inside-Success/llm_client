@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-11
-Verification context: experiment provenance now supplies truthful changed-file/category context for divergence diagnosis and marks collection failure as unknown; replay payload semantics are unchanged (68 focused tests passed, 1 skipped)
+Verification context: attempt events add schema/model/path metadata, raw hashes, typed validation issues, and optional artifact references for divergence diagnosis without truncating or inlining replay payloads; existing call snapshots remain unchanged.
 
 ## Context
 

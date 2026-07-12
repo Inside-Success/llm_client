@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from importlib import import_module
 from typing import Any, Callable, NoReturn, TypeVar, cast
+from uuid import uuid4
 
 from llm_client.core.client import AsyncCachePolicy, CachePolicy, Hooks, LLMCallResult, RetryPolicy
 from llm_client.core.config import ClientConfig
@@ -24,6 +25,14 @@ import logging as _logging
 
 from llm_client.core.models import supports_structured_output as _registry_supports_structured_output
 from llm_client.parsing_utils import safe_json_loads as _safe_json_loads
+from llm_client.observability.structured_attempts import (
+    AttemptEventType,
+    AttemptFailureClass,
+    RecoveryDecision,
+    StructuredAttemptEvent,
+    StructuredValidationIssue,
+    record_structured_attempt_event,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -114,6 +123,63 @@ def _build_validation_repair_message(exc: _StructuredValidationRetry) -> dict[st
             "Please fix these issues and return a corrected response."
         ),
     }
+
+
+def _validation_failure_class(error: ValidationError) -> AttemptFailureClass:
+    """Classify missing required fields separately from other schema failures."""
+
+    return (
+        "missing_required"
+        if any(issue.get("type") == "missing" for issue in error.errors())
+        else "schema_validation"
+    )
+
+
+def _attempt_event(
+    *,
+    logical_call_id: str,
+    trace_id: str,
+    task: str,
+    attempt: int,
+    model: str,
+    schema_hash: str,
+    event_type: AttemptEventType,
+    raw_content: str | None = None,
+    validation_error: ValidationError | None = None,
+    recovery_decision: RecoveryDecision | None = None,
+) -> StructuredAttemptEvent:
+    """Build one typed native-schema attempt event without storing raw content."""
+
+    issues: tuple[StructuredValidationIssue, ...] = ()
+    failure_class: AttemptFailureClass | None = None
+    if validation_error is not None:
+        failure_class = _validation_failure_class(validation_error)
+        issues = tuple(
+            StructuredValidationIssue(
+                location=tuple(issue.get("loc", ())),
+                code=str(issue.get("type", "validation_error")),
+                message=str(issue.get("msg", "validation failed"))[:500],
+            )
+            for issue in validation_error.errors()[:10]
+        )
+    return StructuredAttemptEvent(
+        logical_call_id=logical_call_id,
+        trace_id=trace_id,
+        task=task,
+        attempt_ordinal=attempt,
+        model=model,
+        execution_path="native_schema",
+        schema_hash=schema_hash,
+        event_type=event_type,
+        raw_sha256=(
+            _hashlib.sha256(raw_content.encode()).hexdigest()
+            if raw_content is not None
+            else None
+        ),
+        failure_class=failure_class,
+        validation_issues=issues,
+        recovery_decision=recovery_decision,
+    )
 
 
 def _base_model_name(model: str) -> str:
@@ -240,6 +306,7 @@ def _call_llm_structured_impl(
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="call_llm_structured",
     )
+    _logical_call_id = uuid4().hex
     timeout = _normalize_timeout(
         timeout,
         caller="call_llm_structured",
@@ -530,12 +597,33 @@ def _call_llm_structured_impl(
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
                         raise ValueError("Empty content from LLM (native JSON schema structured)")
+                    record_structured_attempt_event(_attempt_event(
+                        logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                        attempt=attempt, model=current_model, schema_hash=_schema_hash,
+                        event_type="received", raw_content=raw_content,
+                    ))
                     try:
                         parsed = _robust_validate_json(response_model, raw_content)
                     except ValidationError as ve:
+                        record_structured_attempt_event(_attempt_event(
+                            logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                            attempt=attempt, model=current_model, schema_hash=_schema_hash,
+                            event_type="validation_failed", validation_error=ve,
+                        ))
+                        record_structured_attempt_event(_attempt_event(
+                            logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                            attempt=attempt, model=current_model, schema_hash=_schema_hash,
+                            event_type="recovery_decided",
+                            recovery_decision="retry" if attempt < r.max_retries else "exhausted",
+                        ))
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
+                    record_structured_attempt_event(_attempt_event(
+                        logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                        attempt=attempt, model=current_model, schema_hash=_schema_hash,
+                        event_type="validated",
+                    ))
                     usage = _extract_usage(response)
                     cost, cost_source = _parse_cost_result(_compute_cost(response))
                     finish_reason: str = first_choice.finish_reason or "stop"
@@ -766,7 +854,6 @@ def _call_llm_structured_impl(
         )
         raise wrap_error(e) from e
 
-
 async def _acall_llm_structured_impl(
     model: str,
     messages: list[dict[str, Any]],
@@ -841,6 +928,7 @@ async def _acall_llm_structured_impl(
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm_structured",
     )
+    _logical_call_id = uuid4().hex
     timeout = _normalize_timeout(
         timeout,
         caller="acall_llm_structured",
@@ -1131,12 +1219,33 @@ async def _acall_llm_structured_impl(
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
                         raise ValueError("Empty content from LLM (native JSON schema structured)")
+                    record_structured_attempt_event(_attempt_event(
+                        logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                        attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
+                        event_type="received", raw_content=raw_content,
+                    ))
                     try:
                         parsed = _robust_validate_json(response_model, raw_content)
                     except ValidationError as ve:
+                        record_structured_attempt_event(_attempt_event(
+                            logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                            attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
+                            event_type="validation_failed", validation_error=ve,
+                        ))
+                        record_structured_attempt_event(_attempt_event(
+                            logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                            attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
+                            event_type="recovery_decided",
+                            recovery_decision="retry" if attempt < r.max_retries else "exhausted",
+                        ))
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message_async = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
+                    record_structured_attempt_event(_attempt_event(
+                        logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
+                        attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
+                        event_type="validated",
+                    ))
                     usage = _extract_usage(response)
                     cost, cost_source = _parse_cost_result(_compute_cost(response))
                     finish_reason: str = first_choice.finish_reason or "stop"

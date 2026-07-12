@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-17
 Last verified: 2026-07-11
-Verification context: shared experiment-run provenance again captures real Git dirty state, changed paths, and categories; focused cross-project experiment persistence controls pass (68 passed, 1 skipped)
+Verification context: structured-output retry observability is implemented once in the shared runtime and queryable across projects; sync/async fail→retry→success controls prove the common substrate rather than an application-local logger.
 
 ## Context
 
