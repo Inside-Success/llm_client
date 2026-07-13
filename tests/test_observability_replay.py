@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 import json
 from typing import Any, Callable
@@ -130,6 +131,17 @@ def _latest_snapshot(trace_id: str) -> dict[str, Any]:
     return snapshot
 
 
+def _latest_call_id(trace_id: str) -> int:
+    """Return the newest persisted call id for one runtime trace."""
+
+    row = io_log._get_db().execute(
+        "SELECT id FROM llm_calls WHERE trace_id = ? ORDER BY id DESC LIMIT 1",
+        (trace_id,),
+    ).fetchone()
+    assert row is not None
+    return int(row[0])
+
+
 def test_snapshot_fingerprint_ignores_ephemeral_metadata() -> None:
     snapshot = replay_module.build_call_snapshot(
         public_api="call_llm",
@@ -207,7 +219,10 @@ def test_snapshot_marks_non_json_kwargs_as_replay_unsupported() -> None:
     assert replay["unsupported_keys"] == ["non_json"]
 
 
-def test_snapshot_marks_non_json_message_content_as_replay_unsupported() -> None:
+# mock-ok: dispatch is replaced to prove diagnostic message content fails before I/O.
+def test_snapshot_marks_non_json_message_content_as_replay_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Replay never dispatches a diagnostic summary in place of original message content."""
 
     snapshot = replay_module.build_call_snapshot(
@@ -230,6 +245,16 @@ def test_snapshot_marks_non_json_message_content_as_replay_unsupported() -> None
     replay = snapshot["replay"]
     assert isinstance(replay, dict)
     assert replay["unsupported_keys"] == ["messages"]
+    replay["unsupported_keys"] = []
+    call_id = _insert_call(snapshot)
+    monkeypatch.setattr(
+        replay_module,
+        "_call_text_for_replay",
+        lambda *args, **kwargs: ({"value": "unexpected"}, "result"),
+    )
+
+    with pytest.raises(ValueError, match="replay-unsupported normalized value"):
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.message.lossy.replay")
 
 
 def test_compare_call_snapshots_reports_compact_differences() -> None:
@@ -571,6 +596,214 @@ async def test_text_runtimes_snapshot_effective_retry_cache_and_execution_mode(
     assert control["execution_mode"] == "text"
 
 
+@pytest.mark.parametrize(
+    "public_api",
+    ["call_llm", "acall_llm", "call_llm_structured", "acall_llm_structured"],
+)
+# mock-ok: provider transports are replaced; both public-runtime passes, persistence,
+# fingerprint validation, envelope validation, and replay reconstruction are real.
+def test_public_runtime_snapshots_round_trip_timeout_disabled(
+    public_api: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every public producer must replay its real timeout-disabled snapshot."""
+
+    sync_completion = MagicMock(return_value=_provider_response('{"value":"ok"}'))
+    async_completion = AsyncMock(return_value=_provider_response('{"value":"ok"}'))
+    monkeypatch.setattr("llm_client.core.client.litellm.completion", sync_completion)
+    monkeypatch.setattr("llm_client.core.client.litellm.acompletion", async_completion)
+    monkeypatch.setattr("llm_client.core.client.litellm.completion_cost", lambda *_args, **_kwargs: 0.001)
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._model_supports_native_schema",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+
+    trace_id = f"trace.timeout-disabled.{public_api}"
+    common_kwargs = {
+        "timeout": 60,
+        "num_retries": 0,
+        "retry": RetryPolicy(max_retries=0, base_delay=0.25, max_delay=2.0),
+        "fallback_models": [],
+        "cache": None,
+        "task": "test.timeout-disabled.round-trip",
+        "trace_id": trace_id,
+        "max_budget": 0,
+    }
+    messages = [{"role": "user", "content": "hi"}]
+    if public_api == "call_llm":
+        call_llm("provider/text-model", messages, **common_kwargs)
+    elif public_api == "acall_llm":
+        asyncio.run(acall_llm("provider/text-model", messages, **common_kwargs))
+    elif public_api == "call_llm_structured":
+        call_llm_structured(
+            "provider/native-model",
+            messages,
+            RuntimeReplayItem,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            **common_kwargs,
+        )
+    else:
+        asyncio.run(
+            acall_llm_structured(
+                "provider/native-model",
+                messages,
+                RuntimeReplayItem,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                **common_kwargs,
+            )
+        )
+
+    call_id = _latest_call_id(trace_id)
+    snapshot = _latest_snapshot(trace_id)
+    assert snapshot["request"]["control"]["timeout"] == 0
+    if public_api == "call_llm_structured":
+        original_provider_kwargs = dict(sync_completion.call_args.kwargs)
+    else:
+        original_provider_kwargs = dict(async_completion.call_args.kwargs)
+
+    sync_completion.reset_mock()
+    async_completion.reset_mock()
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
+
+    replay_trace_id = f"trace.timeout-disabled.replay.{public_api}"
+    replay_module.replay_call_snapshot(
+        call_id,
+        trace_id=replay_trace_id,
+    )
+
+    assert _latest_snapshot(replay_trace_id) == snapshot
+    if public_api == "call_llm_structured":
+        sync_completion.assert_called_once()
+        provider_kwargs = sync_completion.call_args.kwargs
+    else:
+        async_completion.assert_awaited_once()
+        provider_kwargs = async_completion.call_args.kwargs
+    assert {
+        key: value for key, value in provider_kwargs.items() if key != "metadata"
+    } == {
+        key: value
+        for key, value in original_provider_kwargs.items()
+        if key != "metadata"
+    }
+
+
+@pytest.mark.parametrize(
+    "value_factory",
+    [
+        pytest.param(lambda: Path("relative/path"), id="path"),
+        pytest.param(lambda: ("a", "b"), id="tuple"),
+        pytest.param(lambda: {"a", "b"}, id="set"),
+        pytest.param(lambda: float("inf"), id="nonfinite-float"),
+        pytest.param(lambda: {1: "value"}, id="non-string-mapping-key"),
+        pytest.param(lambda: object(), id="opaque-object"),
+        pytest.param(
+            lambda: {"__type__": "builtins.object", "__repr__": "<object>"},
+            id="legacy-diagnostic-shape",
+        ),
+        pytest.param(
+            lambda: {
+                "__llm_client_replay_unsupported__": {
+                    "type": "builtins.object",
+                    "reason": "diagnostic",
+                    "repr": "<object>",
+                }
+            },
+            id="current-diagnostic-shape",
+        ),
+    ],
+)
+# mock-ok: dispatch is replaced to prove lossy values fail before provider I/O.
+def test_replay_rejects_lossy_normalization_when_support_metadata_is_empty(
+    value_factory: Callable[[], object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Intrinsic diagnostics cannot be hidden by false-empty support metadata."""
+
+    snapshot = replay_module.build_call_snapshot(
+        public_api="call_llm",
+        call_kind="text",
+        requested_model="provider/text-model",
+        messages=[{"role": "user", "content": "hi"}],
+        prompt_ref="prompt@1",
+        timeout=60,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        base_delay=1.0,
+        max_delay=30.0,
+        retry_on=None,
+        fallback_models=[],
+        public_kwargs={"custom": value_factory()},
+        retry_policy=RetryPolicy(max_retries=0),
+        cache_policy=None,
+        execution_mode="text",
+    )
+    assert snapshot["replay"]["unsupported_keys"] == ["custom"]
+    snapshot["replay"]["unsupported_keys"] = []
+    call_id = _insert_call(snapshot)
+    dispatched = False
+
+    def fake_text(*args: object, **kwargs: object) -> tuple[dict[str, str], str]:
+        nonlocal dispatched
+        dispatched = True
+        return {"value": "unexpected"}, "result"
+
+    monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
+
+    with pytest.raises(ValueError, match="replay-unsupported normalized value"):
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.lossy.replay")
+    assert dispatched is False
+
+
+# mock-ok: dispatch is replaced so exact nested JSON kwargs can be compared directly.
+def test_json_native_nested_kwargs_round_trip_exactly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replay preserves recursively JSON-native values without false rejection."""
+
+    nested = {"items": [1, 2.5, True, None, {"name": "value"}]}
+    snapshot = replay_module.build_call_snapshot(
+        public_api="call_llm",
+        call_kind="text",
+        requested_model="provider/text-model",
+        messages=[{"role": "user", "content": "hi"}],
+        prompt_ref="prompt@1",
+        timeout=60,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        base_delay=1.0,
+        max_delay=30.0,
+        retry_on=None,
+        fallback_models=[],
+        public_kwargs={"custom": nested},
+        retry_policy=RetryPolicy(max_retries=0),
+        cache_policy=None,
+        execution_mode="text",
+    )
+    assert snapshot["replay"]["unsupported_keys"] == []
+    call_id = _insert_call(snapshot)
+    captured: dict[str, object] = {}
+
+    def fake_text(
+        model: str,
+        replay_messages: list[dict[str, object]],
+        **kwargs: object,
+    ) -> tuple[dict[str, str], str]:
+        captured.update(kwargs)
+        return {"value": "ok"}, "result"
+
+    monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
+    replay_module.replay_call_snapshot(call_id, trace_id="trace.native-json.replay")
+
+    assert captured["custom"] == nested
+
+
 def test_snapshot_marks_custom_retry_and_enabled_cache_replay_unsupported() -> None:
     """Replay refuses execution controls whose runtime state cannot be reconstructed."""
 
@@ -615,6 +848,7 @@ def test_snapshot_marks_custom_retry_and_enabled_cache_replay_unsupported() -> N
         lambda control: control.__setitem__("fallback_models", "none"),
         lambda control: control.__setitem__("cache_policy", {}),
         lambda control: control.__setitem__("timeout", "60"),
+        lambda control: control.__setitem__("timeout", -1),
         lambda control: control.__setitem__("unknown_control", True),
     ],
 )

@@ -1,6 +1,6 @@
 # Plan #99: Strict Native JSON-Schema Execution
 
-**Status:** 🚧 In Progress — second repair locally green; independent acceptance pending
+**Status:** 🚧 In Progress — second repair independently rejected; third repair active
 
 **Reopened:** 2026-07-13 after onto-canon6 Plan 0141 independently rejected merge
 `84253ed`. Strict native-schema routing is implemented and remains green, but the
@@ -13,6 +13,15 @@ completion record below is retained as historical evidence, not current acceptan
 replay metadata, v2-to-v1 downgrade, coordinated structured-to-text reinterpretation,
 captured-but-omitted text `execution_mode`, and incomplete/coercive v2 control parsing.
 That commit is not bindable by onto-canon6 Plan 0141.
+
+**Second repair rejection:** independent review rejected exact commit `f63788b`
+(tree `89ab942`) despite 47/47 focused tests passing. A real public call under
+`LLM_CLIENT_TIMEOUT_POLICY=ban` persisted the effective timeout sentinel `0`, while the
+v2 replay consumer required `timeout > 0`, so the runtime could not replay its own
+snapshot. The review also found that lossy Python-to-JSON coercions could change
+provider-visible values while being labeled replay-safe, and that forged empty support
+metadata could allow diagnostic substitutions to dispatch. This commit is not bindable
+by onto-canon6 Plan 0141.
 
 **Verified:** 2026-07-13T18:44:10Z
 **Verification Evidence:**
@@ -267,6 +276,9 @@ Slice 1 — strict path from public API through runtime and replay identity
 | `tests/test_observability_replay.py` | `test_runtime_snapshot_uses_effective_retry_and_disabled_cache` | real public structured call persists resolved policy rather than shadowed defaults |
 | `tests/test_observability_replay.py` | `test_async_runtime_snapshot_uses_effective_retry_and_disabled_cache` | async structured runtime persists the same effective policy and strict mode |
 | `tests/test_observability_replay.py` | `test_text_runtimes_snapshot_effective_retry_cache_and_execution_mode` | sync and async text runtimes persist effective policy plus capability mode |
+| `tests/test_observability_replay.py` | `test_public_runtime_snapshots_round_trip_timeout_disabled` | real sync/async text/structured producers persist and consume identical timeout-disabled snapshots with identical provider-visible controls |
+| `tests/test_observability_replay.py` | `test_replay_rejects_lossy_normalization_when_support_metadata_is_empty` | `Path`, tuple, set, non-finite float, non-string mapping keys, and diagnostic substitutions cannot dispatch even if support metadata is false-empty |
+| `tests/test_observability_replay.py` | `test_json_native_nested_kwargs_round_trip_exactly` | recursively JSON-native values remain replayable without false rejection or value drift |
 | `tests/test_observability_replay.py` | `test_snapshot_marks_custom_retry_and_enabled_cache_replay_unsupported` | non-serializable execution policy fails loud on replay |
 | `tests/test_observability_replay.py` | `test_replay_rejects_coerced_or_inconsistent_execution_policy` | malformed or contradictory v2 policy state cannot replay by coercion |
 | `tests/test_observability_replay.py` | `test_replay_rejects_missing_structured_mode_or_reserved_public_control` | tampered kwargs cannot override the typed replay authority |
@@ -309,7 +321,7 @@ Slice 1 — strict path from public API through runtime and replay identity
 | L99-7 | The declared Plan 99 test inventory is exact and executable. | helper unit controls + mandatory command | F |
 
 Current coverage after independent rejection: A=6, B=0, C=0, D=0, F=1. L99-1 through
-L99-5 and L99-7 retain executable evidence. L99-6 is F until the second repair passes
+L99-5 and L99-7 retain executable evidence. L99-6 is F until the third repair passes
 the expanded negative matrix, full suite, and fresh exact-commit independent review.
 Visibility precedes enforcement; strict mode is opt-in and no default execution
 behavior changes in this repair.
@@ -327,8 +339,8 @@ gate is added by this plan.
 | L99-3 auto mode remains compatible | A | test | existing native structured success | existing schema-rejection-to-Instructor regression remains green |
 | L99-4 policy is replay identity | A | test | strict snapshot replays a typed strict policy | auto and strict snapshots produce different fingerprints |
 | L99-5 typed public API and docs expose the policy | A | test | top-level imports in runtime tests | Pydantic forbids unknown policy fields and generated API signature includes the argument |
-| L99-6 effective execution policy replays exactly | F | rejected | actual four-path capture was correct | independent `9016721` attacks reached dispatch after fingerprint drift, metadata deletion, version downgrade, kind reinterpretation, execution-mode omission, and permissive controls; second repair is unaccepted |
-| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; current mandatory Plan 99 command executes 347 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
+| L99-6 effective execution policy replays exactly | F | rejected | actual four-path capture was correct | independent reviews rejected `9016721` for envelope integrity and `f63788b` because real timeout-ban snapshots could not replay and lossy Python-to-JSON coercions could be mislabeled exact |
+| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; current mandatory Plan 99 command executes 375 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
 
 ### Post-Merge Repair Slices
 
@@ -347,6 +359,11 @@ gate is added by this plan.
    distinguish genuine v1 from downgraded v2; strictly forbid unknown/coerced controls;
    restore text `execution_mode`; reject semantic call-kind reinterpretation; and retain
    the exact independent attacks as permanent tests.
+6. **R99-6 producer-consumer round trip:** accept the runtime's effective timeout-disabled
+   sentinel, round-trip real snapshots from all four public call paths, and permit only
+   JSON-native values whose types and values survive persistence unchanged. Every lossy
+   normalization carries an intrinsic diagnostic marker that replay rejects even when
+   support metadata is empty or inconsistent.
 
 Superseded first-repair local verification on 2026-07-13: the focused replay/helper gate passed
 20 tests; `python scripts/meta/check_plan_tests.py --plan 99` resolved every declared
@@ -373,6 +390,25 @@ an isolated provider-cooldown timing assertion fail; its test and file reruns pa
 followed by clean full runs of 1,599 and 1,604 tests. These are local results only:
 L99-6 remains F and Plan 0141 must not bind this repair until a fresh independent audit
 accepts the exact pushed commit.
+
+Independent review of exact `f63788b` then passed its 47-test focused command but
+rejected the commit on the producer-consumer and lossy-normalization classes above.
+That negative evidence supersedes the local green readout. The third repair must prove
+capture-to-replay behavior for sync/async text/structured public calls, including the
+timeout-disabled runtime default, rather than inspecting persisted fields alone.
+
+Third-repair local verification on 2026-07-13: the focused replay/structured/helper
+matrix passes 61 tests; the exact declared Plan 99 gate collects and passes 375 tests;
+and the full repository suite passes 1,618 tests with 3 skipped and 11 deselected.
+Real sync/async text/structured calls captured with timeout policy `ban` replay through
+the same public runtime under policy `allow`; each replay persists the identical call
+snapshot and reaches the mocked provider transport with identical non-observability
+kwargs. Scoped Ruff, `compileall`, API-reference generation/check, relationship
+validation, and `git diff --check` pass. Repository-wide Ruff retains the exact
+`f63788b` baseline of 315 unrelated errors. Strict mypy improves from 210 to 209 total
+errors and from 11 to 10 in `observability/replay.py`; no new type error is introduced.
+These results are local only: L99-6 remains F until an independent exact-commit review
+accepts the repair.
 
 Verification on 2026-07-13: the final focused structured/replay/trace gate passed
 42 tests. The full repository run reached

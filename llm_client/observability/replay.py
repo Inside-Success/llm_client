@@ -75,6 +75,8 @@ _REPLAY_PUBLIC_API_CALL_KINDS = {
     "call_llm_structured": "structured",
     "acall_llm_structured": "structured",
 }
+_UNSUPPORTED_VALUE_MARKER = "__llm_client_replay_unsupported__"
+_LEGACY_DIAGNOSTIC_KEYS = frozenset({"__type__", "__repr__"})
 
 
 class _ReplayRetryPolicyV2(BaseModel):
@@ -104,7 +106,7 @@ class _ReplayExecutionPolicyV2(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    timeout: int = Field(gt=0)
+    timeout: int = Field(ge=0)
     num_retries: int = Field(ge=0)
     reasoning_effort: str | None
     api_base: str | None
@@ -188,38 +190,106 @@ def _callable_name(value: Any) -> str:
     return _qualified_name(type(value))
 
 
-def _normalize_float(value: float) -> JSONValue:
-    """Return a JSON-safe float representation without inventing precision."""
+def _unsupported_value(value: Any, *, reason: str) -> JSONObject:
+    """Return an intrinsic diagnostic that can never be mistaken for replay input."""
 
-    if math.isfinite(value):
-        return value
-    return repr(value)
+    return {
+        _UNSUPPORTED_VALUE_MARKER: {
+            "type": f"{value.__class__.__module__}.{value.__class__.__qualname__}",
+            "reason": reason,
+            "repr": repr(value),
+        }
+    }
+
+
+def _is_unsupported_diagnostic(value: Mapping[Any, Any]) -> bool:
+    """Recognize current and historical diagnostics embedded in a snapshot."""
+
+    marker = value.get(_UNSUPPORTED_VALUE_MARKER)
+    if isinstance(marker, Mapping) and all(
+        isinstance(marker.get(key), str) for key in ("type", "reason", "repr")
+    ):
+        return True
+    return (
+        frozenset(value.keys()) == _LEGACY_DIAGNOSTIC_KEYS
+        and isinstance(value.get("__type__"), str)
+        and isinstance(value.get("__repr__"), str)
+    )
+
+
+def _find_unsupported_diagnostic_paths(value: Any, *, path: str) -> list[str]:
+    """Find intrinsic replay-unsupported diagnostics without trusting metadata."""
+
+    if isinstance(value, Mapping):
+        if _is_unsupported_diagnostic(value):
+            return [path]
+        paths: list[str] = []
+        for key, child in value.items():
+            paths.extend(
+                _find_unsupported_diagnostic_paths(
+                    child,
+                    path=f"{path}.{key}",
+                )
+            )
+        return paths
+    if isinstance(value, list):
+        paths = []
+        for index, child in enumerate(value):
+            paths.extend(
+                _find_unsupported_diagnostic_paths(
+                    child,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return paths
+    return []
 
 
 def _normalize_json_value(value: Any) -> tuple[JSONValue, bool]:
     """Normalize arbitrary runtime values into JSON-like storage.
 
-    The boolean indicates whether the value remains replay-safe. Primitive JSON,
-    `Path`, and recursively JSON-like collections remain replay-safe. Everything
-    else is summarized rather than silently dropped, and that summary marks the
-    containing key as replay-unsupported.
+    The boolean indicates whether persistence preserves both value and Python type
+    at the public-call boundary. Only recursively JSON-native values are replay-safe.
+    Every lossy coercion becomes an intrinsic diagnostic so missing or false support
+    metadata cannot make the substituted value dispatchable.
     """
 
-    if value is None or isinstance(value, (str, int, bool)):
+    if value is None or type(value) in {str, int, bool}:
         return value, True
-    if isinstance(value, float):
-        return _normalize_float(value), math.isfinite(value)
+    if type(value) is float:
+        if math.isfinite(value):
+            return value, True
+        return _unsupported_value(value, reason="non-finite float"), False
     if isinstance(value, Path):
-        return str(value), True
-    if isinstance(value, Mapping):
+        return _unsupported_value(value, reason="Path would become str"), False
+    if type(value) is dict:
+        if _is_unsupported_diagnostic(value):
+            return dict(value), False
         normalized: JSONObject = {}
         supported = True
-        for key in sorted(value.keys(), key=lambda item: str(item)):
+        for key in value:
+            if type(key) is not str:
+                return (
+                    _unsupported_value(
+                        value,
+                        reason="mapping key would become str",
+                    ),
+                    False,
+                )
+        for key in sorted(value.keys()):
             child, child_supported = _normalize_json_value(value[key])
-            normalized[str(key)] = child
+            normalized[key] = child
             supported = supported and child_supported
         return normalized, supported
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, Mapping):
+        return (
+            _unsupported_value(
+                value,
+                reason="Mapping implementation would become dict",
+            ),
+            False,
+        )
+    if type(value) is list:
         normalized_items: list[JSONValue] = []
         supported = True
         for item in value:
@@ -227,21 +297,16 @@ def _normalize_json_value(value: Any) -> tuple[JSONValue, bool]:
             normalized_items.append(child)
             supported = supported and child_supported
         return normalized_items, supported
+    if isinstance(value, tuple):
+        return _unsupported_value(value, reason="tuple would become list"), False
     if isinstance(value, set):
-        normalized_items: list[JSONValue] = []
-        supported = True
-        for item in sorted(value, key=repr):
-            child, child_supported = _normalize_json_value(item)
-            normalized_items.append(child)
-            supported = supported and child_supported
-        return normalized_items, supported
+        return _unsupported_value(value, reason="set would become list"), False
+    if isinstance(value, list):
+        return _unsupported_value(value, reason="list subclass would become list"), False
     if isinstance(value, type):
-        return _qualified_name(value), False
+        return _unsupported_value(value, reason="type would become qualified name"), False
 
-    return {
-        "__type__": f"{value.__class__.__module__}.{value.__class__.__qualname__}",
-        "__repr__": repr(value),
-    }, False
+    return _unsupported_value(value, reason="value is not JSON-native"), False
 
 
 def _normalize_messages(messages: list[dict[str, Any]]) -> tuple[list[JSONValue], bool]:
@@ -744,6 +809,17 @@ def replay_call_snapshot(
     ):
         raise ValueError(
             f"Call id {call_id} call snapshot does not match its stored fingerprint."
+        )
+
+    unsupported_paths = _find_unsupported_diagnostic_paths(
+        snapshot.get("request"),
+        path="request",
+    )
+    if unsupported_paths:
+        raise ValueError(
+            f"Call id {call_id} contains a replay-unsupported normalized value at "
+            f"{', '.join(unsupported_paths)}. Replay would substitute a different "
+            "public-call value, so llm_client refuses it."
         )
 
     replay = snapshot.get("replay")
