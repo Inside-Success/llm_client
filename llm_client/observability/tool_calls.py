@@ -158,4 +158,46 @@ def log_tool_call(result: ToolCallResult) -> None:
     )
 
 
-__all__ = ["ToolCallResult", "ToolCallStatus", "log_tool_call"]
+def log_tool_call_strict(result: ToolCallResult) -> None:
+    """Persist one tool-call record and propagate any integrity failure.
+
+    Use this for pipeline-critical lifecycle events whose absence would make a
+    successful operation unverifiable. It also fails when observability logging
+    is disabled, preventing a deployment from silently removing required traces.
+    """
+
+    if result.data_loss_warning:
+        logger.warning(
+            "Data loss detected: %s/%s processed_size=%d raw_size=%d",
+            result.tool_name,
+            result.operation,
+            result.processed_size,
+            result.raw_size,
+        )
+    _io_log.log_tool_call_record(
+        call_id=result.call_id,
+        tool_name=result.tool_name,
+        operation=result.operation,
+        provider=result.provider,
+        target=result.target,
+        status=result.status,
+        started_at=result.started_at,
+        ended_at=result.ended_at,
+        duration_ms=result.duration_ms,
+        attempt=result.attempt,
+        task=result.task,
+        trace_id=result.trace_id,
+        metrics=result.metrics,
+        error_type=result.error_type,
+        error_message=result.error_message,
+        result_count=result.result_count,
+        cost=result.cost,
+        raw_size=result.raw_size,
+        processed_size=result.processed_size,
+        query_json=result.query_json,
+        data_loss_warning=result.data_loss_warning,
+        strict=True,
+    )
+
+
+__all__ = ["ToolCallResult", "ToolCallStatus", "log_tool_call", "log_tool_call_strict"]
