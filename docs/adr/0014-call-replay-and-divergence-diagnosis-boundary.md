@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-13
-Verification context: async safety expiry records a terminal lifecycle failure with caller/model/ceiling while preserving existing call snapshots and structured-attempt payload boundaries; focused readback controls pass.
+Verification context: v2 snapshots record the effective typed retry policy, exact fallback order, disabled-cache state, and structured-output mode; replay reconstructs those controls and rejects unsupported, malformed, conflicting, or cross-kind state. Historical v1 replay remains readable.
 
 ## Context
 

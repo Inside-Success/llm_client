@@ -1,6 +1,12 @@
 # Plan #99: Strict Native JSON-Schema Execution
 
-**Status:** ✅ Complete
+**Status:** 🚧 In Progress — repair verified locally; independent acceptance pending
+
+**Reopened:** 2026-07-13 after onto-canon6 Plan 0141 independently rejected merge
+`84253ed`. Strict native-schema routing is implemented and remains green, but the
+snapshot stores legacy `num_retries` rather than the effective typed retry policy,
+omits cache state, and the mandatory declared-test command exits nonzero. The earlier
+completion record below is retained as historical evidence, not current acceptance.
 
 **Verified:** 2026-07-13T18:44:10Z
 **Verification Evidence:**
@@ -34,7 +40,9 @@ JSON schema only, no execution-path fallback, one outer attempt.”
 native provider JSON-schema path. Strict mode must fail with `LLMCapabilityError`
 before Instructor for unsupported models and after exactly the provider rejection for
 rejected schemas. Default auto routing remains backward compatible. The chosen mode
-is part of the replayable call snapshot.
+is part of the replayable call snapshot. The normalized **effective** retry policy,
+fallback chain, and cache-disabled state must also survive replay exactly; non-replayable
+callbacks or cache objects must fail loud rather than degrading to legacy defaults.
 
 **Why:** Callers doing governed construction or evaluation must be able to distinguish
 provider-enforced JSON schema from Instructor repair. A configuration fixture is not
@@ -79,6 +87,12 @@ Requirements:
 4. A provider schema rejection fails after that attempt without Instructor dispatch.
 5. Retry and model fallback remain independently controlled by their existing types.
 6. The mode changes call fingerprint/replay identity and is restored on replay.
+7. Snapshot/replay uses the effective typed retry policy after override resolution, not
+   the shadowed public `num_retries` argument.
+8. Disabled cache and the exact fallback chain are replay identity. Enabled arbitrary
+   cache objects and custom retry callbacks are explicitly replay-unsupported.
+9. The mandatory Plan 99 declared-test command resolves exact pytest nodes, runs them,
+   and exits zero; async/class ownership cannot be inferred by indentation regex state.
 
 Boundary diagram:
 
@@ -242,15 +256,26 @@ Slice 1 — strict path from public API through runtime and replay identity
 | `tests/test_client.py` | `test_strict_native_schema_rejects_agent_sdk_before_dispatch` | Agent SDK cannot satisfy provider-native JSON schema |
 | `tests/test_observability_replay.py` | `test_structured_output_mode_changes_snapshot_fingerprint` | auto vs strict request identities differ |
 | `tests/test_observability_replay.py` | `test_replay_restores_strict_structured_output_policy` | replay restores policy instead of forwarding it as provider data |
+| `tests/test_observability_replay.py` | `test_snapshot_records_effective_retry_and_disabled_cache` | explicit retry overrides shadowed legacy values in replay identity |
+| `tests/test_observability_replay.py` | `test_replay_restores_effective_retry_fallback_and_disabled_cache` | replay rebuilds the exact typed policy and disabled cache state |
+| `tests/test_observability_replay.py` | `test_runtime_snapshot_uses_effective_retry_and_disabled_cache` | real public structured call persists resolved policy rather than shadowed defaults |
+| `tests/test_observability_replay.py` | `test_snapshot_marks_custom_retry_and_enabled_cache_replay_unsupported` | non-serializable execution policy fails loud on replay |
+| `tests/test_observability_replay.py` | `test_replay_rejects_coerced_or_inconsistent_execution_policy` | malformed or contradictory v2 policy state cannot replay by coercion |
+| `tests/test_observability_replay.py` | `test_replay_rejects_missing_structured_mode_or_reserved_public_control` | tampered kwargs cannot override the typed replay authority |
+| `tests/test_observability_replay.py` | `test_replay_rejects_public_api_call_kind_mismatch` | a v2 structured snapshot cannot be reinterpreted as a text call |
 | `tests/test_structured_attempts.py` | `test_strict_generated_validation_failure_exhausts_without_mechanism_fallback` | retry zero retains one invalid generation, records exhausted, and avoids Instructor |
 | `tests/test_structured_attempts.py` | `test_strict_schema_request_rejection_records_terminal_trace_without_fallback` | rejected request records terminal strict identity, no generation event, and no Instructor |
-| `tests/test_complete_plan.py` | timeout parsing, diagnostics, and CLI threading controls | completion gate supports the real suite duration and reports recent progress on timeout |
+| `tests/test_complete_plan.py` | `test_positive_seconds_rejects_invalid_timeout_values` | completion timeout parser rejects invalid values |
+| `tests/test_complete_plan.py` | `test_unit_timeout_reports_recent_captured_progress` | timeout diagnostics retain bounded progress |
+| `tests/test_complete_plan.py` | `test_main_threads_explicit_timeout_to_completion` | CLI threads configured timeout to completion |
+| `tests/test_check_plan_tests.py` | `test_find_test_class_uses_ast_scope_for_async_and_top_level_tests` | declared async and top-level nodes resolve to their real scopes |
+| `tests/test_check_plan_tests.py` | `test_plan99_required_tests_are_exact_and_executable` | no selector/prose pseudo-path enters the Plan 99 test inventory |
 
 ### Existing Tests (Must Pass)
 
 | Test Pattern | Why |
 |---|---|
-| `tests/test_client.py -k structured` | default auto path remains compatible |
+| `tests/test_client.py` | default auto path remains compatible |
 | `tests/test_structured_attempts.py` | attempt truth remains lossless |
 | `tests/test_observability_replay.py` | historical snapshot/replay compatibility remains intact |
 
@@ -263,13 +288,18 @@ Slice 1 — strict path from public API through runtime and replay identity
 | L99-3 | Auto mode is backward compatible. | existing + explicit regression | B |
 | L99-4 | Mode is replayable request identity. | snapshot/fingerprint/replay tests | F |
 | L99-5 | Public API/docs expose the typed policy. | generated API + import test | F |
+| L99-6 | Effective retry/fallback/cache state is exact replay identity. | real snapshot + replay reconstruction negatives | F |
+| L99-7 | The declared Plan 99 test inventory is exact and executable. | helper unit controls + mandatory command | F |
 
-Coverage before implementation: A=0, B=1, C=0, D=0, F=4. Visibility precedes
-enforcement; strict mode is opt-in and no default changes in this plan.
+Current local coverage: A=7, B=0, C=0, D=0, F=0. L99-1 through L99-5 retain their
+implemented evidence; L99-6 and L99-7 now have source plus executable tests. Plan
+completion still waits for R99-4 independent acceptance of the exact pushed commit.
+Visibility precedes enforcement; strict mode is opt-in and no default execution
+behavior changes in this repair.
 
 ## Coverage
 
-Post-implementation distribution: A=5, B=0, C=0, D=0, F=0. Each row has
+Post-repair local distribution: A=7, B=0, C=0, D=0, F=0. Each row has
 source plus an automated test; no new hard repository-wide gate is added by this
 plan.
 
@@ -280,6 +310,30 @@ plan.
 | L99-3 auto mode remains compatible | A | test | existing native structured success | existing schema-rejection-to-Instructor regression remains green |
 | L99-4 policy is replay identity | A | test | strict snapshot replays a typed strict policy | auto and strict snapshots produce different fingerprints |
 | L99-5 typed public API and docs expose the policy | A | test | top-level imports in runtime tests | Pydantic forbids unknown policy fields and generated API signature includes the argument |
+| L99-6 effective execution policy replays exactly | A | test | real public call records effective retry zero, empty fallback, disabled cache, and strict mode; replay reconstructs them | shadowed legacy values, malformed/coerced state, enabled cache, custom callbacks, reserved-kwarg overrides, missing mode, and API/kind mismatch all fail loud |
+| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; mandatory Plan 99 command executes 310 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
+
+### Post-Merge Repair Slices
+
+1. **R99-1 plan/test authority:** replace pseudo/prose test declarations with exact
+   tests; use Python AST scope for sync/async node resolution; add both-sign helper
+   controls; require `check_plan_tests.py --plan 99` exit zero.
+2. **R99-2 effective policy snapshot:** normalize the effective `RetryPolicy`, exact
+   fallback list, cache-disabled state, and strict mode before persistence. Mark custom
+   callbacks/backoff/should-retry functions and enabled arbitrary caches unsupported.
+3. **R99-3 exact replay:** reconstruct the typed retry policy and explicit disabled
+   cache state. Historical v1 snapshots keep their legacy reconstruction; new snapshots
+   fail loud on malformed or unsupported policy state.
+4. **R99-4 independent acceptance:** focused/full gates and one downstream Plan 0141
+   replay must accept an exact pushed commit before the plan can return to Complete.
+
+Post-repair local verification on 2026-07-13: the focused replay/helper gate passed
+20 tests; `python scripts/meta/check_plan_tests.py --plan 99` resolved every declared
+node and passed 311 tests in 52.57 seconds. Scoped Ruff passed for the repaired replay,
+structured-runtime, helper, and test files. Strict mypy reports the same 11 errors in
+`observability/replay.py` on both `origin/main` and this branch, so this increment adds
+no type-check error but does not claim to clear the documented baseline. Independent
+acceptance and the downstream Plan 0141 pinned-replay check remain pending.
 
 Verification on 2026-07-13: the final focused structured/replay/trace gate passed
 42 tests. The full repository run reached
@@ -314,7 +368,8 @@ decorator/public-surface/harness gate passes 41 tests.
 | cache configured | existing cache semantics remain; caller requiring a physical attempt must disable cache separately |
 | Agent SDK selected | strict fails; agent structured mode is not provider `json_schema` |
 | Responses API selected | allowed as native JSON-schema execution |
-| snapshot lacks mode (historical) | replay defaults to auto for compatibility |
+| v1 snapshot lacks mode (historical) | replay defaults to auto for compatibility |
+| v2 structured snapshot lacks mode or conflicts with public API/call kind | fail loud before dispatch |
 
 ## Uncertainty And Concern Register
 
@@ -323,4 +378,4 @@ decorator/public-surface/harness gate passes 41 tests.
 | Instructor has its own hardcoded retry count. | mitigated for strict callers | Strict mode never reaches Instructor; changing auto mode is out of scope. |
 | “Native” could be confused with one specific HTTP API shape. | resolved | Contract includes provider-native Chat JSON schema and Responses API JSON schema; excludes Agent SDK/Instructor. |
 | Strict mode alone does not ensure one physical attempt if retry/cache/model fallback are enabled. | accepted boundary | Docs require callers to combine strict mode with retry zero, cache disabled, and empty fallback when that stronger claim is needed. |
-| Public replay schema could break historical snapshots. | mitigated | Missing mode defaults to auto; snapshot version need not change for additive control. |
+| Public replay schema could break historical snapshots. | mitigated | Version 1 keeps legacy reconstruction and missing-mode behavior; version 2 carries typed effective execution policy and rejects malformed state. |

@@ -194,6 +194,7 @@ async def _acall_llm_impl(
     # (e.g. Langfuse). Harmless when no callbacks are configured.
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
     public_runtime_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     from llm_client.observability.replay import build_call_snapshot
 
     call_snapshot = build_call_snapshot(
@@ -211,6 +212,8 @@ async def _acall_llm_impl(
         retry_on=retry_on,
         fallback_models=fallback_models,
         public_kwargs=snapshot_runtime_kwargs,
+        retry_policy=r,
+        cache_policy=cache,
         execution_mode=execution_mode,
     )
 
@@ -255,7 +258,6 @@ async def _acall_llm_impl(
     # (lines 742-801) where it participates in the fallback chain. Do NOT
     # add early returns here — that was the cause of the fallback bypass bug.
 
-    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     if cache is not None and _is_agent_model(model):
         raise ValueError("Caching not supported for agent models — they have side effects.")
     _warnings: list[str] = list(_entry_warnings)

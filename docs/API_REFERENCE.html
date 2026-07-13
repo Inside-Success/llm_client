@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-13T18:40:07Z -->
+<!-- Generated: 2026-07-13T19:25:36Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -9538,7 +9538,7 @@ reached the shared `llm_client` boundary.</pre>
 <h4>Functions</h4>
 
 <details class="symbol" id="module-llm_client-observability-replay-build_call_snapshot">
-  <summary><code>build_call_snapshot</code> <span class="sig">(*, public_api: str, call_kind: str, requested_model: str, messages: list[dict[str, typing.Any]], prompt_ref: str | None, timeout: int, num_retries: int, reasoning_effort: str | None, api_base: str | None, base_delay: float, max_delay: float, retry_on: list[str] | None, fallback_models: list[str] | None, public_kwargs: Mapping[str, Any], execution_mode: str | None = None, structured_output_mode: str | None = None, response_model: type[typing.Any] | None = None) -&gt; dict[str, str | int | float | bool | None | list[&#x27;JSONValue&#x27;] | dict[str, &#x27;JSONValue&#x27;]]</span></summary>
+  <summary><code>build_call_snapshot</code> <span class="sig">(*, public_api: str, call_kind: str, requested_model: str, messages: list[dict[str, typing.Any]], prompt_ref: str | None, timeout: int, num_retries: int, reasoning_effort: str | None, api_base: str | None, base_delay: float, max_delay: float, retry_on: list[str] | None, fallback_models: list[str] | None, public_kwargs: Mapping[str, Any], retry_policy: llm_client.execution.retry.RetryPolicy | None = None, cache_policy: typing.Any | None = None, execution_mode: str | None = None, structured_output_mode: str | None = None, response_model: type[typing.Any] | None = None) -&gt; dict[str, str | int | float | bool | None | list[&#x27;JSONValue&#x27;] | dict[str, &#x27;JSONValue&#x27;]]</span></summary>
   <div class="symbol-body">
     <p class="summary">Build the normalized call snapshot used for fingerprinting and replay.</p>
     <p class="meta">Source: <code>llm_client.observability.replay</code> functions</p>

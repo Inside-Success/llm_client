@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: canonical typed attempt models and trace-scoped history query live under `observability/`; the `io_log` compatibility backend persists metadata-only append events, binds final rows by `logical_call_id`, and propagates integrity-write failures. Focused controls pass.
+Verification context: canonical typed attempt and v2 replay-policy models live under `observability/`; `io_log` persists the effective retry/fallback/cache snapshot, and unsupported or malformed reconstruction fails loud. Focused persistence and replay controls pass.
 Date: 2026-02-23
 
 ## Context

@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-13
-Verification context: native-schema attempts retain per-logical-call identity and async safety-timeout failures preserve the requested model plus exact provider-path model without fabricating a resolved result; focused lifecycle controls pass.
+Verification context: native-schema attempts retain per-logical-call identity; v2 replay snapshots preserve the requested model and exact fallback order without fabricating a resolved model; focused lifecycle and replay controls pass.
 
 ## Context
 

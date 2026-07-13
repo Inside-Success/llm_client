@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: attempt events and trace-scoped queries expose raw-content SHA-256 plus optional artifact references without inlining raw response bodies, preserving the control-plane/bulk-data boundary; focused readback controls pass.
+Verification context: attempt events and v2 call snapshots retain compact control-plane metadata, including effective retry/fallback/cache state, without adding raw response bodies; focused readback and replay controls pass.
 Date: 2026-03-17
 
 ## Context
