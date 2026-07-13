@@ -23,7 +23,11 @@ from llm_client.execution.call_contracts import (
     _resolve_unsupported_param_policy,
     _strip_llm_internal_kwargs,
 )
-from llm_client.utils.cost_utils import FALLBACK_COST_FLOOR_USD_PER_TOKEN, _parse_cost_result
+from llm_client.utils.cost_utils import (
+    FALLBACK_COST_FLOOR_USD_PER_TOKEN,
+    _parse_cost_result,
+    _provider_reported_cost,
+)
 from llm_client.core.data_types import LLMCallResult
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
 
@@ -192,7 +196,15 @@ def _extract_responses_usage(response: Any) -> dict[str, Any]:
 
 
 def _compute_responses_cost(response: Any, usage: dict[str, Any]) -> tuple[float, str]:
-    """Compute cost for one Responses API call."""
+    """Compute cost for one Responses API call.
+
+    Same ordering as ``cost_utils._compute_cost``: provider-reported actual
+    cost first, then litellm's estimate, then the flat floor.
+    """
+
+    provider_cost = _provider_reported_cost(response)
+    if provider_cost is not None:
+        return provider_cost, "provider_reported"
 
     try:
         cost = float(litellm.completion_cost(completion_response=response))
@@ -200,10 +212,6 @@ def _compute_responses_cost(response: Any, usage: dict[str, Any]) -> tuple[float
             return cost, "computed"
     except Exception:
         pass
-
-    raw_usage = getattr(response, "usage", None)
-    if raw_usage and hasattr(raw_usage, "cost") and raw_usage.cost:
-        return float(raw_usage.cost), "provider_reported"
 
     total = usage["total_tokens"]
     fallback = total * FALLBACK_COST_FLOOR_USD_PER_TOKEN
