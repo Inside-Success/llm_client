@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-12
+Last verified: 2026-07-13
 Verification context: native-schema attempts retain per-logical-call identity and async safety-timeout failures preserve the requested model plus exact provider-path model without fabricating a resolved result; focused lifecycle controls pass.
 
 ## Context

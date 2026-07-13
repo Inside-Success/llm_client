@@ -11,7 +11,8 @@ Wiki home: http://localhost:8088/index.php/Project_Wiki
 | LLM-PORT-003 | Prompt-evaluation logic can drift back into this repo. | Medium | Capability decomposition assigns prompt-eval semantics to `prompt_eval`. | Keep new evaluation features behind explicit boundary decisions. |
 | LLM-PORT-004 | Runtime substrate can bloat into workflow orchestration. | Medium | ADR 0010 keeps workflow orchestration above this layer. | Use separate workflow runtime when durable orchestration is required. |
 | LLM-PORT-005 | Model/provider behavior changes over time. | Medium | Model registry, trace logging, and errors/cost queries expose drift. | Use empirical traces before changing task policy. |
-| LLM-RUNTIME-006 | Structured callers cannot currently require native JSON schema; provider schema rejection silently changes execution to Instructor, whose internal retries are separate from `RetryPolicy`. | High | Plan 99 freezes an opt-in strict execution policy and no-default-change boundary. | Pass sync/async provider-rejection and replay-identity controls before downstream authorization. |
+| LLM-RUNTIME-006 | Structured callers could not require native JSON schema; provider schema rejection silently changed execution to Instructor, whose internal retries are separate from `RetryPolicy`. | High | Plan 99 implements an opt-in strict execution policy with sync/async rejection, trace, replay, and default-auto controls. | Bind the exact merged commit in downstream Plan 0141 and inspect its first live MiniMax-M3 trace. |
+| LLM-VERIFY-007 | The mandatory `complete_plan.py` non-E2E pytest pass can wait indefinitely without naming the active test, so a stalled gate is not diagnostic. | Medium | Plan 99 uses focused behavioral/trace gates and records the interrupted broad-run evidence honestly. | Add per-test timeout/current-test reporting to the completion harness, then rerun Plan 99 completion without bypassing failures. |
 
 ## Portfolio Judgment
 

@@ -283,6 +283,7 @@ from llm_client.core.client import (
     stream_llm_with_tools,
     strip_fences,
 )
+from llm_client.execution.call_contracts import StructuredOutputPolicy
 from llm_client.core.data_types import TurnEvent
 from llm_client.parsing_utils import (
     TruncatedOutputError,
@@ -334,6 +335,7 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "ResolvedCallPlan",
     "resolve_call",
     "RetryPolicy",
+    "StructuredOutputPolicy",
     "acall_llm",
     "acall_llm_batch",
     "acall_llm_structured",

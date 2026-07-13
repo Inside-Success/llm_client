@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-12
+Last verified: 2026-07-13
 Verification context: async safety expiry remains a typed terminal failure rather than a warning; malformed safety configuration emits a visible operational log and retains the finite default.
 
 ## Context

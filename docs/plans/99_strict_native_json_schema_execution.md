@@ -1,6 +1,6 @@
 # Plan #99: Strict Native JSON-Schema Execution
 
-**Status:** In Progress
+**Status:** In Progress (implemented; mandatory completion helper stalled)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -49,7 +49,8 @@ the public implementation changes those proven claims.
 - `llm_client/core/client.py` — public sync/async structured entry points.
 - `llm_client/execution/call_contracts.py` — typed execution-policy home.
 - `llm_client/observability/replay.py` — replayable control identity.
-- `tests/test_client.py`, `tests/test_replay.py` — current boundary fixtures.
+- `tests/test_client.py`, `tests/test_observability_replay.py`, and
+  `tests/test_structured_attempts.py` — current boundary and trace fixtures.
 - Plans 97 and 98 — attempt history and async attempt liveness.
 - ADRs 0007, 0010, and 0014 — execution/observability/replay ownership.
 - onto-canon6 findings `sm-020ed4c22ad9` and `sm-1d483b58e2c0`.
@@ -184,8 +185,11 @@ issued.
 - `llm_client/execution/structured_runtime.py`
 - `llm_client/observability/replay.py`
 - `llm_client/__init__.py`
-- `tests/test_client.py`, `tests/test_replay.py`
+- `tests/test_client.py`, `tests/test_observability_replay.py`,
+  `tests/test_structured_attempts.py`
 - generated API reference and coupled plan/ADR verification context as required
+- coupled verification contexts: ADRs 0001, 0002, 0003, 0004, 0007, 0009, 0010,
+  0012, 0013, and 0014
 
 ## Thin Slice
 
@@ -217,8 +221,10 @@ Slice 1 — strict path from public API through runtime and replay identity
 | `tests/test_client.py` | `test_strict_native_schema_accepts_native_success_sync` | sync native result remains parsed and traced |
 | `tests/test_client.py` | `test_strict_native_schema_accepts_native_success_async` | async native result remains parsed and traced |
 | `tests/test_client.py` | `test_strict_native_schema_rejects_agent_sdk_before_dispatch` | Agent SDK cannot satisfy provider-native JSON schema |
-| `tests/test_replay.py` | `test_structured_output_mode_changes_snapshot_fingerprint` | auto vs strict request identities differ |
-| `tests/test_replay.py` | `test_replay_restores_strict_structured_output_policy` | replay restores policy instead of forwarding it as provider data |
+| `tests/test_observability_replay.py` | `test_structured_output_mode_changes_snapshot_fingerprint` | auto vs strict request identities differ |
+| `tests/test_observability_replay.py` | `test_replay_restores_strict_structured_output_policy` | replay restores policy instead of forwarding it as provider data |
+| `tests/test_structured_attempts.py` | `test_strict_generated_validation_failure_exhausts_without_mechanism_fallback` | retry zero retains one invalid generation, records exhausted, and avoids Instructor |
+| `tests/test_structured_attempts.py` | `test_strict_schema_request_rejection_records_terminal_trace_without_fallback` | rejected request records terminal strict identity, no generation event, and no Instructor |
 
 ### Existing Tests (Must Pass)
 
@@ -226,20 +232,47 @@ Slice 1 — strict path from public API through runtime and replay identity
 |---|---|
 | `tests/test_client.py -k structured` | default auto path remains compatible |
 | `tests/test_structured_attempts.py` | attempt truth remains lossless |
-| `tests/test_replay.py` | historical snapshot/replay compatibility remains intact |
+| `tests/test_observability_replay.py` | historical snapshot/replay compatibility remains intact |
 
 ## Acceptance Criteria
 
 | ID | Criterion | Evidence target | Baseline |
 |---|---|---|---|
 | L99-1 | Strict mode never executes Instructor or Agent SDK. | source + sync/async negatives | F |
-| L99-2 | Provider schema rejection retains one native attempt then fails typed. | attempt readback tests | F |
+| L99-2 | Provider schema request rejection dispatches once, records terminal strict identity, then fails typed; invalid generations remain lossless. | terminal-call + attempt-ledger readback tests | F |
 | L99-3 | Auto mode is backward compatible. | existing + explicit regression | B |
 | L99-4 | Mode is replayable request identity. | snapshot/fingerprint/replay tests | F |
 | L99-5 | Public API/docs expose the typed policy. | generated API + import test | F |
 
 Coverage before implementation: A=0, B=1, C=0, D=0, F=4. Visibility precedes
 enforcement; strict mode is opt-in and no default changes in this plan.
+
+## Coverage
+
+Post-implementation distribution: A=5, B=0, C=0, D=0, F=0. Each row has
+source plus an automated test; no new hard repository-wide gate is added by this
+plan.
+
+| Requirement | Grade | Evidence class | Positive control | Negative control |
+|---|---|---|---|---|
+| L99-1 strict excludes Instructor and Agent SDK | A | test | strict native sync/async success tests | unsupported-model, Agent SDK, and schema-rejection tests assert forbidden adapters are unused |
+| L99-2 rejection and invalid-generation traces are truthful | A | test | native success records the accepted path | real SQLite readbacks prove terminal strict rejection or one exhausted generation without fallback |
+| L99-3 auto mode remains compatible | A | test | existing native structured success | existing schema-rejection-to-Instructor regression remains green |
+| L99-4 policy is replay identity | A | test | strict snapshot replays a typed strict policy | auto and strict snapshots produce different fingerprints |
+| L99-5 typed public API and docs expose the policy | A | test | top-level imports in runtime tests | Pydantic forbids unknown policy fields and generated API signature includes the argument |
+
+Verification on 2026-07-13: the final focused structured/replay/trace gate passed
+42 tests. The full repository run reached
+334 passed / 1 skipped before an unrelated long event wait was interrupted; its two
+completed failures were missing `prompt_eval`/SciPy environment dependencies and
+passed after installing the declared editable dependency. Scoped Ruff passed. Strict
+mypy reports the documented 181-error repository baseline and no new
+`StructuredOutputPolicy` error after canonicalizing imports. Two-pass pre-landing
+review passed after adding terminal logging for strict Agent-SDK rejection and explicit
+`mock-ok` rationale on controlled provider-boundary tests. The mandatory
+`complete_plan.py --plan 99 --dry-run --skip-real-e2e` gate reproduced the broad-suite
+event-wait stall and was interrupted after nearly four minutes; concern
+`LLM-VERIFY-007` tracks the non-diagnostic harness failure.
 
 ## Failure Modes And Pre-Made Decisions
 

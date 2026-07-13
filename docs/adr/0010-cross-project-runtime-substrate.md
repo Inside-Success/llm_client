@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-12
+Last verified: 2026-07-13
 Verification context: provider-independent async structured-attempt cancellation and terminal lifecycle evidence are implemented once in the shared runtime across native schema, Responses, and Instructor paths; focused controls pass.
 
 ## Context

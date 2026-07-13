@@ -1,7 +1,7 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-07-12
+Last verified: 2026-07-13
 Verification context: structured attempt lifecycle events and trace-scoped queries remain limited to non-streaming native-schema calls; stream lifecycle/heartbeat semantics are unchanged.
 Date: 2026-03-22
 
