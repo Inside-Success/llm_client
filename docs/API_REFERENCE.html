@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-13T18:40:07Z -->
+<!-- Generated: 2026-07-13T21:05:12Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1191,14 +1191,15 @@ Never raises — observability must not break model execution.</pre>
 </details>
 
 <details class="symbol" id="module-llm_client-io_log-log_tool_call_record">
-  <summary><code>log_tool_call_record</code> <span class="sig">(*, call_id: str, tool_name: str, operation: str, status: Literal[&#x27;started&#x27;, &#x27;succeeded&#x27;, &#x27;failed&#x27;], started_at: str, provider: str | None = None, target: str | None = None, ended_at: str | None = None, duration_ms: int | None = None, attempt: int = 1, task: str | None = None, trace_id: str | None = None, metrics: dict[str, typing.Any] | None = None, error_type: str | None = None, error_message: str | None = None, result_count: int | None = None, cost: float | None = None, raw_size: int = 0, processed_size: int = 0, query_json: dict[str, typing.Any] | None = None, data_loss_warning: bool = False) -&gt; None</span></summary>
+  <summary><code>log_tool_call_record</code> <span class="sig">(*, call_id: str, tool_name: str, operation: str, status: Literal[&#x27;started&#x27;, &#x27;succeeded&#x27;, &#x27;failed&#x27;], started_at: str, provider: str | None = None, target: str | None = None, ended_at: str | None = None, duration_ms: int | None = None, attempt: int = 1, task: str | None = None, trace_id: str | None = None, metrics: dict[str, typing.Any] | None = None, error_type: str | None = None, error_message: str | None = None, result_count: int | None = None, cost: float | None = None, raw_size: int = 0, processed_size: int = 0, query_json: dict[str, typing.Any] | None = None, data_loss_warning: bool = False, strict: bool = False) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Append one non-LLM tool-call observability record.</p>
     <p class="meta">Source: <code>llm_client.io_log</code> functions</p>
     <pre class="doc">Append one non-LLM tool-call observability record.
 
-This mirrors ``log_call``: dual-write to JSONL and SQLite, and never raise
-into product code.
+This mirrors ``log_call``: dual-write to JSONL and SQLite. Existing callers
+retain best-effort behavior. Pipeline-critical callers may set ``strict``
+so disabled logging or a persistence failure propagates into product code.
 
 Wave 1 adds ``result_count``, ``cost``, ``raw_size``, ``processed_size``,
 ``query_json``, and ``data_loss_warning`` for size tracking and automated
@@ -1832,6 +1833,20 @@ first consumer, but the record shape is generic.</pre>
 When ``data_loss_warning`` is True, a warning is emitted to the logger
 before writing -- this makes silent data loss visible in process logs
 even before anyone queries the observability DB.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-observability-log_tool_call_strict">
+  <summary><code>log_tool_call_strict</code> <span class="sig">(result: llm_client.observability.tool_calls.ToolCallResult) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Persist one tool-call record and propagate any integrity failure.</p>
+    <p class="meta">Source: <code>llm_client.observability.tool_calls</code> functions</p>
+    <pre class="doc">Persist one tool-call record and propagate any integrity failure.
+
+Use this for pipeline-critical lifecycle events whose absence would make a
+successful operation unverifiable. It also fails when observability logging
+is disabled or the event has no joinable trace id, preventing a deployment
+from silently removing required traces.</pre>
   </div>
 </details>
 
@@ -9714,6 +9729,20 @@ Wave 1 adds size tracking and data-loss detection: ``raw_size`` and
 When ``data_loss_warning`` is True, a warning is emitted to the logger
 before writing -- this makes silent data loss visible in process logs
 even before anyone queries the observability DB.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-observability-tool_calls-log_tool_call_strict">
+  <summary><code>log_tool_call_strict</code> <span class="sig">(result: llm_client.observability.tool_calls.ToolCallResult) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Persist one tool-call record and propagate any integrity failure.</p>
+    <p class="meta">Source: <code>llm_client.observability.tool_calls</code> functions</p>
+    <pre class="doc">Persist one tool-call record and propagate any integrity failure.
+
+Use this for pipeline-critical lifecycle events whose absence would make a
+successful operation unverifiable. It also fails when observability logging
+is disabled or the event has no joinable trace id, preventing a deployment
+from silently removing required traces.</pre>
   </div>
 </details>
 
