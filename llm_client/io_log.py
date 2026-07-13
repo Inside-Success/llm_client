@@ -637,11 +637,13 @@ def log_tool_call_record(
     processed_size: int = 0,
     query_json: dict[str, Any] | None = None,
     data_loss_warning: bool = False,
+    strict: bool = False,
 ) -> None:
     """Append one non-LLM tool-call observability record.
 
-    This mirrors ``log_call``: dual-write to JSONL and SQLite, and never raise
-    into product code.
+    This mirrors ``log_call``: dual-write to JSONL and SQLite. Existing callers
+    retain best-effort behavior. Pipeline-critical callers may set ``strict``
+    so disabled logging or a persistence failure propagates into product code.
 
     Wave 1 adds ``result_count``, ``cost``, ``raw_size``, ``processed_size``,
     ``query_json``, and ``data_loss_warning`` for size tracking and automated
@@ -649,8 +651,13 @@ def log_tool_call_record(
     """
 
     if not _logging_enabled():
+        if strict:
+            raise RuntimeError("Strict tool-call persistence requires logging to be enabled")
         return
-    try:
+
+    def _persist() -> None:
+        """Write the JSONL and SQLite records as one fail-loud operation."""
+
         timestamp = datetime.now(timezone.utc).isoformat()
         record = {
             "timestamp": timestamp,
@@ -705,6 +712,12 @@ def log_tool_call_record(
             query_json=query_json,
             data_loss_warning=data_loss_warning,
         )
+
+    if strict:
+        _persist()
+        return
+    try:
+        _persist()
     except Exception:
         logger.debug("io_log.log_tool_call_record failed", exc_info=True)
 
@@ -1391,47 +1404,44 @@ def _write_tool_call_to_db(
     query_json: dict[str, Any] | None = None,
     data_loss_warning: bool = False,
 ) -> None:
-    """Insert a tool-call record into SQLite. Never raises."""
+    """Insert a tool-call record into SQLite and propagate integrity failures."""
 
-    try:
-        def _write(db: sqlite3.Connection) -> None:
-            db.execute(
-                """INSERT INTO tool_calls
-                   (timestamp, project, call_id, tool_name, operation, provider, target,
-                    status, started_at, ended_at, duration_ms, attempt, task, trace_id,
-                    metrics, error_type, error_message, result_count, cost, raw_size,
-                    processed_size, query_json, data_loss_warning)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    timestamp,
-                    _get_project(),
-                    call_id,
-                    tool_name,
-                    operation,
-                    provider,
-                    target,
-                    status,
-                    started_at,
-                    ended_at,
-                    duration_ms,
-                    attempt,
-                    task,
-                    trace_id,
-                    json.dumps(metrics, default=str),
-                    error_type,
-                    error_message,
-                    result_count,
-                    cost,
-                    raw_size,
-                    processed_size,
-                    json.dumps(query_json, default=str) if query_json else None,
-                    1 if data_loss_warning else 0,
-                ),
-            )
+    def _write(db: sqlite3.Connection) -> None:
+        db.execute(
+            """INSERT INTO tool_calls
+               (timestamp, project, call_id, tool_name, operation, provider, target,
+                status, started_at, ended_at, duration_ms, attempt, task, trace_id,
+                metrics, error_type, error_message, result_count, cost, raw_size,
+                processed_size, query_json, data_loss_warning)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                timestamp,
+                _get_project(),
+                call_id,
+                tool_name,
+                operation,
+                provider,
+                target,
+                status,
+                started_at,
+                ended_at,
+                duration_ms,
+                attempt,
+                task,
+                trace_id,
+                json.dumps(metrics, default=str),
+                error_type,
+                error_message,
+                result_count,
+                cost,
+                raw_size,
+                processed_size,
+                json.dumps(query_json, default=str) if query_json else None,
+                1 if data_loss_warning else 0,
+            ),
+        )
 
-        _run_db_write(_write)
-    except Exception:
-        logger.debug("io_log._write_tool_call_to_db failed", exc_info=True)
+    _run_db_write(_write)
 
 
 def import_jsonl(jsonl_path: str | Path, table: str = "llm_calls") -> int:

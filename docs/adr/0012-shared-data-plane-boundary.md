@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: attempt events and trace-scoped queries expose raw-content SHA-256 plus optional artifact references without inlining raw response bodies, preserving the control-plane/bulk-data boundary; focused readback controls pass.
+Verification context: attempt events and strict tool-call lifecycles persist bounded execution metadata and trace links without persisting operator result bodies, preserving the control-plane/bulk-data boundary; focused readback controls pass.
 Date: 2026-03-17
 
 ## Context
@@ -45,6 +45,9 @@ We need a clear line between:
    - `llm_client` logs the embedding event and its provenance,
    - vectors, indexes, and large embedding artifacts live in the data plane or
      in project-specific derived stores that are linked back to that event.
+7. Tool-call lifecycle rows may include bounded query metadata and result counts,
+   but bulk tool results remain in project/data-plane artifacts referenced by
+   the trace rather than being copied into the shared observability database.
 
 ## Consequences
 
@@ -71,3 +74,5 @@ Negative:
    missing or inconsistent.
 3. New storage integrations must preserve the distinction between shared
    metadata in `llm_client` and bulk payloads in the data plane.
+4. Strict tool-call tests must prove lifecycle metadata survives both sinks
+   without introducing result-body persistence.

@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-13
-Verification context: async safety expiry remains a typed terminal failure rather than a warning; malformed safety configuration emits a visible operational log and retains the finite default.
+Verification context: async safety expiry remains a typed terminal failure rather than a warning; strict tool-call persistence failures propagate as errors, while data-loss diagnostics retain warning semantics. Focused controls pass.
 
 ## Context
 
@@ -18,6 +18,8 @@ mismatch.
 3. Week 1 locks category semantics; code identifiers can be added later.
 4. Week 1 applies only drift fixes needed to align behavior/tests with this
    taxonomy.
+5. Missing/disabled persistence for a caller that explicitly selects the strict
+   tool-call API is an integrity error, not a warning or best-effort advisory.
 
 ## Rationale
 

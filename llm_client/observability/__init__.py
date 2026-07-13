@@ -56,7 +56,11 @@ from llm_client.observability.replay import (
     get_call_snapshot,
     replay_call_snapshot,
 )
-from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
+from llm_client.observability.tool_calls import (
+    ToolCallResult,
+    log_tool_call,
+    log_tool_call_strict,
+)
 from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
     StructuredValidationIssue,
@@ -102,6 +106,7 @@ __all__ = [
     "log_experiment_aggregate",
     "log_foundation_event",
     "log_tool_call",
+    "log_tool_call_strict",
     "log_item",
     "lookup_result",
     "parse_claude_transcript",
