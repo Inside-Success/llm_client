@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-12
-Verification context: native-schema attempts now receive a per-logical-call id and append-only lifecycle events without changing requested/resolved model identity; sync/async fail→retry→success controls preserve the executed model and ordered attempt history.
+Verification context: native-schema attempts retain per-logical-call identity and async safety-timeout failures preserve the requested model plus exact provider-path model without fabricating a resolved result; focused lifecycle controls pass.
 
 ## Context
 

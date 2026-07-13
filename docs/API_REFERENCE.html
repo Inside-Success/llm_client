@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-12T16:11:46Z -->
+<!-- Generated: 2026-07-13T06:15:00Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -8701,9 +8701,9 @@ Returns True if IPv4 forcing was activated.</pre>
     <p class="meta">Source: <code>llm_client.execution.timeout_policy</code> functions</p>
     <pre class="doc">Return the safety ceiling timeout in seconds.
 
-This timeout applies even when TIMEOUT_POLICY=ban. It prevents
-infinite hangs on dead connections. Not a request timeout —
-a dead-connection detector.
+This timeout applies even when TIMEOUT_POLICY=ban. It requests
+cancellation of cooperative async provider attempts independently of the
+request-timeout policy; it is not a hard process kill.
 
 Override via LLM_CLIENT_SAFETY_TIMEOUT env var. Set to 0 to disable
 (not recommended).</pre>

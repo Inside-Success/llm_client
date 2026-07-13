@@ -84,6 +84,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 95 | [Require llm_client Registration Audit](95_require-llm-client-registration-audit.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project enforcement of shared LLM routing |
 | 96 | [Registration-Only Audit Fast Path](96_registration-only-audit-fastpath.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project llm_client registration classification |
 | 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress | - |
+| 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | 🚧 In Progress | DIGIMON Plan #111 bound-trace refresh |
 
 
 ## Status Key

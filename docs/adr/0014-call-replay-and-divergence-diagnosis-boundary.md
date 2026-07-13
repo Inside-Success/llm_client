@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-12
-Verification context: trace-scoped attempt history queries expose schema/model/path metadata, raw hashes, typed issues, artifact references, and exact final-call binding for divergence diagnosis without truncating or inlining replay payloads; call snapshots remain unchanged.
+Verification context: async safety expiry records a terminal lifecycle failure with caller/model/ceiling while preserving existing call snapshots and structured-attempt payload boundaries; focused readback controls pass.
 
 ## Context
 

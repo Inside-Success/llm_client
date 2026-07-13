@@ -24,6 +24,7 @@ import json as _json
 import logging as _logging
 
 from llm_client.core.models import supports_structured_output as _registry_supports_structured_output
+from llm_client.execution.timeout_policy import _await_with_safety_ceiling
 from llm_client.parsing_utils import safe_json_loads as _safe_json_loads
 from llm_client.observability.structured_attempts import (
     AttemptEventType,
@@ -52,7 +53,7 @@ def _model_supports_native_schema(model: str) -> bool:
 
     registry_capability = _registry_supports_structured_output(model)
     if registry_capability is not None:
-        return registry_capability
+        return bool(registry_capability)
     return bool(litellm.supports_response_schema(model=model))
 
 
@@ -68,7 +69,7 @@ def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
     JSON-level failures trigger the fallback.
     """
     try:
-        return response_model.model_validate_json(raw_content)
+        return cast(T, response_model.model_validate_json(raw_content))
     except ValidationError:
         # Schema validation error -- don't mask with fallback
         raise
@@ -80,7 +81,7 @@ def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
             len(raw_content),
         )
         parsed_data = _safe_json_loads(raw_content)
-        return response_model.model_validate(parsed_data)
+        return cast(T, response_model.model_validate(parsed_data))
 
 
 class _StructuredValidationRetry(Exception):
@@ -1159,7 +1160,11 @@ async def _acall_llm_structured_impl(
             async def _invoke_responses_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 try:
                     async with _rate_limit.aacquire(current_model):
-                        response = await litellm.aresponses(**resp_kwargs)
+                        response = await _await_with_safety_ceiling(
+                            litellm.aresponses(**resp_kwargs),
+                            caller="acall_llm_structured.responses_api",
+                            model=current_model,
+                        )
                 except Exception as exc:
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
@@ -1282,7 +1287,11 @@ async def _acall_llm_structured_impl(
                     logger.info("acall_llm_structured: appended validation repair message for attempt %d", attempt)
                 try:
                     async with _rate_limit.aacquire(current_model):
-                        response = await litellm.acompletion(**base_kwargs)
+                        response = await _await_with_safety_ceiling(
+                            litellm.acompletion(**base_kwargs),
+                            caller="acall_llm_structured.native_schema",
+                            model=current_model,
+                        )
                     first_choice = _first_choice_or_empty_error(
                         response,
                         model=current_model,
@@ -1445,8 +1454,10 @@ async def _acall_llm_structured_impl(
             ).hexdigest()[:16]
 
             async def _invoke_instructor_attempt(attempt: int) -> tuple[T, LLMCallResult]:
-                parsed, completion_response = await client.chat.completions.create_with_completion(
-                    **call_kwargs,
+                parsed, completion_response = await _await_with_safety_ceiling(
+                    client.chat.completions.create_with_completion(**call_kwargs),
+                    caller="acall_llm_structured.instructor",
+                    model=current_model,
                 )
 
                 usage = _extract_usage(completion_response)
