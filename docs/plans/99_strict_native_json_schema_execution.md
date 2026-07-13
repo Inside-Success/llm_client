@@ -190,6 +190,8 @@ issued.
 - generated API reference and coupled plan/ADR verification context as required
 - coupled verification contexts: ADRs 0001, 0002, 0003, 0004, 0007, 0009, 0010,
   0012, 0013, and 0014
+- `scripts/meta/complete_plan.py`, `tests/test_complete_plan.py` (completion-gate
+  configurability and timeout diagnostics exposed while closing this plan)
 
 ## Thin Slice
 
@@ -225,6 +227,7 @@ Slice 1 — strict path from public API through runtime and replay identity
 | `tests/test_observability_replay.py` | `test_replay_restores_strict_structured_output_policy` | replay restores policy instead of forwarding it as provider data |
 | `tests/test_structured_attempts.py` | `test_strict_generated_validation_failure_exhausts_without_mechanism_fallback` | retry zero retains one invalid generation, records exhausted, and avoids Instructor |
 | `tests/test_structured_attempts.py` | `test_strict_schema_request_rejection_records_terminal_trace_without_fallback` | rejected request records terminal strict identity, no generation event, and no Instructor |
+| `tests/test_complete_plan.py` | timeout parsing, diagnostics, and CLI threading controls | completion gate supports the real suite duration and reports recent progress on timeout |
 
 ### Existing Tests (Must Pass)
 
@@ -275,7 +278,9 @@ wait. A verbose rerun identified slow multi-process CLI smoke imports followed b
 mocked client test inheriting real provider-cooldown state before its mock. The client
 test isolation fixture now disables shared cooldown waiting (dedicated rate-limit and
 kernel tests retain that coverage); concern `LLM-VERIFY-007` tracks the remaining
-diagnostic-harness follow-up.
+diagnostic-harness follow-up. The helper now accepts
+`--test-timeout-seconds` (900-second default) and prints bounded captured pytest output
+on timeout; three harness contract tests pass.
 
 ## Failure Modes And Pre-Made Decisions
 
