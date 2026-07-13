@@ -7,8 +7,10 @@ the wrapper-side liveness logic was restored.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -17,7 +19,9 @@ from pydantic import BaseModel
 
 from llm_client.core import client
 import llm_client.io_log as io_log
+import llm_client.execution.timeout_policy as timeout_policy
 from llm_client.core.data_types import LLMCallResult
+from llm_client.core.errors import LLMTransientError
 
 
 @pytest.fixture(autouse=True)
@@ -383,6 +387,92 @@ async def test_acall_llm_structured_emits_failed_lifecycle(monkeypatch: pytest.M
     assert failed["progress_event_count"] == 1
     assert failed["error_type"] == "RuntimeError"
     assert failed["error_message"] == "boom"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_path", "expected_caller"),
+    [
+        ("responses_api", "acall_llm_structured.responses_api"),
+        ("native_schema", "acall_llm_structured.native_schema"),
+        ("instructor", "acall_llm_structured.instructor"),
+    ],
+)
+async def test_async_structured_safety_timeout_cancels_provider_and_emits_failed_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_path: str,
+    expected_caller: str,
+) -> None:
+    """Every provider-backed async structured path is cancelled and logged."""
+
+    cancelled = asyncio.Event()
+
+    # mock-ok: the non-returning provider transport is the external failure seam;
+    # cancellation, retry classification, wrapper cleanup, and SQLite lifecycle
+    # persistence remain real.
+    async def _hung_provider(**_: Any) -> Any:
+        try:
+            await asyncio.Future()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    monkeypatch.setenv("LLM_CLIENT_SAFETY_TIMEOUT", "1")
+    monkeypatch.setattr(timeout_policy, "safety_timeout_s", lambda: 0.05)
+    monkeypatch.setattr(
+        "llm_client.core.client._is_responses_api_model",
+        lambda _model: provider_path == "responses_api",
+    )
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._model_supports_native_schema",
+        lambda _model: provider_path == "native_schema",
+    )
+    if provider_path == "responses_api":
+        monkeypatch.setattr("llm_client.core.client.litellm.aresponses", _hung_provider)
+    elif provider_path == "native_schema":
+        monkeypatch.setattr("llm_client.core.client.litellm.acompletion", _hung_provider)
+    else:
+        import instructor
+
+        fake_client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create_with_completion=_hung_provider),
+            ),
+        )
+        monkeypatch.setattr(instructor, "from_litellm", lambda _completion: fake_client)
+
+    with pytest.raises(LLMTransientError) as caught:
+        await asyncio.wait_for(
+            client.acall_llm_structured(
+                "openrouter/test-model",
+                [{"role": "user", "content": "hello"}],
+                _ResponseModel,
+                num_retries=0,
+                task="test.lifecycle.safety",
+                trace_id="trace.lifecycle.async.safety",
+                max_budget=0.1,
+                config=client.ClientConfig(routing_policy="openrouter"),
+                lifecycle_heartbeat_interval_s=0,
+                lifecycle_stall_after_s=0,
+            ),
+            timeout=1.5,
+        )
+
+    assert isinstance(caught.value.original, TimeoutError)
+    assert expected_caller in str(caught.value.original)
+    assert "openrouter/test-model" in str(caught.value.original)
+    assert "timed out after 0.05s async attempt safety ceiling" in str(caught.value.original)
+    assert cancelled.is_set()
+
+    rows = _lifecycle_rows()
+    assert [payload["llm_call_lifecycle"]["phase"] for _, payload in rows] == [
+        "started",
+        "failed",
+    ]
+    failed = rows[-1][1]["llm_call_lifecycle"]
+    assert failed["error_type"] == "TimeoutError"
+    assert failed["error_message"]
+    assert failed["provider_timeout_s"] == 1
 
 
 @pytest.mark.asyncio
