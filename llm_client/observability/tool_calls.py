@@ -163,9 +163,12 @@ def log_tool_call_strict(result: ToolCallResult) -> None:
 
     Use this for pipeline-critical lifecycle events whose absence would make a
     successful operation unverifiable. It also fails when observability logging
-    is disabled, preventing a deployment from silently removing required traces.
+    is disabled or the event has no joinable trace id, preventing a deployment
+    from silently removing required traces.
     """
 
+    if result.trace_id is None or not result.trace_id.strip():
+        raise ValueError("Strict tool-call persistence requires a non-empty trace_id")
     if result.data_loss_warning:
         logger.warning(
             "Data loss detected: %s/%s processed_size=%d raw_size=%d",

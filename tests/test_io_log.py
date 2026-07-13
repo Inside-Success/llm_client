@@ -46,7 +46,11 @@ def _mock_result(
     )
 
 
-def _tool_result(*, call_id: str = "strict-tool-1") -> ToolCallResult:
+def _tool_result(
+    *,
+    call_id: str = "strict-tool-1",
+    trace_id: str | None = "digimon.query.strict-roundtrip",
+) -> ToolCallResult:
     """Build one complete tool event for strict-persistence controls."""
 
     now = datetime.now(timezone.utc).isoformat()
@@ -59,7 +63,7 @@ def _tool_result(*, call_id: str = "strict-tool-1") -> ToolCallResult:
         ended_at=now,
         duration_ms=1,
         task="digimon.query.operator",
-        trace_id="digimon.query.strict-roundtrip",
+        trace_id=trace_id,
         result_count=2,
     )
 
@@ -97,6 +101,28 @@ def test_strict_tool_call_propagates_persistence_failure(
     with pytest.raises(sqlite3.OperationalError, match="read-only"):
         log_tool_call_strict(_tool_result(call_id="strict-fails"))
     log_tool_call(_tool_result(call_id="compatibility-swallows"))
+
+
+def test_strict_tool_call_propagates_jsonl_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken first persistence sink must prevent an unverifiable operation."""
+
+    def fail_jsonl(*_: object, **__: object) -> None:
+        raise OSError("observability log directory is read-only")
+
+    monkeypatch.setattr(io_log, "_append_jsonl", fail_jsonl)
+
+    with pytest.raises(OSError, match="read-only"):
+        log_tool_call_strict(_tool_result(call_id="strict-jsonl-fails"))
+
+
+@pytest.mark.parametrize("trace_id", [None, "", "   "])
+def test_strict_tool_call_rejects_unjoinable_trace_id(trace_id: str | None) -> None:
+    """A persisted row without a trace id cannot verify its parent request."""
+
+    with pytest.raises(ValueError, match="non-empty trace_id"):
+        log_tool_call_strict(_tool_result(trace_id=trace_id))
 
 
 def test_strict_tool_call_rejects_disabled_logging() -> None:
