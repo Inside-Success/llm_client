@@ -192,6 +192,10 @@ issued.
   0012, 0013, and 0014
 - `scripts/meta/complete_plan.py`, `tests/test_complete_plan.py` (completion-gate
   configurability and timeout diagnostics exposed while closing this plan)
+- `tests/test_public_surface.py` (top-level export-count contract)
+- `llm_client/tools/decorator.py`, `tests/test_tool_decorator.py` (restore accepted
+  Plans 32/47 contracts overwritten by the later backup merge and exposed by the
+  mandatory completion gate)
 
 ## Thin Slice
 
@@ -280,7 +284,11 @@ test isolation fixture now disables shared cooldown waiting (dedicated rate-limi
 kernel tests retain that coverage); concern `LLM-VERIFY-007` tracks the remaining
 diagnostic-harness follow-up. The helper now accepts
 `--test-timeout-seconds` (900-second default) and prints bounded captured pytest output
-on timeout; three harness contract tests pass.
+on timeout; three harness contract tests pass. Its first completed full readout found
+one stale Plan 99 public-export count plus seven `origin/main` tool-decorator failures.
+The count is corrected, and the accepted Plans 32/47 sync/registry/type contracts lost
+by the later backup merge are restored without removing later metadata; the combined
+decorator/public-surface/harness gate passes 41 tests.
 
 ## Failure Modes And Pre-Made Decisions
 
