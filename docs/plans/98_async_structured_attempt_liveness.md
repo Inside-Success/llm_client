@@ -196,6 +196,49 @@ awaitables, L98-4=A, L98-5=A, L98-6=B, L98-7=A, L98-8=F. Completion remains
 blocked on the downstream DIGIMON bound trace and on landing this isolated
 shared-runtime branch; sync hard termination remains an explicit non-claim.
 
+## Slice 2 progress — 2026-07-13
+
+DIGIMON loaded this worktree revision through an explicit `PYTHONPATH`
+binding, then regenerated both maintained live query gates without an
+unbounded provider wait:
+
+- `digimon_e2e_v0` passed with no failed checks, a passing corruption negative
+  control, and trace IDs
+  `digimon.query.dynamic_trace_gate.488db9bef33b4bb6bff18290b2b0cc0a.single`
+  and
+  `digimon.query.dynamic_trace_gate.488db9bef33b4bb6bff18290b2b0cc0a.agentic`.
+- `digimon_dynamic_query` passed with no failed checks, a passing corruption
+  negative control, and trace IDs
+  `digimon.query.dynamic_trace_gate.8100097d697d4f03bb45df61a3f2869b.single`
+  and
+  `digimon.query.dynamic_trace_gate.8100097d697d4f03bb45df61a3f2869b.agentic`.
+- The E2E run retained a fenced-JSON schema failure in the attempt history and
+  recovered on the configured retry. This is intentional observability: the
+  liveness boundary bounds a provider await and does not suppress a real
+  structured-output failure.
+- The downstream commands imported
+  `llm_client/execution/timeout_policy.py` from this worktree; the safety helper
+  was present at runtime. The first pre-fix E2E attempt had remained pending
+  beyond five minutes in answer synthesis, while the bound run completed.
+
+The focused suite now reports 28 passing timeout/lifecycle/structured tests,
+including an explicit proof that caller cancellation propagates unchanged, and
+the Plan #98 required-test runner reports 21 passing tests. Current evidence is
+L98-1=A, L98-2=A, L98-3=A for cancellation-cooperative awaitables, L98-4=A,
+L98-5=A, L98-6=B, L98-7=A, and L98-8=A. The documented sync and
+cancellation-swallowing transport non-claims remain unchanged.
+
+The sanctioned completion wrapper was also run without duplicating paid E2E
+calls. It did not change this plan's status because its unsharded 1,559-test
+unit command exceeded the wrapper's fixed 300-second ceiling. A clean detached
+`origin/main` worktree reproduced the slow quota/cooldown control independently
+of this branch, and the broad run also exposed two existing failures caused by
+the environment's missing optional `prompt_eval` checkout. Neither path imports
+or exercises the Plan #98 structured-attempt changes. The branch is therefore
+ready for review and downstream use, but the plan remains formally In Progress
+until the shared completion baseline or its fixed timeout is repaired; no
+`--force` status override was used.
+
 ## Failure handling
 
 | Failure | Action |
