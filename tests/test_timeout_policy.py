@@ -129,6 +129,37 @@ async def test_async_safety_ceiling_cancels_nonreturning_awaitable(
 
 
 @pytest.mark.asyncio
+async def test_external_cancellation_is_not_relabelled_as_safety_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Caller cancellation propagates unchanged while still draining the provider task."""
+
+    monkeypatch.setattr(timeout_policy, "safety_timeout_s", lambda: 60)
+    provider_cancelled = asyncio.Event()
+
+    async def _never_returns() -> None:
+        try:
+            await asyncio.Future()
+        finally:
+            provider_cancelled.set()
+
+    call = asyncio.create_task(
+        timeout_policy._await_with_safety_ceiling(
+            _never_returns(),
+            caller="test.external_cancel",
+            model="provider/model",
+        )
+    )
+    await asyncio.sleep(0)
+    call.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    assert provider_cancelled.is_set()
+
+
+@pytest.mark.asyncio
 async def test_provider_timeout_is_not_relabelled_as_safety_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
