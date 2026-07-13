@@ -80,6 +80,7 @@ import llm_client.utils.rate_limit as _rate_limit
 from llm_client.execution.call_contracts import (
     AGENT_RETRY_SAFE_ENV,
     ExecutionMode,
+    StructuredOutputPolicy,
     _AGENT_ONLY_KWARGS,
     _CODEX_AGENT_ALIASES,
     _DEPRECATED_MODEL_EXCEPTIONS,
@@ -579,6 +580,7 @@ def call_llm_structured(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    structured_output_policy: StructuredOutputPolicy | None = None,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Call LLM and get back a validated Pydantic model.
@@ -599,6 +601,8 @@ def call_llm_structured(
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
         hooks: Observability hooks (before_call, after_call, on_error)
+        structured_output_policy: Execution-path policy. Strict native-schema
+            mode fails instead of switching to Agent SDK or Instructor.
         **kwargs: Additional params passed to litellm.completion.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -645,6 +649,7 @@ def call_llm_structured(
             on_fallback=on_fallback,
             hooks=hooks,
             config=config,
+            structured_output_policy=structured_output_policy,
             **runtime_kwargs,
         ),
         resolve_model=lambda outcome: outcome[1].resolved_model or str(outcome[1].model or "") or None,
@@ -859,6 +864,7 @@ async def acall_llm_structured(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    structured_output_policy: StructuredOutputPolicy | None = None,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Async version of call_llm_structured.
@@ -879,6 +885,8 @@ async def acall_llm_structured(
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
         hooks: Observability hooks (before_call, after_call, on_error)
+        structured_output_policy: Execution-path policy. Strict native-schema
+            mode fails instead of switching to Agent SDK or Instructor.
         **kwargs: Additional params passed to litellm.acompletion.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -925,6 +933,7 @@ async def acall_llm_structured(
             on_fallback=on_fallback,
             hooks=hooks,
             config=config,
+            structured_output_policy=structured_output_policy,
             **runtime_kwargs,
         ),
         resolve_model=lambda outcome: outcome[1].resolved_model or str(outcome[1].model or "") or None,

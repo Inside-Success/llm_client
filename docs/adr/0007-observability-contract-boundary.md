@@ -1,7 +1,7 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-07-12
+Last verified: 2026-07-13
 Verification context: canonical typed attempt models and trace-scoped history query live under `observability/`; the `io_log` compatibility backend persists metadata-only append events, binds final rows by `logical_call_id`, and propagates integrity-write failures. Focused controls pass.
 Date: 2026-02-23
 

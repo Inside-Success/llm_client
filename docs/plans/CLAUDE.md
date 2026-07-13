@@ -85,6 +85,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 96 | [Registration-Only Audit Fast Path](96_registration-only-audit-fastpath.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project llm_client registration classification |
 | 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress | - |
 | 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | 🚧 In Progress | DIGIMON Plan #111 bound-trace refresh |
+| 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | ✅ Complete | onto-canon6 Plan 0141 R2 runtime authorization |
 
 
 ## Status Key

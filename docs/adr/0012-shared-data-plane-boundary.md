@@ -1,7 +1,7 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-12
+Last verified: 2026-07-13
 Verification context: attempt events and trace-scoped queries expose raw-content SHA-256 plus optional artifact references without inlining raw response bodies, preserving the control-plane/bulk-data boundary; focused readback controls pass.
 Date: 2026-03-17
 

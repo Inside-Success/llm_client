@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from llm_client import io_log
+from llm_client.execution.call_contracts import StructuredOutputPolicy
 from llm_client.observability import replay as replay_module
 
 
@@ -185,6 +186,82 @@ def test_compare_call_snapshots_reports_compact_differences() -> None:
     assert report["fingerprints_match"] is False
     assert any("request.messages[0].content" in diff for diff in report["request_differences"])
     assert "request:" in replay_module.format_call_diff(report)
+
+
+def test_structured_output_mode_changes_snapshot_fingerprint() -> None:
+    """Strict execution policy is caller-visible replay identity."""
+
+    common = {
+        "public_api": "call_llm_structured",
+        "call_kind": "structured",
+        "requested_model": "provider/native-model",
+        "messages": [{"role": "user", "content": "hi"}],
+        "prompt_ref": "prompt@1",
+        "timeout": 60,
+        "num_retries": 0,
+        "reasoning_effort": None,
+        "api_base": None,
+        "base_delay": 1.0,
+        "max_delay": 30.0,
+        "retry_on": None,
+        "fallback_models": None,
+        "public_kwargs": {},
+        "response_model": ReplayItem,
+    }
+    automatic = replay_module.build_call_snapshot(
+        **common,
+        structured_output_mode="auto",
+    )
+    strict = replay_module.build_call_snapshot(
+        **common,
+        structured_output_mode="require_native_json_schema",
+    )
+
+    assert replay_module.snapshot_fingerprint(automatic) != replay_module.snapshot_fingerprint(
+        strict
+    )
+
+
+# mock-ok: replay dispatch is replaced so reconstructed typed kwargs can be inspected.
+def test_replay_restores_strict_structured_output_policy(monkeypatch) -> None:
+    """Replay rebuilds the typed strict policy instead of forwarding provider data."""
+
+    snapshot = replay_module.build_call_snapshot(
+        public_api="call_llm_structured",
+        call_kind="structured",
+        requested_model="provider/native-model",
+        messages=[{"role": "user", "content": "hi"}],
+        prompt_ref="prompt@1",
+        timeout=60,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        base_delay=1.0,
+        max_delay=30.0,
+        retry_on=None,
+        fallback_models=None,
+        public_kwargs={},
+        structured_output_mode="require_native_json_schema",
+        response_model=ReplayItem,
+    )
+    call_id = _insert_call(snapshot)
+    captured: dict[str, object] = {}
+
+    def fake_structured(
+        model: str,
+        messages: list[dict[str, object]],
+        response_model: type[object],
+        **kwargs: object,
+    ) -> tuple[dict[str, str], str]:
+        captured.update(kwargs)
+        return {"value": "ok"}, "result"
+
+    monkeypatch.setattr(replay_module, "_call_structured_for_replay", fake_structured)
+    replay_module.replay_call_snapshot(call_id, trace_id="trace.strict.replay")
+
+    policy = captured["structured_output_policy"]
+    assert isinstance(policy, StructuredOutputPolicy)
+    assert policy.mode == "require_native_json_schema"
 
 
 def test_replay_call_snapshot_uses_new_trace_and_preserves_original_record(monkeypatch) -> None:

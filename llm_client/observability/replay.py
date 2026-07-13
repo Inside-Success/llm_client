@@ -155,6 +155,7 @@ def build_call_snapshot(
     fallback_models: list[str] | None,
     public_kwargs: Mapping[str, Any],
     execution_mode: str | None = None,
+    structured_output_mode: str | None = None,
     response_model: type[Any] | None = None,
 ) -> JSONObject:
     """Build the normalized call snapshot used for fingerprinting and replay.
@@ -183,6 +184,7 @@ def build_call_snapshot(
                 "retry_on": list(retry_on) if retry_on is not None else None,
                 "fallback_models": list(fallback_models) if fallback_models is not None else None,
                 "execution_mode": execution_mode,
+                "structured_output_mode": structured_output_mode,
             },
             "kwargs": normalized_kwargs,
             "response_model_fqn": response_model_fqn,
@@ -537,6 +539,14 @@ def replay_call_snapshot(
         "prompt_ref": request.get("prompt_ref"),
         **dict(public_kwargs),
     }
+
+    structured_output_mode = control.get("structured_output_mode")
+    if structured_output_mode is not None:
+        from llm_client.execution.call_contracts import StructuredOutputPolicy
+
+        call_kwargs["structured_output_policy"] = StructuredOutputPolicy.model_validate(
+            {"mode": structured_output_mode}
+        )
 
     requested_model = request.get("requested_model")
     if not isinstance(requested_model, str) or not requested_model:

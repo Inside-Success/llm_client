@@ -27,6 +27,7 @@ import uuid
 from typing import Any, Literal, NoReturn
 
 import litellm
+from pydantic import BaseModel, ConfigDict, Field
 
 import llm_client.io_log as _io_log
 from llm_client.core.errors import (
@@ -50,6 +51,23 @@ logger = logging.getLogger(__name__)
 
 REQUIRE_TAGS_ENV = "LLM_CLIENT_REQUIRE_TAGS"
 AGENT_RETRY_SAFE_ENV = "LLM_CLIENT_AGENT_RETRY_SAFE"
+
+
+class StructuredOutputPolicy(BaseModel):
+    """Select which structured-output execution paths a logical call may use.
+
+    Auto mode preserves the historical native-schema-to-Instructor routing.
+    Strict mode requires provider-native JSON schema and fails loudly rather
+    than changing execution mechanisms when capability checks or the provider
+    reject that schema.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: Literal["auto", "require_native_json_schema"] = Field(
+        default="auto",
+        description="Allowed structured-output execution paths for this logical call.",
+    )
 
 
 def truthy_env(value: Any) -> bool:
