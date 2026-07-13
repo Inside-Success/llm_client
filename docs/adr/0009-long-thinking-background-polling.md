@@ -62,3 +62,7 @@ Negative:
 2. Retrieval helper tests must validate:
    - key-presence requirements,
    - OpenAI client invocation shape (api key/base URL/timeout).
+
+Verification context (2026-07-13): Plan 97's native-schema attempt lifecycle is
+limited to Completions native JSON-schema calls. Responses/background polling
+semantics in this ADR remain unchanged.

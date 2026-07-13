@@ -16,10 +16,21 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 import llm_client.io_log as _io_log
 
 AttemptEventType = Literal[
-    "received", "validation_failed", "validated", "recovery_decided"
+    "started",
+    "received",
+    "execution_failed",
+    "validation_failed",
+    "validated",
+    "recovery_decided",
 ]
-AttemptFailureClass = Literal["missing_required", "schema_validation"]
-RecoveryDecision = Literal["retry", "exhausted"]
+AttemptFailureClass = Literal[
+    "missing_required",
+    "schema_validation",
+    "timeout",
+    "rate_limit",
+    "provider_execution",
+]
+RecoveryDecision = Literal["retry", "fallback", "exhausted"]
 
 
 class StructuredValidationIssue(BaseModel):
@@ -75,6 +86,15 @@ class StructuredAttemptEvent(BaseModel):
     failure_class: AttemptFailureClass | None = Field(
         default=None, description="Typed failure family."
     )
+    execution_error_type: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description=(
+            "Bounded exception class name for execution_failed; messages and "
+            "provider bodies are intentionally excluded."
+        ),
+    )
     validation_issues: tuple[StructuredValidationIssue, ...] = Field(
         default=(), description="Typed validation issues."
     )
@@ -86,16 +106,24 @@ class StructuredAttemptEvent(BaseModel):
     def _event_shape(self) -> "StructuredAttemptEvent":
         if self.event_type == "received" and self.raw_sha256 is None:
             raise ValueError("received event requires raw_sha256")
-        if self.event_type == "validation_failed" and self.failure_class is None:
-            raise ValueError("validation_failed event requires failure_class")
+        if self.event_type in {"validation_failed", "execution_failed"} and self.failure_class is None:
+            raise ValueError(f"{self.event_type} event requires failure_class")
+        if self.event_type == "execution_failed" and self.execution_error_type is None:
+            raise ValueError("execution_failed event requires execution_error_type")
         if self.event_type == "recovery_decided" and self.recovery_decision is None:
             raise ValueError("recovery_decided event requires recovery_decision")
-        if self.event_type != "validation_failed" and (
+        if self.event_type not in {"validation_failed", "execution_failed"} and (
             self.failure_class or self.validation_issues
         ):
             raise ValueError(
-                "failure details are only valid on validation_failed events"
+                "failure details are only valid on failed events"
             )
+        if self.event_type != "execution_failed" and self.execution_error_type is not None:
+            raise ValueError(
+                "execution_error_type is only valid on execution_failed events"
+            )
+        if self.event_type == "execution_failed" and self.validation_issues:
+            raise ValueError("execution_failed cannot carry validation issues")
         if self.event_type != "recovery_decided" and self.recovery_decision is not None:
             raise ValueError(
                 "recovery_decision is only valid on recovery_decided events"

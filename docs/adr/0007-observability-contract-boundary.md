@@ -46,3 +46,8 @@ Negative:
 3. Warning/diagnostic emission must remain category-consistent with ADR 0003.
 4. Strict persistence tests must cover both sinks, disabled logging, and null or
    blank trace identifiers.
+5. Native-schema attempt tests must cover `started` before provider invocation,
+   typed pre-response failure, and retry-kernel recovery disposition. Attempt
+   events exclude exception messages and provider bodies.
+
+Last verified: 2026-07-13 (Plan 97 Slice 3 transport-attempt lifecycle).

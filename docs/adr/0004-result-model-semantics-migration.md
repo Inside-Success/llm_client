@@ -44,3 +44,7 @@ Negative:
 2. MCP/agent tests assert fallback cases still preserve:
    - `requested_model` as caller input.
    - `routing_trace` attempted model chain.
+
+Verification context (2026-07-13): structured-attempt child events expose the
+per-attempt model and global ordinal needed to diagnose fallback, without
+changing `LLMCallResult.model`, `requested_model`, or `routing_trace`.

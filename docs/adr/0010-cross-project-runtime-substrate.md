@@ -84,3 +84,8 @@ Negative:
    on `llm_client` without recreating primary execution or analytics backends.
 4. Strict cross-project tool traces must prove sink failures propagate and the
    persisted event remains joinable to its parent trace.
+5. Cross-project structured traces must prove every provider attempt begins at
+   `started`, preserves pre-response failures, and records the retry kernel's
+   actual disposition with logical-call-global ordinals.
+
+Last verified: 2026-07-13 (DIGIMON-bound Plan 97 transport failure).

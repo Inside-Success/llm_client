@@ -38,3 +38,8 @@ Negative:
 
 Add stable warning codes (`LLMC_WARN_*`) with structured metadata once
 router/kernel contracts are stabilized.
+
+Verification context (2026-07-13): native-schema pre-response failures are
+typed attempt events (`timeout`, `rate_limit`, or `provider_execution`), not
+warnings. The retry kernel records the actual retry/fallback/exhaustion
+disposition; persistence failure remains an integrity error.

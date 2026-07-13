@@ -770,6 +770,7 @@ CREATE TABLE IF NOT EXISTS structured_attempt_events (
     raw_sha256 TEXT,
     raw_artifact_ref TEXT,
     failure_class TEXT,
+    execution_error_type TEXT,
     validation_issues TEXT NOT NULL,
     recovery_decision TEXT
 );
@@ -1047,6 +1048,12 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN logical_call_id TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id)")
 
+    attempt_cols = {row[1] for row in conn.execute("PRAGMA table_info(structured_attempt_events)")}
+    if "execution_error_type" not in attempt_cols:
+        conn.execute(
+            "ALTER TABLE structured_attempt_events ADD COLUMN execution_error_type TEXT"
+        )
+
     # task_scores: add git_commit if missing
     scores_cols = {r[1] for r in conn.execute("PRAGMA table_info(task_scores)").fetchall()}
     if scores_cols and "git_commit" not in scores_cols:
@@ -1183,8 +1190,8 @@ def write_structured_attempt_event(event: dict[str, Any]) -> None:
                (event_id, timestamp, project, logical_call_id, trace_id, task,
                 attempt_ordinal, model, execution_path, schema_hash, event_type,
                 raw_sha256, raw_artifact_ref, failure_class, validation_issues,
-                recovery_decision)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                execution_error_type, recovery_decision)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 event["event_id"], event["timestamp"], _get_project(),
                 event["logical_call_id"], event["trace_id"], event["task"],
@@ -1192,6 +1199,7 @@ def write_structured_attempt_event(event: dict[str, Any]) -> None:
                 event["schema_hash"], event["event_type"], event.get("raw_sha256"),
                 event.get("raw_artifact_ref"), event.get("failure_class"),
                 json.dumps(event.get("validation_issues", []), default=str),
+                event.get("execution_error_type"),
                 event.get("recovery_decision"),
             ),
         )
@@ -1206,7 +1214,7 @@ def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]
         """SELECT event_id, timestamp, logical_call_id, trace_id, task,
                   attempt_ordinal, model, execution_path, schema_hash, event_type,
                   raw_sha256, raw_artifact_ref, failure_class, validation_issues,
-                  recovery_decision
+                  execution_error_type, recovery_decision
            FROM structured_attempt_events
            WHERE logical_call_id = ? ORDER BY id""",
         (logical_call_id,),
@@ -1215,7 +1223,7 @@ def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]
         "event_id", "timestamp", "logical_call_id", "trace_id", "task",
         "attempt_ordinal", "model", "execution_path", "schema_hash", "event_type",
         "raw_sha256", "raw_artifact_ref", "failure_class", "validation_issues",
-        "recovery_decision",
+        "execution_error_type", "recovery_decision",
     )
     result: list[dict[str, Any]] = []
     for row in rows:

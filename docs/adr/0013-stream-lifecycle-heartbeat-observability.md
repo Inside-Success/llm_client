@@ -64,3 +64,7 @@ Negative:
    - async iteration error emits `started -> progress -> failed` and captures error metadata
 2. Existing stream fixtures should continue passing for non-streaming and streaming
    behavior after monitor extraction.
+
+Verification context (2026-07-13): structured non-streaming attempt events now
+also use `started`, but are stored in `structured_attempt_events`; they do not
+change stream heartbeat or terminal lifecycle semantics in this ADR.

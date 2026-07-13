@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-13T21:05:12Z -->
+<!-- Generated: 2026-07-13T21:33:01Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1983,7 +1983,7 @@ reconstruct that state first and then hand this module a prepared call.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-StructuredAttemptEvent">
-  <summary><code>StructuredAttemptEvent</code> <span class="sig">(*, event_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, logical_call_id: str, trace_id: str, task: str, attempt_ordinal: Annotated[int, Ge(ge=0)], model: str, execution_path: Literal[&#x27;native_schema&#x27;], schema_hash: str, event_type: Literal[&#x27;received&#x27;, &#x27;validation_failed&#x27;, &#x27;validated&#x27;, &#x27;recovery_decided&#x27;], raw_sha256: str | None = None, raw_artifact_ref: str | None = None, failure_class: Optional[Literal[&#x27;missing_required&#x27;, &#x27;schema_validation&#x27;]] = None, validation_issues: tuple[llm_client.observability.structured_attempts.StructuredValidationIssue, ...] = (), recovery_decision: Optional[Literal[&#x27;retry&#x27;, &#x27;exhausted&#x27;]] = None) -&gt; None</span></summary>
+  <summary><code>StructuredAttemptEvent</code> <span class="sig">(*, event_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, logical_call_id: str, trace_id: str, task: str, attempt_ordinal: Annotated[int, Ge(ge=0)], model: str, execution_path: Literal[&#x27;native_schema&#x27;], schema_hash: str, event_type: Literal[&#x27;started&#x27;, &#x27;received&#x27;, &#x27;execution_failed&#x27;, &#x27;validation_failed&#x27;, &#x27;validated&#x27;, &#x27;recovery_decided&#x27;], raw_sha256: str | None = None, raw_artifact_ref: str | None = None, failure_class: Optional[Literal[&#x27;missing_required&#x27;, &#x27;schema_validation&#x27;, &#x27;timeout&#x27;, &#x27;rate_limit&#x27;, &#x27;provider_execution&#x27;]] = None, execution_error_type: Annotated[str | None, MinLen(min_length=1), MaxLen(max_length=128)] = None, validation_issues: tuple[llm_client.observability.structured_attempts.StructuredValidationIssue, ...] = (), recovery_decision: Optional[Literal[&#x27;retry&#x27;, &#x27;fallback&#x27;, &#x27;exhausted&#x27;]] = None) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Append-only event describing one stage of one provider generation attempt.</p>
     <p class="meta">Source: <code>llm_client.observability.structured_attempts</code> class</p>
@@ -8363,7 +8363,7 @@ imported directly from ``call_contracts`` and ``model_detection``.</pre>
 </details>
 
 <details class="symbol" id="module-llm_client-execution-execution_kernel-run_async_with_retry">
-  <summary><code>run_async_with_retry</code> <span class="sig">(*, caller: str, model: str, max_retries: int, invoke: Callable[[int], Awaitable[~T]], should_retry: Callable[[Exception], bool], compute_delay: Callable[[int, Exception], tuple[float, str]], warning_sink: list[str], logger: logging.Logger, on_error: Optional[Callable[[Exception, int], NoneType]] = None, on_retry: Optional[Callable[[int, Exception, float], NoneType]] = None, maybe_retry_hook: Optional[Callable[[Exception, int, int], bool]] = None) -&gt; ~T</span></summary>
+  <summary><code>run_async_with_retry</code> <span class="sig">(*, caller: str, model: str, max_retries: int, invoke: Callable[[int], Awaitable[~T]], should_retry: Callable[[Exception], bool], compute_delay: Callable[[int, Exception], tuple[float, str]], warning_sink: list[str], logger: logging.Logger, on_error: Optional[Callable[[Exception, int], NoneType]] = None, on_retry: Optional[Callable[[int, Exception, float], NoneType]] = None, on_decision: Optional[Callable[[int, Exception, Literal[&#x27;retry&#x27;, &#x27;exhausted&#x27;]], NoneType]] = None, maybe_retry_hook: Optional[Callable[[Exception, int, int], bool]] = None) -&gt; ~T</span></summary>
   <div class="symbol-body">
     <p class="summary">Execute async attempts with shared retry behavior.</p>
     <p class="meta">Source: <code>llm_client.execution.execution_kernel</code> functions</p>
@@ -8381,7 +8381,7 @@ imported directly from ``call_contracts`` and ``model_detection``.</pre>
 </details>
 
 <details class="symbol" id="module-llm_client-execution-execution_kernel-run_sync_with_retry">
-  <summary><code>run_sync_with_retry</code> <span class="sig">(*, caller: str, model: str, max_retries: int, invoke: Callable[[int], ~T], should_retry: Callable[[Exception], bool], compute_delay: Callable[[int, Exception], tuple[float, str]], warning_sink: list[str], logger: logging.Logger, on_error: Optional[Callable[[Exception, int], NoneType]] = None, on_retry: Optional[Callable[[int, Exception, float], NoneType]] = None, maybe_retry_hook: Optional[Callable[[Exception, int, int], bool]] = None) -&gt; ~T</span></summary>
+  <summary><code>run_sync_with_retry</code> <span class="sig">(*, caller: str, model: str, max_retries: int, invoke: Callable[[int], ~T], should_retry: Callable[[Exception], bool], compute_delay: Callable[[int, Exception], tuple[float, str]], warning_sink: list[str], logger: logging.Logger, on_error: Optional[Callable[[Exception, int], NoneType]] = None, on_retry: Optional[Callable[[int, Exception, float], NoneType]] = None, on_decision: Optional[Callable[[int, Exception, Literal[&#x27;retry&#x27;, &#x27;exhausted&#x27;]], NoneType]] = None, maybe_retry_hook: Optional[Callable[[Exception, int, int], bool]] = None) -&gt; ~T</span></summary>
   <div class="symbol-body">
     <p class="summary">Execute sync attempts with shared retry behavior.</p>
     <p class="meta">Source: <code>llm_client.execution.execution_kernel</code> functions</p>
@@ -9679,7 +9679,7 @@ metadata plane; the event carries a content hash and optional artifact reference
 <h4>Classes</h4>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-structured_attempts-StructuredAttemptEvent">
-  <summary><code>StructuredAttemptEvent</code> <span class="sig">(*, event_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, logical_call_id: str, trace_id: str, task: str, attempt_ordinal: Annotated[int, Ge(ge=0)], model: str, execution_path: Literal[&#x27;native_schema&#x27;], schema_hash: str, event_type: Literal[&#x27;received&#x27;, &#x27;validation_failed&#x27;, &#x27;validated&#x27;, &#x27;recovery_decided&#x27;], raw_sha256: str | None = None, raw_artifact_ref: str | None = None, failure_class: Optional[Literal[&#x27;missing_required&#x27;, &#x27;schema_validation&#x27;]] = None, validation_issues: tuple[llm_client.observability.structured_attempts.StructuredValidationIssue, ...] = (), recovery_decision: Optional[Literal[&#x27;retry&#x27;, &#x27;exhausted&#x27;]] = None) -&gt; None</span></summary>
+  <summary><code>StructuredAttemptEvent</code> <span class="sig">(*, event_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, logical_call_id: str, trace_id: str, task: str, attempt_ordinal: Annotated[int, Ge(ge=0)], model: str, execution_path: Literal[&#x27;native_schema&#x27;], schema_hash: str, event_type: Literal[&#x27;started&#x27;, &#x27;received&#x27;, &#x27;execution_failed&#x27;, &#x27;validation_failed&#x27;, &#x27;validated&#x27;, &#x27;recovery_decided&#x27;], raw_sha256: str | None = None, raw_artifact_ref: str | None = None, failure_class: Optional[Literal[&#x27;missing_required&#x27;, &#x27;schema_validation&#x27;, &#x27;timeout&#x27;, &#x27;rate_limit&#x27;, &#x27;provider_execution&#x27;]] = None, execution_error_type: Annotated[str | None, MinLen(min_length=1), MaxLen(max_length=128)] = None, validation_issues: tuple[llm_client.observability.structured_attempts.StructuredValidationIssue, ...] = (), recovery_decision: Optional[Literal[&#x27;retry&#x27;, &#x27;fallback&#x27;, &#x27;exhausted&#x27;]] = None) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Append-only event describing one stage of one provider generation attempt.</p>
     <p class="meta">Source: <code>llm_client.observability.structured_attempts</code> class</p>

@@ -176,6 +176,66 @@ Pre-landing review disposition:
 | write succeeds but readback count mismatches | binding failure; block completion |
 | provider route cannot be proven | store null; never guess |
 
+## Slice 3: pre-response transport integrity
+
+DIGIMON trace
+`digimon.query.dynamic_trace_gate.bbee180ec88645c5a29fe3a8c41c6749.agentic`
+proved that the Slice-1 lifecycle was still partial: a provider timeout consumed
+attempt ordinal 0, the retry succeeded at ordinal 1, and the child ledger began
+at ordinal 1 because no response existed to trigger `received`. The final
+`llm_calls.retry_count=1` and the child history therefore contradicted each
+other.
+
+This slice extends the native-schema lifecycle to begin before transport:
+
+- success: `started -> received -> validated`;
+- validation recovery: `started -> received -> validation_failed -> recovery_decided`;
+- pre-response failure: `started -> execution_failed -> recovery_decided`.
+
+`recovery_decided` is emitted from the shared retry kernel after its actual
+retry decision. The structured runtime maps terminal per-model exhaustion to
+`fallback` when another configured model remains, otherwise `exhausted`.
+Attempt ordinals are logical-call global, not restarted for each fallback
+model. Execution failures carry only a bounded typed class and exception type,
+never an exception message or provider body.
+
+Required deterministic controls:
+
+1. sync and async timeout-then-success histories begin at ordinal zero;
+2. non-retryable and retry-exhausted attempts end in `exhausted`;
+3. model fallback uses increasing ordinals and records `fallback`;
+4. validation retries retain exactly one recovery decision;
+5. deleted/reordered/duplicate lifecycle events fail the consumer continuity
+   checker;
+6. existing v1 database rows remain readable after additive migration.
+
+The preserved failed DIGIMON trace remains defect evidence. A fresh passing
+trace counts only after these controls pass; rerunning until a no-timeout sample
+appears is explicitly prohibited.
+
+Implementation evidence (2026-07-13):
+
+- 13 structured-attempt tests pass, including sync/async timeout-to-success,
+  non-retryable cross-model fallback with contiguous ordinals, strict terminal
+  failure, validation recovery, and additive old-table migration;
+- 8 shared retry-kernel tests pass, including decision persistence before a
+  user callback that raises;
+- 93 structured-runtime/observability/replay tests and 251 client tests pass;
+- the full repository suite passes 1,585 tests with 3 declared skips and 11
+  deselections;
+- Ruff passes on every changed runtime/test module (the legacy `io_log.py`
+  facade retains unrelated pre-existing lint debt).
+
+Repository-wide `make check` remains red before tests because clean
+`origin/main` and this branch both report the same 315 pre-existing Ruff
+violations (LLM-VERIFY-009). That inherited red gate is not counted as evidence
+for or against this slice.
+
+Consumer verification remains open: DIGIMON's independent SQLite projection
+and continuity checker must migrate to the v2 event shape, pass lifecycle
+mutation controls, and bind a fresh real trace before L97-1/L97-2 can be called
+closed across the project boundary.
+
 ## References Reviewed
 
 - DIGIMON Plan #110

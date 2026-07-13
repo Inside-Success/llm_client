@@ -117,3 +117,8 @@ Negative:
    explicit lookup of the full replayable payload.
 6. Tool-call observability changes must preserve the distinction between
    lifecycle diagnosis and replayable LLM call contracts.
+7. Structured-attempt lifecycle events diagnose retries and fallback but are
+   not replay envelopes. Replay continues to derive from the final call
+   snapshot; attempt histories bind by `logical_call_id` and `trace_id`.
+
+Last verified: 2026-07-13 (Plan 97 Slice 3 lifecycle expansion).

@@ -76,3 +76,8 @@ Negative:
    metadata in `llm_client` and bulk payloads in the data plane.
 4. Strict tool-call tests must prove lifecycle metadata survives both sinks
    without introducing result-body persistence.
+5. Structured execution-failure events retain only bounded failure class and
+   exception type; exception messages and provider bodies remain outside the
+   shared metadata plane.
+
+Last verified: 2026-07-13 (Plan 97 Slice 3 additive event migration).
