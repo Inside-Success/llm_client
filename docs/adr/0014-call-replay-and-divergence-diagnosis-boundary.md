@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-07-12
+Last verified: 2026-07-13
 Verification context: async safety expiry records a terminal lifecycle failure with caller/model/ceiling while preserving existing call snapshots and structured-attempt payload boundaries; focused readback controls pass.
 
 ## Context

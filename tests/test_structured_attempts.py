@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import litellm
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from llm_client import io_log
-from llm_client import acall_llm_structured, call_llm_structured
-from pydantic import BaseModel
+from llm_client import (
+    StructuredOutputPolicy,
+    acall_llm_structured,
+    call_llm_structured,
+    io_log,
+)
+from llm_client.core.errors import LLMError
+from llm_client.core.errors import LLMCapabilityError
 from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
     get_structured_attempt_events,
@@ -252,6 +258,103 @@ def test_native_schema_runtime_persists_litellm_pre_return_validation_failure(
     ]
     assert history[1].failure_class == "schema_validation"
     assert history[1].validation_issues[0].code == "provider_json_schema_validation"
+
+
+# mock-ok: provider output is controlled; real retry runtime and SQLite ledger run.
+@patch("instructor.from_litellm")
+@patch("llm_client.core.client.litellm.completion")
+def test_strict_generated_validation_failure_exhausts_without_mechanism_fallback(
+    mock_completion: MagicMock,
+    mock_from_litellm: MagicMock,
+) -> None:
+    """Retry zero records one invalid generation and never enters Instructor."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.side_effect = litellm.JSONSchemaValidationError(
+        model="deepseek/deepseek-chat",
+        llm_provider="openrouter",
+        raw_response='```json\n{"action":"answer"}\n```',
+        schema="{}",
+    )
+
+    with pytest.raises(LLMError, match="JSONSchemaValidationError"):
+        call_llm_structured(
+            "deepseek/deepseek-chat",
+            [{"role": "user", "content": "Choose"}],
+            response_model=Decision,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            task="planner",
+            trace_id="trace-strict-native-exhausted",
+            max_budget=0,
+            num_retries=0,
+        )
+
+    mock_completion.assert_called_once()
+    mock_from_litellm.assert_not_called()
+    logical_call_id = io_log._get_db().execute(
+        "SELECT logical_call_id FROM structured_attempt_events WHERE trace_id=? LIMIT 1",
+        ("trace-strict-native-exhausted",),
+    ).fetchone()[0]
+    history = get_structured_attempt_events(logical_call_id)
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "received"),
+        (0, "validation_failed"),
+        (0, "recovery_decided"),
+    ]
+    assert history[1].failure_class == "schema_validation"
+    assert history[2].recovery_decision == "exhausted"
+
+
+# mock-ok: provider rejection is controlled; real terminal logging and readback run.
+@patch("instructor.from_litellm")
+@patch("llm_client.core.client.litellm.completion")
+def test_strict_schema_request_rejection_records_terminal_trace_without_fallback(
+    mock_completion: MagicMock,
+    mock_from_litellm: MagicMock,
+) -> None:
+    """A rejected schema request records terminal strict identity and no generation."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.side_effect = Exception(
+        "INVALID_ARGUMENT: response_schema nesting depth exceeds limit"
+    )
+
+    with pytest.raises(LLMCapabilityError, match="forbids Instructor fallback"):
+        call_llm_structured(
+            "deepseek/deepseek-chat",
+            [{"role": "user", "content": "Choose"}],
+            response_model=Decision,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            task="planner",
+            trace_id="trace-strict-schema-request-rejected",
+            max_budget=0,
+            num_retries=0,
+        )
+
+    mock_completion.assert_called_once()
+    mock_from_litellm.assert_not_called()
+    assert get_structured_attempt_histories("trace-strict-schema-request-rejected") == {}
+    row = io_log._get_db().execute(
+        "SELECT error, call_snapshot FROM llm_calls WHERE trace_id=?",
+        ("trace-strict-schema-request-rejected",),
+    ).fetchone()
+    assert row is not None
+    assert "strict structured-output policy forbids Instructor fallback" in row[0]
+    snapshot = json.loads(row[1])
+    assert (
+        snapshot["request"]["control"]["structured_output_mode"]
+        == "require_native_json_schema"
+    )
 
 
 @pytest.mark.asyncio

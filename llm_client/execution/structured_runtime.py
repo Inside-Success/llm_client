@@ -13,9 +13,16 @@ from importlib import import_module
 from typing import Any, Callable, NoReturn, TypeVar, cast
 from uuid import uuid4
 
-from llm_client.core.client import AsyncCachePolicy, CachePolicy, Hooks, LLMCallResult, RetryPolicy
+from llm_client.core.client import (
+    AsyncCachePolicy,
+    CachePolicy,
+    Hooks,
+    LLMCallResult,
+    RetryPolicy,
+)
 from llm_client.core.config import ClientConfig
 from llm_client.core.errors import LLMCapabilityError, _unwrap_instructor_retry
+from llm_client.execution.call_contracts import StructuredOutputPolicy
 from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 from pydantic import BaseModel, ValidationError
 
@@ -314,6 +321,7 @@ def _call_llm_structured_impl(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    structured_output_policy: StructuredOutputPolicy | None = None,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Run the synchronous structured-call runtime behind ``client.call_llm_structured``."""
@@ -358,6 +366,8 @@ def _call_llm_structured_impl(
     wrap_error = _client.wrap_error
 
     _check_model_deprecation(model)
+    output_policy = structured_output_policy or StructuredOutputPolicy()
+    require_native_json_schema = output_policy.mode == "require_native_json_schema"
     cfg = config or ClientConfig.from_env()
     _log_t0 = time.monotonic()
     task = kwargs.pop("task", None)
@@ -398,6 +408,7 @@ def _call_llm_structured_impl(
         retry_on=retry_on,
         fallback_models=fallback_models,
         public_kwargs=public_kwargs,
+        structured_output_mode=output_policy.mode,
         response_model=response_model,
     )
     plan = _resolve_call_plan(
@@ -410,6 +421,24 @@ def _call_llm_structured_impl(
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
 
     if _is_agent_model(model):
+        if require_native_json_schema:
+            capability_error = LLMCapabilityError(
+                f"Model {model} uses an Agent SDK structured path, not provider-native JSON schema."
+            )
+            _log_call_event(
+                model=model,
+                messages=messages,
+                error=capability_error,
+                latency_s=time.monotonic() - _log_t0,
+                caller="call_llm_structured",
+                task=task,
+                trace_id=trace_id,
+                prompt_ref=prompt_ref,
+                call_snapshot=call_snapshot,
+                execution_path="error",
+                retry_count=None,
+            )
+            raise capability_error
         from llm_client.sdk.agents import _route_call_structured
 
         if hooks and hooks.before_call:
@@ -618,6 +647,11 @@ def _call_llm_structured_impl(
 
         supports_schema = _model_supports_native_schema(current_model)
         _native_schema_failed = False
+        if require_native_json_schema and not supports_schema:
+            raise LLMCapabilityError(
+                f"Model {current_model} does not support native JSON schema; "
+                "strict structured-output policy forbids Instructor fallback."
+            )
         if supports_schema:
             schema = _strict_json_schema(response_model.model_json_schema())
             base_kwargs = _prepare_call_kwargs(
@@ -788,6 +822,12 @@ def _call_llm_structured_impl(
                     ),
                 ))
             except _NativeSchemaFallback as schema_error:
+                if require_native_json_schema:
+                    raise LLMCapabilityError(
+                        f"Provider rejected native JSON schema for model {current_model}; "
+                        "strict structured-output policy forbids Instructor fallback.",
+                        original=schema_error,
+                    ) from schema_error
                 logger.warning(
                     "Native JSON schema rejected by provider (%s), falling back to instructor: %s",
                     current_model,
@@ -943,6 +983,7 @@ async def _acall_llm_structured_impl(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    structured_output_policy: StructuredOutputPolicy | None = None,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Run the async structured-call runtime behind ``client.acall_llm_structured``."""
@@ -989,6 +1030,8 @@ async def _acall_llm_structured_impl(
     wrap_error = _client.wrap_error
 
     _check_model_deprecation(model)
+    output_policy = structured_output_policy or StructuredOutputPolicy()
+    require_native_json_schema = output_policy.mode == "require_native_json_schema"
     cfg = config or ClientConfig.from_env()
     _log_t0 = time.monotonic()
     task = kwargs.pop("task", None)
@@ -1029,6 +1072,7 @@ async def _acall_llm_structured_impl(
         retry_on=retry_on,
         fallback_models=fallback_models,
         public_kwargs=public_kwargs,
+        structured_output_mode=output_policy.mode,
         response_model=response_model,
     )
     plan = _resolve_call_plan(
@@ -1041,6 +1085,24 @@ async def _acall_llm_structured_impl(
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
 
     if _is_agent_model(model):
+        if require_native_json_schema:
+            capability_error = LLMCapabilityError(
+                f"Model {model} uses an Agent SDK structured path, not provider-native JSON schema."
+            )
+            _log_call_event(
+                model=model,
+                messages=messages,
+                error=capability_error,
+                latency_s=time.monotonic() - _log_t0,
+                caller="acall_llm_structured",
+                task=task,
+                trace_id=trace_id,
+                prompt_ref=prompt_ref,
+                call_snapshot=call_snapshot,
+                execution_path="error",
+                retry_count=None,
+            )
+            raise capability_error
         from llm_client.sdk.agents import _route_acall_structured
 
         if hooks and hooks.before_call:
@@ -1253,6 +1315,11 @@ async def _acall_llm_structured_impl(
 
         supports_schema = _model_supports_native_schema(current_model)
         _native_schema_failed = False
+        if require_native_json_schema and not supports_schema:
+            raise LLMCapabilityError(
+                f"Model {current_model} does not support native JSON schema; "
+                "strict structured-output policy forbids Instructor fallback."
+            )
         if supports_schema:
             schema = _strict_json_schema(response_model.model_json_schema())
             base_kwargs = _prepare_call_kwargs(
@@ -1427,6 +1494,12 @@ async def _acall_llm_structured_impl(
                     ),
                 ))
             except _NativeSchemaFallback as schema_error:
+                if require_native_json_schema:
+                    raise LLMCapabilityError(
+                        f"Provider rejected native JSON schema for model {current_model}; "
+                        "strict structured-output policy forbids Instructor fallback.",
+                        original=schema_error,
+                    ) from schema_error
                 logger.warning(
                     "Native JSON schema rejected by provider (%s), falling back to instructor: %s",
                     current_model,
