@@ -51,8 +51,9 @@ from llm_client.core.model_availability import clear_model_unavailability
 
 @pytest.fixture(autouse=True)
 def _explicit_test_routing_policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Week-1 invariant: routing policy must be explicit in tests."""
+    """Keep mocked client tests independent of routing and shared cooldown state."""
     monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "off")
+    monkeypatch.setattr("llm_client.utils.rate_limit._cooldown_enabled", False)
     monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
     clear_model_unavailability()
     yield
@@ -847,12 +848,10 @@ class TestNonRetryableErrors:
         assert mock_comp.call_count == 1
 
     @patch("llm_client.execution.execution_kernel._maybe_register_provider_cooldown")
-    @patch("llm_client.utils.rate_limit._provider_cooldown_remaining", return_value=0.0)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_quota_exceeded_registers_provider_cooldown(
         self,
         mock_comp: MagicMock,
-        _mock_cooldown_remaining: MagicMock,
         mock_register_cooldown: MagicMock,
     ) -> None:
         """Quota-like 429s should still publish shared cooldown state."""

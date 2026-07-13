@@ -272,8 +272,10 @@ review passed after adding terminal logging for strict Agent-SDK rejection and e
 `mock-ok` rationale on controlled provider-boundary tests. The mandatory
 `complete_plan.py --plan 99 --dry-run --skip-real-e2e` gate reproduced the broad-suite
 wait. A verbose rerun identified slow multi-process CLI smoke imports followed by a
-quota test inheriting real provider-cooldown state before its mock; the latter is now
-isolated and concern `LLM-VERIFY-007` tracks the remaining diagnostic-harness follow-up.
+mocked client test inheriting real provider-cooldown state before its mock. The client
+test isolation fixture now disables shared cooldown waiting (dedicated rate-limit and
+kernel tests retain that coverage); concern `LLM-VERIFY-007` tracks the remaining
+diagnostic-harness follow-up.
 
 ## Failure Modes And Pre-Made Decisions
 
