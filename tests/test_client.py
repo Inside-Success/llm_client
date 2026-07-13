@@ -847,10 +847,12 @@ class TestNonRetryableErrors:
         assert mock_comp.call_count == 1
 
     @patch("llm_client.execution.execution_kernel._maybe_register_provider_cooldown")
+    @patch("llm_client.utils.rate_limit._provider_cooldown_remaining", return_value=0.0)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_quota_exceeded_registers_provider_cooldown(
         self,
         mock_comp: MagicMock,
+        _mock_cooldown_remaining: MagicMock,
         mock_register_cooldown: MagicMock,
     ) -> None:
         """Quota-like 429s should still publish shared cooldown state."""

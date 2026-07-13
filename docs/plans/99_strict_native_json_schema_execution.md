@@ -271,8 +271,9 @@ mypy reports the documented 181-error repository baseline and no new
 review passed after adding terminal logging for strict Agent-SDK rejection and explicit
 `mock-ok` rationale on controlled provider-boundary tests. The mandatory
 `complete_plan.py --plan 99 --dry-run --skip-real-e2e` gate reproduced the broad-suite
-event-wait stall and was interrupted after nearly four minutes; concern
-`LLM-VERIFY-007` tracks the non-diagnostic harness failure.
+wait. A verbose rerun identified slow multi-process CLI smoke imports followed by a
+quota test inheriting real provider-cooldown state before its mock; the latter is now
+isolated and concern `LLM-VERIFY-007` tracks the remaining diagnostic-harness follow-up.
 
 ## Failure Modes And Pre-Made Decisions
 
