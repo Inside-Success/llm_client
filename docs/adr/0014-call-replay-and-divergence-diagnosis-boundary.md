@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-13
-Verification context: v2 fingerprints bind public API, call kind, request, and replay-support metadata; the closed envelope records effective retry/fallback/cache/mode state and rejects drift before dispatch. Historical v1 replay remains readable. Independent review rejected Plan 99's second repair for a producer/consumer timeout-sentinel mismatch and lossy coercions mislabeled exact; third repair and acceptance are pending.
+Verification context: v2 fingerprints bind public API, call kind, request, and replay-support metadata; the closed envelope records effective retry/fallback/cache/mode state and rejects drift before dispatch. Historical v1 replay remains readable. Independent review accepted Plan 99 implementation `5ed2a1e` after real four-public-API capture-to-replay and adversarial envelope, downgrade, kind, schema, execution-mode, and lossy-value controls.
 
 ## Context
 

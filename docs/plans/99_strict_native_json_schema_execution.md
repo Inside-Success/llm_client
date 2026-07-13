@@ -1,6 +1,7 @@
 # Plan #99: Strict Native JSON-Schema Execution
 
-**Status:** 🚧 In Progress — second repair independently rejected; third repair active
+**Status:** 🚧 In Progress — exact replay repair independently accepted; downstream
+Plan 0141 binding verification pending
 
 **Reopened:** 2026-07-13 after onto-canon6 Plan 0141 independently rejected merge
 `84253ed`. Strict native-schema routing is implemented and remains green, but the
@@ -22,6 +23,14 @@ snapshot. The review also found that lossy Python-to-JSON coercions could change
 provider-visible values while being labeled replay-safe, and that forged empty support
 metadata could allow diagnostic substitutions to dispatch. This commit is not bindable
 by onto-canon6 Plan 0141.
+
+**Third repair acceptance:** independent read-only review accepted exact commit
+`5ed2a1e9ee4209d8e300e2fb1d6cfaf59622cc3a` (tree
+`6f0e0ca0fd5ce663c074f75033ddeb1d35cd3523`) after 61 focused tests, the
+375-test mandatory Plan 99 gate, and 35 independent adversarial tests. The
+review record is
+`docs/reviews/2026-07-13_plan99_exact_replay_acceptance.md`. Plan 99 remains In
+Progress until the downstream Plan 0141 pinned replay required by R99-4 passes.
 
 **Verified:** 2026-07-13T18:44:10Z
 **Verification Evidence:**
@@ -88,7 +97,21 @@ the public implementation changes those proven claims.
 - `tests/test_client.py`, `tests/test_observability_replay.py`, and
   `tests/test_structured_attempts.py` — current boundary and trace fixtures.
 - Plans 97 and 98 — attempt history and async attempt liveness.
-- ADRs 0007, 0010, and 0014 — execution/observability/replay ownership.
+- `docs/adr/0001-model-identity-v0.md`,
+  `docs/adr/0002-routing-config-precedence.md`,
+  `docs/adr/0003-warning-taxonomy.md`,
+  `docs/adr/0004-result-model-semantics-migration.md`,
+  `docs/adr/0007-observability-contract-boundary.md`,
+  `docs/adr/0009-long-thinking-background-polling.md`,
+  `docs/adr/0010-cross-project-runtime-substrate.md`,
+  `docs/adr/0012-shared-data-plane-boundary.md`,
+  `docs/adr/0013-stream-lifecycle-heartbeat-observability.md`, and
+  `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md` (`ADR-0001`,
+  `ADR-0002`, `ADR-0003`, `ADR-0004`, `ADR-0007`, `ADR-0009`, `ADR-0010`,
+  `ADR-0012`, `ADR-0013`, and `ADR-0014`) — model identity, routing precedence,
+  fail-loud errors, result semantics, execution/observability, timeout,
+  shared-runtime/data-plane, stream, and replay ownership contracts required by
+  `scripts/relationships.yaml`.
 - onto-canon6 findings `sm-020ed4c22ad9` and `sm-1d483b58e2c0`.
 
 ## Requirements To Schema Derivation
@@ -320,16 +343,16 @@ Slice 1 — strict path from public API through runtime and replay identity
 | L99-6 | Effective retry/fallback/cache state is exact replay identity. | real snapshot + replay reconstruction negatives | F |
 | L99-7 | The declared Plan 99 test inventory is exact and executable. | helper unit controls + mandatory command | F |
 
-Current coverage after independent rejection: A=6, B=0, C=0, D=0, F=1. L99-1 through
-L99-5 and L99-7 retain executable evidence. L99-6 is F until the third repair passes
-the expanded negative matrix, full suite, and fresh exact-commit independent review.
-Visibility precedes enforcement; strict mode is opt-in and no default execution
-behavior changes in this repair.
+Current coverage after independent acceptance: A=7, B=0, C=0, D=0, F=0. L99-1
+through L99-7 have executable evidence. L99-6 is accepted at exact implementation
+commit `5ed2a1e`; completion remains pending only on the downstream Plan 0141 pinned
+replay required by R99-4. Visibility precedes enforcement; strict mode is opt-in and
+no default execution behavior changes in this repair.
 
 ## Coverage
 
-Current distribution: A=6, B=0, C=0, D=0, F=1. Independent rejection overrides the
-earlier local grade even though the narrower tests passed. No new hard repository-wide
+Current distribution: A=7, B=0, C=0, D=0, F=0. Fresh independent exact-commit
+acceptance supersedes the two earlier rejection records. No new hard repository-wide
 gate is added by this plan.
 
 | Requirement | Grade | Evidence class | Positive control | Negative control |
@@ -339,7 +362,7 @@ gate is added by this plan.
 | L99-3 auto mode remains compatible | A | test | existing native structured success | existing schema-rejection-to-Instructor regression remains green |
 | L99-4 policy is replay identity | A | test | strict snapshot replays a typed strict policy | auto and strict snapshots produce different fingerprints |
 | L99-5 typed public API and docs expose the policy | A | test | top-level imports in runtime tests | Pydantic forbids unknown policy fields and generated API signature includes the argument |
-| L99-6 effective execution policy replays exactly | F | rejected | actual four-path capture was correct | independent reviews rejected `9016721` for envelope integrity and `f63788b` because real timeout-ban snapshots could not replay and lossy Python-to-JSON coercions could be mislabeled exact |
+| L99-6 effective execution policy replays exactly | A | test + independently observed | all four public APIs capture and consume identical timeout-disabled snapshots with identical provider-visible controls | exact-commit review re-executed lossy-value, false-empty metadata, envelope, downgrade, kind, schema, and execution-mode attacks before accepting `5ed2a1e` |
 | L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; current mandatory Plan 99 command executes 375 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
 
 ### Post-Merge Repair Slices
@@ -387,9 +410,9 @@ Strict mypy still reports the repository's 181-error baseline, including the sam
 `observability/replay.py` findings recorded before this increment; this repair does not
 claim to clear that debt. One earlier broad run before the final envelope additions had
 an isolated provider-cooldown timing assertion fail; its test and file reruns passed,
-followed by clean full runs of 1,599 and 1,604 tests. These are local results only:
-L99-6 remains F and Plan 0141 must not bind this repair until a fresh independent audit
-accepts the exact pushed commit.
+followed by clean full runs of 1,599 and 1,604 tests. At that historical point these
+were local results only: L99-6 was F and Plan 0141 could not bind the repair without a
+fresh independent audit of the exact pushed commit.
 
 Independent review of exact `f63788b` then passed its 47-test focused command but
 rejected the commit on the producer-consumer and lossy-normalization classes above.
@@ -407,8 +430,20 @@ kwargs. Scoped Ruff, `compileall`, API-reference generation/check, relationship
 validation, and `git diff --check` pass. Repository-wide Ruff retains the exact
 `f63788b` baseline of 315 unrelated errors. Strict mypy improves from 210 to 209 total
 errors and from 11 to 10 in `observability/replay.py`; no new type error is introduced.
-These results are local only: L99-6 remains F until an independent exact-commit review
-accepts the repair.
+These local results were subsequently confirmed by the independent exact-commit review
+recorded below.
+
+Independent acceptance on 2026-07-13: a fresh read-only reviewer pinned clean commit
+`5ed2a1e9ee4209d8e300e2fb1d6cfaf59622cc3a` and tree
+`6f0e0ca0fd5ce663c074f75033ddeb1d35cd3523`, confirmed the remote branch matched,
+passed the 61-test focused gate, the 375-test mandatory Plan 99 gate, and a 35-test
+adversarial subset, then found no blocking correctness issue. The review independently
+retested real four-public-API capture-to-replay, lossy and diagnostic value rejection,
+false-empty support metadata, fingerprint/envelope drift, downgrade, cross-kind,
+missing-control, schema-drift, and execution-mode attacks. See
+`docs/reviews/2026-07-13_plan99_exact_replay_acceptance.md`. This satisfies L99-6;
+R99-4 still requires the downstream Plan 0141 pinned replay before Plan 99 returns to
+Complete.
 
 Verification on 2026-07-13: the final focused structured/replay/trace gate passed
 42 tests. The full repository run reached
@@ -457,4 +492,4 @@ decorator/public-surface/harness gate passes 41 tests.
 | “Native” could be confused with one specific HTTP API shape. | resolved | Contract includes provider-native Chat JSON schema and Responses API JSON schema; excludes Agent SDK/Instructor. |
 | Strict mode alone does not ensure one physical attempt if retry/cache/model fallback are enabled. | accepted boundary | Docs require callers to combine strict mode with retry zero, cache disabled, and empty fallback when that stronger claim is needed. |
 | Public replay schema could break historical snapshots. | mitigated | Version 1 keeps legacy reconstruction and missing-mode behavior; version 2 carries typed effective execution policy and rejects malformed state. |
-| Request fingerprint alone does not protect replay support metadata or dispatch authority. | locally repaired; independent acceptance pending | Version 2 identity includes version, public API, call kind, request, and replay-support metadata; every replay verifies the stored fingerprint before a closed envelope can dispatch. |
+| Request fingerprint alone does not protect replay support metadata or dispatch authority. | independently accepted | Version 2 identity includes version, public API, call kind, request, and replay-support metadata; every replay verifies the stored fingerprint before a closed envelope can dispatch. Exact commit `5ed2a1e` passed the fresh adversarial review. |
