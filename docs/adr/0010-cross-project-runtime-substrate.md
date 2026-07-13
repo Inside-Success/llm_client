@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-17
 Last verified: 2026-07-12
-Verification context: structured-output retry observability and trace-scoped history lookup are implemented once in the shared runtime; focused controls prove the cross-project substrate rather than an application-local logger.
+Verification context: provider-independent async structured-attempt cancellation and terminal lifecycle evidence are implemented once in the shared runtime across native schema, Responses, and Instructor paths; focused controls pass.
 
 ## Context
 

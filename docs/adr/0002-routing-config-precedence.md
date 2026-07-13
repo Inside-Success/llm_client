@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-12
-Verification context: attempt observability records the model/path selected by existing explicit routing policy; it does not change call/config precedence, and focused structured-runtime controls pass under explicit routing fixtures.
+Verification context: async structured safety controls exercise all three provider paths under an explicit OpenRouter routing fixture; timeout enforcement does not change call/config precedence.
 
 ## Context
 

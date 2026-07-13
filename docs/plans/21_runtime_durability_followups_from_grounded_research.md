@@ -104,6 +104,14 @@ benchmark-oriented consumers do not need bespoke safety policy to:
 - preserved explicit per-call timeout overrides unchanged
 - verified with focused timeout-policy tests and public structured-wrapper tests
 
+**Scope correction 2026-07-12 (Plan #98):** Those controls proved default
+request-timeout selection and provider-kwarg propagation; they did not prove a
+client-process deadline when a provider transport ignores its timeout. A live
+DIGIMON async native-schema call remained pending beyond the lifecycle event's
+advertised 300-second safety ceiling. Plan #98 separately specifies and tests a
+process-side, per-provider-attempt safety await. Until that slice lands, this
+step must not be read as proof of bounded async structured-call liveness.
+
 ### Step 3: Add trace-level query helpers for `llm_calls` + `tool_calls`
 
 - expose a compact way to inspect one `trace_id`
