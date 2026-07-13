@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: structured attempt lifecycle events and trace-scoped queries remain limited to non-streaming native-schema calls; stream lifecycle/heartbeat semantics are unchanged.
+Verification context: strict programmatic tool-call lifecycles now share trace identity with LLM calls but remain distinct from stream heartbeat state; stream lifecycle/heartbeat semantics are unchanged.
 Date: 2026-03-22
 
 ## Context
@@ -37,6 +37,8 @@ introduced regressions and missing terminal lifecycle rows:
    payload builders, and never into public stream constructors.
 5. Treat stream model constructor arguments as provider iterator + requested model
    (no duplicate positional overloads).
+6. Programmatic tool calls use the separate typed tool-call lifecycle contract;
+   they must not be projected as stream progress or heartbeat events.
 
 ## Consequences
 

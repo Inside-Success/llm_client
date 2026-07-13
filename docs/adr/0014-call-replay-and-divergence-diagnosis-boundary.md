@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-13
-Verification context: async safety expiry records a terminal lifecycle failure with caller/model/ceiling while preserving existing call snapshots and structured-attempt payload boundaries; focused readback controls pass.
+Verification context: strict tool-call lifecycle rows are trace-joinable diagnostic evidence but remain outside replayable LLM call snapshots; exact replay and tool persistence controls pass independently.
 
 ## Context
 
@@ -83,6 +83,10 @@ inference; the same discipline is needed here.
    - compact metadata and fingerprints must remain query-friendly even when the
      full snapshot lives out-of-row.
 
+8. Programmatic tool-call lifecycles are diagnostic siblings of replayable LLM
+   calls under a shared trace id. They are not call snapshots and cannot be
+   replayed as LLM requests; projects own any operator-input replay adapter.
+
 ## Consequences
 
 Positive:
@@ -111,3 +115,5 @@ Negative:
 4. Existing observability compatibility tests must continue passing.
 5. Any artifact-backed snapshot persistence must prove "no truncation" and
    explicit lookup of the full replayable payload.
+6. Tool-call observability changes must preserve the distinction between
+   lifecycle diagnosis and replayable LLM call contracts.

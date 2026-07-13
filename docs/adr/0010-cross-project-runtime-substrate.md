@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-17
 Last verified: 2026-07-13
-Verification context: provider-independent async structured-attempt cancellation and terminal lifecycle evidence are implemented once in the shared runtime across native schema, Responses, and Instructor paths; focused controls pass.
+Verification context: provider-independent structured-attempt evidence and fail-loud, trace-joinable tool-call lifecycle persistence are implemented once in the shared runtime; focused controls pass.
 
 ## Context
 
@@ -53,6 +53,8 @@ existing libraries already solve well.
 7. Workflow orchestration is above the core client boundary. `task_graph` may
    remain as a simple orchestrator, but `llm_client` should not turn into a
    bespoke general-purpose workflow engine.
+8. Cross-project callers that require tool execution to be auditable use the
+   shared strict tool-call API rather than implementing project-local sinks.
 
 ## Consequences
 
@@ -80,3 +82,5 @@ Negative:
    shared facility rather than a prompt-specific one.
 3. Integration work in higher-level packages should verify that they can depend
    on `llm_client` without recreating primary execution or analytics backends.
+4. Strict cross-project tool traces must prove sink failures propagate and the
+   persisted event remains joinable to its parent trace.
