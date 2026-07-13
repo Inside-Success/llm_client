@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-13
-Verification context: v2 snapshots record the effective typed retry policy, exact fallback order, disabled-cache state, and structured-output mode; replay reconstructs those controls and rejects unsupported, malformed, conflicting, or cross-kind state. Historical v1 replay remains readable.
+Verification context: v2 fingerprints bind public API, call kind, request, and replay-support metadata; the closed envelope records effective retry/fallback/cache/mode state and rejects drift before dispatch. Historical v1 replay remains readable. Local gates pass; Plan 99 tracks pending independent acceptance.
 
 ## Context
 
@@ -52,6 +52,9 @@ inference; the same discipline is needed here.
    - observability-only metadata must not perturb the fingerprint,
    - meaningful caller-visible request differences must appear either in the
      fingerprint or in the compact diff report.
+   - version 2 exact-replay fingerprints additionally bind the public API,
+     semantic call kind, and replay-support metadata; trace/project/timing/cost
+     metadata remain excluded.
 
 4. `llm_client` must expose compact **call diff** surfaces that compare two
    captured call snapshots and report only the differences needed for the next

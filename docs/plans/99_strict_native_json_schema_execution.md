@@ -1,12 +1,18 @@
 # Plan #99: Strict Native JSON-Schema Execution
 
-**Status:** 🚧 In Progress — repair verified locally; independent acceptance pending
+**Status:** 🚧 In Progress — second repair locally green; independent acceptance pending
 
 **Reopened:** 2026-07-13 after onto-canon6 Plan 0141 independently rejected merge
 `84253ed`. Strict native-schema routing is implemented and remains green, but the
 snapshot stores legacy `num_retries` rather than the effective typed retry policy,
 omits cache state, and the mandatory declared-test command exits nonzero. The earlier
 completion record below is retained as historical evidence, not current acceptance.
+
+**First repair rejection:** independent review rejected exact commit `9016721`
+(tree `ada2429`) for six reproduced classes: persisted fingerprint drift, fail-open
+replay metadata, v2-to-v1 downgrade, coordinated structured-to-text reinterpretation,
+captured-but-omitted text `execution_mode`, and incomplete/coercive v2 control parsing.
+That commit is not bindable by onto-canon6 Plan 0141.
 
 **Verified:** 2026-07-13T18:44:10Z
 **Verification Evidence:**
@@ -259,10 +265,21 @@ Slice 1 — strict path from public API through runtime and replay identity
 | `tests/test_observability_replay.py` | `test_snapshot_records_effective_retry_and_disabled_cache` | explicit retry overrides shadowed legacy values in replay identity |
 | `tests/test_observability_replay.py` | `test_replay_restores_effective_retry_fallback_and_disabled_cache` | replay rebuilds the exact typed policy and disabled cache state |
 | `tests/test_observability_replay.py` | `test_runtime_snapshot_uses_effective_retry_and_disabled_cache` | real public structured call persists resolved policy rather than shadowed defaults |
+| `tests/test_observability_replay.py` | `test_async_runtime_snapshot_uses_effective_retry_and_disabled_cache` | async structured runtime persists the same effective policy and strict mode |
+| `tests/test_observability_replay.py` | `test_text_runtimes_snapshot_effective_retry_cache_and_execution_mode` | sync and async text runtimes persist effective policy plus capability mode |
 | `tests/test_observability_replay.py` | `test_snapshot_marks_custom_retry_and_enabled_cache_replay_unsupported` | non-serializable execution policy fails loud on replay |
 | `tests/test_observability_replay.py` | `test_replay_rejects_coerced_or_inconsistent_execution_policy` | malformed or contradictory v2 policy state cannot replay by coercion |
 | `tests/test_observability_replay.py` | `test_replay_rejects_missing_structured_mode_or_reserved_public_control` | tampered kwargs cannot override the typed replay authority |
 | `tests/test_observability_replay.py` | `test_replay_rejects_public_api_call_kind_mismatch` | a v2 structured snapshot cannot be reinterpreted as a text call |
+| `tests/test_observability_replay.py` | `test_historical_v1_snapshot_replays_with_legacy_controls` | genuine v1 shape retains legacy compatibility without v2 authority fields |
+| `tests/test_observability_replay.py` | `test_v2_replay_rejects_downgrade_missing_metadata_or_cross_kind_reinterpretation` | v2 cannot shed its version/metadata or change semantic call kind |
+| `tests/test_observability_replay.py` | `test_v2_replay_rejects_persisted_snapshot_fingerprint_mismatch` | persisted snapshot drift is rejected before dispatch |
+| `tests/test_observability_replay.py` | `test_v2_replay_rejects_persisted_full_version_downgrade` | a persisted v2 envelope cannot be reduced to a shape-valid v1 snapshot |
+| `tests/test_observability_replay.py` | `test_v2_replay_rejects_missing_or_unmodeled_envelope_state` | missing or unknown fixed-envelope state cannot default or disappear |
+| `tests/test_observability_replay.py` | `test_v2_snapshot_fingerprint_includes_public_api` | sync/async dispatch authority is bound into v2 identity |
+| `tests/test_observability_replay.py` | `test_snapshot_marks_non_json_message_content_as_replay_unsupported` | diagnostic summaries never substitute for original message content on replay |
+| `tests/test_observability_replay.py` | `test_v2_replay_rejects_response_model_schema_drift` | imported class identity cannot hide a changed structured schema |
+| `tests/test_observability_replay.py` | `test_v2_text_replay_restores_execution_mode` | text replay restores its captured capability contract |
 | `tests/test_structured_attempts.py` | `test_strict_generated_validation_failure_exhausts_without_mechanism_fallback` | retry zero retains one invalid generation, records exhausted, and avoids Instructor |
 | `tests/test_structured_attempts.py` | `test_strict_schema_request_rejection_records_terminal_trace_without_fallback` | rejected request records terminal strict identity, no generation event, and no Instructor |
 | `tests/test_complete_plan.py` | `test_positive_seconds_rejects_invalid_timeout_values` | completion timeout parser rejects invalid values |
@@ -291,17 +308,17 @@ Slice 1 — strict path from public API through runtime and replay identity
 | L99-6 | Effective retry/fallback/cache state is exact replay identity. | real snapshot + replay reconstruction negatives | F |
 | L99-7 | The declared Plan 99 test inventory is exact and executable. | helper unit controls + mandatory command | F |
 
-Current local coverage: A=7, B=0, C=0, D=0, F=0. L99-1 through L99-5 retain their
-implemented evidence; L99-6 and L99-7 now have source plus executable tests. Plan
-completion still waits for R99-4 independent acceptance of the exact pushed commit.
+Current coverage after independent rejection: A=6, B=0, C=0, D=0, F=1. L99-1 through
+L99-5 and L99-7 retain executable evidence. L99-6 is F until the second repair passes
+the expanded negative matrix, full suite, and fresh exact-commit independent review.
 Visibility precedes enforcement; strict mode is opt-in and no default execution
 behavior changes in this repair.
 
 ## Coverage
 
-Post-repair local distribution: A=7, B=0, C=0, D=0, F=0. Each row has
-source plus an automated test; no new hard repository-wide gate is added by this
-plan.
+Current distribution: A=6, B=0, C=0, D=0, F=1. Independent rejection overrides the
+earlier local grade even though the narrower tests passed. No new hard repository-wide
+gate is added by this plan.
 
 | Requirement | Grade | Evidence class | Positive control | Negative control |
 |---|---|---|---|---|
@@ -310,8 +327,8 @@ plan.
 | L99-3 auto mode remains compatible | A | test | existing native structured success | existing schema-rejection-to-Instructor regression remains green |
 | L99-4 policy is replay identity | A | test | strict snapshot replays a typed strict policy | auto and strict snapshots produce different fingerprints |
 | L99-5 typed public API and docs expose the policy | A | test | top-level imports in runtime tests | Pydantic forbids unknown policy fields and generated API signature includes the argument |
-| L99-6 effective execution policy replays exactly | A | test | real public call records effective retry zero, empty fallback, disabled cache, and strict mode; replay reconstructs them | shadowed legacy values, malformed/coerced state, enabled cache, custom callbacks, reserved-kwarg overrides, missing mode, and API/kind mismatch all fail loud |
-| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; mandatory Plan 99 command executes 310 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
+| L99-6 effective execution policy replays exactly | F | rejected | actual four-path capture was correct | independent `9016721` attacks reached dispatch after fingerprint drift, metadata deletion, version downgrade, kind reinterpretation, execution-mode omission, and permissive controls; second repair is unaccepted |
+| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; current mandatory Plan 99 command executes 347 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
 
 ### Post-Merge Repair Slices
 
@@ -326,14 +343,36 @@ plan.
    fail loud on malformed or unsupported policy state.
 4. **R99-4 independent acceptance:** focused/full gates and one downstream Plan 0141
    replay must accept an exact pushed commit before the plan can return to Complete.
+5. **R99-5 envelope-integrity repair:** bind v2 fingerprint to replay-critical metadata;
+   distinguish genuine v1 from downgraded v2; strictly forbid unknown/coerced controls;
+   restore text `execution_mode`; reject semantic call-kind reinterpretation; and retain
+   the exact independent attacks as permanent tests.
 
-Post-repair local verification on 2026-07-13: the focused replay/helper gate passed
+Superseded first-repair local verification on 2026-07-13: the focused replay/helper gate passed
 20 tests; `python scripts/meta/check_plan_tests.py --plan 99` resolved every declared
 node and passed 311 tests in 52.57 seconds. Scoped Ruff passed for the repaired replay,
 structured-runtime, helper, and test files. Strict mypy reports the same 11 errors in
 `observability/replay.py` on both `origin/main` and this branch, so this increment adds
 no type-check error but does not claim to clear the documented baseline. Independent
-acceptance and the downstream Plan 0141 pinned-replay check remain pending.
+review then rejected exact `9016721` on the six envelope/control classes listed above.
+Its independent positive probe confirmed all four sync/async text/structured paths did
+persist effective retry `0/.25/2.0`, exact fallback order, disabled cache, and strict
+mode where applicable. Its negative evidence controls current status; `9016721` is not
+accepted or bindable. The changed `text_runtime.py` retains six parent-revision Ruff
+findings and was intentionally checked with those exact baseline codes excluded; the
+remaining changed Python files passed scoped Ruff.
+
+Second-repair local verification on 2026-07-13: replay/helper controls passed 38 tests;
+the final mandatory `check_plan_tests.py --plan 99` command collected and passed 347
+tests in 75.43 seconds; and the full repository suite passed 1,604 tests with 3 skipped and 11
+deselected in 178.19 seconds. Scoped Ruff, `compileall`, and `git diff --check` passed.
+Strict mypy still reports the repository's 181-error baseline, including the same 11
+`observability/replay.py` findings recorded before this increment; this repair does not
+claim to clear that debt. One earlier broad run before the final envelope additions had
+an isolated provider-cooldown timing assertion fail; its test and file reruns passed,
+followed by clean full runs of 1,599 and 1,604 tests. These are local results only:
+L99-6 remains F and Plan 0141 must not bind this repair until a fresh independent audit
+accepts the exact pushed commit.
 
 Verification on 2026-07-13: the final focused structured/replay/trace gate passed
 42 tests. The full repository run reached
@@ -370,6 +409,9 @@ decorator/public-surface/harness gate passes 41 tests.
 | Responses API selected | allowed as native JSON-schema execution |
 | v1 snapshot lacks mode (historical) | replay defaults to auto for compatibility |
 | v2 structured snapshot lacks mode or conflicts with public API/call kind | fail loud before dispatch |
+| v2 snapshot fingerprint, support metadata, or semantic call kind drifts | fail loud before dispatch |
+| v2 snapshot is relabeled v1 while retaining v2 policy fields | reject as downgrade; genuine v1 shape remains replayable |
+| text snapshot records a non-default capability mode | restore that exact `execution_mode` on replay |
 
 ## Uncertainty And Concern Register
 
@@ -379,3 +421,4 @@ decorator/public-surface/harness gate passes 41 tests.
 | “Native” could be confused with one specific HTTP API shape. | resolved | Contract includes provider-native Chat JSON schema and Responses API JSON schema; excludes Agent SDK/Instructor. |
 | Strict mode alone does not ensure one physical attempt if retry/cache/model fallback are enabled. | accepted boundary | Docs require callers to combine strict mode with retry zero, cache disabled, and empty fallback when that stronger claim is needed. |
 | Public replay schema could break historical snapshots. | mitigated | Version 1 keeps legacy reconstruction and missing-mode behavior; version 2 carries typed effective execution policy and rejects malformed state. |
+| Request fingerprint alone does not protect replay support metadata or dispatch authority. | locally repaired; independent acceptance pending | Version 2 identity includes version, public API, call kind, request, and replay-support metadata; every replay verifies the stored fingerprint before a closed envelope can dispatch. |
