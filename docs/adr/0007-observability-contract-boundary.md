@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: canonical typed attempt and tool-call models live under `observability/`; compatibility logging remains best effort, while `log_tool_call_strict` requires a joinable trace id and propagates disabled-sink, JSONL, and SQLite failures. Focused controls pass.
+Verification context: canonical typed attempt, v2 replay-policy, and tool-call models live under `observability/`; `io_log` persists effective retry/fallback/cache state, unsupported or malformed replay reconstruction fails loud, and `log_tool_call_strict` requires a joinable trace id and propagates disabled-sink, JSONL, and SQLite failures. Focused persistence, replay, and tool-call controls pass.
 Date: 2026-02-23
 
 ## Context

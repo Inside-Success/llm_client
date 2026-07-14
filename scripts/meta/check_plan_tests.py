@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import ast
 import re
 import subprocess
 import sys
@@ -219,27 +220,27 @@ def find_plan_files(plans_dir: Path) -> list[Path]:
     )
 
 
+def _find_test_function(content: str, func_name: str) -> tuple[bool, str | None]:
+    """Return whether a top-level test exists and its direct class owner, if any."""
+
+    tree = ast.parse(content)
+    function_nodes = (ast.FunctionDef, ast.AsyncFunctionDef)
+    for node in tree.body:
+        if isinstance(node, function_nodes) and node.name == func_name:
+            return True, None
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for child in node.body:
+            if isinstance(child, function_nodes) and child.name == func_name:
+                return True, node.name
+    return False, None
+
+
 def find_test_class(content: str, func_name: str) -> str | None:
-    """Find the class containing a test function, if any.
+    """Find the direct class containing a sync or async test function, if any."""
 
-    Returns class name if function is in a class, None if at top level.
-    """
-    lines = content.split("\n")
-    current_class: str | None = None
-    func_pattern = re.compile(rf"^\s*def\s+{re.escape(func_name)}\s*\(")
-    class_pattern = re.compile(r"^class\s+(\w+)\s*[:\(]")
-
-    for line in lines:
-        # Check for class definition (not indented)
-        class_match = class_pattern.match(line)
-        if class_match:
-            current_class = class_match.group(1)
-
-        # Check for function (may be indented if in class)
-        if func_pattern.search(line):
-            return current_class
-
-    return None
+    _, owner = _find_test_function(content, func_name)
+    return owner
 
 
 def get_pytest_path(req: TestRequirement, project_root: Path) -> str | None:
@@ -262,23 +263,18 @@ def get_pytest_path(req: TestRequirement, project_root: Path) -> str | None:
     # Handle TestClass::test_function format (already complete)
     if "::" in req.function:
         class_name, func_name = req.function.split("::", 1)
-        class_pattern = rf"class\s+{re.escape(class_name)}\s*[:\(]"
-        func_pattern = rf"def\s+{re.escape(func_name)}\s*\("
-        if re.search(class_pattern, content) and re.search(func_pattern, content):
+        found, owner = _find_test_function(content, func_name)
+        if found and owner == class_name:
             return f"{req.file}::{req.function}"
         return None
 
-    # Function without class - check if it exists
-    func_pattern = rf"def\s+{re.escape(req.function)}\s*\("
-    if not re.search(func_pattern, content):
+    found, containing_class = _find_test_function(content, req.function)
+    if not found:
         return None
 
-    # Find if function is in a class
-    containing_class = find_test_class(content, req.function)
     if containing_class:
         return f"{req.file}::{containing_class}::{req.function}"
-    else:
-        return f"{req.file}::{req.function}"
+    return f"{req.file}::{req.function}"
 
 
 def check_test_exists(req: TestRequirement, project_root: Path) -> bool:
@@ -291,7 +287,7 @@ def run_tests(requirements: list[TestRequirement], project_root: Path) -> tuple[
     if not requirements:
         return 0, "No tests to run"
 
-    pytest_args = ["pytest", "-v"]
+    pytest_args = [sys.executable, "-m", "pytest", "-v"]
 
     for req in requirements:
         # Plan #41: Use get_pytest_path to get the correct path with class prefix

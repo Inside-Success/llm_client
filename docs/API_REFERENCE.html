@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-13T21:33:01Z -->
+<!-- Generated: 2026-07-14T00:44:27Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -3419,7 +3419,7 @@ consumers that use ``extra=&#x27;forbid&#x27;`` mirror schemas.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-BudgetLedger">
-  <summary><code>BudgetLedger</code> <span class="sig">(*, max_budget: Annotated[float, Ge(ge=0)], entries: list[llm_client.workflow.review_cycle.BudgetLedgerEntry] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>BudgetLedger</code> <span class="sig">(*, max_budget: Annotated[float, Ge(ge=0.0)], entries: list[llm_client.workflow.review_cycle.BudgetLedgerEntry] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Cumulative in-run budget ledger.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -3450,7 +3450,7 @@ consumers that use ``extra=&#x27;forbid&#x27;`` mirror schemas.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-BudgetLedgerEntry">
-  <summary><code>BudgetLedgerEntry</code> <span class="sig">(*, cycle: int, call_kind: Literal[&#x27;review&#x27;, &#x27;apply&#x27;], model: str, cost_usd: Annotated[float, Ge(ge=0)], cumulative_usd: Annotated[float, Ge(ge=0)]) -&gt; None</span></summary>
+  <summary><code>BudgetLedgerEntry</code> <span class="sig">(*, cycle: int, call_kind: Literal[&#x27;review&#x27;, &#x27;apply&#x27;], model: str, cost_usd: Annotated[float, Ge(ge=0.0)], cumulative_usd: Annotated[float, Ge(ge=0.0)]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">One model-call cost entry in a review-cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -3717,7 +3717,7 @@ or deny against the implementation diff.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-ReviewCallResult">
-  <summary><code>ReviewCallResult</code> <span class="sig">(*, review: llm_client.workflow.adversarial_review.AdversarialReviewV1, cost_usd: Annotated[float, Ge(ge=0)] = 0.0, model: str = &#x27;&#x27;) -&gt; None</span></summary>
+  <summary><code>ReviewCallResult</code> <span class="sig">(*, review: llm_client.workflow.adversarial_review.AdversarialReviewV1, cost_usd: Annotated[float, Ge(ge=0.0)] = 0.0, model: str = &#x27;&#x27;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Reviewer output plus cost metadata.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -3737,7 +3737,7 @@ or deny against the implementation diff.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-ReviewCycleSignoff">
-  <summary><code>ReviewCycleSignoff</code> <span class="sig">(*, task_id: str, final_status: Literal[&#x27;pass&#x27;, &#x27;non_actionable_remaining&#x27;, &#x27;no_diff&#x27;, &#x27;repeated_digest&#x27;, &#x27;max_cycles&#x27;, &#x27;budget_exhausted&#x27;], cycles_completed: Annotated[int, Ge(ge=0)], final_verdict: str, stop_reason: str, budget_spent_usd: Annotated[float, Ge(ge=0)], actionable_count: Annotated[int, Ge(ge=0)], discussion_queue_count: Annotated[int, Ge(ge=0)], artifact_index: dict[str, str] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>ReviewCycleSignoff</code> <span class="sig">(*, task_id: str, final_status: Literal[&#x27;pass&#x27;, &#x27;non_actionable_remaining&#x27;, &#x27;no_diff&#x27;, &#x27;repeated_digest&#x27;, &#x27;max_cycles&#x27;, &#x27;budget_exhausted&#x27;], cycles_completed: Annotated[int, Ge(ge=0)], final_verdict: str, stop_reason: str, budget_spent_usd: Annotated[float, Ge(ge=0.0)], actionable_count: Annotated[int, Ge(ge=0)], discussion_queue_count: Annotated[int, Ge(ge=0)], artifact_index: dict[str, str] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Terminal record for a review-cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -3747,7 +3747,7 @@ or deny against the implementation diff.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-ReviewCycleTask">
-  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/opus&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/opus&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0.0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0.0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Configuration for one local review cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -4012,7 +4012,7 @@ LLM calls, prompt identity, budgets, and observability still flow through
 <h4>Functions</h4>
 
 <details class="symbol" id="module-llm_client-workflow_langgraph-build_summary_approval_workflow">
-  <summary><code>build_summary_approval_workflow</code> <span class="sig">(*, checkpointer: Any | None = None) -&gt; Any</span></summary>
+  <summary><code>build_summary_approval_workflow</code> <span class="sig">(*, checkpointer: typing.Any | None = None) -&gt; Any</span></summary>
   <div class="symbol-body">
     <p class="summary">Build the concrete LangGraph summary approval workflow.</p>
     <p class="meta">Source: <code>llm_client.workflow_langgraph</code> functions</p>
@@ -4029,7 +4029,7 @@ Returns:
 </details>
 
 <details class="symbol" id="module-llm_client-workflow_langgraph-resume_summary_approval_workflow">
-  <summary><code>resume_summary_approval_workflow</code> <span class="sig">(app: Any, *, workflow_id: str, approved: bool, review_note: str | None = None) -&gt; dict[str, Any]</span></summary>
+  <summary><code>resume_summary_approval_workflow</code> <span class="sig">(app: Any, *, workflow_id: str, approved: bool, review_note: str | None = None) -&gt; dict[str, typing.Any]</span></summary>
   <div class="symbol-body">
     <p class="summary">Resume the summary approval workflow with an explicit review decision.</p>
     <p class="meta">Source: <code>llm_client.workflow_langgraph</code> functions</p>
@@ -4038,7 +4038,7 @@ Returns:
 </details>
 
 <details class="symbol" id="module-llm_client-workflow_langgraph-start_summary_approval_workflow">
-  <summary><code>start_summary_approval_workflow</code> <span class="sig">(app: Any, *, workflow_id: str, source_text: str, requested_style: str = &#x27;concise&#x27;, max_budget: float = 0.25, max_revision_rounds: int = 1, trace_id: str | None = None) -&gt; dict[str, Any]</span></summary>
+  <summary><code>start_summary_approval_workflow</code> <span class="sig">(app: Any, *, workflow_id: str, source_text: str, requested_style: str = &#x27;concise&#x27;, max_budget: float = 0.25, max_revision_rounds: int = 1, trace_id: str | None = None) -&gt; dict[str, typing.Any]</span></summary>
   <div class="symbol-body">
     <p class="summary">Start the concrete summary approval workflow and run until pause or end.</p>
     <p class="meta">Source: <code>llm_client.workflow_langgraph</code> functions</p>
@@ -4057,39 +4057,15 @@ Returns:
 
 
 
-<h4>Classes</h4>
-
-<details class="symbol class-symbol" id="module-llm_client-workflow_langgraph-SummaryApprovalDecision">
-  <summary><code>SummaryApprovalDecision</code> <span class="sig">()</span></summary>
-  <div class="symbol-body">
-    <p class="summary">Validated human review payload used to resume the workflow.</p>
-    <p class="meta">Source: <code>llm_client.workflow_langgraph</code> class</p>
-    <pre class="doc">Validated human review payload used to resume the workflow.</pre>
-
-  </div>
-</details>
-
-<details class="symbol class-symbol" id="module-llm_client-workflow_langgraph-SummaryApprovalState">
-  <summary><code>SummaryApprovalState</code> <span class="sig">()</span></summary>
-  <div class="symbol-body">
-    <p class="summary">State carried through the LangGraph summary approval workflow.</p>
-    <p class="meta">Source: <code>llm_client.workflow_langgraph</code> class</p>
-    <pre class="doc">State carried through the LangGraph summary approval workflow.</pre>
-
-  </div>
-</details>
-
-
-
 <h4>Constants</h4>
 <table>
   <thead>
     <tr><th>Name</th><th>Value</th><th>Type</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>DRAFT_PROMPT_REF</code></td><td><code>&#x27;shared.workflow.summary_approval_draft@1&#x27;</code></td><td>literal</td></tr>
-<tr><td><code>REVISION_PROMPT_REF</code></td><td><code>&#x27;shared.workflow.summary_approval_revision@1&#x27;</code></td><td>literal</td></tr>
-<tr><td><code>WORKFLOW_SELECTION_TASK</code></td><td><code>&#x27;synthesis&#x27;</code></td><td>literal</td></tr>
+    <tr><td><code>DRAFT_PROMPT_REF</code></td><td><code>&#x27;shared.workflow.summary_approval_draft@1&#x27;</code></td><td>str</td></tr>
+<tr><td><code>REVISION_PROMPT_REF</code></td><td><code>&#x27;shared.workflow.summary_approval_revision@1&#x27;</code></td><td>str</td></tr>
+<tr><td><code>WORKFLOW_SELECTION_TASK</code></td><td><code>&#x27;synthesis&#x27;</code></td><td>str</td></tr>
   </tbody>
 </table>
 
@@ -7875,7 +7851,7 @@ what observations were available.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-core-provider_policy-ProviderRuntimePolicy">
-  <summary><code>ProviderRuntimePolicy</code> <span class="sig">(*, route_class: Literal[&#x27;agent_sdk&#x27;, &#x27;direct_provider&#x27;, &#x27;openrouter&#x27;], shared_limit: Annotated[int, Ge(ge=0)] = 0, cooldown_floor_s: Annotated[float, Ge(ge=0)] = 0.0) -&gt; None</span></summary>
+  <summary><code>ProviderRuntimePolicy</code> <span class="sig">(*, route_class: Literal[&#x27;agent_sdk&#x27;, &#x27;direct_provider&#x27;, &#x27;openrouter&#x27;], shared_limit: Annotated[int, Ge(ge=0)] = 0, cooldown_floor_s: Annotated[float, Ge(ge=0.0)] = 0.0) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Default shared runtime policy for one provider.</p>
     <p class="meta">Source: <code>llm_client.core.provider_policy</code> class</p>
@@ -9553,7 +9529,7 @@ reached the shared `llm_client` boundary.</pre>
 <h4>Functions</h4>
 
 <details class="symbol" id="module-llm_client-observability-replay-build_call_snapshot">
-  <summary><code>build_call_snapshot</code> <span class="sig">(*, public_api: str, call_kind: str, requested_model: str, messages: list[dict[str, typing.Any]], prompt_ref: str | None, timeout: int, num_retries: int, reasoning_effort: str | None, api_base: str | None, base_delay: float, max_delay: float, retry_on: list[str] | None, fallback_models: list[str] | None, public_kwargs: Mapping[str, Any], execution_mode: str | None = None, structured_output_mode: str | None = None, response_model: type[typing.Any] | None = None) -&gt; dict[str, str | int | float | bool | None | list[&#x27;JSONValue&#x27;] | dict[str, &#x27;JSONValue&#x27;]]</span></summary>
+  <summary><code>build_call_snapshot</code> <span class="sig">(*, public_api: str, call_kind: str, requested_model: str, messages: list[dict[str, typing.Any]], prompt_ref: str | None, timeout: int, num_retries: int, reasoning_effort: str | None, api_base: str | None, base_delay: float, max_delay: float, retry_on: list[str] | None, fallback_models: list[str] | None, public_kwargs: Mapping[str, Any], retry_policy: llm_client.execution.retry.RetryPolicy | None = None, cache_policy: typing.Any | None = None, execution_mode: str | None = None, structured_output_mode: str | None = None, response_model: type[typing.Any] | None = None) -&gt; dict[str, str | int | float | bool | None | list[&#x27;JSONValue&#x27;] | dict[str, &#x27;JSONValue&#x27;]]</span></summary>
   <div class="symbol-body">
     <p class="summary">Build the normalized call snapshot used for fingerprinting and replay.</p>
     <p class="meta">Source: <code>llm_client.observability.replay</code> functions</p>
@@ -11321,7 +11297,9 @@ Raises:
     <tr><th>Name</th><th>Value</th><th>Type</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>WF_STAGE_KEY</code></td><td><code>&#x27;_wf_current_stage&#x27;</code></td><td>str</td></tr>
+    <tr><td><code>END</code></td><td><code>&#x27;__end__&#x27;</code></td><td>str</td></tr>
+<tr><td><code>START</code></td><td><code>&#x27;__start__&#x27;</code></td><td>str</td></tr>
+<tr><td><code>WF_STAGE_KEY</code></td><td><code>&#x27;_wf_current_stage&#x27;</code></td><td>str</td></tr>
   </tbody>
 </table>
 
@@ -12836,7 +12814,7 @@ contracts so tests can prove loop safety without model credentials.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-review_cycle-ApplyAttempt">
-  <summary><code>ApplyAttempt</code> <span class="sig">(*, narrative: str, sidecar: dict[str, typing.Any] = &lt;factory&gt;, cost_usd: Annotated[float, Ge(ge=0)] = 0.0, model: str = &#x27;&#x27;) -&gt; None</span></summary>
+  <summary><code>ApplyAttempt</code> <span class="sig">(*, narrative: str, sidecar: dict[str, typing.Any] = &lt;factory&gt;, cost_usd: Annotated[float, Ge(ge=0.0)] = 0.0, model: str = &#x27;&#x27;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Implementer apply-call result.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -12846,7 +12824,7 @@ contracts so tests can prove loop safety without model credentials.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-review_cycle-BudgetLedger">
-  <summary><code>BudgetLedger</code> <span class="sig">(*, max_budget: Annotated[float, Ge(ge=0)], entries: list[llm_client.workflow.review_cycle.BudgetLedgerEntry] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>BudgetLedger</code> <span class="sig">(*, max_budget: Annotated[float, Ge(ge=0.0)], entries: list[llm_client.workflow.review_cycle.BudgetLedgerEntry] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Cumulative in-run budget ledger.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -12877,7 +12855,7 @@ contracts so tests can prove loop safety without model credentials.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-review_cycle-BudgetLedgerEntry">
-  <summary><code>BudgetLedgerEntry</code> <span class="sig">(*, cycle: int, call_kind: Literal[&#x27;review&#x27;, &#x27;apply&#x27;], model: str, cost_usd: Annotated[float, Ge(ge=0)], cumulative_usd: Annotated[float, Ge(ge=0)]) -&gt; None</span></summary>
+  <summary><code>BudgetLedgerEntry</code> <span class="sig">(*, cycle: int, call_kind: Literal[&#x27;review&#x27;, &#x27;apply&#x27;], model: str, cost_usd: Annotated[float, Ge(ge=0.0)], cumulative_usd: Annotated[float, Ge(ge=0.0)]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">One model-call cost entry in a review-cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -12887,7 +12865,7 @@ contracts so tests can prove loop safety without model credentials.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-review_cycle-ReviewCallResult">
-  <summary><code>ReviewCallResult</code> <span class="sig">(*, review: llm_client.workflow.adversarial_review.AdversarialReviewV1, cost_usd: Annotated[float, Ge(ge=0)] = 0.0, model: str = &#x27;&#x27;) -&gt; None</span></summary>
+  <summary><code>ReviewCallResult</code> <span class="sig">(*, review: llm_client.workflow.adversarial_review.AdversarialReviewV1, cost_usd: Annotated[float, Ge(ge=0.0)] = 0.0, model: str = &#x27;&#x27;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Reviewer output plus cost metadata.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -12907,7 +12885,7 @@ contracts so tests can prove loop safety without model credentials.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-review_cycle-ReviewCycleSignoff">
-  <summary><code>ReviewCycleSignoff</code> <span class="sig">(*, task_id: str, final_status: Literal[&#x27;pass&#x27;, &#x27;non_actionable_remaining&#x27;, &#x27;no_diff&#x27;, &#x27;repeated_digest&#x27;, &#x27;max_cycles&#x27;, &#x27;budget_exhausted&#x27;], cycles_completed: Annotated[int, Ge(ge=0)], final_verdict: str, stop_reason: str, budget_spent_usd: Annotated[float, Ge(ge=0)], actionable_count: Annotated[int, Ge(ge=0)], discussion_queue_count: Annotated[int, Ge(ge=0)], artifact_index: dict[str, str] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>ReviewCycleSignoff</code> <span class="sig">(*, task_id: str, final_status: Literal[&#x27;pass&#x27;, &#x27;non_actionable_remaining&#x27;, &#x27;no_diff&#x27;, &#x27;repeated_digest&#x27;, &#x27;max_cycles&#x27;, &#x27;budget_exhausted&#x27;], cycles_completed: Annotated[int, Ge(ge=0)], final_verdict: str, stop_reason: str, budget_spent_usd: Annotated[float, Ge(ge=0.0)], actionable_count: Annotated[int, Ge(ge=0)], discussion_queue_count: Annotated[int, Ge(ge=0)], artifact_index: dict[str, str] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Terminal record for a review-cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -12917,7 +12895,7 @@ contracts so tests can prove loop safety without model credentials.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-review_cycle-ReviewCycleTask">
-  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/opus&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/opus&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0.0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0.0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Configuration for one local review cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>

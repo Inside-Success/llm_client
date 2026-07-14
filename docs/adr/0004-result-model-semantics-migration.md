@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-23
 Last verified: 2026-07-13
-Verification context: provider-attempt safety cancellation adds no successful result and leaves `LLMCallResult.model`, requested/resolved model semantics, and routing traces unchanged; focused structured controls pass.
+Verification context: provider-attempt safety cancellation and v2 replay reconstruction add no fabricated successful result and leave `LLMCallResult.model`, requested/resolved model semantics, and routing traces unchanged; focused structured controls pass.
 
 ## Context
 

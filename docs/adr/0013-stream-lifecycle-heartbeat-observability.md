@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: strict programmatic tool-call lifecycles now share trace identity with LLM calls but remain distinct from stream heartbeat state; stream lifecycle/heartbeat semantics are unchanged.
+Verification context: v2 effective-policy snapshots remain on non-streaming text/structured call paths, while strict programmatic tool-call lifecycles share trace identity with LLM calls but remain distinct from stream heartbeat state; stream lifecycle, heartbeat, and stagnation semantics are unchanged.
 Date: 2026-03-22
 
 ## Context

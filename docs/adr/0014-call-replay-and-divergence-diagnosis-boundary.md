@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-13
-Verification context: strict tool-call lifecycle rows are trace-joinable diagnostic evidence but remain outside replayable LLM call snapshots; exact replay and tool persistence controls pass independently.
+Verification context: v2 fingerprints bind public API, call kind, request, and replay-support metadata; the closed envelope records effective retry/fallback/cache/mode state and rejects drift before dispatch. Historical v1 replay remains readable. Independent review accepted Plan 99 implementation `5ed2a1e` after real four-public-API capture-to-replay and adversarial envelope, downgrade, kind, schema, execution-mode, and lossy-value controls. Strict tool-call lifecycle rows are trace-joinable diagnostic evidence but remain outside replayable LLM call snapshots; exact replay and tool persistence controls pass independently.
 
 ## Context
 
@@ -52,6 +52,9 @@ inference; the same discipline is needed here.
    - observability-only metadata must not perturb the fingerprint,
    - meaningful caller-visible request differences must appear either in the
      fingerprint or in the compact diff report.
+   - version 2 exact-replay fingerprints additionally bind the public API,
+     semantic call kind, and replay-support metadata; trace/project/timing/cost
+     metadata remain excluded.
 
 4. `llm_client` must expose compact **call diff** surfaces that compare two
    captured call snapshots and report only the differences needed for the next

@@ -427,6 +427,7 @@ def _call_llm_structured_impl(
     _check_budget(trace_id, max_budget)
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
+    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     from llm_client.observability.replay import build_call_snapshot
 
     call_snapshot = build_call_snapshot(
@@ -444,6 +445,8 @@ def _call_llm_structured_impl(
         retry_on=retry_on,
         fallback_models=fallback_models,
         public_kwargs=public_kwargs,
+        retry_policy=r,
+        cache_policy=cache,
         structured_output_mode=output_policy.mode,
         response_model=response_model,
     )
@@ -512,7 +515,6 @@ def _call_llm_structured_impl(
             response_format_type="agent_sdk",
         )
         return cast(T, parsed), llm_result
-    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     _warnings: list[str] = list(_entry_warnings)
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
@@ -1155,6 +1157,7 @@ async def _acall_llm_structured_impl(
     _check_budget(trace_id, max_budget)
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
+    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     from llm_client.observability.replay import build_call_snapshot
 
     call_snapshot = build_call_snapshot(
@@ -1172,6 +1175,8 @@ async def _acall_llm_structured_impl(
         retry_on=retry_on,
         fallback_models=fallback_models,
         public_kwargs=public_kwargs,
+        retry_policy=r,
+        cache_policy=cache,
         structured_output_mode=output_policy.mode,
         response_model=response_model,
     )
@@ -1240,7 +1245,6 @@ async def _acall_llm_structured_impl(
             response_format_type="agent_sdk",
         )
         return cast(T, parsed), llm_result
-    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     _warnings: list[str] = list(_entry_warnings)
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
