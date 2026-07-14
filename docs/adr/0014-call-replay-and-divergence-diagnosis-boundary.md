@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-22
 Last verified: 2026-07-13
-Verification context: v2 fingerprints bind public API, call kind, request, and replay-support metadata; the closed envelope records effective retry/fallback/cache/mode state and rejects drift before dispatch. Historical v1 replay remains readable. Independent review accepted Plan 99 implementation `5ed2a1e` after real four-public-API capture-to-replay and adversarial envelope, downgrade, kind, schema, execution-mode, and lossy-value controls.
+Verification context: v2 fingerprints bind public API, call kind, request, and replay-support metadata; the closed envelope records effective retry/fallback/cache/mode state and rejects drift before dispatch. Historical v1 replay remains readable. Independent review accepted Plan 99 implementation `5ed2a1e` after real four-public-API capture-to-replay and adversarial envelope, downgrade, kind, schema, execution-mode, and lossy-value controls. Strict tool-call lifecycle rows are trace-joinable diagnostic evidence but remain outside replayable LLM call snapshots; exact replay and tool persistence controls pass independently.
 
 ## Context
 
@@ -86,6 +86,10 @@ inference; the same discipline is needed here.
    - compact metadata and fingerprints must remain query-friendly even when the
      full snapshot lives out-of-row.
 
+8. Programmatic tool-call lifecycles are diagnostic siblings of replayable LLM
+   calls under a shared trace id. They are not call snapshots and cannot be
+   replayed as LLM requests; projects own any operator-input replay adapter.
+
 ## Consequences
 
 Positive:
@@ -114,3 +118,10 @@ Negative:
 4. Existing observability compatibility tests must continue passing.
 5. Any artifact-backed snapshot persistence must prove "no truncation" and
    explicit lookup of the full replayable payload.
+6. Tool-call observability changes must preserve the distinction between
+   lifecycle diagnosis and replayable LLM call contracts.
+7. Structured-attempt lifecycle events diagnose retries and fallback but are
+   not replay envelopes. Replay continues to derive from the final call
+   snapshot; attempt histories bind by `logical_call_id` and `trace_id`.
+
+Last verified: 2026-07-13 (Plan 97 Slice 3 lifecycle expansion).

@@ -363,7 +363,7 @@ gate is added by this plan.
 | L99-4 policy is replay identity | A | test | strict snapshot replays a typed strict policy | auto and strict snapshots produce different fingerprints |
 | L99-5 typed public API and docs expose the policy | A | test | top-level imports in runtime tests | Pydantic forbids unknown policy fields and generated API signature includes the argument |
 | L99-6 effective execution policy replays exactly | A | test + independently observed | all four public APIs capture and consume identical timeout-disabled snapshots with identical provider-visible controls | exact-commit review re-executed lossy-value, false-empty metadata, envelope, downgrade, kind, schema, and execution-mode attacks before accepting `5ed2a1e` |
-| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; current mandatory Plan 99 command executes 375 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
+| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; after integration with current main, the mandatory Plan 99 command executes 379 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
 
 ### Post-Merge Repair Slices
 
@@ -444,6 +444,25 @@ missing-control, schema-drift, and execution-mode attacks. See
 `docs/reviews/2026-07-13_plan99_exact_replay_acceptance.md`. This satisfies L99-6;
 R99-4 still requires the downstream Plan 0141 pinned replay before Plan 99 returns to
 Complete.
+
+Current-main integration candidate on 2026-07-13: merged `origin/main` at `e30e088`
+without rewriting accepted implementation `5ed2a1e` or evidence `340157f`; both remain
+ancestors. The production runtime auto-merged. Generated API references were rebuilt
+from the combined source, and overlapping ADR verification contexts preserve both exact
+replay and Plan 97/tool-trace evidence. The mandatory Plan 99 command now passes 379
+tests because current main added four tests to a declared whole-file surface; a wider
+Plan 97/99 replay/attempt/io-log/runtime selection passes 399 tests. The Plan 99-touched
+Python surface is Ruff-clean after removing six inherited findings from
+`text_runtime.py`; repository-wide Ruff improves from the clean-main baseline of 315 to
+309 findings. Repository-wide mypy retains the same four clean-main errors. A full
+venv-backed run is not accepted evidence: both clean `origin/main` and this candidate
+can segfault when a lifecycle heartbeat writer races a test fixture that closes the
+shared SQLite connection (`LLM-VERIFY-012`). A post-commit audit also rejected the first
+integration commit because its worktree hook generated API docs with ambient system
+Python and suppressed generator failures; the repo venv produced a different reference.
+The repaired hook pins and reports the canonical venv and fails loud (`LLM-VERIFY-013`).
+This integration candidate remains pending fresh exact-commit review and normal PR merge;
+downstream Plan 0141 remains fail-closed.
 
 Verification on 2026-07-13: the final focused structured/replay/trace gate passed
 42 tests. The full repository run reached

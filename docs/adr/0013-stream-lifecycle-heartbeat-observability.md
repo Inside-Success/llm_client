@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: v2 effective-policy snapshots remain on non-streaming text/structured call paths; stream lifecycle, heartbeat, and stagnation semantics are unchanged.
+Verification context: v2 effective-policy snapshots remain on non-streaming text/structured call paths, while strict programmatic tool-call lifecycles share trace identity with LLM calls but remain distinct from stream heartbeat state; stream lifecycle, heartbeat, and stagnation semantics are unchanged.
 Date: 2026-03-22
 
 ## Context
@@ -37,6 +37,8 @@ introduced regressions and missing terminal lifecycle rows:
    payload builders, and never into public stream constructors.
 5. Treat stream model constructor arguments as provider iterator + requested model
    (no duplicate positional overloads).
+6. Programmatic tool calls use the separate typed tool-call lifecycle contract;
+   they must not be projected as stream progress or heartbeat events.
 
 ## Consequences
 
@@ -62,3 +64,7 @@ Negative:
    - async iteration error emits `started -> progress -> failed` and captures error metadata
 2. Existing stream fixtures should continue passing for non-streaming and streaming
    behavior after monitor extraction.
+
+Verification context (2026-07-13): structured non-streaming attempt events now
+also use `started`, but are stored in `structured_attempt_events`; they do not
+change stream heartbeat or terminal lifecycle semantics in this ADR.

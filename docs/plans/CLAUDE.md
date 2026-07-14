@@ -83,7 +83,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 94 | [Model Tier Taxonomy and Fable Ban](94_model-tier-taxonomy-and-fable-ban.md) | High | 🚧 In Progress (implemented; focused verified; helper timeout) | Cross-project model-selection cleanup |
 | 95 | [Require llm_client Registration Audit](95_require-llm-client-registration-audit.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project enforcement of shared LLM routing |
 | 96 | [Registration-Only Audit Fast Path](96_registration-only-audit-fastpath.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project llm_client registration classification |
-| 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress | - |
+| 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress (Slice 3 producer built; DIGIMON consumer trace pending) | DIGIMON Plan #111 bound-trace refresh |
 | 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | 🚧 In Progress | DIGIMON Plan #111 bound-trace refresh |
 | 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | 🚧 In Progress (exact repair accepted; downstream binding verification pending) | onto-canon6 Plan 0141 R2 runtime authorization |
 

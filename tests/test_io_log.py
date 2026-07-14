@@ -15,7 +15,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from llm_client import io_log
-from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
+from llm_client.observability.tool_calls import (
+    ToolCallResult,
+    log_tool_call,
+    log_tool_call_strict,
+)
 from llm_client.observability.query import summarize_trace
 
 
@@ -40,6 +44,94 @@ def _mock_result(
         cost=cost,
         finish_reason=finish_reason,
     )
+
+
+def _tool_result(
+    *,
+    call_id: str = "strict-tool-1",
+    trace_id: str | None = "digimon.query.strict-roundtrip",
+) -> ToolCallResult:
+    """Build one complete tool event for strict-persistence controls."""
+
+    now = datetime.now(timezone.utc).isoformat()
+    return ToolCallResult(
+        call_id=call_id,
+        tool_name="digimon.operator",
+        operation="structured.cypher",
+        status="succeeded",
+        started_at=now,
+        ended_at=now,
+        duration_ms=1,
+        task="digimon.query.operator",
+        trace_id=trace_id,
+        result_count=2,
+    )
+
+
+def test_strict_tool_call_persists_query_trace_round_trip(tmp_path: Path) -> None:
+    """Strict logging must write a row readable under the exact query trace id."""
+
+    log_tool_call_strict(_tool_result())
+
+    connection = sqlite3.connect(tmp_path / "test.db")
+    try:
+        row = connection.execute(
+            "SELECT operation, status, trace_id, result_count FROM tool_calls"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert row == (
+        "structured.cypher",
+        "succeeded",
+        "digimon.query.strict-roundtrip",
+        2,
+    )
+
+
+def test_strict_tool_call_propagates_persistence_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Critical traces fail loud while the compatibility API stays best effort."""
+
+    def fail_write(**_: object) -> None:
+        raise sqlite3.OperationalError("observability database is read-only")
+
+    monkeypatch.setattr(io_log, "_write_tool_call_to_db", fail_write)
+
+    with pytest.raises(sqlite3.OperationalError, match="read-only"):
+        log_tool_call_strict(_tool_result(call_id="strict-fails"))
+    log_tool_call(_tool_result(call_id="compatibility-swallows"))
+
+
+def test_strict_tool_call_propagates_jsonl_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken first persistence sink must prevent an unverifiable operation."""
+
+    def fail_jsonl(*_: object, **__: object) -> None:
+        raise OSError("observability log directory is read-only")
+
+    monkeypatch.setattr(io_log, "_append_jsonl", fail_jsonl)
+
+    with pytest.raises(OSError, match="read-only"):
+        log_tool_call_strict(_tool_result(call_id="strict-jsonl-fails"))
+
+
+@pytest.mark.parametrize("trace_id", [None, "", "   "])
+def test_strict_tool_call_rejects_unjoinable_trace_id(trace_id: str | None) -> None:
+    """A persisted row without a trace id cannot verify its parent request."""
+
+    with pytest.raises(ValueError, match="non-empty trace_id"):
+        log_tool_call_strict(_tool_result(trace_id=trace_id))
+
+
+def test_strict_tool_call_rejects_disabled_logging() -> None:
+    """Required trace evidence cannot silently disappear behind configuration."""
+
+    io_log._enabled = False
+
+    with pytest.raises(RuntimeError, match="requires logging to be enabled"):
+        log_tool_call_strict(_tool_result(call_id="strict-disabled"))
 
 
 @pytest.fixture(autouse=True)

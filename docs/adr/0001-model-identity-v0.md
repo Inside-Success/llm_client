@@ -51,3 +51,7 @@ Negative:
 
 After router extraction (`resolve_call -> ResolvedCallPlan`) and shared kernel
 work, propose a follow-up ADR to unify or deprecate ambiguous `model` usage.
+
+Verification context (2026-07-13): native-schema attempt identity now includes
+one logical-call-global ordinal across model fallback. Each event records the
+actual model used; final requested/resolved model semantics remain unchanged.

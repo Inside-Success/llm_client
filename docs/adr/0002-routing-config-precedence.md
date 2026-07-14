@@ -41,3 +41,7 @@ Negative:
 
 Week 2+: extract pure routing resolver with typed output:
 `resolve_call(request, config) -> ResolvedCallPlan`.
+
+Verification context (2026-07-13): the resolved fallback order now determines
+globally increasing structured-attempt ordinals. This adds observability of the
+existing route; it does not change configuration precedence.

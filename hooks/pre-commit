@@ -10,6 +10,21 @@ echo "Running pre-commit checks..."
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
+COMMON_GIT_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
+CANONICAL_REPO_ROOT=$(dirname "$COMMON_GIT_DIR")
+PYTHON_BIN=python
+for CANDIDATE in \
+    "$REPO_ROOT/.venv/bin/python" \
+    "$CANONICAL_REPO_ROOT/.venv/bin/python" \
+    "$REPO_ROOT/.venv/Scripts/python.exe" \
+    "$CANONICAL_REPO_ROOT/.venv/Scripts/python.exe"; do
+    if [[ -x "$CANDIDATE" ]]; then
+        PYTHON_BIN="$CANDIDATE"
+        break
+    fi
+done
+echo "Using Python: $PYTHON_BIN"
+
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 if [[ "$BRANCH" == "main" && "${ALLOW_MAIN_COMMIT:-0}" != "1" ]]; then
     echo ""
@@ -44,8 +59,8 @@ if [[ -n "$GENERATOR" ]]; then
     STAGED_PLANS=$(git diff --cached --name-only --diff-filter=ACM | grep '^docs/plans/' || true)
     if [[ -n "$STAGED_PLANS" ]]; then
         echo "Regenerating plan index..."
-        python "$GENERATOR" 2>/dev/null || true
-        git add docs/plans/CLAUDE.md 2>/dev/null || true
+        "$PYTHON_BIN" "$GENERATOR"
+        git add docs/plans/CLAUDE.md
     fi
 fi
 
@@ -59,8 +74,8 @@ if [[ -n "$API_REFERENCE_GEN" ]]; then
         echo "Regenerating API reference docs..."
         # Regenerate and stage instead of check-only — avoids race condition
         # where --check compares disk state against staged Python changes.
-        python "$API_REFERENCE_GEN" --write 2>/dev/null || true
-        git add docs/API_REFERENCE.md docs/API_REFERENCE.html 2>/dev/null || true
+        "$PYTHON_BIN" "$API_REFERENCE_GEN" --write
+        git add docs/API_REFERENCE.md docs/API_REFERENCE.html
     fi
 fi
 
@@ -68,7 +83,7 @@ fi
 DOC_COUPLING=$(find_script "check_doc_coupling.py")
 if [[ -n "$DOC_COUPLING" ]]; then
     echo "Checking doc-code coupling..."
-    if ! python "$DOC_COUPLING" --staged --strict 2>/dev/null; then
+    if ! "$PYTHON_BIN" "$DOC_COUPLING" --staged --strict; then
         echo ""
         echo "ERROR: Doc-coupling violation detected!"
         echo "Run 'python $DOC_COUPLING --suggest' to see which docs to update."
@@ -81,7 +96,7 @@ fi
 STAGED_SRC=$(echo "$STAGED_PY" | grep '^src/' || true)
 if [[ -n "$STAGED_SRC" ]] && command -v mypy >/dev/null 2>&1; then
     echo "Running mypy on changed files..."
-    if ! python -m mypy --strict --ignore-missing-imports --follow-imports=silent $STAGED_SRC 2>/dev/null; then
+    if ! "$PYTHON_BIN" -m mypy --strict --ignore-missing-imports --follow-imports=silent $STAGED_SRC; then
         echo ""
         echo "ERROR: mypy type check failed!"
         echo ""
@@ -95,7 +110,7 @@ if [[ -n "$SYNC_STATUS" ]]; then
     STAGED_PLANS=$(git diff --cached --name-only --diff-filter=ACM | grep '^docs/plans/' || true)
     if [[ -n "$STAGED_PLANS" ]]; then
         echo "Checking plan status consistency..."
-        if ! python "$SYNC_STATUS" --check 2>/dev/null; then
+        if ! "$PYTHON_BIN" "$SYNC_STATUS" --check; then
             echo ""
             echo "ERROR: Plan status inconsistency detected!"
             echo "Run 'python $SYNC_STATUS --check' to see details"

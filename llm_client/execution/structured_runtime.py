@@ -9,8 +9,9 @@ caller-facing signatures.
 
 from __future__ import annotations
 
+import asyncio
 from importlib import import_module
-from typing import Any, Callable, NoReturn, TypeVar, cast
+from typing import Any, Callable, Literal, NoReturn, TypeVar, cast
 from uuid import uuid4
 
 from llm_client.core.client import (
@@ -29,6 +30,8 @@ from pydantic import BaseModel, ValidationError
 import hashlib as _hashlib
 import json as _json
 import logging as _logging
+
+import litellm
 
 from llm_client.core.models import supports_structured_output as _registry_supports_structured_output
 from llm_client.execution.timeout_policy import _await_with_safety_ceiling
@@ -156,6 +159,7 @@ def _attempt_event(
     validation_error: ValidationError | None = None,
     failure_class: AttemptFailureClass | None = None,
     validation_issues: tuple[StructuredValidationIssue, ...] = (),
+    execution_error_type: str | None = None,
     recovery_decision: RecoveryDecision | None = None,
 ) -> StructuredAttemptEvent:
     """Build one typed native-schema attempt event without storing raw content."""
@@ -187,7 +191,46 @@ def _attempt_event(
         ),
         failure_class=failure_class,
         validation_issues=issues,
+        execution_error_type=execution_error_type,
         recovery_decision=recovery_decision,
+    )
+
+
+def _execution_failure_class(error: Exception) -> AttemptFailureClass:
+    """Classify a pre-response failure without retaining dynamic error text."""
+
+    if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
+        return "timeout"
+    rate_limit_type = getattr(litellm, "RateLimitError", None)
+    if isinstance(rate_limit_type, type) and isinstance(error, rate_limit_type):
+        return "rate_limit"
+    return "provider_execution"
+
+
+def _record_execution_failure(
+    *,
+    error: Exception,
+    logical_call_id: str,
+    trace_id: str,
+    task: str,
+    attempt: int,
+    model: str,
+    schema_hash: str,
+) -> None:
+    """Persist one bounded pre-response failure without message or body."""
+
+    record_structured_attempt_event(
+        _attempt_event(
+            logical_call_id=logical_call_id,
+            trace_id=trace_id,
+            task=task,
+            attempt=attempt,
+            model=model,
+            schema_hash=schema_hash,
+            event_type="execution_failed",
+            failure_class=_execution_failure_class(error),
+            execution_error_type=type(error).__name__[:128],
+        )
     )
 
 
@@ -219,7 +262,6 @@ def _record_provider_schema_validation_failure(
     attempt: int,
     model: str,
     schema_hash: str,
-    max_retries: int,
 ) -> bool:
     """Persist a LiteLLM pre-return validation failure as a complete attempt."""
 
@@ -240,12 +282,6 @@ def _record_provider_schema_validation_failure(
             code="provider_json_schema_validation",
             message="Provider response failed LiteLLM JSON Schema validation.",
         ),),
-    ))
-    record_structured_attempt_event(_attempt_event(
-        logical_call_id=logical_call_id, trace_id=trace_id, task=task,
-        attempt=attempt, model=model, schema_hash=schema_hash,
-        event_type="recovery_decided",
-        recovery_decision="retry" if attempt < max_retries else "exhausted",
     ))
     return True
 
@@ -482,9 +518,10 @@ def _call_llm_structured_impl(
     _warnings: list[str] = list(_entry_warnings)
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
+    next_native_attempt_ordinal = 0
 
     def _execute_model(model_idx: int, current_model: str) -> tuple[T, LLMCallResult]:
-        nonlocal last_model_attempted
+        nonlocal last_model_attempted, next_native_attempt_ordinal
         last_model_attempted = current_model
         current_api_base = _resolve_api_base_for_model(current_model, api_base, cfg)
         background_mode = _background_mode_for_model(
@@ -679,13 +716,67 @@ def _call_llm_structured_impl(
             }
 
             _pending_repair_message: dict[str, str] | None = None
+            _recovery_pending: set[int] = set()
+            _attempt_ordinals: dict[int, int] = {}
+
+            def _native_attempt_ordinal(local_attempt: int) -> int:
+                """Assign one contiguous ordinal when an attempt actually starts."""
+
+                nonlocal next_native_attempt_ordinal
+                if local_attempt not in _attempt_ordinals:
+                    _attempt_ordinals[local_attempt] = next_native_attempt_ordinal
+                    next_native_attempt_ordinal += 1
+                return _attempt_ordinals[local_attempt]
+
+            def _record_native_recovery(
+                attempt: int,
+                error: Exception,
+                decision: Literal["retry", "exhausted"],
+            ) -> None:
+                """Persist the retry kernel's actual disposition exactly once."""
+
+                logical_attempt = _native_attempt_ordinal(attempt)
+                if logical_attempt not in _recovery_pending:
+                    return
+                _recovery_pending.remove(logical_attempt)
+                recovery_decision: RecoveryDecision = decision
+                if decision == "exhausted" and (
+                    (isinstance(error, _NativeSchemaFallback) and not require_native_json_schema)
+                    or model_idx < len(models) - 1
+                ):
+                    recovery_decision = "fallback"
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_schema_hash,
+                        event_type="recovery_decided",
+                        recovery_decision=recovery_decision,
+                    )
+                )
 
             def _invoke_native_schema_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal _pending_repair_message
+                logical_attempt = _native_attempt_ordinal(attempt)
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_schema_hash,
+                        event_type="started",
+                    )
+                )
                 if _pending_repair_message is not None:
                     base_kwargs["messages"] = list(base_kwargs["messages"]) + [_pending_repair_message]
                     _pending_repair_message = None
                     logger.info("call_llm_structured: appended validation repair message for attempt %d", attempt)
+                attempt_validated = False
                 try:
                     with _rate_limit.acquire(current_model):
                         response = litellm.completion(**base_kwargs)
@@ -699,7 +790,7 @@ def _call_llm_structured_impl(
                         raise ValueError("Empty content from LLM (native JSON schema structured)")
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                        attempt=attempt, model=current_model, schema_hash=_schema_hash,
+                        attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
                         event_type="received", raw_content=raw_content,
                     ))
                     try:
@@ -707,23 +798,19 @@ def _call_llm_structured_impl(
                     except ValidationError as ve:
                         record_structured_attempt_event(_attempt_event(
                             logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                            attempt=attempt, model=current_model, schema_hash=_schema_hash,
+                            attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
                             event_type="validation_failed", validation_error=ve,
                         ))
-                        record_structured_attempt_event(_attempt_event(
-                            logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                            attempt=attempt, model=current_model, schema_hash=_schema_hash,
-                            event_type="recovery_decided",
-                            recovery_decision="retry" if attempt < r.max_retries else "exhausted",
-                        ))
+                        _recovery_pending.add(logical_attempt)
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                        attempt=attempt, model=current_model, schema_hash=_schema_hash,
+                        attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
                         event_type="validated",
                     ))
+                    attempt_validated = True
                     usage = _extract_usage(response)
                     cost, cost_source = _parse_cost_result(_compute_cost(response))
                     finish_reason: str = first_choice.finish_reason or "stop"
@@ -768,12 +855,24 @@ def _call_llm_structured_impl(
                     )
                     return parsed, llm_result
                 except Exception as exc:
-                    _record_provider_schema_validation_failure(
+                    provider_validation = _record_provider_schema_validation_failure(
                         error=exc, logical_call_id=_logical_call_id,
-                        trace_id=trace_id, task=task, attempt=attempt,
+                        trace_id=trace_id, task=task, attempt=logical_attempt,
                         model=current_model, schema_hash=_schema_hash,
-                        max_retries=r.max_retries,
                     )
+                    if provider_validation:
+                        _recovery_pending.add(logical_attempt)
+                    elif not isinstance(exc, _StructuredValidationRetry) and not attempt_validated:
+                        _record_execution_failure(
+                            error=exc,
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_schema_hash,
+                        )
+                        _recovery_pending.add(logical_attempt)
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
                         error=exc,
@@ -809,6 +908,7 @@ def _call_llm_structured_impl(
                     logger=logger,
                     on_error=_on_native_schema_error,
                     on_retry=r.on_retry,
+                    on_decision=_record_native_recovery,
                     maybe_retry_hook=lambda exc, attempt, max_retries: (
                         False if isinstance(exc, _NativeSchemaFallback) else _maybe_retry_with_openrouter_key_rotation(
                             error=exc,
@@ -1148,9 +1248,10 @@ async def _acall_llm_structured_impl(
     _warnings: list[str] = list(_entry_warnings)
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
+    next_native_attempt_ordinal = 0
 
     async def _execute_model(model_idx: int, current_model: str) -> tuple[T, LLMCallResult]:
-        nonlocal last_model_attempted
+        nonlocal last_model_attempted, next_native_attempt_ordinal
         last_model_attempted = current_model
         current_api_base = _resolve_api_base_for_model(current_model, api_base, cfg)
         background_mode = _background_mode_for_model(
@@ -1349,13 +1450,67 @@ async def _acall_llm_structured_impl(
             }
 
             _pending_repair_message_async: dict[str, str] | None = None
+            _recovery_pending_async: set[int] = set()
+            _attempt_ordinals_async: dict[int, int] = {}
+
+            def _native_attempt_ordinal_async(local_attempt: int) -> int:
+                """Assign one contiguous ordinal when an async attempt starts."""
+
+                nonlocal next_native_attempt_ordinal
+                if local_attempt not in _attempt_ordinals_async:
+                    _attempt_ordinals_async[local_attempt] = next_native_attempt_ordinal
+                    next_native_attempt_ordinal += 1
+                return _attempt_ordinals_async[local_attempt]
+
+            def _record_native_recovery_async(
+                attempt: int,
+                error: Exception,
+                decision: Literal["retry", "exhausted"],
+            ) -> None:
+                """Persist the async retry kernel's actual disposition exactly once."""
+
+                logical_attempt = _native_attempt_ordinal_async(attempt)
+                if logical_attempt not in _recovery_pending_async:
+                    return
+                _recovery_pending_async.remove(logical_attempt)
+                recovery_decision: RecoveryDecision = decision
+                if decision == "exhausted" and (
+                    (isinstance(error, _NativeSchemaFallback) and not require_native_json_schema)
+                    or model_idx < len(models) - 1
+                ):
+                    recovery_decision = "fallback"
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_schema_hash_async,
+                        event_type="recovery_decided",
+                        recovery_decision=recovery_decision,
+                    )
+                )
 
             async def _invoke_native_schema_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal _pending_repair_message_async
+                logical_attempt = _native_attempt_ordinal_async(attempt)
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_schema_hash_async,
+                        event_type="started",
+                    )
+                )
                 if _pending_repair_message_async is not None:
                     base_kwargs["messages"] = list(base_kwargs["messages"]) + [_pending_repair_message_async]
                     _pending_repair_message_async = None
                     logger.info("acall_llm_structured: appended validation repair message for attempt %d", attempt)
+                attempt_validated = False
                 try:
                     async with _rate_limit.aacquire(current_model):
                         response = await _await_with_safety_ceiling(
@@ -1373,7 +1528,7 @@ async def _acall_llm_structured_impl(
                         raise ValueError("Empty content from LLM (native JSON schema structured)")
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                        attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
+                        attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
                         event_type="received", raw_content=raw_content,
                     ))
                     try:
@@ -1381,23 +1536,19 @@ async def _acall_llm_structured_impl(
                     except ValidationError as ve:
                         record_structured_attempt_event(_attempt_event(
                             logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                            attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
+                            attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
                             event_type="validation_failed", validation_error=ve,
                         ))
-                        record_structured_attempt_event(_attempt_event(
-                            logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                            attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
-                            event_type="recovery_decided",
-                            recovery_decision="retry" if attempt < r.max_retries else "exhausted",
-                        ))
+                        _recovery_pending_async.add(logical_attempt)
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message_async = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
-                        attempt=attempt, model=current_model, schema_hash=_schema_hash_async,
+                        attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
                         event_type="validated",
                     ))
+                    attempt_validated = True
                     usage = _extract_usage(response)
                     cost, cost_source = _parse_cost_result(_compute_cost(response))
                     finish_reason: str = first_choice.finish_reason or "stop"
@@ -1442,12 +1593,24 @@ async def _acall_llm_structured_impl(
                     )
                     return parsed, llm_result
                 except Exception as exc:
-                    _record_provider_schema_validation_failure(
+                    provider_validation = _record_provider_schema_validation_failure(
                         error=exc, logical_call_id=_logical_call_id,
-                        trace_id=trace_id, task=task, attempt=attempt,
+                        trace_id=trace_id, task=task, attempt=logical_attempt,
                         model=current_model, schema_hash=_schema_hash_async,
-                        max_retries=r.max_retries,
                     )
+                    if provider_validation:
+                        _recovery_pending_async.add(logical_attempt)
+                    elif not isinstance(exc, _StructuredValidationRetry) and not attempt_validated:
+                        _record_execution_failure(
+                            error=exc,
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_schema_hash_async,
+                        )
+                        _recovery_pending_async.add(logical_attempt)
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
                         error=exc,
@@ -1483,6 +1646,7 @@ async def _acall_llm_structured_impl(
                     logger=logger,
                     on_error=_on_native_schema_error,
                     on_retry=r.on_retry,
+                    on_decision=_record_native_recovery_async,
                     maybe_retry_hook=lambda exc, attempt, max_retries: (
                         False if isinstance(exc, _NativeSchemaFallback) else _maybe_retry_with_openrouter_key_rotation(
                             error=exc,

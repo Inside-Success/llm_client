@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-13
-Verification context: canonical typed attempt and v2 replay-policy models live under `observability/`; `io_log` persists the effective retry/fallback/cache snapshot, and unsupported or malformed reconstruction fails loud. Focused persistence and replay controls pass.
+Verification context: canonical typed attempt, v2 replay-policy, and tool-call models live under `observability/`; `io_log` persists effective retry/fallback/cache state, unsupported or malformed replay reconstruction fails loud, and `log_tool_call_strict` requires a joinable trace id and propagates disabled-sink, JSONL, and SQLite failures. Focused persistence, replay, and tool-call controls pass.
 Date: 2026-02-23
 
 ## Context
@@ -23,6 +23,10 @@ persisted, how compatibility is preserved, and where behavior should evolve.
    must remain aligned with the warning taxonomy contract in ADR 0003.
 5. Any breaking changes to observability payload shape or sink behavior require
    a dedicated ADR update.
+6. The canonical tool-call surface exposes two explicit policies:
+   - `log_tool_call` preserves compatibility best-effort behavior,
+   - `log_tool_call_strict` is for pipeline-critical evidence and fails when
+     logging is disabled, the trace id is blank, or either configured sink fails.
 
 ## Consequences
 
@@ -40,3 +44,10 @@ Negative:
 1. Compatibility tests must cover `io_log` delegated behavior.
 2. Observability tests must verify default-safe persistence behavior.
 3. Warning/diagnostic emission must remain category-consistent with ADR 0003.
+4. Strict persistence tests must cover both sinks, disabled logging, and null or
+   blank trace identifiers.
+5. Native-schema attempt tests must cover `started` before provider invocation,
+   typed pre-response failure, and retry-kernel recovery disposition. Attempt
+   events exclude exception messages and provider bodies.
+
+Last verified: 2026-07-13 (Plan 97 Slice 3 transport-attempt lifecycle).
