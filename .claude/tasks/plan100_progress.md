@@ -9,8 +9,8 @@ Implement and certify budget-complete call snapshot v3 on exact Plan 97 commit
 
 - [x] Preserve the active Plan 97 commit in a separate child worktree and claim.
 - [x] Complete required reading and write requirements through schema before code.
-- [ ] Add failing v3 builder, fingerprint, historical-read, and replay controls.
-- [ ] Implement v3 and pass text/structured sync/async producer controls.
+- [x] Add failing v3 builder, fingerprint, historical-read, and replay controls.
+- [x] Implement v3 and pass text/structured sync/async producer controls.
 - [ ] Run focused and full shared-runtime gates and adversarial audit.
 - [ ] Commit, push, and integrate or publish the exact shared revision.
 - [ ] Pin the exact revision in a new DoDAF successor plan.
@@ -19,7 +19,7 @@ Implement and certify budget-complete call snapshot v3 on exact Plan 97 commit
 
 ## Current Phase
 
-Plan 100 proposal acceptance; named failing tests are next.
+Plan 100 Slice 2: broad shared-runtime verification and bounded audit.
 
 ## Constraints
 
@@ -36,3 +36,9 @@ Plan 100 proposal acceptance; named failing tests are next.
 - 2026-07-14: Investigation selected closed snapshot v3 with required
   `request.control.max_budget`, full-envelope identity, historical v1/v2 reads,
   and a separately supplied fresh replay budget.
+- 2026-07-14: The six declared controls were observed red (11 failures, one
+  historical compatibility pass), then passed after implementation (12 passes).
+- 2026-07-14: Full replay tests passed (62); Plan 97 structured-attempt and
+  execution-kernel tests passed (25). Targeted Ruff passed. Strict mypy reached
+  the pre-existing `llm_client/parsing_utils.py:139` no-Any-return error outside
+  this change; no type error in the modified boundary was reported first.

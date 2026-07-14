@@ -40,7 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
-| 100 | [Budget-complete call snapshot v3](100_budget_complete_call_snapshot_v3.md) | High | 📋 Planned | DoDAF fresh page-window diagnostic |
+| 100 | [Budget-complete call snapshot v3](100_budget_complete_call_snapshot_v3.md) | High | 🚧 In Progress | DoDAF fresh page-window diagnostic |
 | 1 | [LLM Client Master Roadmap](01_master-roadmap.md) | Highest | ✅ Complete | - |
 | 2 | [Client Boundary Hardening Program](02_client-boundary-hardening.md) | High | ✅ Complete | - |
 | 3 | [Model Policy Modernization](03_model-policy-modernization.md) | High | ✅ Complete | - |

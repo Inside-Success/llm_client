@@ -1,6 +1,6 @@
 # Plan #100: Budget-Complete Call Snapshot V3
 
-**Status:** Planned
+**Status:** In Progress
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None; child branch preserves Plan 97 commit `d74b8ea`
@@ -69,7 +69,7 @@ flowchart LR
 
 ```mermaid
 classDiagram
-  ReplaySnapshotV2 <|-- ReplaySnapshotV3
+  ReplaySnapshotV2 .. ReplaySnapshotV3 : separate closed versions
   ReplaySnapshotV3 --> ReplayRequestV3
   ReplayRequestV3 --> ReplayExecutionPolicyV3
   ReplayExecutionPolicyV3 : float max_budget
@@ -90,9 +90,11 @@ new derived call. They are deliberately separate values.
 | `_ReplaySnapshotV3` | runtime -> log/replay | version 3, public API, call kind, request, replay metadata; `extra="forbid"` |
 | replay invocation | operator -> replay | trace ID and explicit fresh finite nonnegative max budget for v3 |
 
-Schema is derived directly through the Pydantic models. V2 models remain
-unchanged. No database schema change is needed because call snapshots are stored
-as versioned JSON.
+Schema is derived directly through the Pydantic models for replayable snapshots.
+Diagnostic snapshots containing values already marked replay-unsupported remain
+capturable and are rejected before replay. V2 models remain unchanged. No
+database schema change is needed because call snapshots are stored as versioned
+JSON.
 
 ## Backward Runtime Pass
 

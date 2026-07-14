@@ -1,7 +1,7 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: v2 effective-policy snapshots remain on non-streaming text/structured call paths, while strict programmatic tool-call lifecycles share trace identity with LLM calls but remain distinct from stream heartbeat state; stream lifecycle, heartbeat, and stagnation semantics are unchanged.
 Date: 2026-03-22
 

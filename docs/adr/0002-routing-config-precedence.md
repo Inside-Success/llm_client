@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: async structured safety controls exercise all three provider paths under an explicit OpenRouter routing fixture; v2 replay restores caller-selected retry/fallback/cache controls without changing call/config routing precedence.
 
 ## Context

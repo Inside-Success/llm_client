@@ -208,6 +208,7 @@ async def _acall_llm_impl(
         requested_model=model,
         messages=messages,
         prompt_ref=prompt_ref,
+        max_budget=max_budget,
         timeout=timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,

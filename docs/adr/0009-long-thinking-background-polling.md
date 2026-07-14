@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: the initial provider-backed async structured Responses request has a configurable per-attempt cancellation ceiling; effective call controls now enter v2 replay identity while background polling retains its separate explicit timeout contract.
 
 ## Context
