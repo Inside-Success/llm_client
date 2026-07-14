@@ -48,3 +48,6 @@ Negative:
 Verification context (2026-07-13): structured-attempt child events expose the
 per-attempt model and global ordinal needed to diagnose fallback, without
 changing `LLMCallResult.model`, `requested_model`, or `routing_trace`.
+
+Post-validation finalization cannot switch models, preserving the executed
+model identity attached to the already-validated result.

@@ -43,3 +43,6 @@ Verification context (2026-07-13): native-schema pre-response failures are
 typed attempt events (`timeout`, `rate_limit`, or `provider_execution`), not
 warnings. The retry kernel records the actual retry/fallback/exhaustion
 disposition; persistence failure remains an integrity error.
+
+Local failures after schema validation now propagate as terminal call errors
+without another provider attempt or an advisory warning.

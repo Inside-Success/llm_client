@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-14T00:44:27Z -->
+<!-- Generated: 2026-07-14T03:16:04Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -8330,11 +8330,11 @@ imported directly from ``call_contracts`` and ``model_detection``.</pre>
 <h4>Functions</h4>
 
 <details class="symbol" id="module-llm_client-execution-execution_kernel-run_async_with_fallback">
-  <summary><code>run_async_with_fallback</code> <span class="sig">(*, models: list[str], execute_model: Callable[[int, str], Awaitable[~T]], on_fallback: Optional[Callable[[str, Exception, str], Any]] = None, warning_sink: list[str] | None = None, logger: logging.Logger | None = None) -&gt; ~T</span></summary>
+  <summary><code>run_async_with_fallback</code> <span class="sig">(*, models: list[str], execute_model: Callable[[int, str], Awaitable[~T]], should_fallback: Optional[Callable[[Exception], bool]] = None, on_fallback: Optional[Callable[[str, Exception, str], Any]] = None, warning_sink: list[str] | None = None, logger: logging.Logger | None = None) -&gt; ~T</span></summary>
   <div class="symbol-body">
-    <p class="summary">Execute async model chain with fallback behavior.</p>
+    <p class="summary">Execute an async model chain while preserving caller-defined terminals.</p>
     <p class="meta">Source: <code>llm_client.execution.execution_kernel</code> functions</p>
-    <pre class="doc">Execute async model chain with fallback behavior.</pre>
+    <pre class="doc">Execute an async model chain while preserving caller-defined terminals.</pre>
   </div>
 </details>
 
@@ -8348,11 +8348,11 @@ imported directly from ``call_contracts`` and ``model_detection``.</pre>
 </details>
 
 <details class="symbol" id="module-llm_client-execution-execution_kernel-run_sync_with_fallback">
-  <summary><code>run_sync_with_fallback</code> <span class="sig">(*, models: list[str], execute_model: Callable[[int, str], ~T], on_fallback: Optional[Callable[[str, Exception, str], Any]] = None, warning_sink: list[str] | None = None, logger: logging.Logger | None = None) -&gt; ~T</span></summary>
+  <summary><code>run_sync_with_fallback</code> <span class="sig">(*, models: list[str], execute_model: Callable[[int, str], ~T], should_fallback: Optional[Callable[[Exception], bool]] = None, on_fallback: Optional[Callable[[str, Exception, str], Any]] = None, warning_sink: list[str] | None = None, logger: logging.Logger | None = None) -&gt; ~T</span></summary>
   <div class="symbol-body">
-    <p class="summary">Execute sync model chain with fallback behavior.</p>
+    <p class="summary">Execute a sync model chain while preserving caller-defined terminals.</p>
     <p class="meta">Source: <code>llm_client.execution.execution_kernel</code> functions</p>
-    <pre class="doc">Execute sync model chain with fallback behavior.</pre>
+    <pre class="doc">Execute a sync model chain while preserving caller-defined terminals.</pre>
   </div>
 </details>
 

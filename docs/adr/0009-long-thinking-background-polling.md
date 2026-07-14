@@ -66,3 +66,7 @@ Negative:
 Verification context (2026-07-13): Plan 97's native-schema attempt lifecycle is
 limited to Completions native JSON-schema calls. Responses/background polling
 semantics in this ADR remain unchanged.
+
+Within that bounded native-schema path, local finalization after validation is
+terminal and cannot re-enter provider retry or fallback; polling remains out of
+scope and unchanged.

@@ -146,6 +146,25 @@ def test_run_sync_with_fallback_uses_next_model() -> None:
     assert any("FALLBACK: primary -> fallback" in w for w in warnings)
 
 
+def test_run_sync_with_fallback_honors_non_fallback_boundary() -> None:
+    """A caller can mark a local terminal failure as ineligible for fallback."""
+
+    seen: list[str] = []
+
+    def execute_model(_model_idx: int, model_name: str) -> str:
+        seen.append(model_name)
+        raise RuntimeError("local finalization failed")
+
+    with pytest.raises(RuntimeError, match="local finalization failed"):
+        run_sync_with_fallback(
+            models=["primary", "fallback"],
+            execute_model=execute_model,
+            should_fallback=lambda _exc: False,
+        )
+
+    assert seen == ["primary"]
+
+
 @pytest.mark.asyncio
 async def test_run_async_with_fallback_uses_next_model() -> None:
     warnings: list[str] = []
@@ -168,6 +187,26 @@ async def test_run_async_with_fallback_uses_next_model() -> None:
     assert result == "ok"
     assert seen == ["primary", "fallback"]
     assert any("FALLBACK: primary -> fallback" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_run_async_with_fallback_honors_non_fallback_boundary() -> None:
+    """The async kernel preserves the same caller-owned terminal boundary."""
+
+    seen: list[str] = []
+
+    async def execute_model(_model_idx: int, model_name: str) -> str:
+        seen.append(model_name)
+        raise RuntimeError("local finalization failed")
+
+    with pytest.raises(RuntimeError, match="local finalization failed"):
+        await run_async_with_fallback(
+            models=["primary", "fallback"],
+            execute_model=execute_model,
+            should_fallback=lambda _exc: False,
+        )
+
+    assert seen == ["primary"]
 
 
 @pytest.mark.asyncio

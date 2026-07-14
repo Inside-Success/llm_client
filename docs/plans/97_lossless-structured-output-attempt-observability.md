@@ -4,7 +4,7 @@
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
-**Blocks:** DIGIMON Plan #110 trace-bound recovery
+**Blocks:** DIGIMON Plan #111 trace-bound recovery
 
 ---
 
@@ -36,7 +36,7 @@ traces can accidentally hide recovered defects.
 5. Persistence failure is not silently ignored on this integrity path.
 6. Slice 1 covers native JSON-schema validation only. Instructor/Responses paths,
    normalization events, fallback consolidation, and DIGIMON projection remain
-   later slices in DIGIMON Plan #110.
+   later slices in DIGIMON Plan #111.
 
 ## Contract notebook
 
@@ -236,9 +236,44 @@ and continuity checker must migrate to the v2 event shape, pass lifecycle
 mutation controls, and bind a fresh real trace before L97-1/L97-2 can be called
 closed across the project boundary.
 
+### Post-validation boundary correction — 2026-07-13
+
+An adversarial source audit found a second continuity defect after the Slice 3
+transport repair. The native-schema retry closure records `validated` as soon as
+Pydantic parsing succeeds, but then performs usage/cost extraction, result
+construction, `after_call`, cache persistence, and final call logging inside the
+same retry boundary. A retryable exception from any of those local finalization
+steps can therefore issue another provider request after the ordinal is already
+terminal, without a `recovery_decided` event.
+
+The correction preserves the semantic boundary rather than moving the marker:
+
+- `validated` terminates provider-attempt retry and model fallback;
+- post-validation finalization failures remain visible on the logical-call error
+  path and retain their original public cause;
+- another provider generation is forbidden because it cannot repair a local
+  hook, cache, cost-normalization, or observability failure.
+
+Required negative controls configure both retry and model fallback, raise from
+post-validation finalization, and prove exactly one sync/async provider call with
+the terminal child history `started -> received -> validated`. Existing
+pre-validation retry/fallback histories must remain unchanged. Investigation:
+`docs/investigations/2026-07-13-postvalidation-structured-attempt-integrity.md`.
+
+Verification evidence:
+
+- all four new controls failed before the repair (the two public paths each made
+  four provider calls), then passed with exactly one provider call;
+- attempt/retry-kernel suite: 25 passed;
+- wider structured/observability/replay suite: 174 passed;
+- full repository suite: 1,636 passed, 3 declared skips, 11 deselections;
+- Ruff passes on changed code/tests. Strict mypy reports no diagnostic in the
+  changed runtime modules, but the import-following command remains red on
+  unrelated baseline errors recorded as LLM-VERIFY-015.
+
 ## References Reviewed
 
-- DIGIMON Plan #110
+- DIGIMON Plan #111
 - `llm_client/execution/structured_runtime.py`
 - `llm_client/io_log.py`
 - `llm_client/observability/events.py`, `query.py`, `replay.py`

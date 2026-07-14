@@ -89,3 +89,7 @@ Negative:
    actual disposition with logical-call-global ordinals.
 
 Last verified: 2026-07-13 (DIGIMON-bound Plan 97 transport failure).
+
+The shared runtime now distinguishes provider recovery from local finalization:
+once native structured output validates, hook/cache/log failures fail loud
+without repeating generation or switching models.

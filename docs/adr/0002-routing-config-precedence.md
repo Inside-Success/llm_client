@@ -45,3 +45,6 @@ Week 2+: extract pure routing resolver with typed output:
 Verification context (2026-07-13): the resolved fallback order now determines
 globally increasing structured-attempt ordinals. This adds observability of the
 existing route; it does not change configuration precedence.
+
+The runtime now treats a validated native-schema response as terminal for model
+fallback; this is an execution-integrity boundary, not a new routing precedence.

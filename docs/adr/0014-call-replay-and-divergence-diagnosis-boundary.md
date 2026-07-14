@@ -125,3 +125,7 @@ Negative:
    snapshot; attempt histories bind by `logical_call_id` and `trace_id`.
 
 Last verified: 2026-07-13 (Plan 97 Slice 3 lifecycle expansion).
+
+Validated native-schema attempts are now terminal for retry/fallback even when
+later local finalization fails, preventing replay diagnostics from observing a
+fabricated second provider generation for a client-side failure.
