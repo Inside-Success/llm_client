@@ -1,7 +1,7 @@
 # Plan #99: Strict Native JSON-Schema Execution
 
-**Status:** 🚧 In Progress — exact replay repair independently accepted; downstream
-Plan 0141 binding verification pending
+**Status:** 🚧 In Progress — current-main integration independently accepted;
+downstream Plan 0141 binding verification pending
 
 **Reopened:** 2026-07-13 after onto-canon6 Plan 0141 independently rejected merge
 `84253ed`. Strict native-schema routing is implemented and remains green, but the
@@ -470,8 +470,14 @@ The repaired hook requires and reports a repository venv, fails if branch freshn
 be fetched, and fails loud on generators (`LLM-VERIFY-013`). The mandatory plan-test helper
 now launches pytest through its invoking `sys.executable`, so a venv-selected gate cannot
 escape to ambient Python.
-This integration candidate remains pending fresh exact-commit review and normal PR merge;
-downstream Plan 0141 remains fail-closed.
+Independent read-only review accepted exact candidate
+`c38aea4546b9a8318d233dd49b6fda7060d665c4` (tree
+`d8ff2406611ea20434687274c7d71df0e409b7be`) after reproducing the canonical-venv
+320-test mandatory gate, 400-test wider gate, 99-test lifecycle overlap subset, both
+hook negatives, interpreter binding, exact base/candidate Ruff and mypy comparisons,
+API generation, relationships, compile, diff, and GitHub checks. The record is
+`docs/reviews/2026-07-13_plan99_current_main_integration_acceptance.md`. Normal PR merge
+and downstream installed-runtime binding remain pending; Plan 0141 remains fail-closed.
 
 Historical pre-repair verification on 2026-07-13 (retained for chronology, not as the
 current integration baseline): the final focused structured/replay/trace gate passed
