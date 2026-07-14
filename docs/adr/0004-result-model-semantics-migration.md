@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: provider-attempt safety cancellation and v2 replay reconstruction add no fabricated successful result and leave `LLMCallResult.model`, requested/resolved model semantics, and routing traces unchanged; focused structured controls pass.
 
 ## Context
@@ -48,3 +48,6 @@ Negative:
 Verification context (2026-07-13): structured-attempt child events expose the
 per-attempt model and global ordinal needed to diagnose fallback, without
 changing `LLMCallResult.model`, `requested_model`, or `routing_trace`.
+
+Post-validation finalization cannot switch models, preserving the executed
+model identity attached to the already-validated result.

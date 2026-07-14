@@ -195,17 +195,20 @@ def run_sync_with_fallback(
     *,
     models: list[str],
     execute_model: Callable[[int, str], T],
+    should_fallback: Callable[[Exception], bool] | None = None,
     on_fallback: Callable[[str, Exception, str], Any] | None = None,
     warning_sink: list[str] | None = None,
     logger: logging.Logger | None = None,
 ) -> T:
-    """Execute sync model chain with fallback behavior."""
+    """Execute a sync model chain while preserving caller-defined terminals."""
     last_error: Exception | None = None
     for model_idx, current_model in enumerate(models):
         try:
             return execute_model(model_idx, current_model)
         except Exception as exc:
             last_error = exc
+            if should_fallback is not None and not should_fallback(exc):
+                raise
             exhaustion_record = record_model_unavailability(current_model, exc)
             if exhaustion_record is not None and warning_sink is not None:
                 warning_sink.append(
@@ -240,17 +243,20 @@ async def run_async_with_fallback(
     *,
     models: list[str],
     execute_model: Callable[[int, str], Awaitable[T]],
+    should_fallback: Callable[[Exception], bool] | None = None,
     on_fallback: Callable[[str, Exception, str], Any] | None = None,
     warning_sink: list[str] | None = None,
     logger: logging.Logger | None = None,
 ) -> T:
-    """Execute async model chain with fallback behavior."""
+    """Execute an async model chain while preserving caller-defined terminals."""
     last_error: Exception | None = None
     for model_idx, current_model in enumerate(models):
         try:
             return await execute_model(model_idx, current_model)
         except Exception as exc:
             last_error = exc
+            if should_fallback is not None and not should_fallback(exc):
+                raise
             exhaustion_record = record_model_unavailability(current_model, exc)
             if exhaustion_record is not None and warning_sink is not None:
                 warning_sink.append(

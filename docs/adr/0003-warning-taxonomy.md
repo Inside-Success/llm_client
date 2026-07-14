@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: async safety expiry remains a typed terminal failure rather than a warning; malformed v2 replay policy, unsupported reconstruction, and strict tool-call persistence failures propagate as visible errors rather than silent defaults, while data-loss diagnostics retain warning semantics. Focused controls pass.
 
 ## Context
@@ -43,3 +43,6 @@ Verification context (2026-07-13): native-schema pre-response failures are
 typed attempt events (`timeout`, `rate_limit`, or `provider_execution`), not
 warnings. The retry kernel records the actual retry/fallback/exhaustion
 disposition; persistence failure remains an integrity error.
+
+Local failures after schema validation now propagate as terminal call errors
+without another provider attempt or an advisory warning.

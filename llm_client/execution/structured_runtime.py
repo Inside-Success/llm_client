@@ -113,6 +113,27 @@ class _StructuredValidationRetry(Exception):
         )
 
 
+class _StructuredFinalizationFailure(Exception):
+    """Carry a local post-validation failure across retry/fallback kernels.
+
+    Repeating generation cannot repair a hook, cache, cost-normalization, or
+    observability failure after the provider response already passed schema
+    validation. The marker is private and unwrapped at the public boundary.
+    """
+
+    def __init__(self, cause: Exception) -> None:
+        self.cause = cause
+        super().__init__(str(cause) or type(cause).__name__)
+
+
+def _unwrap_structured_finalization_failure(exc: Exception) -> Exception:
+    """Return the original local failure rather than leaking a policy marker."""
+
+    if isinstance(exc, _StructuredFinalizationFailure):
+        return exc.cause
+    return exc
+
+
 def _build_validation_repair_message(exc: _StructuredValidationRetry) -> dict[str, str]:
     """Build a user message that tells the model what went wrong.
 
@@ -436,6 +457,7 @@ def _call_llm_structured_impl(
         requested_model=model,
         messages=messages,
         prompt_ref=prompt_ref,
+        max_budget=max_budget,
         timeout=timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,
@@ -805,12 +827,12 @@ def _call_llm_structured_impl(
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
+                    attempt_validated = True
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
                         event_type="validated",
                     ))
-                    attempt_validated = True
                     usage = _extract_usage(response)
                     cost, cost_source = _parse_cost_result(_compute_cost(response))
                     finish_reason: str = first_choice.finish_reason or "stop"
@@ -855,6 +877,8 @@ def _call_llm_structured_impl(
                     )
                     return parsed, llm_result
                 except Exception as exc:
+                    if attempt_validated:
+                        raise _StructuredFinalizationFailure(exc) from exc
                     provider_validation = _record_provider_schema_validation_failure(
                         error=exc, logical_call_id=_logical_call_id,
                         trace_id=trace_id, task=task, attempt=logical_attempt,
@@ -886,7 +910,12 @@ def _call_llm_structured_impl(
                 if isinstance(exc, _NativeSchemaFallback):
                     return
                 if hooks and hooks.on_error:
-                    hooks.on_error(exc, attempt)
+                    try:
+                        hooks.on_error(_unwrap_structured_finalization_failure(exc), attempt)
+                    except Exception as hook_error:
+                        if isinstance(exc, _StructuredFinalizationFailure):
+                            raise _StructuredFinalizationFailure(hook_error) from exc
+                        raise
 
             try:
                 return cast(tuple[T, LLMCallResult], run_sync_with_retry(
@@ -894,7 +923,8 @@ def _call_llm_structured_impl(
                     model=current_model,
                     max_retries=r.max_retries,
                     invoke=_invoke_native_schema_attempt,
-                    should_retry=lambda exc: (
+                    should_retry=lambda exc: not isinstance(exc, _StructuredFinalizationFailure)
+                    and (
                         isinstance(exc, _StructuredValidationRetry)
                         or (not isinstance(exc, _NativeSchemaFallback) and _check_retryable(exc, r))
                     ),
@@ -910,7 +940,7 @@ def _call_llm_structured_impl(
                     on_retry=r.on_retry,
                     on_decision=_record_native_recovery,
                     maybe_retry_hook=lambda exc, attempt, max_retries: (
-                        False if isinstance(exc, _NativeSchemaFallback) else _maybe_retry_with_openrouter_key_rotation(
+                        False if isinstance(exc, (_NativeSchemaFallback, _StructuredFinalizationFailure)) else _maybe_retry_with_openrouter_key_rotation(
                             error=exc,
                             attempt=attempt,
                             max_retries=max_retries,
@@ -1046,15 +1076,19 @@ def _call_llm_structured_impl(
         return cast(tuple[T, LLMCallResult], run_sync_with_fallback(
             models=models,
             execute_model=_execute_model,
+            should_fallback=lambda exc: not isinstance(
+                exc, _StructuredFinalizationFailure
+            ),
             on_fallback=on_fallback,
             warning_sink=_warnings,
             logger=logger,
         ))
     except Exception as e:
+        terminal_error = _unwrap_structured_finalization_failure(e)
         _log_call_event(
             model=last_model_attempted,
             messages=messages,
-            error=e,
+            error=terminal_error,
             latency_s=time.monotonic() - _log_t0,
             caller="call_llm_structured",
             task=task,
@@ -1064,7 +1098,7 @@ def _call_llm_structured_impl(
             execution_path="error",
             retry_count=None,
         )
-        raise wrap_error(e) from e
+        raise wrap_error(terminal_error) from terminal_error
 
 async def _acall_llm_structured_impl(
     model: str,
@@ -1166,6 +1200,7 @@ async def _acall_llm_structured_impl(
         requested_model=model,
         messages=messages,
         prompt_ref=prompt_ref,
+        max_budget=max_budget,
         timeout=timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,
@@ -1543,12 +1578,12 @@ async def _acall_llm_structured_impl(
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message_async = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
+                    attempt_validated = True
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
                         event_type="validated",
                     ))
-                    attempt_validated = True
                     usage = _extract_usage(response)
                     cost, cost_source = _parse_cost_result(_compute_cost(response))
                     finish_reason: str = first_choice.finish_reason or "stop"
@@ -1593,6 +1628,8 @@ async def _acall_llm_structured_impl(
                     )
                     return parsed, llm_result
                 except Exception as exc:
+                    if attempt_validated:
+                        raise _StructuredFinalizationFailure(exc) from exc
                     provider_validation = _record_provider_schema_validation_failure(
                         error=exc, logical_call_id=_logical_call_id,
                         trace_id=trace_id, task=task, attempt=logical_attempt,
@@ -1624,7 +1661,12 @@ async def _acall_llm_structured_impl(
                 if isinstance(exc, _NativeSchemaFallback):
                     return
                 if hooks and hooks.on_error:
-                    hooks.on_error(exc, attempt)
+                    try:
+                        hooks.on_error(_unwrap_structured_finalization_failure(exc), attempt)
+                    except Exception as hook_error:
+                        if isinstance(exc, _StructuredFinalizationFailure):
+                            raise _StructuredFinalizationFailure(hook_error) from exc
+                        raise
 
             try:
                 return cast(tuple[T, LLMCallResult], await run_async_with_retry(
@@ -1632,7 +1674,8 @@ async def _acall_llm_structured_impl(
                     model=current_model,
                     max_retries=r.max_retries,
                     invoke=_invoke_native_schema_attempt,
-                    should_retry=lambda exc: (
+                    should_retry=lambda exc: not isinstance(exc, _StructuredFinalizationFailure)
+                    and (
                         isinstance(exc, _StructuredValidationRetry)
                         or (not isinstance(exc, _NativeSchemaFallback) and _check_retryable(exc, r))
                     ),
@@ -1648,7 +1691,7 @@ async def _acall_llm_structured_impl(
                     on_retry=r.on_retry,
                     on_decision=_record_native_recovery_async,
                     maybe_retry_hook=lambda exc, attempt, max_retries: (
-                        False if isinstance(exc, _NativeSchemaFallback) else _maybe_retry_with_openrouter_key_rotation(
+                        False if isinstance(exc, (_NativeSchemaFallback, _StructuredFinalizationFailure)) else _maybe_retry_with_openrouter_key_rotation(
                             error=exc,
                             attempt=attempt,
                             max_retries=max_retries,
@@ -1786,14 +1829,18 @@ async def _acall_llm_structured_impl(
         return cast(tuple[T, LLMCallResult], await run_async_with_fallback(
             models=models,
             execute_model=_execute_model,
+            should_fallback=lambda exc: not isinstance(
+                exc, _StructuredFinalizationFailure
+            ),
             on_fallback=on_fallback,
             warning_sink=_warnings,
             logger=logger,
         ))
     except Exception as e:
+        terminal_error = _unwrap_structured_finalization_failure(e)
         # Unwrap InstructorRetryException to expose the underlying provider error
         # in the observability record (e.g. BadRequestError, RateLimitError).
-        log_error = _unwrap_instructor_retry(e)
+        log_error = _unwrap_instructor_retry(terminal_error)
         _log_call_event(
             model=last_model_attempted,
             messages=messages,
@@ -1807,4 +1854,4 @@ async def _acall_llm_structured_impl(
             execution_path="error",
             retry_count=None,
         )
-        raise wrap_error(e) from e
+        raise wrap_error(terminal_error) from terminal_error

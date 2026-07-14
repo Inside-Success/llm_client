@@ -1,8 +1,12 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-07-13
-Verification context: canonical typed attempt, v2 replay-policy, and tool-call models live under `observability/`; `io_log` persists effective retry/fallback/cache state, unsupported or malformed replay reconstruction fails loud, and `log_tool_call_strict` requires a joinable trace id and propagates disabled-sink, JSONL, and SQLite failures. Focused persistence, replay, and tool-call controls pass.
+Last verified: 2026-07-14
+Verification context: canonical typed attempt, v3 replay-policy, and tool-call
+models live under `observability/`; `io_log` persists effective
+retry/fallback/cache/budget state, unsupported or malformed replay
+reconstruction fails loud, and v3 replay requires fresh budget authority.
+Focused persistence, replay, and tool-call controls pass.
 Date: 2026-02-23
 
 ## Context
@@ -50,4 +54,4 @@ Negative:
    typed pre-response failure, and retry-kernel recovery disposition. Attempt
    events exclude exception messages and provider bodies.
 
-Last verified: 2026-07-13 (Plan 97 Slice 3 transport-attempt lifecycle).
+Last verified: 2026-07-14 (Plan 97 Slice 3 transport-attempt lifecycle).

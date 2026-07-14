@@ -34,7 +34,7 @@ JSONScalar = str | int | float | bool | None
 JSONValue = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
 JSONObject = dict[str, JSONValue]
 
-_SNAPSHOT_VERSION = 2
+_SNAPSHOT_VERSION = 3
 _OBSERVABILITY_ONLY_KWARGS = {
     "task",
     "trace_id",
@@ -171,6 +171,43 @@ class _ReplaySnapshotV2(BaseModel):
     ]
     call_kind: Literal["text", "structured"]
     request: _ReplayRequestV2
+    replay: _ReplayMetadataV2
+
+
+class _ReplayExecutionPolicyV3(_ReplayExecutionPolicyV2):
+    """V3 execution controls including the checked original-call spend ceiling."""
+
+    max_budget: float = Field(ge=0, allow_inf_nan=False)
+
+
+class _ReplayRequestV3(BaseModel):
+    """Closed replay request envelope for snapshot version 3."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    requested_model: str
+    messages: list[dict[str, Any]]
+    prompt_ref: str | None
+    control: _ReplayExecutionPolicyV3
+    kwargs: dict[str, Any]
+    response_model_fqn: str | None
+    response_model_schema: dict[str, Any] | None
+
+
+class _ReplaySnapshotV3(BaseModel):
+    """Closed envelope adding budget-complete original-call identity."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    snapshot_version: Literal[3]
+    public_api: Literal[
+        "call_llm",
+        "acall_llm",
+        "call_llm_structured",
+        "acall_llm_structured",
+    ]
+    call_kind: Literal["text", "structured"]
+    request: _ReplayRequestV3
     replay: _ReplayMetadataV2
 
 
@@ -384,6 +421,7 @@ def build_call_snapshot(
     requested_model: str,
     messages: list[dict[str, Any]],
     prompt_ref: str | None,
+    max_budget: float,
     timeout: int,
     num_retries: int,
     reasoning_effort: str | None,
@@ -435,6 +473,7 @@ def build_call_snapshot(
             "prompt_ref": prompt_ref,
             "control": {
                 "timeout": timeout,
+                "max_budget": max_budget,
                 "num_retries": effective_retry.max_retries,
                 "reasoning_effort": reasoning_effort,
                 "api_base": api_base,
@@ -459,7 +498,20 @@ def build_call_snapshot(
             "unsupported_keys": unsupported_keys,
         },
     }
-    return snapshot
+    if (
+        isinstance(max_budget, bool)
+        or not isinstance(max_budget, (int, float))
+        or not math.isfinite(max_budget)
+        or max_budget < 0
+    ):
+        raise ValueError("invalid v3 call snapshot: max_budget must be finite and nonnegative")
+    if unsupported_keys:
+        return snapshot
+    try:
+        validated = _ReplaySnapshotV3.model_validate(snapshot)
+    except Exception as error:
+        raise ValueError(f"invalid v3 call snapshot: {error}") from error
+    return validated.model_dump(mode="json")
 
 
 def snapshot_request_identity(snapshot: Mapping[str, Any]) -> JSONObject:
@@ -478,9 +530,10 @@ def snapshot_fingerprint(snapshot: Mapping[str, Any]) -> str:
     """Return a deterministic fingerprint for one normalized call snapshot."""
 
     request = snapshot_request_identity(snapshot)
-    if snapshot.get("snapshot_version") == 2:
+    snapshot_version = snapshot.get("snapshot_version")
+    if snapshot_version in {2, 3}:
         fingerprint_identity: JSONValue = {
-            "snapshot_version": 2,
+            "snapshot_version": snapshot_version,
             "public_api": snapshot.get("public_api"),
             "call_kind": snapshot.get("call_kind"),
             "request": request,
@@ -695,13 +748,13 @@ def _resolve_response_model_for_replay(
     call_id: int,
     snapshot_version: int,
 ) -> type[Any]:
-    """Resolve a structured model and reject v2 schema drift before dispatch."""
+    """Resolve a structured model and reject closed-envelope schema drift."""
 
     model_fqn = request.get("response_model_fqn")
     if not isinstance(model_fqn, str) or not model_fqn:
         raise ValueError(f"Call id {call_id} snapshot is missing request.response_model_fqn.")
     response_model = _resolve_response_model(model_fqn)
-    if snapshot_version == 2:
+    if snapshot_version in {2, 3}:
         stored_schema = request.get("response_model_schema")
         current_schema = _normalize_response_model_schema(response_model)
         if stored_schema != current_schema:
@@ -781,7 +834,7 @@ def replay_call_snapshot(
     *,
     trace_id: str,
     task: str | None = None,
-    max_budget: float = 0.0,
+    max_budget: float | None = None,
     project: str | None = None,
 ) -> dict[str, Any]:
     """Replay one captured call snapshot through the shared runtime.
@@ -797,7 +850,7 @@ def replay_call_snapshot(
         raise ValueError(f"Call id {call_id} does not have a replayable call snapshot.")
 
     snapshot_version = snapshot.get("snapshot_version", 1)
-    if type(snapshot_version) is not int or snapshot_version not in {1, 2}:
+    if type(snapshot_version) is not int or snapshot_version not in {1, 2, 3}:
         raise ValueError(
             f"Call id {call_id} has unsupported snapshot_version={snapshot_version!r}."
         )
@@ -823,8 +876,8 @@ def replay_call_snapshot(
         )
 
     replay = snapshot.get("replay")
-    validated_v2: _ReplaySnapshotV2 | None = None
-    if snapshot_version == 2:
+    validated_snapshot: _ReplaySnapshotV2 | _ReplaySnapshotV3 | None = None
+    if snapshot_version in {2, 3}:
         try:
             replay_metadata = _ReplayMetadataV2.model_validate(replay)
         except Exception as error:
@@ -844,9 +897,14 @@ def replay_call_snapshot(
         )
     if snapshot_version == 2:
         try:
-            validated_v2 = _ReplaySnapshotV2.model_validate(snapshot)
+            validated_snapshot = _ReplaySnapshotV2.model_validate(snapshot)
         except Exception as error:
             raise ValueError(f"Call id {call_id} has invalid v2 snapshot envelope: {error}") from error
+    elif snapshot_version == 3:
+        try:
+            validated_snapshot = _ReplaySnapshotV3.model_validate(snapshot)
+        except Exception as error:
+            raise ValueError(f"Call id {call_id} has invalid v3 snapshot envelope: {error}") from error
 
     request = snapshot_request_identity(snapshot)
     messages = request.get("messages")
@@ -867,15 +925,15 @@ def replay_call_snapshot(
         )
 
     public_api = (
-        validated_v2.public_api
-        if validated_v2 is not None
+        validated_snapshot.public_api
+        if validated_snapshot is not None
         else str(snapshot.get("public_api", "call_llm"))
     )
     replay_policy: _ReplayExecutionPolicyV2 | None = None
-    if validated_v2 is not None:
-        replay_policy = validated_v2.request.control
+    if validated_snapshot is not None:
+        replay_policy = validated_snapshot.request.control
         expected_call_kind = _REPLAY_PUBLIC_API_CALL_KINDS.get(public_api)
-        if validated_v2.call_kind != expected_call_kind:
+        if validated_snapshot.call_kind != expected_call_kind:
             raise ValueError(
                 f"Call id {call_id} public_api={public_api!r} requires "
                 f"call_kind={expected_call_kind!r}."
@@ -916,6 +974,20 @@ def replay_call_snapshot(
                 "text calls require execution_mode."
             )
 
+    if snapshot_version == 3 and max_budget is None:
+        raise ValueError(
+            f"Call id {call_id} v3 replay requires a fresh explicit max_budget; "
+            "the captured original-call budget is identity, not new spend authority."
+        )
+    effective_replay_budget = 0.0 if max_budget is None else max_budget
+    if (
+        isinstance(effective_replay_budget, bool)
+        or not isinstance(effective_replay_budget, (int, float))
+        or not math.isfinite(effective_replay_budget)
+        or effective_replay_budget < 0
+    ):
+        raise ValueError("replay max_budget must be a finite nonnegative number")
+
     replay_task = task or record["task"] or f"observability.replay.{snapshot.get('public_api', 'call')}"
     replay_project = project if project is not None else record["project"]
     if replay_policy is not None:
@@ -938,7 +1010,7 @@ def replay_call_snapshot(
             ),
             "task": replay_task,
             "trace_id": trace_id,
-            "max_budget": max_budget,
+            "max_budget": float(effective_replay_budget),
             "prompt_ref": request.get("prompt_ref"),
             **dict(public_kwargs),
         }
@@ -970,7 +1042,7 @@ def replay_call_snapshot(
             "fallback_models": control.get("fallback_models"),
             "task": replay_task,
             "trace_id": trace_id,
-            "max_budget": max_budget,
+            "max_budget": float(effective_replay_budget),
             "prompt_ref": request.get("prompt_ref"),
             **dict(public_kwargs),
         }

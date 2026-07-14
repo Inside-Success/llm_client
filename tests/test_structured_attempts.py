@@ -12,6 +12,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from llm_client import (
+    Hooks,
     StructuredOutputPolicy,
     acall_llm_structured,
     call_llm_structured,
@@ -86,6 +87,98 @@ def _native_response(content: str) -> MagicMock:
     response.usage.completion_tokens = 1
     response.usage.total_tokens = 2
     return response
+
+
+def _raise_finalization_timeout(_result: object) -> None:
+    """Represent a local post-validation failure that generation cannot repair."""
+
+    raise TimeoutError("local finalization timed out")
+
+
+def _history_for_trace(trace_id: str) -> list[tuple[int, str]]:
+    """Read the sole structured-attempt history for one isolated test trace."""
+
+    history = next(iter(get_structured_attempt_histories(trace_id).values()))
+    return [(event.attempt_ordinal, event.event_type) for event in history]
+
+
+# mock-ok: provider response is controlled; public retry/fallback and SQLite ledger are real.
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.completion")
+def test_sync_postvalidation_failure_never_retries_or_falls_back(
+    mock_completion: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """A validated provider response is terminal even if local finalization fails."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.return_value = _native_response(
+        '{"action":"answer","rationale":"Enough evidence."}'
+    )
+
+    with pytest.raises(LLMError, match="local finalization timed out"):
+        call_llm_structured(
+            "deepseek/deepseek-chat",
+            [{"role": "user", "content": "Choose"}],
+            response_model=Decision,
+            fallback_models=["openrouter/deepseek/deepseek-v4-flash"],
+            hooks=Hooks(after_call=_raise_finalization_timeout),
+            task="planner",
+            trace_id="trace-sync-postvalidation-failure",
+            max_budget=0,
+            num_retries=1,
+            base_delay=0,
+        )
+
+    assert mock_completion.call_count == 1
+    assert _history_for_trace("trace-sync-postvalidation-failure") == [
+        (0, "started"),
+        (0, "received"),
+        (0, "validated"),
+    ]
+
+
+@pytest.mark.asyncio
+# mock-ok: provider response is controlled; public async retry/fallback and SQLite ledger are real.
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_async_postvalidation_failure_never_retries_or_falls_back(
+    mock_completion: AsyncMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The async public path preserves the same validated terminal boundary."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.return_value = _native_response(
+        '{"action":"answer","rationale":"Enough evidence."}'
+    )
+
+    with pytest.raises(LLMError, match="local finalization timed out"):
+        await acall_llm_structured(
+            "deepseek/deepseek-chat",
+            [{"role": "user", "content": "Choose"}],
+            response_model=Decision,
+            fallback_models=["openrouter/deepseek/deepseek-v4-flash"],
+            hooks=Hooks(after_call=_raise_finalization_timeout),
+            task="planner",
+            trace_id="trace-async-postvalidation-failure",
+            max_budget=0,
+            num_retries=1,
+            base_delay=0,
+        )
+
+    assert mock_completion.await_count == 1
+    assert _history_for_trace("trace-async-postvalidation-failure") == [
+        (0, "started"),
+        (0, "received"),
+        (0, "validated"),
+    ]
 
 
 def test_failed_attempt_survives_successful_retry_in_order() -> None:

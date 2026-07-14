@@ -1,7 +1,7 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: attempt events, v2 call snapshots, and strict tool-call lifecycles persist bounded control-plane metadata, effective retry/fallback/cache state, and trace links without persisting raw response or operator-result bodies; focused readback and replay controls pass.
 Date: 2026-03-17
 
@@ -80,4 +80,4 @@ Negative:
    exception type; exception messages and provider bodies remain outside the
    shared metadata plane.
 
-Last verified: 2026-07-13 (Plan 97 Slice 3 additive event migration).
+Last verified: 2026-07-14 (Plan 97 Slice 3 additive event migration).

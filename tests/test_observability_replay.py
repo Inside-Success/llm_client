@@ -142,6 +142,181 @@ def _latest_call_id(trace_id: str) -> int:
     return int(row[0])
 
 
+def _snapshot_builder_kwargs() -> dict[str, Any]:
+    """Return one complete text snapshot input before the v3 budget field."""
+
+    return {
+        "public_api": "call_llm",
+        "call_kind": "text",
+        "requested_model": "provider/text-model",
+        "messages": [{"role": "user", "content": "hi"}],
+        "prompt_ref": "prompt@1",
+        "timeout": 60,
+        "num_retries": 0,
+        "reasoning_effort": None,
+        "api_base": None,
+        "base_delay": 1.0,
+        "max_delay": 30.0,
+        "retry_on": None,
+        "fallback_models": [],
+        "public_kwargs": {},
+        "retry_policy": RetryPolicy(max_retries=0),
+        "cache_policy": None,
+        "execution_mode": "text",
+    }
+
+
+def _historical_v2_snapshot() -> dict[str, Any]:
+    """Return a literal closed-v2 fixture independent of the current builder."""
+
+    return {
+        "snapshot_version": 2,
+        "public_api": "call_llm",
+        "call_kind": "text",
+        "request": {
+            "requested_model": "provider/text-model",
+            "messages": [{"role": "user", "content": "hi"}],
+            "prompt_ref": "prompt@1",
+            "control": {
+                "timeout": 60,
+                "num_retries": 0,
+                "reasoning_effort": None,
+                "api_base": None,
+                "base_delay": 1.0,
+                "max_delay": 30.0,
+                "retry_on": None,
+                "fallback_models": [],
+                "execution_mode": "text",
+                "structured_output_mode": None,
+                "retry_policy": {
+                    "max_retries": 0,
+                    "base_delay": 1.0,
+                    "max_delay": 30.0,
+                    "retry_on": None,
+                    "on_retry": None,
+                    "backoff": None,
+                    "should_retry": None,
+                },
+                "cache_policy": {"mode": "disabled"},
+            },
+            "kwargs": {},
+            "response_model_fqn": None,
+            "response_model_schema": None,
+        },
+        "replay": {"unsupported_keys": []},
+    }
+
+
+def test_v3_snapshot_retains_budget_and_fingerprint_changes() -> None:
+    """The effective spend ceiling is exact original-call identity in v3."""
+
+    low = replay_module.build_call_snapshot(**_snapshot_builder_kwargs(), max_budget=0.2)
+    high = replay_module.build_call_snapshot(**_snapshot_builder_kwargs(), max_budget=0.35)
+
+    assert low["snapshot_version"] == 3
+    assert low["request"]["control"]["max_budget"] == 0.2
+    assert replay_module.snapshot_fingerprint(low) != replay_module.snapshot_fingerprint(high)
+
+
+@pytest.mark.parametrize("value", ["0.35", -0.1, float("inf"), float("nan")])
+def test_v3_snapshot_rejects_missing_or_invalid_budget(value: object) -> None:
+    """V3 rejects absent, coerced, negative, and nonfinite budget state."""
+
+    with pytest.raises(TypeError):
+        replay_module.build_call_snapshot(**_snapshot_builder_kwargs())
+    with pytest.raises(ValueError, match="max_budget"):
+        replay_module.build_call_snapshot(**_snapshot_builder_kwargs(), max_budget=value)
+
+
+# mock-ok: dispatch is replaced to verify historical envelope reads without provider I/O.
+def test_historical_v1_v2_snapshots_remain_readable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Literal historical v1/v2 records retain their pre-v3 replay behavior."""
+
+    captured_versions: list[int] = []
+
+    def fake_text(*args: object, **kwargs: object) -> tuple[dict[str, str], str]:
+        captured_versions.append(len(captured_versions) + 1)
+        return {"value": "ok"}, "result"
+
+    monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
+    v2 = _historical_v2_snapshot()
+    replay_module._ReplaySnapshotV2.model_validate(v2)
+    v2_call_id = _insert_call(v2)
+    replay_module.replay_call_snapshot(
+        v2_call_id,
+        trace_id="trace.historical.v2.replay",
+        max_budget=0.1,
+    )
+
+    v1 = json.loads(json.dumps(v2))
+    v1["snapshot_version"] = 1
+    v1["request"]["control"].pop("retry_policy")
+    v1["request"]["control"].pop("cache_policy")
+    v1_call_id = _insert_call(v1)
+    replay_module.replay_call_snapshot(
+        v1_call_id,
+        trace_id="trace.historical.v1.replay",
+        max_budget=0.1,
+    )
+    assert captured_versions == [1, 2]
+
+
+# mock-ok: dispatch is replaced to prove missing fresh authority fails before I/O.
+def test_v3_replay_requires_fresh_explicit_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A captured original budget cannot silently authorize a new v3 call."""
+
+    snapshot = replay_module.build_call_snapshot(
+        **_snapshot_builder_kwargs(), max_budget=0.35
+    )
+    call_id = _insert_call(snapshot)
+    dispatched = False
+
+    def fake_text(*args: object, **kwargs: object) -> tuple[dict[str, str], str]:
+        nonlocal dispatched
+        dispatched = True
+        return {"value": "unexpected"}, "result"
+
+    monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
+    with pytest.raises(ValueError, match="fresh explicit max_budget"):
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.v3.no-budget")
+    for invalid_budget in ("0.2", True, -0.1, float("inf"), float("nan")):
+        with pytest.raises(ValueError, match="replay max_budget"):
+            replay_module.replay_call_snapshot(
+                call_id,
+                trace_id="trace.v3.invalid-budget",
+                max_budget=invalid_budget,
+            )
+    assert dispatched is False
+
+
+# mock-ok: dispatch is replaced so captured and fresh budgets can be compared directly.
+def test_v3_replay_dispatches_fresh_budget_not_captured_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replay validates original identity but dispatches under new spend authority."""
+
+    snapshot = replay_module.build_call_snapshot(
+        **_snapshot_builder_kwargs(), max_budget=0.35
+    )
+    call_id = _insert_call(snapshot)
+    captured: dict[str, object] = {}
+
+    def fake_text(*args: object, **kwargs: object) -> tuple[dict[str, str], str]:
+        captured.update(kwargs)
+        return {"value": "ok"}, "result"
+
+    monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
+    replay_module.replay_call_snapshot(
+        call_id,
+        trace_id="trace.v3.fresh-budget",
+        max_budget=0.2,
+    )
+    assert snapshot["request"]["control"]["max_budget"] == 0.35
+    assert captured["max_budget"] == 0.2
+
+
 def test_snapshot_fingerprint_ignores_ephemeral_metadata() -> None:
     snapshot = replay_module.build_call_snapshot(
         public_api="call_llm",
@@ -149,6 +324,7 @@ def test_snapshot_fingerprint_ignores_ephemeral_metadata() -> None:
         requested_model="gpt-5",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=2,
         reasoning_effort=None,
@@ -178,6 +354,7 @@ def test_v2_snapshot_fingerprint_includes_public_api() -> None:
         requested_model="gpt-5",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -203,6 +380,7 @@ def test_snapshot_marks_non_json_kwargs_as_replay_unsupported() -> None:
         requested_model="gpt-5",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref=None,
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -231,6 +409,7 @@ def test_snapshot_marks_non_json_message_content_as_replay_unsupported(
         requested_model="gpt-5",
         messages=[{"role": "user", "content": object()}],
         prompt_ref=None,
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -254,7 +433,7 @@ def test_snapshot_marks_non_json_message_content_as_replay_unsupported(
     )
 
     with pytest.raises(ValueError, match="replay-unsupported normalized value"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.message.lossy.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.message.lossy.replay", max_budget=0.0)
 
 
 def test_compare_call_snapshots_reports_compact_differences() -> None:
@@ -264,6 +443,7 @@ def test_compare_call_snapshots_reports_compact_differences() -> None:
         requested_model="gpt-5",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=2,
         reasoning_effort=None,
@@ -280,6 +460,7 @@ def test_compare_call_snapshots_reports_compact_differences() -> None:
         requested_model="gpt-5",
         messages=[{"role": "user", "content": "different"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=2,
         reasoning_effort=None,
@@ -309,6 +490,7 @@ def test_structured_output_mode_changes_snapshot_fingerprint() -> None:
         "requested_model": "provider/native-model",
         "messages": [{"role": "user", "content": "hi"}],
         "prompt_ref": "prompt@1",
+        "max_budget": 0.0,
         "timeout": 60,
         "num_retries": 0,
         "reasoning_effort": None,
@@ -344,6 +526,7 @@ def test_replay_restores_strict_structured_output_policy(monkeypatch) -> None:
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -369,7 +552,7 @@ def test_replay_restores_strict_structured_output_policy(monkeypatch) -> None:
         return {"value": "ok"}, "result"
 
     monkeypatch.setattr(replay_module, "_call_structured_for_replay", fake_structured)
-    replay_module.replay_call_snapshot(call_id, trace_id="trace.strict.replay")
+    replay_module.replay_call_snapshot(call_id, trace_id="trace.strict.replay", max_budget=0.0)
 
     policy = captured["structured_output_policy"]
     assert isinstance(policy, StructuredOutputPolicy)
@@ -385,6 +568,7 @@ def test_snapshot_records_effective_retry_and_disabled_cache() -> None:
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=9,
         reasoning_effort=None,
@@ -432,6 +616,7 @@ def test_replay_restores_effective_retry_fallback_and_disabled_cache(monkeypatch
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=2,
         reasoning_effort=None,
@@ -459,7 +644,7 @@ def test_replay_restores_effective_retry_fallback_and_disabled_cache(monkeypatch
         return {"value": "ok"}, "result"
 
     monkeypatch.setattr(replay_module, "_call_structured_for_replay", fake_structured)
-    replay_module.replay_call_snapshot(call_id, trace_id="trace.policy.replay")
+    replay_module.replay_call_snapshot(call_id, trace_id="trace.policy.replay", max_budget=0.0)
 
     retry = captured["retry"]
     assert isinstance(retry, RetryPolicy)
@@ -674,6 +859,7 @@ def test_public_runtime_snapshots_round_trip_timeout_disabled(
     replay_module.replay_call_snapshot(
         call_id,
         trace_id=replay_trace_id,
+        max_budget=0.0,
     )
 
     assert _latest_snapshot(replay_trace_id) == snapshot
@@ -690,6 +876,76 @@ def test_public_runtime_snapshots_round_trip_timeout_disabled(
         for key, value in original_provider_kwargs.items()
         if key != "metadata"
     }
+
+
+@pytest.mark.parametrize(
+    "public_api",
+    ["call_llm", "acall_llm", "call_llm_structured", "acall_llm_structured"],
+)
+# mock-ok: provider transports are replaced; real public runtimes persist each snapshot.
+def test_public_runtime_snapshots_retain_effective_budget_all_paths(
+    public_api: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every text and structured sync/async producer captures its checked budget."""
+
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion",
+        MagicMock(return_value=_provider_response('{"value":"ok"}')),
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.acompletion",
+        AsyncMock(return_value=_provider_response('{"value":"ok"}')),
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion_cost",
+        lambda *_args, **_kwargs: 0.001,
+    )
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._model_supports_native_schema",
+        lambda *_args, **_kwargs: True,
+    )
+    trace_id = f"trace.v3.budget.{public_api}"
+    common_kwargs = {
+        "num_retries": 0,
+        "retry": RetryPolicy(max_retries=0),
+        "fallback_models": [],
+        "cache": None,
+        "task": "test.v3.runtime-budget",
+        "trace_id": trace_id,
+        "max_budget": 0.35,
+    }
+    messages = [{"role": "user", "content": "hi"}]
+    if public_api == "call_llm":
+        call_llm("provider/text-model", messages, **common_kwargs)
+    elif public_api == "acall_llm":
+        asyncio.run(acall_llm("provider/text-model", messages, **common_kwargs))
+    elif public_api == "call_llm_structured":
+        call_llm_structured(
+            "provider/native-model",
+            messages,
+            RuntimeReplayItem,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            **common_kwargs,
+        )
+    else:
+        asyncio.run(
+            acall_llm_structured(
+                "provider/native-model",
+                messages,
+                RuntimeReplayItem,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                **common_kwargs,
+            )
+        )
+
+    snapshot = _latest_snapshot(trace_id)
+    assert snapshot["snapshot_version"] == 3
+    assert snapshot["request"]["control"]["max_budget"] == 0.35
 
 
 @pytest.mark.parametrize(
@@ -730,6 +986,7 @@ def test_replay_rejects_lossy_normalization_when_support_metadata_is_empty(
         requested_model="provider/text-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -756,7 +1013,7 @@ def test_replay_rejects_lossy_normalization_when_support_metadata_is_empty(
     monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
 
     with pytest.raises(ValueError, match="replay-unsupported normalized value"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.lossy.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.lossy.replay", max_budget=0.0)
     assert dispatched is False
 
 
@@ -773,6 +1030,7 @@ def test_json_native_nested_kwargs_round_trip_exactly(
         requested_model="provider/text-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -799,7 +1057,7 @@ def test_json_native_nested_kwargs_round_trip_exactly(
         return {"value": "ok"}, "result"
 
     monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
-    replay_module.replay_call_snapshot(call_id, trace_id="trace.native-json.replay")
+    replay_module.replay_call_snapshot(call_id, trace_id="trace.native-json.replay", max_budget=0.0)
 
     assert captured["custom"] == nested
 
@@ -813,6 +1071,7 @@ def test_snapshot_marks_custom_retry_and_enabled_cache_replay_unsupported() -> N
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=2,
         reasoning_effort=None,
@@ -837,7 +1096,7 @@ def test_snapshot_marks_custom_retry_and_enabled_cache_replay_unsupported() -> N
         ValueError,
         match=r"cache_policy, retry_policy\.on_retry",
     ):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.unsupported.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.unsupported.replay", max_budget=0.0)
 
 
 @pytest.mark.parametrize(
@@ -856,7 +1115,7 @@ def test_replay_rejects_coerced_or_inconsistent_execution_policy(
     mutate: Callable[[dict[str, Any]], None],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Typed replay refuses malformed or contradictory v2 execution policy state."""
+    """Typed replay refuses malformed or contradictory current execution policy state."""
 
     snapshot = replay_module.build_call_snapshot(
         public_api="call_llm_structured",
@@ -864,6 +1123,7 @@ def test_replay_rejects_coerced_or_inconsistent_execution_policy(
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=2,
         reasoning_effort=None,
@@ -889,9 +1149,9 @@ def test_replay_rejects_coerced_or_inconsistent_execution_policy(
 
     with pytest.raises(
         ValueError,
-        match="invalid replay-safe execution policy state|invalid v2 snapshot envelope",
+        match="invalid replay-safe execution policy state|invalid v3 snapshot envelope",
     ):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.tampered.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.tampered.replay", max_budget=0.0)
 
 
 @pytest.mark.parametrize(
@@ -916,6 +1176,7 @@ def test_replay_rejects_missing_structured_mode_or_reserved_public_control(
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -940,7 +1201,7 @@ def test_replay_rejects_missing_structured_mode_or_reserved_public_control(
     )
 
     with pytest.raises(ValueError, match="replay-safe execution policy|reserved"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.override.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.override.replay", max_budget=0.0)
 
 
 def test_replay_rejects_public_api_call_kind_mismatch() -> None:
@@ -952,6 +1213,7 @@ def test_replay_rejects_public_api_call_kind_mismatch() -> None:
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -970,7 +1232,7 @@ def test_replay_rejects_public_api_call_kind_mismatch() -> None:
     call_id = _insert_call(snapshot)
 
     with pytest.raises(ValueError, match="requires call_kind='structured'"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.kind.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.kind.replay", max_budget=0.0)
 
 
 # mock-ok: replay dispatch is replaced so legacy reconstruction can be inspected without I/O.
@@ -985,6 +1247,7 @@ def test_historical_v1_snapshot_replays_with_legacy_controls(
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=1,
         reasoning_effort=None,
@@ -1014,7 +1277,7 @@ def test_historical_v1_snapshot_replays_with_legacy_controls(
         return {"value": "ok"}, "result"
 
     monkeypatch.setattr(replay_module, "_call_structured_for_replay", fake_structured)
-    replay_module.replay_call_snapshot(call_id, trace_id="trace.v1.replay")
+    replay_module.replay_call_snapshot(call_id, trace_id="trace.v1.replay", max_budget=0.0)
 
     assert captured["num_retries"] == 1
     assert "retry" not in captured
@@ -1047,6 +1310,7 @@ def test_v2_replay_rejects_downgrade_missing_metadata_or_cross_kind_reinterpreta
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -1075,7 +1339,7 @@ def test_v2_replay_rejects_downgrade_missing_metadata_or_cross_kind_reinterpreta
     )
 
     with pytest.raises(ValueError, match="snapshot_version|replay metadata|structured"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.v2.guard.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.v2.guard.replay", max_budget=0.0)
 
 
 def test_v2_replay_rejects_persisted_snapshot_fingerprint_mismatch() -> None:
@@ -1087,6 +1351,7 @@ def test_v2_replay_rejects_persisted_snapshot_fingerprint_mismatch() -> None:
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -1110,7 +1375,7 @@ def test_v2_replay_rejects_persisted_snapshot_fingerprint_mismatch() -> None:
     io_log._get_db().commit()
 
     with pytest.raises(ValueError, match="fingerprint"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.fingerprint.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.fingerprint.replay", max_budget=0.0)
 
 
 # mock-ok: dispatch is replaced so a guard regression cannot issue a provider call.
@@ -1125,6 +1390,7 @@ def test_v2_replay_rejects_persisted_full_version_downgrade(
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -1156,7 +1422,7 @@ def test_v2_replay_rejects_persisted_full_version_downgrade(
     )
 
     with pytest.raises(ValueError, match="fingerprint"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.downgrade.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.downgrade.replay", max_budget=0.0)
 
 
 @pytest.mark.parametrize(
@@ -1179,6 +1445,7 @@ def test_v2_replay_rejects_missing_or_unmodeled_envelope_state(
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -1201,7 +1468,7 @@ def test_v2_replay_rejects_missing_or_unmodeled_envelope_state(
     )
 
     with pytest.raises(ValueError, match="snapshot envelope"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.envelope.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.envelope.replay", max_budget=0.0)
 
 
 # mock-ok: dispatch is replaced to prove schema drift fails before provider I/O.
@@ -1216,6 +1483,7 @@ def test_v2_replay_rejects_response_model_schema_drift(
         requested_model="provider/native-model",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -1244,7 +1512,7 @@ def test_v2_replay_rejects_response_model_schema_drift(
     )
 
     with pytest.raises(ValueError, match="schema no longer matches"):
-        replay_module.replay_call_snapshot(call_id, trace_id="trace.schema-drift.replay")
+        replay_module.replay_call_snapshot(call_id, trace_id="trace.schema-drift.replay", max_budget=0.0)
 
 
 # mock-ok: replay dispatch is replaced so reconstructed capability kwargs can be inspected.
@@ -1257,6 +1525,7 @@ def test_v2_text_replay_restores_execution_mode(monkeypatch: pytest.MonkeyPatch)
         requested_model="claude-code/opus",
         messages=[{"role": "user", "content": "inspect workspace"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=0,
         reasoning_effort=None,
@@ -1282,7 +1551,7 @@ def test_v2_text_replay_restores_execution_mode(monkeypatch: pytest.MonkeyPatch)
         return {"value": "ok"}, "result"
 
     monkeypatch.setattr(replay_module, "_call_text_for_replay", fake_text)
-    replay_module.replay_call_snapshot(call_id, trace_id="trace.execution-mode.replay")
+    replay_module.replay_call_snapshot(call_id, trace_id="trace.execution-mode.replay", max_budget=0.0)
 
     assert captured["execution_mode"] == "workspace_agent"
     assert captured["allowed_tools"] == ["Read"]
@@ -1295,6 +1564,7 @@ def test_replay_call_snapshot_uses_new_trace_and_preserves_original_record(monke
         requested_model="gpt-5",
         messages=[{"role": "user", "content": "hi"}],
         prompt_ref="prompt@1",
+        max_budget=0.0,
         timeout=60,
         num_retries=1,
         reasoning_effort=None,

@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: async structured safety controls exercise all three provider paths under an explicit OpenRouter routing fixture; v2 replay restores caller-selected retry/fallback/cache controls without changing call/config routing precedence.
 
 ## Context
@@ -45,3 +45,6 @@ Week 2+: extract pure routing resolver with typed output:
 Verification context (2026-07-13): the resolved fallback order now determines
 globally increasing structured-attempt ordinals. This adds observability of the
 existing route; it does not change configuration precedence.
+
+The runtime now treats a validated native-schema response as terminal for model
+fallback; this is an execution-integrity boundary, not a new routing precedence.

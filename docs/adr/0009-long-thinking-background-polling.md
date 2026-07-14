@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: the initial provider-backed async structured Responses request has a configurable per-attempt cancellation ceiling; effective call controls now enter v2 replay identity while background polling retains its separate explicit timeout contract.
 
 ## Context
@@ -66,3 +66,7 @@ Negative:
 Verification context (2026-07-13): Plan 97's native-schema attempt lifecycle is
 limited to Completions native JSON-schema calls. Responses/background polling
 semantics in this ADR remain unchanged.
+
+Within that bounded native-schema path, local finalization after validation is
+terminal and cannot re-enter provider retry or fallback; polling remains out of
+scope and unchanged.

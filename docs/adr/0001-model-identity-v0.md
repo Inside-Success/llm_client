@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Verification context: native-schema attempts retain per-logical-call identity; v2 replay snapshots preserve the requested model and exact fallback order without fabricating a resolved model; focused lifecycle and replay controls pass.
 
 ## Context
@@ -55,3 +55,6 @@ work, propose a follow-up ADR to unify or deprecate ambiguous `model` usage.
 Verification context (2026-07-13): native-schema attempt identity now includes
 one logical-call-global ordinal across model fallback. Each event records the
 actual model used; final requested/resolved model semantics remain unchanged.
+
+Post-validation finalization failures now stop retry and model fallback, so a
+validated response cannot fabricate a later executed-model identity.
