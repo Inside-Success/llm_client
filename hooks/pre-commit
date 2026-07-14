@@ -12,7 +12,7 @@ cd "$REPO_ROOT"
 
 COMMON_GIT_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
 CANONICAL_REPO_ROOT=$(dirname "$COMMON_GIT_DIR")
-PYTHON_BIN=python
+PYTHON_BIN=""
 for CANDIDATE in \
     "$REPO_ROOT/.venv/bin/python" \
     "$CANONICAL_REPO_ROOT/.venv/bin/python" \
@@ -23,9 +23,14 @@ for CANDIDATE in \
         break
     fi
 done
+if [[ -z "$PYTHON_BIN" ]]; then
+    echo "ERROR: no repository virtualenv Python found in the worktree or canonical checkout."
+    echo "Create .venv in one of those locations before committing."
+    exit 1
+fi
 echo "Using Python: $PYTHON_BIN"
 
-BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$BRANCH" == "main" && "${ALLOW_MAIN_COMMIT:-0}" != "1" ]]; then
     echo ""
     echo "ERROR: direct commits on 'main' are blocked."
@@ -122,13 +127,16 @@ fi
 
 # 6. Branch divergence check
 echo "Checking branch freshness..."
-git fetch origin 2>/dev/null || true
+if ! git fetch origin; then
+    echo "ERROR: unable to fetch origin; branch freshness cannot be verified."
+    exit 1
+fi
 
 REMOTE="origin/$BRANCH"
 
 if git rev-parse --verify "$REMOTE" >/dev/null 2>&1; then
-    LOCAL_ONLY=$(git rev-list "$REMOTE..HEAD" --count 2>/dev/null || echo "0")
-    REMOTE_ONLY=$(git rev-list "HEAD..$REMOTE" --count 2>/dev/null || echo "0")
+    LOCAL_ONLY=$(git rev-list "$REMOTE..HEAD" --count)
+    REMOTE_ONLY=$(git rev-list "HEAD..$REMOTE" --count)
 
     if [ "$REMOTE_ONLY" -gt 0 ] && [ "$LOCAL_ONLY" -gt 0 ]; then
         echo ""

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -62,3 +64,27 @@ def test_plan99_required_tests_are_exact_and_executable() -> None:
         if requirement.function is not None:
             assert " " not in requirement.function
         assert module.get_pytest_path(requirement, ROOT) is not None
+
+
+def test_run_tests_uses_invoking_python_for_pytest(monkeypatch, tmp_path: Path) -> None:
+    """The plan gate must not escape its selected virtualenv through PATH."""
+
+    module = _load_script()
+    test_file = tmp_path / "test_sample.py"
+    test_file.write_text("def test_sample():\n    assert True\n", encoding="utf-8")
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["args"] = args
+        return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
+
+    # mock-ok: observe command construction without recursively launching pytest.
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    exit_code, output = module.run_tests(
+        [module.TestRequirement(file=test_file.name)],
+        tmp_path,
+    )
+
+    assert exit_code == 0
+    assert output == "ok"
+    assert captured["args"][:4] == [sys.executable, "-m", "pytest", "-v"]

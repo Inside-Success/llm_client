@@ -287,7 +287,7 @@ def run_tests(requirements: list[TestRequirement], project_root: Path) -> tuple[
     if not requirements:
         return 0, "No tests to run"
 
-    pytest_args = ["pytest", "-v"]
+    pytest_args = [sys.executable, "-m", "pytest", "-v"]
 
     for req in requirements:
         # Plan #41: Use get_pytest_path to get the correct path with class prefix

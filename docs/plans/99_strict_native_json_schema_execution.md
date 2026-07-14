@@ -363,7 +363,7 @@ gate is added by this plan.
 | L99-4 policy is replay identity | A | test | strict snapshot replays a typed strict policy | auto and strict snapshots produce different fingerprints |
 | L99-5 typed public API and docs expose the policy | A | test | top-level imports in runtime tests | Pydantic forbids unknown policy fields and generated API signature includes the argument |
 | L99-6 effective execution policy replays exactly | A | test + independently observed | all four public APIs capture and consume identical timeout-disabled snapshots with identical provider-visible controls | exact-commit review re-executed lossy-value, false-empty metadata, envelope, downgrade, kind, schema, and execution-mode attacks before accepting `5ed2a1e` |
-| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; after integration with current main, the mandatory Plan 99 command executes 379 tests | pseudo selectors, prose function cells, and false class ownership are rejected by helper tests |
+| L99-7 mandatory declared tests execute exactly | A | test + observed command | AST resolver finds exact sync, async, class, and top-level nodes; after integration with current main, the canonical-venv Plan 99 command executes 320 tests | pseudo selectors, prose function cells, false class ownership, and ambient-pytest escape are rejected by helper tests |
 
 ### Post-Merge Repair Slices
 
@@ -406,9 +406,10 @@ Second-repair local verification on 2026-07-13: replay/helper controls passed 38
 the final mandatory `check_plan_tests.py --plan 99` command collected and passed 347
 tests in 75.43 seconds; and the full repository suite passed 1,604 tests with 3 skipped and 11
 deselected in 178.19 seconds. Scoped Ruff, `compileall`, and `git diff --check` passed.
-Strict mypy still reports the repository's 181-error baseline, including the same 11
-`observability/replay.py` findings recorded before this increment; this repair does not
-claim to clear that debt. One earlier broad run before the final envelope additions had
+The then-current ambient strict-mypy run reported 181 repository findings, including the
+same 11 `observability/replay.py` findings recorded before this increment; that historical,
+unversioned count is not a current baseline and this repair did not claim to clear the debt.
+One earlier broad run before the final envelope additions had
 an isolated provider-cooldown timing assertion fail; its test and file reruns passed,
 followed by clean full runs of 1,599 and 1,604 tests. At that historical point these
 were local results only: L99-6 was F and Plan 0141 could not bind the repair without a
@@ -449,28 +450,38 @@ Current-main integration candidate on 2026-07-13: merged `origin/main` at `e30e0
 without rewriting accepted implementation `5ed2a1e` or evidence `340157f`; both remain
 ancestors. The production runtime auto-merged. Generated API references were rebuilt
 from the combined source, and overlapping ADR verification contexts preserve both exact
-replay and Plan 97/tool-trace evidence. The mandatory Plan 99 command now passes 379
-tests because current main added four tests to a declared whole-file surface; a wider
-Plan 97/99 replay/attempt/io-log/runtime selection passes 399 tests. The Plan 99-touched
+replay and Plan 97/tool-trace evidence. After repairing the helper to retain its invoking
+interpreter, the canonical-venv mandatory Plan 99 command passes 320 tests; the earlier
+379-test ambient-Python readout is not accepted evidence. A wider canonical-venv Plan
+97/99 replay/attempt/io-log/runtime selection passes 400 tests. The Plan 99-touched
 Python surface is Ruff-clean after removing six inherited findings from
 `text_runtime.py`; repository-wide Ruff improves from the clean-main baseline of 315 to
-309 findings. Repository-wide mypy retains the same four clean-main errors. A full
-venv-backed run is not accepted evidence: both clean `origin/main` and this candidate
+309 findings. Type checking remains red but improves by one finding under both measured
+toolchains: exact `mypy 1.19.1 --strict llm_client/` reports 209 candidate findings versus
+210 on clean `e30e088`, while exact canonical-venv `python -m mypy 1.20.0 --strict
+llm_client/` reports 210 versus 211. These are environment-pinned baseline comparisons,
+not a green type-check claim. A full venv-backed run is not accepted evidence: both clean
+`origin/main` and this candidate
 can segfault when a lifecycle heartbeat writer races a test fixture that closes the
 shared SQLite connection (`LLM-VERIFY-012`). A post-commit audit also rejected the first
 integration commit because its worktree hook generated API docs with ambient system
 Python and suppressed generator failures; the repo venv produced a different reference.
-The repaired hook pins and reports the canonical venv and fails loud (`LLM-VERIFY-013`).
+The repaired hook requires and reports a repository venv, fails if branch freshness cannot
+be fetched, and fails loud on generators (`LLM-VERIFY-013`). The mandatory plan-test helper
+now launches pytest through its invoking `sys.executable`, so a venv-selected gate cannot
+escape to ambient Python.
 This integration candidate remains pending fresh exact-commit review and normal PR merge;
 downstream Plan 0141 remains fail-closed.
 
-Verification on 2026-07-13: the final focused structured/replay/trace gate passed
+Historical pre-repair verification on 2026-07-13 (retained for chronology, not as the
+current integration baseline): the final focused structured/replay/trace gate passed
 42 tests. The full repository run reached
 334 passed / 1 skipped before an unrelated long event wait was interrupted; its two
 completed failures were missing `prompt_eval`/SciPy environment dependencies and
-passed after installing the declared editable dependency. Scoped Ruff passed. Strict
-mypy reports the documented 181-error repository baseline and no new
-`StructuredOutputPolicy` error after canonicalizing imports. Two-pass pre-landing
+passed after installing the declared editable dependency. Scoped Ruff passed. The
+then-current ambient strict-mypy run reported 181 findings and no new
+`StructuredOutputPolicy` finding after canonicalizing imports; that historical count is
+not comparable to the interpreter-pinned current integration counts above. Two-pass pre-landing
 review passed after adding terminal logging for strict Agent-SDK rejection and explicit
 `mock-ok` rationale on controlled provider-boundary tests. The mandatory
 `complete_plan.py --plan 99 --dry-run --skip-real-e2e` gate reproduced the broad-suite
