@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-03-17
 Last verified: 2026-07-14
-Verification context: provider-independent structured execution, exact effective-policy snapshot/replay, structured-attempt evidence, and fail-loud trace-joinable tool-call lifecycle persistence are implemented once in the shared runtime; strict native-schema, retry/fallback/cache, reconstruction, attempt, and tool-call controls pass.
+Verification context: provider-independent structured execution, exact effective-policy snapshot/replay, structured-attempt evidence, strict selected-attempt reads, and fail-loud trace-joinable tool-call lifecycle persistence are implemented once in the shared runtime; focused controls pass.
 
 ## Context
 

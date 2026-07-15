@@ -23,7 +23,11 @@ def test_grouped_exports_flatten_to_public_surface_without_duplicates() -> None:
 
     assert len(flattened) == len(set(flattened))
     assert llm_client.__all__ == flattened
-    assert len(flattened) == 128
+    assert len(flattened) == 132
+    assert "AuthoritativeSelectedAttempt" in llm_client._CORE_SUBSTRATE_EXPORTS
+    assert "SelectedAttemptIntegrityError" in llm_client._CORE_SUBSTRATE_EXPORTS
+    assert "get_authoritative_selected_attempt" in llm_client._CORE_SUBSTRATE_EXPORTS
+    assert "get_authoritative_selected_attempt_for_trace" in llm_client._CORE_SUBSTRATE_EXPORTS
 
     assert "call_llm" in llm_client._CORE_SUBSTRATE_EXPORTS
     assert "compare_call_snapshots" in llm_client._CORE_SUBSTRATE_EXPORTS

@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-14
-Verification context: attempt events, v2 call snapshots, and strict tool-call lifecycles persist bounded control-plane metadata, effective retry/fallback/cache state, and trace links without persisting raw response or operator-result bodies; focused readback and replay controls pass.
+Verification context: attempt events, v3 call snapshots, selected-attempt receipts, and strict tool-call lifecycles retain bounded control-plane metadata, hashes, and trace links without inlining raw response or operator-result bodies; focused readback controls pass.
 Date: 2026-03-17
 
 ## Context

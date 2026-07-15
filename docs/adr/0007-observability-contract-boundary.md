@@ -2,11 +2,11 @@
 
 Status: Accepted  
 Last verified: 2026-07-14
-Verification context: canonical typed attempt, v3 replay-policy, and tool-call
+Verification context: canonical typed attempt, selected-attempt receipt, v3 replay-policy, and tool-call
 models live under `observability/`; `io_log` persists effective
 retry/fallback/cache/budget state, unsupported or malformed replay
 reconstruction fails loud, and v3 replay requires fresh budget authority.
-Focused persistence, replay, and tool-call controls pass.
+Focused persistence, selected-attempt, replay, and tool-call controls pass.
 Date: 2026-02-23
 
 ## Context

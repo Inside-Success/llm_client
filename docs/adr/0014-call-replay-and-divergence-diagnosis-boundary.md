@@ -6,7 +6,7 @@ Last verified: 2026-07-14
 Verification context: v3 fingerprints bind public API, call kind, request,
 replay-support metadata, and the checked effective `max_budget`; v3 replay
 requires a separate fresh budget instead of treating captured identity as spend
-authority. Historical v1/v2 replay remains readable. Four-public-API capture,
+authority. Selected-attempt reads verify that fingerprint before projecting requested identity. Historical v1/v2 replay remains readable. Four-public-API capture,
 historical compatibility, malformed-budget, no-dispatch, and fresh-budget
 controls pass. Strict tool-call lifecycle rows remain trace-joinable diagnostic
 evidence outside replayable LLM call snapshots.
