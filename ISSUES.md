@@ -51,6 +51,32 @@ canonical source. Agents therefore cannot follow both the repository rule that
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
 
+### LLM-011: Push rejection prescribes an unscoped claim
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Low |
+| Reported | 2026-07-15 during Plan #105 branch publication |
+
+The push hook correctly rejected a branch without a repository-local claim,
+but its exact remediation command omitted `--plan` and `--feature`. Running the
+prescribed command created an unscoped claim and immediately warned that the
+claim should have been scoped, requiring release and recreation.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `repository-push-claim-guidance`
+- **Friction:** The `llm_client` push hook's remediation command creates an
+  unscoped claim even when the current branch and plan document identify a plan;
+  the claim tool then warns that the prescribed claim is insufficiently scoped.
+- **Recommendation:** Make the hook infer a unique plan from the branch or
+  tracked plan document and print `--plan N`; when inference is unavailable,
+  explain the required scope choice instead of prescribing an unscoped command.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
 ### LLM-009: Parallel yielded commands lose first-class wait handles
 
 | Field | Value |
