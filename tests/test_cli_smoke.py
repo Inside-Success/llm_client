@@ -20,6 +20,8 @@ CLI_CMDS = [
     ["review-cycle", "--help"],
     ["duet-review", "--help"],
     ["deliberate-task", "--help"],
+    ["provider-limit", "--help"],
+    ["provider-limit", "openrouter", "--help"],
 ]
 
 
