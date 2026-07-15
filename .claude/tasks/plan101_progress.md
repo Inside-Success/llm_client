@@ -24,7 +24,7 @@ events.
 1. [done] Audit current persistence schemas and lifecycle writers.
 2. [done] Freeze the plan and negative controls.
 3. [done] Add failing tests, then the smallest typed reader.
-4. [in progress] Run repository-wide verification before integration.
+4. [in progress] Independent review and integration; full tests are complete.
 
 ## Focused Evidence
 
@@ -32,4 +32,8 @@ events.
 - The real public structured runtime produces a readable joined receipt with a
   mocked provider transport and real temporary SQLite persistence.
 - Ruff on changed canonical modules/tests and `git diff --check` pass.
+- Full repository suite: 1,667 passed, 3 skipped, 11 deselected.
+- New module: strict mypy passes with imported-module diagnostics silenced.
+- Repository baseline remains red at 309 Ruff and 210 mypy findings; recorded
+  in `ISSUES.md` and not changed in this plan.
 - No provider call was made.
