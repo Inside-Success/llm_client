@@ -1,6 +1,6 @@
 # Plan #102: Exact Selected Raw Structured Content
 
-**Status:** In Progress
+**Status:** Complete; independently accepted at `6e53919`
 **Type:** implementation
 **Priority:** High
 **Blocked By:** Plan #101 complete at `40ca594d45304ec674ff57e8b969b15894f4be41`

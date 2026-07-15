@@ -26,13 +26,13 @@ normalized parsed content with provider raw content.
 - [x] Provider-free failing tests added.
 - [x] Sidecar storage and exact reader implemented.
 - [x] Native structured runtime wired.
-- [ ] Focused and repository verification complete.
-- [ ] Independent review accepted.
+- [x] Focused and repository verification complete.
+- [x] Independent review accepted.
 - [ ] Merged and downstream dependency pinned.
 
 ## Verification Snapshot
 
-- 70 focused provider-free runtime/receipt/artifact tests pass after repairing
+- 71 focused provider-free runtime/receipt/artifact tests pass after repairing
   the first independent review's symlink-substitution and disabled-cleanup
   blockers. The three original counterexample controls pass directly.
 - Changed files pass Ruff; the three Plan 102 observability modules pass strict
@@ -45,9 +45,23 @@ normalized parsed content with provider raw content.
 - Canonical whole-package `make typecheck` is inherited red in this environment
   with 209 errors across 40 files; none originate in the new raw-artifact or
   selected-reader modules. This does not count as a passing repository gate.
-- The pre-repair exact commit `d6ae314` was independently rejected. The repair
-  still requires exact-commit re-review before merge or downstream use.
+- The pre-repair exact commit `d6ae314` was independently rejected. Direct
+  replay accepted both blocker repairs at `fce9118`; a final narrow review
+  accepted exact `6e53919` after normalizing impossible-date failures to the
+  documented typed error.
 - No provider or model call occurred.
+
+## Independent Review Resolution
+
+The first review rejected two operational gaps: a duplicate-write path followed
+a matching-byte final symlink, and cleanup stopped being reachable after raw
+collection was disabled. The accepted repair uses `lstat`, `O_NOFOLLOW`, and
+inode matching without chmodding existing targets; rejects expired references
+at read time; and exports agent-invocable cleanup that remains available after
+collection stops. Documentation explicitly disclaims any background timer.
+
+The reviewer directly replayed both original counterexamples and the final
+impossible-date typed-error control before accepting exact `6e53919`.
 
 ## Constraints
 
