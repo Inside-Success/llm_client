@@ -55,3 +55,6 @@ Negative:
    events exclude exception messages and provider bodies.
 
 Last verified: 2026-07-14 (Plan 97 Slice 3 transport-attempt lifecycle).
+
+Plan 101 adds trusted-process runtime receipts; it does not claim provider
+attestation, source authentication, signatures, or hostile-process security.

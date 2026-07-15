@@ -57,10 +57,10 @@ from llm_client.observability.replay import (
     replay_call_snapshot,
 )
 from llm_client.observability.selected_attempts import (
-    AuthoritativeSelectedAttempt,
-    SelectedAttemptIntegrityError,
-    get_authoritative_selected_attempt,
-    get_authoritative_selected_attempt_for_trace,
+    RuntimeSelectedAttemptReceipt,
+    SelectedAttemptReceiptError,
+    get_runtime_selected_attempt_receipt,
+    diagnose_runtime_selected_attempt_receipt_for_trace,
 )
 from llm_client.observability.tool_calls import (
     ToolCallResult,
@@ -79,7 +79,7 @@ __all__ = [
     "AgentToolUsageEvent",
     "ActiveFeatureProfile",
     "ActiveExperimentRun",
-    "AuthoritativeSelectedAttempt",
+    "RuntimeSelectedAttemptReceipt",
     "ExperimentRun",
     "activate_experiment_run",
     "activate_feature_profile",
@@ -98,8 +98,8 @@ __all__ = [
     "get_active_experiment_run_id",
     "get_active_feature_profile",
     "get_active_llm_calls",
-    "get_authoritative_selected_attempt",
-    "get_authoritative_selected_attempt_for_trace",
+    "get_runtime_selected_attempt_receipt",
+    "diagnose_runtime_selected_attempt_receipt_for_trace",
     "get_background_mode_adoption",
     "get_call_snapshot",
     "get_completed_traces",
@@ -123,7 +123,7 @@ __all__ = [
     "persist_usage_events",
     "replay_call_snapshot",
     "start_run",
-    "SelectedAttemptIntegrityError",
+    "SelectedAttemptReceiptError",
     "ToolCallResult",
     "ToolSurfaceMatcher",
     "ToolUsageImportSummary",

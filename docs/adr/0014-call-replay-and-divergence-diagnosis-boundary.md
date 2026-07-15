@@ -147,3 +147,6 @@ Snapshot v3 adds the checked original-call budget to the closed replayable
 envelope without changing historical v1/v2 interpretation. Snapshots already
 marked replay-unsupported remain diagnostic captures and are refused before
 reconstruction.
+
+Plan 101 receipt lookup verifies the same v3 fingerprint but remains a
+trusted-process provenance read, not replay authority or provider attestation.

@@ -46,3 +46,5 @@ disposition; persistence failure remains an integrity error.
 
 Local failures after schema validation now propagate as terminal call errors
 without another provider attempt or an advisory warning.
+
+Plan 101 receipt contradictions remain fail-loud integrity errors, not warnings.

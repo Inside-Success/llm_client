@@ -81,3 +81,6 @@ Negative:
    shared metadata plane.
 
 Last verified: 2026-07-14 (Plan 97 Slice 3 additive event migration).
+
+Plan 101 receipts retain hashes and typed lifecycle metadata only; raw provider
+content remains external behind the optional artifact reference.

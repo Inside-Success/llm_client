@@ -22,16 +22,16 @@ from llm_client.observability.structured_attempts import (
 )
 
 
-class SelectedAttemptIntegrityError(ValueError):
+class SelectedAttemptReceiptError(ValueError):
     """Persisted call and attempt evidence cannot identify one exact selection."""
 
 
-class AuthoritativeSelectedAttempt(BaseModel):
-    """One strict projection of a runtime-selected native-schema attempt.
+class RuntimeSelectedAttemptReceipt(BaseModel):
+    """One trusted-process receipt for a runtime-selected native-schema attempt.
 
-    ``authoritative`` means joined from the terminal runtime row and persisted
-    attempt lifecycle. The digest is an integrity fingerprint, not a signature
-    or a hostile-process security boundary.
+    The digest is an integrity fingerprint over persisted runtime evidence, not
+    independent provider attestation, source authentication, a signature, or a
+    hostile-process security boundary.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -71,17 +71,17 @@ class AuthoritativeSelectedAttempt(BaseModel):
     lineage: tuple[StructuredAttemptEvent, ...] = Field(
         description="Complete ordered lifecycle, including failed attempts."
     )
-    authority_digest: str = Field(
+    receipt_digest: str = Field(
         min_length=64,
         max_length=64,
         description="Integrity digest over the normalized joined receipt evidence.",
     )
 
 
-def _fail(logical_call_id: str, detail: str) -> SelectedAttemptIntegrityError:
+def _fail(logical_call_id: str, detail: str) -> SelectedAttemptReceiptError:
     """Build one contextual fail-loud integrity error."""
 
-    return SelectedAttemptIntegrityError(f"Logical call {logical_call_id}: {detail}")
+    return SelectedAttemptReceiptError(f"Logical call {logical_call_id}: {detail}")
 
 
 def _require_text(
@@ -149,19 +149,43 @@ def _validate_history(
                 logical_call_id,
                 f"attempt {ordinal} has incomplete failure/recovery lifecycle.",
             )
+        attempt_models = {event.model for event in attempt}
+        if len(attempt_models) != 1:
+            raise _fail(
+                logical_call_id,
+                f"attempt {ordinal} contains inconsistent model identity.",
+            )
+        next_attempt = [
+            event for event in events if event.attempt_ordinal == ordinal + 1
+        ]
+        current_model = attempt[0].model
+        next_model = next_attempt[0].model
+        recovery = attempt[-1].recovery_decision
+        if recovery == "retry" and next_model != current_model:
+            raise _fail(logical_call_id, f"attempt {ordinal} retry changed model.")
+        if recovery == "fallback" and next_model == current_model:
+            raise _fail(logical_call_id, f"attempt {ordinal} fallback kept the same model.")
+        if recovery == "exhausted":
+            raise _fail(
+                logical_call_id,
+                f"attempt {ordinal} is exhausted but a later success exists.",
+            )
+    selected_models = {event.model for event in selected_events}
+    if len(selected_models) != 1:
+        raise _fail(logical_call_id, "selected attempt contains inconsistent model identity.")
     return received, selected
 
 
-def _authority_digest(payload: dict[str, Any]) -> str:
+def _receipt_digest(payload: dict[str, Any]) -> str:
     """Hash normalized joined evidence without implying a signature."""
 
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def get_authoritative_selected_attempt(
+def get_runtime_selected_attempt_receipt(
     logical_call_id: str,
-) -> AuthoritativeSelectedAttempt:
+) -> RuntimeSelectedAttemptReceipt:
     """Return the sole exact selected attempt for one logical structured call.
 
     The function performs no model call. It rejects unsupported runtime paths
@@ -169,7 +193,7 @@ def get_authoritative_selected_attempt(
     """
 
     if not logical_call_id.strip():
-        raise SelectedAttemptIntegrityError("logical_call_id must be nonblank.")
+        raise SelectedAttemptReceiptError("logical_call_id must be nonblank.")
     try:
         rows = _io_log.read_structured_terminal_calls(logical_call_id)
     except ValueError as error:
@@ -245,22 +269,26 @@ def get_authoritative_selected_attempt(
         "call_fingerprint": stored_fingerprint,
         "lineage": [event.model_dump(mode="json") for event in events],
     }
-    return AuthoritativeSelectedAttempt.model_validate(
-        {**evidence, "authority_digest": _authority_digest(evidence)}
+    return RuntimeSelectedAttemptReceipt.model_validate(
+        {**evidence, "receipt_digest": _receipt_digest(evidence)}
     )
 
 
-def get_authoritative_selected_attempt_for_trace(
+def diagnose_runtime_selected_attempt_receipt_for_trace(
     trace_id: str,
-) -> AuthoritativeSelectedAttempt:
-    """Return one receipt only when a trace maps to exactly one logical call."""
+) -> RuntimeSelectedAttemptReceipt:
+    """Diagnose a trace only when it maps to exactly one logical call.
+
+    Trusted consumers must pin the ``logical_call_id`` returned on the actual
+    ``LLMCallResult`` and call ``get_runtime_selected_attempt_receipt``.
+    """
 
     if not trace_id.strip():
-        raise SelectedAttemptIntegrityError("trace_id must be nonblank.")
+        raise SelectedAttemptReceiptError("trace_id must be nonblank.")
     logical_call_ids = _io_log.read_structured_attempt_call_ids(trace_id)
     if len(logical_call_ids) != 1:
-        raise SelectedAttemptIntegrityError(
+        raise SelectedAttemptReceiptError(
             f"Trace {trace_id}: expected exactly one logical call; "
             f"found {len(logical_call_ids)}."
         )
-    return get_authoritative_selected_attempt(logical_call_ids[0])
+    return get_runtime_selected_attempt_receipt(logical_call_ids[0])

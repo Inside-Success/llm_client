@@ -93,3 +93,6 @@ Last verified: 2026-07-14 (DIGIMON-bound Plan 97 transport failure).
 The shared runtime now distinguishes provider recovery from local finalization:
 once native structured output validates, hook/cache/log failures fail loud
 without repeating generation or switching models.
+
+Plan 101 consumers pin the logical call identity returned by the same runtime
+result; trace-only lookup is diagnostic.

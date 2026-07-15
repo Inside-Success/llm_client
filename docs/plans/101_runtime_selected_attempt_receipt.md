@@ -1,10 +1,10 @@
-# Plan #101: Authoritative Selected Structured Attempt
+# Plan #101: Runtime-Selected Structured Attempt Receipt
 
 **Status:** In Progress
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None; Plan 100 merged at `a5a4364`
-**Blocks:** onto-canon6 Plan 0141 provider-authoritative receipt pinning
+**Blocks:** onto-canon6 Plan 0141 trusted-runner receipt pinning
 
 ## Goal And Scope
 
@@ -15,9 +15,10 @@ the runtime without asking a caller to replay or reconstruct lifecycle events.
 
 This plan does not execute a model, make a semantic judgment, add a security
 boundary against hostile in-process code, or claim that the observability
-database is an append-only audit service. Here, **authoritative** means derived
-from the runtime-owned terminal call row plus the matching persisted attempt
-lifecycle, rather than from a caller-constructed event list.
+database is an append-only audit service. This is **trusted-process runtime
+provenance**, not provider attestation, source authentication, a signature, or
+an independent audit. The consumer must pin the `logical_call_id` returned on
+the actual `LLMCallResult`; trace lookup is diagnostic only.
 
 ## Modality And Decisions
 
@@ -38,10 +39,13 @@ Premade decisions:
 5. Recompute and verify the stored call-snapshot fingerprint.
 6. Preserve the full ordered event history as typed lineage. The receipt does
    not discard failed attempts or fallback/recovery decisions.
-7. Compute an authority digest over the normalized terminal-row identity and
+7. Compute a receipt integrity digest over the normalized terminal-row identity and
    complete typed event history. This is an integrity fingerprint, not a
    signature or tamper-proof storage claim.
 8. Do not change runtime writers or provider behavior in this slice.
+9. Return the same `logical_call_id` on the actual sync/async `LLMCallResult`.
+   A trusted consumer pins that exact value; trace lookup remains diagnostic and
+   may not establish trusted selection.
 
 ## Requirements
 
@@ -52,8 +56,9 @@ Premade decisions:
 | L101-R3 | Evidence-bearing selection | selected received event contributes raw SHA-256 and optional artifact reference | selected result without evidence hash | source + tests, A |
 | L101-R4 | Complete lineage | all ordered typed attempt events retained, including failures and recovery decisions | success-only history | source + retry/fallback fixture, A |
 | L101-R5 | Fail-loud integrity | absent, nonterminal, ambiguous, incomplete, mismatched, or fingerprint-tampered state rejects | partial receipt or silent fallback | negative tests, A |
-| L101-R6 | Provider-owned join | public attempt events without a matching terminal runtime row cannot yield a receipt | caller-event-only receipt | negative test, A |
+| L101-R6 | Runtime evidence join | public attempt events without a matching terminal runtime row cannot yield a receipt | caller-event-only receipt | negative test, A |
 | L101-R7 | Provider-free verification | tests use real temporary SQLite and typed fixtures; no provider call | network/model dependency | test audit, A |
+| L101-R8 | Returned identity binding | sync/async result ID exactly selects its persisted receipt | trace discovery or substituted ID | public-runtime tests, A |
 
 ## Boundaries And Domain Model
 
@@ -63,7 +68,7 @@ flowchart LR
   R --> C["terminal llm_calls row"]
   E --> J["strict selected-attempt reader"]
   C --> J
-  J --> P["AuthoritativeSelectedAttempt"]
+  J --> P["RuntimeSelectedAttemptReceipt"]
   X["caller-authored events only"] -. rejected .-> J
 ```
 
@@ -72,18 +77,23 @@ flowchart LR
 | terminal call row | runtime's final successful public-call record | one row; no error; native/json-schema path; v3 structured snapshot; matching call/trace/task/model/schema |
 | attempt history | append-only generation lifecycle | one logical call; stable trace/task/schema per event; legal per-attempt order; one validated attempt |
 | selected evidence | received payload associated with selected attempt | same ordinal/model/schema; nonblank SHA-256; precedes validated |
-| receipt | typed provider-owned projection | requested/resolved model, selected ordinal, hashes/artifact, complete lineage, authority digest |
+| receipt | typed trusted-process projection | requested/resolved model, selected ordinal, hashes/artifact, complete lineage, receipt digest |
+| returned result identity | trusted-runner selection handle | exact `LLMCallResult.logical_call_id`; same value on terminal row and events |
 
 The receipt is a Pydantic producer model with `extra="forbid"`. It carries no
 LLM-generated identifier. The reader never accepts caller-supplied event
 objects; it reads both stores itself.
 
+Within each attempt ordinal, every event names one model. A `retry` must lead
+to the same model, a `fallback` must lead to a different model, and `exhausted`
+cannot precede a later selected success.
+
 ## Contracts Then Schema
 
-`AuthoritativeSelectedAttempt` contains `logical_call_id`, `trace_id`, `task`,
+`RuntimeSelectedAttemptReceipt` contains `logical_call_id`, `trace_id`, `task`,
 terminal `call_id`, requested and resolved model, selected attempt ordinal,
 schema hash, raw SHA-256, optional artifact reference, call fingerprint,
-complete ordered `StructuredAttemptEvent` lineage, and an authority digest over
+complete ordered `StructuredAttemptEvent` lineage, and a receipt digest over
 the normalized joined evidence.
 
 The low-level SQLite seam returns raw persisted rows only inside `llm_client`.
@@ -106,7 +116,7 @@ attempts may fail and then carry `recovery_decided`. A validated attempt may not
 also fail or carry recovery, and events after the selected validation are
 invalid. Multiple terminal rows, multiple validations, mismatched identity,
 missing received evidence, unsupported paths, malformed snapshots, and
-fingerprint drift raise `SelectedAttemptIntegrityError`.
+fingerprint drift raise `SelectedAttemptReceiptError`.
 
 ## Files Affected
 
@@ -125,7 +135,7 @@ fingerprint drift raise `SelectedAttemptIntegrityError`.
 | successful single attempt | exact typed receipt from real temporary SQLite |
 | validation retry then success | selected ordinal and full failed-attempt lineage retained |
 | fallback then success | requested and resolved model differ truthfully; recovery retained |
-| public events only / terminal row only | neither half can claim authority |
+| public events only / terminal row only | neither half can yield a receipt |
 | duplicate terminal rows | ambiguity rejects |
 | multiple/missing validated attempts | lifecycle rejects |
 | missing/mismatched received evidence | evidence join rejects |
@@ -153,10 +163,11 @@ and temporary SQLite fixtures expose the entire seam.
 | Criterion | Initial grade | Target |
 |---|---|---|
 | contract and failure taxonomy | D (this plan) | A |
-| successful receipt | A (source + provider-free runtime test) | A |
-| complete retry/fallback lineage | A (source + test) | A |
+| successful receipt | A (source + sync/async provider-free runtime tests) | A |
+| complete retry/fallback lineage | A (source + sync/async runtime tests) | A |
 | public-event-only rejection | A (negative test) | A |
 | mismatch/tamper rejection | A (negative tests) | A |
+| returned-ID binding and substitution rejection | A (public-runtime tests) | A |
 | downstream onto-canon6 integration | F | separate consumer-plan evidence |
 
 The reader does not become a downstream hard gate until the target A-grade
@@ -165,7 +176,8 @@ provider-free tests pass. A provider call remains separately authorized work.
 ## Audit Charter
 
 **Stage:** shared-runtime contract supporting a PoC. **Next decision:** whether
-onto-canon6 may pin this exact reader for its provider-authoritative run receipt.
+onto-canon6 may pin the exact runtime-returned logical call identity and read
+its trusted-process receipt without claiming independent provider authority.
 Review at most three blocker groups: false authority, incomplete lineage, and
 unusable consumer identity. Security hardening, semantic quality, remote audit
 storage, and unrelated observability cleanup are out of scope.

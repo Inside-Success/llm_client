@@ -41,7 +41,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
 | 100 | [Budget-complete call snapshot v3](100_budget_complete_call_snapshot_v3.md) | High | ✅ Complete | DoDAF fresh page-window diagnostic |
-| 101 | [Authoritative selected structured attempt](101_authoritative_selected_attempt.md) | High | 🚧 In Progress | onto-canon6 Plan 0141 provider-authoritative receipt pinning |
+| 101 | [Runtime-selected structured attempt receipt](101_runtime_selected_attempt_receipt.md) | High | 🚧 In Progress | onto-canon6 Plan 0141 trusted-runner receipt pinning |
 | 1 | [LLM Client Master Roadmap](01_master-roadmap.md) | Highest | ✅ Complete | - |
 | 2 | [Client Boundary Hardening Program](02_client-boundary-hardening.md) | High | ✅ Complete | - |
 | 3 | [Model Policy Modernization](03_model-policy-modernization.md) | High | ✅ Complete | - |

@@ -68,3 +68,6 @@ Negative:
 Verification context (2026-07-13): structured non-streaming attempt events now
 also use `started`, but are stored in `structured_attempt_events`; they do not
 change stream heartbeat or terminal lifecycle semantics in this ADR.
+
+Plan 101 returns logical receipt identity only on non-streaming structured
+results; stream heartbeat state remains separate and unchanged.

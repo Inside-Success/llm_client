@@ -52,6 +52,8 @@ class LLMCallResult:
     """Best-effort model string used for the successful terminal attempt."""
     execution_model: str | None = None
     """Alias for resolved terminal model, kept additive for migration clarity."""
+    logical_call_id: str | None = None
+    """Runtime identity joining a structured result to its persisted attempts."""
     routing_trace: dict[str, Any] | None = field(default=None, repr=False)
     """Optional routing/fallback trace for contract characterization and debugging."""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
