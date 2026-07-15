@@ -10,8 +10,8 @@ normalized parsed content with provider raw content.
 
 - retention remains off by default and invalid configuration fails loudly;
 - enabled storage is checked before provider dispatch;
-- exact bytes are private, contained, hash-bound, atomically written, and
-  retention-bounded;
+- exact bytes are private, contained, hash-bound, atomically written, expired
+  reads fail, and cleanup remains agent-invocable after collection is disabled;
 - the public reader selects only through the Plan 101 exact receipt and rejects
   absence or tampering;
 - sync/async success, retry, and fallback paths retain every received attempt;
@@ -32,12 +32,21 @@ normalized parsed content with provider raw content.
 
 ## Verification Snapshot
 
-- 63 focused provider-free runtime/receipt/artifact tests pass.
+- 70 focused provider-free runtime/receipt/artifact tests pass after repairing
+  the first independent review's symlink-substitution and disabled-cleanup
+  blockers. The three original counterexample controls pass directly.
 - Changed files pass Ruff; the three Plan 102 observability modules pass strict
   mypy.
+- Generated API references are current; their generator check and 11 API/public
+  surface tests pass.
+- The repo-local full suite passes: 1,695 passed, 3 skipped, 11 deselected.
+- Canonical whole-repository `make lint` is inherited red with 309 findings;
+  none are in the changed Plan 102 files, which pass their scoped Ruff check.
 - Canonical whole-package `make typecheck` is inherited red in this environment
   with 209 errors across 40 files; none originate in the new raw-artifact or
   selected-reader modules. This does not count as a passing repository gate.
+- The pre-repair exact commit `d6ae314` was independently rejected. The repair
+  still requires exact-commit re-review before merge or downstream use.
 - No provider or model call occurred.
 
 ## Constraints

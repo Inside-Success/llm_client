@@ -59,7 +59,7 @@ normalized result JSON as those bytes is false provenance.
 | L102-R5 | Exact selected read | reader starts from exact `logical_call_id` and Plan 101 receipt | trace/latest/first discovery | source + tests, A |
 | L102-R6 | Fail-loud integrity | absent ref/file, malformed ref, hash mismatch, non-UTF-8, or receipt mismatch raises | partial content or fallback | negative tests, A |
 | L102-R7 | Attempt completeness | sync/async success, validation retry, and fallback attach refs to every received attempt | selected-only or success-only retention | runtime tests, A |
-| L102-R8 | Bounded retention | configured age cleanup removes expired sidecars without deleting current artifacts | unbounded raw retention | source + tests, A |
+| L102-R8 | Enforced retention | reads reject expired refs; later prepares and agent-invocable cleanup remove expired sidecars even after collection is disabled | stale read succeeds or cleanup requires enabled collection | source + tests, A |
 | L102-R9 | No semantic authority | result is trusted-process transport evidence only | provider attestation or semantic correctness claim | contract review, A |
 
 ## Boundaries
@@ -141,6 +141,9 @@ call-key mismatch, ordinal mismatch, and hash-name mismatch before opening.
 `extra="forbid"`. It returns raw text because the provider boundary already
 delivers a Python `str`; decoding is strict UTF-8. It carries the selected
 receipt digest so the joined evidence is explicit. It is not a signature.
+`cleanup_structured_raw_artifacts()` is an importable cleanup operation for an
+agent or scheduler. The library does not claim a background timer when no
+process invokes it; expiry is still enforced synchronously on every read.
 
 ```mermaid
 sequenceDiagram
@@ -230,7 +233,7 @@ the call rather than degrade to a null reference.
 | atomic duplicate write | identical content is stable; conflicting path fails |
 | selected receipt exact read | strict joined typed projection |
 | missing/ref/hash/UTF-8 mutations | all fail loudly |
-| expired vs current cleanup | bounded retention without current deletion |
+| expired read plus enabled/disabled cleanup | stale bytes cannot reopen; cleanup remains agent-invocable after collection stops |
 | sync/async success and validation retry/fallback | every received event has a verifiable ref |
 | existing Plan 97/101/replay/public tests | no lifecycle or API regression |
 

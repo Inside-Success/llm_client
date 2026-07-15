@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-14
-Verification context: async safety expiry remains a typed terminal failure rather than a warning; malformed replay policy, unsupported reconstruction, strict persistence failures, incomplete selected-attempt joins, and missing or tampered raw artifacts propagate as visible errors rather than silent defaults. Focused controls pass.
+Verification context: async safety expiry remains a typed terminal failure rather than a warning; malformed replay policy, unsupported reconstruction, strict persistence failures, incomplete selected-attempt joins, expired raw references, and missing, linked, or tampered raw artifacts propagate as visible errors rather than silent defaults. Focused controls pass.
 
 ## Context
 

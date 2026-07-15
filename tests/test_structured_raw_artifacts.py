@@ -17,6 +17,7 @@ from llm_client import acall_llm_structured, call_llm_structured, io_log
 from llm_client.core.errors import LLMError
 from llm_client.observability.raw_artifacts import (
     StructuredRawArtifactError,
+    cleanup_structured_raw_artifacts,
     prepare_structured_raw_artifact_store,
     read_structured_raw_artifact,
     write_structured_raw_artifact,
@@ -182,6 +183,29 @@ def test_exact_bytes_permissions_and_duplicate_write(
     assert stat.S_IMODE(absolute_path.parent.parent.stat().st_mode) == 0o700
 
 
+def test_existing_target_symlink_is_rejected_without_following(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A matching outside symlink cannot be accepted as a successful duplicate."""
+
+    _enable(monkeypatch)
+    raw = '{"action":"accept"}'
+    stored = write_structured_raw_artifact("logical-1", 0, raw)
+    assert stored is not None
+    path = (
+        Path(os.environ["LLM_CLIENT_STRUCTURED_RAW_ARTIFACT_ROOT"])
+        / Path(*stored.artifact_ref.split("/"))
+    )
+    path.unlink()
+    outside = tmp_path / "outside.raw"
+    outside.write_text(raw)
+    os.chmod(outside, 0o600)
+    path.symlink_to(outside)
+
+    with pytest.raises(StructuredRawArtifactError, match="not a regular file"):
+        write_structured_raw_artifact("logical-1", 0, raw)
+
+
 @pytest.mark.parametrize(
     "artifact_ref",
     [
@@ -281,6 +305,50 @@ def test_retention_cleanup_removes_only_expired_date_directories(
 
     assert not expired.exists()
     assert current.exists()
+
+
+def test_reader_rejects_expired_reference_before_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retention is enforced on read even when an old file has not been cleaned."""
+
+    _enable(monkeypatch)
+    monkeypatch.setenv("LLM_CLIENT_STRUCTURED_RAW_RETENTION_DAYS", "1")
+    stored = write_structured_raw_artifact("logical-1", 0, '{"action":"accept"}')
+    assert stored is not None
+    expired_day = (date.today() - timedelta(days=2)).isoformat()
+    expired_ref = stored.artifact_ref.replace(date.today().isoformat(), expired_day)
+
+    with pytest.raises(StructuredRawArtifactError, match="expired"):
+        read_structured_raw_artifact(
+            artifact_ref=expired_ref,
+            logical_call_id="logical-1",
+            attempt_ordinal=0,
+            expected_sha256=stored.raw_sha256,
+        )
+
+
+def test_disabled_prepare_and_explicit_cleanup_remove_expired_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabling collection does not disable cleanup of retained data."""
+
+    _enable(monkeypatch)
+    monkeypatch.setenv("LLM_CLIENT_STRUCTURED_RAW_RETENTION_DAYS", "1")
+    prepare_structured_raw_artifact_store()
+    version_root = Path(os.environ["LLM_CLIENT_STRUCTURED_RAW_ARTIFACT_ROOT"]) / "v1"
+    expired = version_root / (date.today() - timedelta(days=30)).isoformat()
+    expired.mkdir(mode=0o700)
+    (expired / "old.raw").write_text("old")
+    monkeypatch.setenv("LLM_CLIENT_STRUCTURED_RAW_ARTIFACTS", "off")
+
+    assert prepare_structured_raw_artifact_store() is False
+    assert not expired.exists()
+
+    expired.mkdir(mode=0o700)
+    (expired / "old.raw").write_text("old")
+    assert cleanup_structured_raw_artifacts() == 1
+    assert not expired.exists()
 
 
 # mock-ok: provider responses are controlled; runtime, retry, SQLite, and sidecars are real.

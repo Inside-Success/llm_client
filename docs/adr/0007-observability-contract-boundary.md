@@ -6,7 +6,9 @@ Verification context: canonical typed attempt, selected-attempt receipt, opt-in 
 models live under `observability/`; `io_log` persists effective
 retry/fallback/cache/budget state, unsupported or malformed replay
 reconstruction fails loud, and v3 replay requires fresh budget authority.
-Focused persistence, selected-attempt, replay, and tool-call controls pass.
+Raw-artifact reads reject expired or substituted paths, and cleanup remains an
+importable observability operation after collection is disabled. Focused
+persistence, selected-attempt, replay, and tool-call controls pass.
 Date: 2026-02-23
 
 ## Context

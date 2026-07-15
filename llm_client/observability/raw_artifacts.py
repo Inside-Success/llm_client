@@ -114,12 +114,13 @@ def _ensure_private_directory(path: Path) -> None:
         ) from error
 
 
-def _cleanup_expired(root: Path, retention_days: int) -> None:
+def _cleanup_expired(root: Path, retention_days: int) -> int:
     """Remove only owned version/date directories older than configured retention."""
 
     version_root = root / _VERSION
     _ensure_private_directory(version_root)
     cutoff = date.today() - timedelta(days=retention_days)
+    removed = 0
     try:
         children = tuple(version_root.iterdir())
     except OSError as error:
@@ -136,10 +137,12 @@ def _cleanup_expired(root: Path, retention_days: int) -> None:
         if child_date < cutoff:
             try:
                 shutil.rmtree(child)
+                removed += 1
             except OSError as error:
                 raise StructuredRawArtifactError(
                     f"Cannot remove expired structured raw artifact directory {child}: {error}"
                 ) from error
+    return removed
 
 
 def _ensure_private_tree(root: Path, directory: Path) -> None:
@@ -162,6 +165,8 @@ def prepare_structured_raw_artifact_store() -> bool:
     """Validate enabled storage before provider transport and clean expired data."""
 
     if not _retention_enabled():
+        if _artifact_root().exists():
+            cleanup_structured_raw_artifacts()
         return False
     if not _io_log._logging_enabled():
         raise StructuredRawArtifactError(
@@ -180,6 +185,23 @@ def prepare_structured_raw_artifact_store() -> bool:
             f"Structured raw artifact root is not writable: {root}: {error}"
         ) from error
     return True
+
+
+def cleanup_structured_raw_artifacts() -> int:
+    """Remove expired sidecars even when collection is currently disabled.
+
+    This importable operation is suitable for an agent or scheduler. It does
+    not claim that the library runs a background timer when no process invokes
+    it; read-time expiry independently prevents stale artifacts from reopening.
+    """
+
+    root = _artifact_root()
+    if not root.exists():
+        return 0
+    if root.is_symlink():
+        raise StructuredRawArtifactError("Raw artifact root is a symbolic link.")
+    _ensure_private_directory(root)
+    return _cleanup_expired(root, _retention_days())
 
 
 def _call_key(logical_call_id: str) -> str:
@@ -220,7 +242,13 @@ def _validate_ref(
     match = _REF_RE.fullmatch(artifact_ref)
     if match is None:
         raise StructuredRawArtifactError("Raw artifact reference shape is invalid.")
-    _day, call_key, ordinal_text, ref_sha256 = match.groups()
+    day_text, call_key, ordinal_text, ref_sha256 = match.groups()
+    artifact_day = date.fromisoformat(day_text)
+    cutoff = date.today() - timedelta(days=_retention_days())
+    if artifact_day < cutoff:
+        raise StructuredRawArtifactError(
+            f"Raw artifact reference expired under current retention: {artifact_ref}"
+        )
     if call_key != _call_key(logical_call_id):
         raise StructuredRawArtifactError("Raw artifact logical-call identity mismatch.")
     if int(ordinal_text) != attempt_ordinal:
@@ -231,10 +259,44 @@ def _validate_ref(
     if configured_root.is_symlink():
         raise StructuredRawArtifactError("Raw artifact root is a symbolic link.")
     root = configured_root.resolve()
-    path = (root / Path(*pure.parts)).resolve(strict=False)
-    if path != root and root not in path.parents:
-        raise StructuredRawArtifactError("Raw artifact reference escapes its root.")
-    return path
+    return root / Path(*pure.parts)
+
+
+def _read_existing_regular_file(path: Path) -> bytes:
+    """Read an existing target without following links or accepting special files."""
+
+    try:
+        before = path.lstat()
+    except OSError as error:
+        raise StructuredRawArtifactError(
+            f"Cannot inspect existing raw artifact target {path}: {error}"
+        ) from error
+    if not stat.S_ISREG(before.st_mode):
+        raise StructuredRawArtifactError(
+            f"Existing raw artifact target is not a regular file: {path}"
+        )
+    mode = stat.S_IMODE(before.st_mode)
+    if mode & 0o077:
+        raise StructuredRawArtifactError(
+            f"Existing raw artifact target has non-private permissions: {oct(mode)}"
+        )
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, os.O_RDONLY | nofollow)
+        after = os.fstat(fd)
+        if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+            os.close(fd)
+            raise StructuredRawArtifactError(
+                f"Existing raw artifact target changed during verification: {path}"
+            )
+        with os.fdopen(fd, "rb") as handle:
+            return handle.read()
+    except StructuredRawArtifactError:
+        raise
+    except OSError as error:
+        raise StructuredRawArtifactError(
+            f"Cannot read existing raw artifact target {path}: {error}"
+        ) from error
 
 
 def write_structured_raw_artifact(
@@ -266,12 +328,13 @@ def write_structured_raw_artifact(
         try:
             os.link(temporary, path)
         except FileExistsError:
-            existing = path.read_bytes()
+            existing = _read_existing_regular_file(path)
             if existing != raw_bytes:
                 raise StructuredRawArtifactError(
                     f"Existing raw artifact content contradicts its reference: {artifact_ref}"
                 )
-        os.chmod(path, 0o600)
+        else:
+            os.chmod(path, 0o600)
     except StructuredRawArtifactError:
         raise
     except OSError as error:

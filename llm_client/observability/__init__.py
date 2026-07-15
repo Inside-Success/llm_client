@@ -64,7 +64,10 @@ from llm_client.observability.selected_attempts import (
     get_runtime_selected_raw_content,
     diagnose_runtime_selected_attempt_receipt_for_trace,
 )
-from llm_client.observability.raw_artifacts import StructuredRawArtifactError
+from llm_client.observability.raw_artifacts import (
+    StructuredRawArtifactError,
+    cleanup_structured_raw_artifacts,
+)
 from llm_client.observability.tool_calls import (
     ToolCallResult,
     log_tool_call,
@@ -90,6 +93,7 @@ __all__ = [
     "compare_runs",
     "compare_cohorts",
     "compare_call_snapshots",
+    "cleanup_structured_raw_artifacts",
     "configure_agent_spec_enforcement",
     "configure_experiment_enforcement",
     "configure_feature_profile",
