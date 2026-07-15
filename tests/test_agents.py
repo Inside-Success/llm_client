@@ -2136,6 +2136,47 @@ class TestCodexFallback:
         assert "--dangerously-bypass-approvals-and-sandbox" in command
         assert stdin_payload == "Reply with OK only."
 
+    def test_build_codex_cli_command_preserves_sandbox_for_never_approval(self, tmp_path) -> None:
+        """Headless approval must not silently discard the requested sandbox."""
+
+        command, _env, _stdin_payload = _build_codex_cli_command(
+            "codex",
+            "Reply with OK only.",
+            output_schema=None,
+            kwargs={
+                "working_directory": str(tmp_path),
+                "approval_policy": "never",
+                "sandbox_mode": "read-only",
+            },
+            output_path=str(tmp_path / "last.txt"),
+            schema_path=None,
+        )
+
+        assert "--dangerously-bypass-approvals-and-sandbox" not in command
+        assert "-a" not in command
+        assert 'approval_policy="never"' in command
+        assert command[command.index("-s") + 1] == "read-only"
+
+    def test_build_codex_cli_command_forwards_non_never_approval(self, tmp_path) -> None:
+        """Current Codex receives approval policy via config, not removed `-a`."""
+
+        command, _env, _stdin_payload = _build_codex_cli_command(
+            "codex",
+            "Reply with OK only.",
+            output_schema=None,
+            kwargs={
+                "working_directory": str(tmp_path),
+                "approval_policy": "on-request",
+                "sandbox_mode": "read-only",
+            },
+            output_path=str(tmp_path / "last.txt"),
+            schema_path=None,
+        )
+
+        assert "-a" not in command
+        assert 'approval_policy="on-request"' in command
+        assert "--dangerously-bypass-approvals-and-sandbox" not in command
+
     def test_call_codex_via_cli_uses_subprocess_transport(
         self,
         monkeypatch: pytest.MonkeyPatch,
