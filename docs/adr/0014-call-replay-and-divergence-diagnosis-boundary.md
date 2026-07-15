@@ -8,7 +8,7 @@ replay-support metadata, and the checked effective `max_budget`; v3 replay
 requires a separate fresh budget instead of treating captured identity as spend
 authority. Selected-attempt reads verify that fingerprint before projecting requested identity, and opt-in raw sidecars let trusted-process consumers recompute selected transport hashes. Historical v1/v2 replay remains readable. Four-public-API capture,
 historical compatibility, malformed-budget, no-dispatch, and fresh-budget
-controls pass; raw-sidecar controls additionally reject expired or linked
+controls pass; raw-sidecar controls additionally reject malformed, expired, or linked
 artifacts and expose explicit retention cleanup. Strict tool-call lifecycle rows remain trace-joinable diagnostic
 evidence outside replayable LLM call snapshots.
 

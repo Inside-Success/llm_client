@@ -243,7 +243,12 @@ def _validate_ref(
     if match is None:
         raise StructuredRawArtifactError("Raw artifact reference shape is invalid.")
     day_text, call_key, ordinal_text, ref_sha256 = match.groups()
-    artifact_day = date.fromisoformat(day_text)
+    try:
+        artifact_day = date.fromisoformat(day_text)
+    except ValueError as error:
+        raise StructuredRawArtifactError(
+            "Raw artifact reference contains an invalid date."
+        ) from error
     cutoff = date.today() - timedelta(days=_retention_days())
     if artifact_day < cutoff:
         raise StructuredRawArtifactError(

@@ -212,6 +212,7 @@ def test_existing_target_symlink_is_rejected_without_following(
         "/tmp/outside.raw",
         "../outside.raw",
         "v2/2026-07-14/key/0-" + "a" * 64 + ".raw",
+        "v1/2026-99-99/" + "a" * 64 + "/0-" + "a" * 64 + ".raw",
         "v1/2026-07-14/wrong-key/0-" + "a" * 64 + ".raw",
         "v1/2026-07-14/" + "a" * 64 + "/1-" + "a" * 64 + ".raw",
     ],
