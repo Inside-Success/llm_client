@@ -1,14 +1,11 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-07-14
-Verification context: canonical typed attempt, selected-attempt receipt, opt-in exact raw-artifact, v3 replay-policy, and tool-call
-models live under `observability/`; `io_log` persists effective
-retry/fallback/cache/budget state, unsupported or malformed replay
-reconstruction fails loud, and v3 replay requires fresh budget authority.
-Raw-artifact reads reject malformed, expired, or substituted paths, and cleanup remains an
-importable observability operation after collection is disabled. Focused
-persistence, selected-attempt, replay, and tool-call controls pass.
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes cost-query statements with writes on
+the shared SQLite connection without changing query inputs, return shape,
+persistence payloads, replay, receipts, raw artifacts, or tool-call policy.
+Focused persistence and observability controls pass.
 Date: 2026-02-23
 
 ## Context

@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-14
-Verification context: native-schema attempts retain per-logical-call identity; the actual sync/async result returns that identity for exact receipt and opt-in raw-artifact lookup, while v3 replay snapshots preserve requested model and fallback order. Focused lifecycle and replay controls pass.
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes public Instructor construction and changes cost-source selection without changing requested, resolved, or executed model identity. Structured runtime, attempt, replay, and raw-artifact controls pass.
 
 ## Context
 

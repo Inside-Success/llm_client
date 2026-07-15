@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-14
-Verification context: provider-independent structured execution, exact effective-policy snapshot/replay, structured-attempt evidence, strict selected-attempt and typed fail-loud raw-content reads, agent-invocable raw retention cleanup, and trace-joinable tool-call lifecycle persistence are implemented once in the shared runtime; focused controls pass.
+Last verified: 2026-07-15
+Verification context: Plan 105 keeps provider-reported cost precedence, thread-safe public Instructor construction, and serialized shared-SQLite cost queries in the cross-project substrate. Focused client, structured, persistence, and observability controls pass.
 
 ## Context
 

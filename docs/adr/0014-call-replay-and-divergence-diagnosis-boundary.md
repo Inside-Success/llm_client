@@ -2,15 +2,11 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-07-14
-Verification context: v3 fingerprints bind public API, call kind, request,
-replay-support metadata, and the checked effective `max_budget`; v3 replay
-requires a separate fresh budget instead of treating captured identity as spend
-authority. Selected-attempt reads verify that fingerprint before projecting requested identity, and opt-in raw sidecars let trusted-process consumers recompute selected transport hashes. Historical v1/v2 replay remains readable. Four-public-API capture,
-historical compatibility, malformed-budget, no-dispatch, and fresh-budget
-controls pass; raw-sidecar controls additionally reject malformed, expired, or linked
-artifacts and expose explicit retention cleanup. Strict tool-call lifecycle rows remain trace-joinable diagnostic
-evidence outside replayable LLM call snapshots.
+Last verified: 2026-07-15
+Verification context: Plan 105 changes provider-cost selection and statement
+serialization without changing call snapshots, fingerprints, fresh replay
+authority, selected-attempt receipts, raw-artifact links, or historical replay.
+Focused replay, structured-attempt, and observability controls pass.
 
 ## Context
 

@@ -51,6 +51,60 @@ canonical source. Agents therefore cannot follow both the repository rule that
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
 
+### LLM-012: Failed pre-commit validation leaves generated docs staged
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #105 implementation commit |
+
+The pre-commit hook regenerated and staged both API-reference outputs before
+running doc-code coupling. Coupling then failed, so an unsuccessful commit
+attempt left additional generated mutations in the index and expanded the
+review scope before the agent could satisfy the reported requirement.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `pre-commit-validation-ordering`
+- **Friction:** The `llm_client` pre-commit hook mutates and stages generated API
+  documentation before later doc-code coupling validation can reject the
+  commit, so a failed validation attempt changes the index and obscures the
+  intended commit boundary.
+- **Recommendation:** Run non-mutating validation before generation, or generate
+  into a temporary location, compare, and only update/stage outputs after all
+  blocking checks pass; add a negative control proving failed hooks leave the
+  index unchanged.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
+### LLM-011: Push rejection prescribes an unscoped claim
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Low |
+| Reported | 2026-07-15 during Plan #105 branch publication |
+
+The push hook correctly rejected a branch without a repository-local claim,
+but its exact remediation command omitted `--plan` and `--feature`. Running the
+prescribed command created an unscoped claim and immediately warned that the
+claim should have been scoped, requiring release and recreation.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `repository-push-claim-guidance`
+- **Friction:** The `llm_client` push hook's remediation command creates an
+  unscoped claim even when the current branch and plan document identify a plan;
+  the claim tool then warns that the prescribed claim is insufficiently scoped.
+- **Recommendation:** Make the hook infer a unique plan from the branch or
+  tracked plan document and print `--plan N`; when inference is unavailable,
+  explain the required scope choice instead of prescribing an unscoped command.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
 ### LLM-009: Parallel yielded commands lose first-class wait handles
 
 | Field | Value |
@@ -225,6 +279,32 @@ completed command from an interrupted one.
 - **Recommendation:** Preserve execution-session handles across compaction, or
   persist an explicit terminal result that a resumed agent can query; document
   the supported recovery command and add a compaction-resume positive control.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
+### LLM-010: Repository lacks the required coordination claim entrypoint
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #105 coordination setup |
+
+The ecosystem execution policy requires agents to establish a repository claim
+before modifying shared projects, but the expected repository command,
+`make claim`, is not implemented by `llm_client`. The attempt failed with
+`No rule to make target 'claim'`, requiring a manually authored claim file.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `coordination-claim-entrypoint`
+- **Friction:** Ecosystem policy requires a repository-local `make claim`
+  entrypoint before shared-project writes, but `llm_client` has no `claim`
+  target, so the prescribed coordination workflow fails before source work.
+- **Recommendation:** Add standard `claim` and `release-claim` Make targets, or
+  document and expose a supported client-neutral claim command through the
+  Make target glossary with a positive integration check.
 
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
