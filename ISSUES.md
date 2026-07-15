@@ -228,3 +228,29 @@ completed command from an interrupted one.
 
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
+### LLM-010: Repository lacks the required coordination claim entrypoint
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #105 coordination setup |
+
+The ecosystem execution policy requires agents to establish a repository claim
+before modifying shared projects, but the expected repository command,
+`make claim`, is not implemented by `llm_client`. The attempt failed with
+`No rule to make target 'claim'`, requiring a manually authored claim file.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `coordination-claim-entrypoint`
+- **Friction:** Ecosystem policy requires a repository-local `make claim`
+  entrypoint before shared-project writes, but `llm_client` has no `claim`
+  target, so the prescribed coordination workflow fails before source work.
+- **Recommendation:** Add standard `claim` and `release-claim` Make targets, or
+  document and expose a supported client-neutral claim command through the
+  Make target glossary with a positive integration check.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
