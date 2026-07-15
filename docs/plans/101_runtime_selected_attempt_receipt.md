@@ -1,6 +1,6 @@
 # Plan #101: Runtime-Selected Structured Attempt Receipt
 
-**Status:** In Progress
+**Status:** Complete; independently accepted at `a360dfa`
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None; Plan 100 merged at `a5a4364`
