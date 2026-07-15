@@ -43,6 +43,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 102 | [Exact selected raw structured content](102_selected_raw_structured_content.md) | High | ✅ Complete | onto-canon6 Plan 0141 transport-receipt construction |
 | 100 | [Budget-complete call snapshot v3](100_budget_complete_call_snapshot_v3.md) | High | ✅ Complete | DoDAF fresh page-window diagnostic |
 | 101 | [Runtime-selected structured attempt receipt](101_runtime_selected_attempt_receipt.md) | High | ✅ Complete | onto-canon6 Plan 0141 trusted-runner receipt pinning |
+| 103 | [Codex CLI Approval Compatibility](103_codex_cli_approval_compatibility.md) | High | ✅ Complete | ecosystem-ops direct Codex dispatch certification |
 | 1 | [LLM Client Master Roadmap](01_master-roadmap.md) | Highest | ✅ Complete | - |
 | 2 | [Client Boundary Hardening Program](02_client-boundary-hardening.md) | High | ✅ Complete | - |
 | 3 | [Model Policy Modernization](03_model-policy-modernization.md) | High | ✅ Complete | - |
