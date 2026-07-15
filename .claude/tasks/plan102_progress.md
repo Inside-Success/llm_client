@@ -23,15 +23,24 @@ normalized parsed content with provider raw content.
 
 - [x] Existing Plan 97/101 contracts and coupled ADRs reviewed.
 - [x] Plan 102 contract written.
-- [ ] Provider-free failing tests added.
-- [ ] Sidecar storage and exact reader implemented.
-- [ ] Native structured runtime wired.
+- [x] Provider-free failing tests added.
+- [x] Sidecar storage and exact reader implemented.
+- [x] Native structured runtime wired.
 - [ ] Focused and repository verification complete.
 - [ ] Independent review accepted.
 - [ ] Merged and downstream dependency pinned.
+
+## Verification Snapshot
+
+- 63 focused provider-free runtime/receipt/artifact tests pass.
+- Changed files pass Ruff; the three Plan 102 observability modules pass strict
+  mypy.
+- Canonical whole-package `make typecheck` is inherited red in this environment
+  with 209 errors across 40 files; none originate in the new raw-artifact or
+  selected-reader modules. This does not count as a passing repository gate.
+- No provider or model call occurred.
 
 ## Constraints
 
 Provider/model calls are unauthorized. This is trusted-process provenance, not
 provider attestation. Semantic judgments remain outside deterministic code.
-

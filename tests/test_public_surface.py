@@ -23,10 +23,13 @@ def test_grouped_exports_flatten_to_public_surface_without_duplicates() -> None:
 
     assert len(flattened) == len(set(flattened))
     assert llm_client.__all__ == flattened
-    assert len(flattened) == 132
+    assert len(flattened) == 135
     assert "RuntimeSelectedAttemptReceipt" in llm_client._CORE_SUBSTRATE_EXPORTS
+    assert "RuntimeSelectedRawContent" in llm_client._CORE_SUBSTRATE_EXPORTS
     assert "SelectedAttemptReceiptError" in llm_client._CORE_SUBSTRATE_EXPORTS
+    assert "StructuredRawArtifactError" in llm_client._CORE_SUBSTRATE_EXPORTS
     assert "get_runtime_selected_attempt_receipt" in llm_client._CORE_SUBSTRATE_EXPORTS
+    assert "get_runtime_selected_raw_content" in llm_client._CORE_SUBSTRATE_EXPORTS
     assert "diagnose_runtime_selected_attempt_receipt_for_trace" in llm_client._CORE_SUBSTRATE_EXPORTS
 
     assert "call_llm" in llm_client._CORE_SUBSTRATE_EXPORTS

@@ -36,6 +36,11 @@ import litellm
 from llm_client.core.models import supports_structured_output as _registry_supports_structured_output
 from llm_client.execution.timeout_policy import _await_with_safety_ceiling
 from llm_client.parsing_utils import safe_json_loads as _safe_json_loads
+from llm_client.observability.raw_artifacts import (
+    StructuredRawArtifactError,
+    prepare_structured_raw_artifact_store,
+    write_structured_raw_artifact,
+)
 from llm_client.observability.structured_attempts import (
     AttemptEventType,
     AttemptFailureClass,
@@ -126,6 +131,15 @@ class _StructuredFinalizationFailure(Exception):
         super().__init__(str(cause) or type(cause).__name__)
 
 
+def _prepare_raw_artifact_store_for_runtime() -> None:
+    """Make raw-artifact configuration failure terminal for this public call."""
+
+    try:
+        prepare_structured_raw_artifact_store()
+    except StructuredRawArtifactError as error:
+        raise _StructuredFinalizationFailure(error) from error
+
+
 def _unwrap_structured_finalization_failure(exc: Exception) -> Exception:
     """Return the original local failure rather than leaking a policy marker."""
 
@@ -177,6 +191,7 @@ def _attempt_event(
     schema_hash: str,
     event_type: AttemptEventType,
     raw_content: str | None = None,
+    raw_artifact_ref: str | None = None,
     validation_error: ValidationError | None = None,
     failure_class: AttemptFailureClass | None = None,
     validation_issues: tuple[StructuredValidationIssue, ...] = (),
@@ -210,11 +225,47 @@ def _attempt_event(
             if raw_content is not None
             else None
         ),
+        raw_artifact_ref=raw_artifact_ref,
         failure_class=failure_class,
         validation_issues=issues,
         execution_error_type=execution_error_type,
         recovery_decision=recovery_decision,
     )
+
+
+def _received_attempt_event(
+    *,
+    logical_call_id: str,
+    trace_id: str,
+    task: str,
+    attempt: int,
+    model: str,
+    schema_hash: str,
+    raw_content: str,
+) -> StructuredAttemptEvent:
+    """Persist exact raw bytes first, then build their received metadata event."""
+
+    artifact = write_structured_raw_artifact(
+        logical_call_id,
+        attempt,
+        raw_content,
+    )
+    event = _attempt_event(
+        logical_call_id=logical_call_id,
+        trace_id=trace_id,
+        task=task,
+        attempt=attempt,
+        model=model,
+        schema_hash=schema_hash,
+        event_type="received",
+        raw_content=raw_content,
+        raw_artifact_ref=(artifact.artifact_ref if artifact is not None else None),
+    )
+    if artifact is not None and event.raw_sha256 != artifact.raw_sha256:
+        raise StructuredRawArtifactError(
+            "Structured raw artifact hash contradicts its received event."
+        )
+    return event
 
 
 def _execution_failure_class(error: Exception) -> AttemptFailureClass:
@@ -289,10 +340,10 @@ def _record_provider_schema_validation_failure(
     raw_content = _provider_schema_validation_raw(error)
     if raw_content is None:
         return False
-    record_structured_attempt_event(_attempt_event(
+    record_structured_attempt_event(_received_attempt_event(
         logical_call_id=logical_call_id, trace_id=trace_id, task=task,
         attempt=attempt, model=model, schema_hash=schema_hash,
-        event_type="received", raw_content=raw_content,
+        raw_content=raw_content,
     ))
     record_structured_attempt_event(_attempt_event(
         logical_call_id=logical_call_id, trace_id=trace_id, task=task,
@@ -717,6 +768,7 @@ def _call_llm_structured_impl(
                 "strict structured-output policy forbids Instructor fallback."
             )
         if supports_schema:
+            _prepare_raw_artifact_store_for_runtime()
             schema = _strict_json_schema(response_model.model_json_schema())
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -813,10 +865,10 @@ def _call_llm_structured_impl(
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
                         raise ValueError("Empty content from LLM (native JSON schema structured)")
-                    record_structured_attempt_event(_attempt_event(
+                    record_structured_attempt_event(_received_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
-                        event_type="received", raw_content=raw_content,
+                        raw_content=raw_content,
                     ))
                     try:
                         parsed = _robust_validate_json(response_model, raw_content)
@@ -882,11 +934,16 @@ def _call_llm_structured_impl(
                 except Exception as exc:
                     if attempt_validated:
                         raise _StructuredFinalizationFailure(exc) from exc
-                    provider_validation = _record_provider_schema_validation_failure(
-                        error=exc, logical_call_id=_logical_call_id,
-                        trace_id=trace_id, task=task, attempt=logical_attempt,
-                        model=current_model, schema_hash=_schema_hash,
-                    )
+                    if isinstance(exc, StructuredRawArtifactError):
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    try:
+                        provider_validation = _record_provider_schema_validation_failure(
+                            error=exc, logical_call_id=_logical_call_id,
+                            trace_id=trace_id, task=task, attempt=logical_attempt,
+                            model=current_model, schema_hash=_schema_hash,
+                        )
+                    except StructuredRawArtifactError as artifact_error:
+                        raise _StructuredFinalizationFailure(artifact_error) from artifact_error
                     if provider_validation:
                         _recovery_pending.add(logical_attempt)
                     elif not isinstance(exc, _StructuredValidationRetry) and not attempt_validated:
@@ -1467,6 +1524,7 @@ async def _acall_llm_structured_impl(
                 "strict structured-output policy forbids Instructor fallback."
             )
         if supports_schema:
+            _prepare_raw_artifact_store_for_runtime()
             schema = _strict_json_schema(response_model.model_json_schema())
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -1567,10 +1625,10 @@ async def _acall_llm_structured_impl(
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
                         raise ValueError("Empty content from LLM (native JSON schema structured)")
-                    record_structured_attempt_event(_attempt_event(
+                    record_structured_attempt_event(_received_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
-                        event_type="received", raw_content=raw_content,
+                        raw_content=raw_content,
                     ))
                     try:
                         parsed = _robust_validate_json(response_model, raw_content)
@@ -1636,11 +1694,16 @@ async def _acall_llm_structured_impl(
                 except Exception as exc:
                     if attempt_validated:
                         raise _StructuredFinalizationFailure(exc) from exc
-                    provider_validation = _record_provider_schema_validation_failure(
-                        error=exc, logical_call_id=_logical_call_id,
-                        trace_id=trace_id, task=task, attempt=logical_attempt,
-                        model=current_model, schema_hash=_schema_hash_async,
-                    )
+                    if isinstance(exc, StructuredRawArtifactError):
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    try:
+                        provider_validation = _record_provider_schema_validation_failure(
+                            error=exc, logical_call_id=_logical_call_id,
+                            trace_id=trace_id, task=task, attempt=logical_attempt,
+                            model=current_model, schema_hash=_schema_hash_async,
+                        )
+                    except StructuredRawArtifactError as artifact_error:
+                        raise _StructuredFinalizationFailure(artifact_error) from artifact_error
                     if provider_validation:
                         _recovery_pending_async.add(logical_attempt)
                     elif not isinstance(exc, _StructuredValidationRetry) and not attempt_validated:

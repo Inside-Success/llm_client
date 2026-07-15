@@ -207,15 +207,21 @@ the call rather than degrade to a null reference.
 
 ### New Tests (TDD)
 
-- `tests/test_structured_raw_artifacts.py`
+| Test File | Test Function | What It Verifies |
+|---|---|---|
+| `tests/test_structured_raw_artifacts.py` |  | Exact sidecar persistence, selection, and integrity controls |
 
 ### Existing Tests
 
-- `tests/test_structured_attempts.py`
-- `tests/test_selected_attempts.py`
-- `tests/test_public_surface.py`
+| Test Pattern | Why |
+|---|---|
+| `tests/test_structured_attempts.py` | Native attempt lifecycle remains complete |
+| `tests/test_selected_attempts.py` | Plan 101 exact selection remains strict |
+| `tests/test_public_surface.py` | Export manifest remains exact |
 
-| Test | What it proves |
+### Coverage Scenarios
+
+| Scenario | What it proves |
 |---|---|
 | disabled writer | no file/ref by default |
 | enabled readiness before mocked transport | configuration failure prevents dispatch |

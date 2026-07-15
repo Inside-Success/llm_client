@@ -229,6 +229,8 @@ def test_attempt_event_rejects_unknown_taxonomy() -> None:
         _event(event_type="execution_failed", failure_class="timeout")
     with pytest.raises(ValidationError, match="only valid on execution_failed"):
         _event(event_type="started", execution_error_type="TimeoutError")
+    with pytest.raises(ValidationError, match="only valid on received"):
+        _event(event_type="started", raw_artifact_ref="v1/example.raw")
 
 
 def test_old_attempt_table_migrates_additive_execution_error_column(

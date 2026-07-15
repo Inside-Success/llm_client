@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-14
-Verification context: attempt events, v3 call snapshots, selected-attempt receipts, and strict tool-call lifecycles retain bounded control-plane metadata, hashes, and trace links without inlining raw response or operator-result bodies; focused readback controls pass.
+Verification context: attempt events, v3 call snapshots, selected-attempt receipts, and strict tool-call lifecycles retain bounded control-plane metadata, hashes, and trace links; optional exact raw response bytes live only in a private retention-bounded sidecar, never inline in the metadata ledger. Focused readback controls pass.
 Date: 2026-03-17
 
 ## Context

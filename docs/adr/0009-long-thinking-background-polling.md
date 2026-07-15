@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-23
 Last verified: 2026-07-14
-Verification context: native-schema sync/async results now expose receipt identity, while Responses background polling remains a distinct unsupported receipt path with its separate explicit timeout contract.
+Verification context: native-schema sync/async results expose receipt identity and may retain exact raw sidecars when explicitly enabled, while Responses background polling remains a distinct unsupported receipt path with its separate explicit timeout contract.
 
 ## Context
 

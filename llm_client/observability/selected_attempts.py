@@ -16,6 +16,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import llm_client.io_log as _io_log
 from llm_client.observability.replay import _ReplaySnapshotV3, snapshot_fingerprint
+from llm_client.observability.raw_artifacts import (
+    StructuredRawArtifactError,
+    read_structured_raw_artifact,
+)
 from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
     get_structured_attempt_events,
@@ -75,6 +79,35 @@ class RuntimeSelectedAttemptReceipt(BaseModel):
         min_length=64,
         max_length=64,
         description="Integrity digest over the normalized joined receipt evidence.",
+    )
+
+
+class RuntimeSelectedRawContent(BaseModel):
+    """Exact selected structured bytes verified by trusted-process evidence.
+
+    This is not provider attestation, a signature, or a semantic-correctness
+    judgment. It proves only what the configured local runtime retained.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    logical_call_id: str = Field(description="Exact runtime-returned call identity.")
+    selected_attempt_ordinal: int = Field(
+        ge=0, description="Ordinal selected by the strict Plan 101 receipt."
+    )
+    raw_content: str = Field(description="Exact retained provider content decoded as UTF-8.")
+    raw_sha256: str = Field(
+        min_length=64,
+        max_length=64,
+        description="SHA-256 verified against both reference and retained bytes.",
+    )
+    raw_artifact_ref: str = Field(
+        description="Verified versioned reference beneath the configured private root."
+    )
+    selected_attempt_receipt_digest: str = Field(
+        min_length=64,
+        max_length=64,
+        description="Digest of the Plan 101 selected-attempt receipt used for this join.",
     )
 
 
@@ -271,6 +304,38 @@ def get_runtime_selected_attempt_receipt(
     }
     return RuntimeSelectedAttemptReceipt.model_validate(
         {**evidence, "receipt_digest": _receipt_digest(evidence)}
+    )
+
+
+def get_runtime_selected_raw_content(
+    logical_call_id: str,
+) -> RuntimeSelectedRawContent:
+    """Return exact retained bytes for the strict selected native-schema attempt."""
+
+    receipt = get_runtime_selected_attempt_receipt(logical_call_id)
+    if receipt.raw_artifact_ref is None:
+        raise StructuredRawArtifactError(
+            f"Logical call {logical_call_id}: selected attempt has no raw artifact reference."
+        )
+    raw_bytes = read_structured_raw_artifact(
+        artifact_ref=receipt.raw_artifact_ref,
+        logical_call_id=receipt.logical_call_id,
+        attempt_ordinal=receipt.selected_attempt_ordinal,
+        expected_sha256=receipt.raw_sha256,
+    )
+    try:
+        raw_content = raw_bytes.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise StructuredRawArtifactError(
+            f"Logical call {logical_call_id}: selected raw artifact is not valid UTF-8."
+        ) from error
+    return RuntimeSelectedRawContent(
+        logical_call_id=receipt.logical_call_id,
+        selected_attempt_ordinal=receipt.selected_attempt_ordinal,
+        raw_content=raw_content,
+        raw_sha256=receipt.raw_sha256,
+        raw_artifact_ref=receipt.raw_artifact_ref,
+        selected_attempt_receipt_digest=receipt.receipt_digest,
     )
 
 

@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-14
-Verification context: native-schema attempts retain per-logical-call identity; the actual sync/async result returns that identity for exact receipt lookup, while v3 replay snapshots preserve requested model and fallback order. Focused lifecycle and replay controls pass.
+Verification context: native-schema attempts retain per-logical-call identity; the actual sync/async result returns that identity for exact receipt and opt-in raw-artifact lookup, while v3 replay snapshots preserve requested model and fallback order. Focused lifecycle and replay controls pass.
 
 ## Context
 

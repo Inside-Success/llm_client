@@ -106,6 +106,10 @@ class StructuredAttemptEvent(BaseModel):
     def _event_shape(self) -> "StructuredAttemptEvent":
         if self.event_type == "received" and self.raw_sha256 is None:
             raise ValueError("received event requires raw_sha256")
+        if self.event_type != "received" and self.raw_artifact_ref is not None:
+            raise ValueError("raw_artifact_ref is only valid on received events")
+        if self.raw_artifact_ref is not None and self.raw_sha256 is None:
+            raise ValueError("raw_artifact_ref requires raw_sha256")
         if self.event_type in {"validation_failed", "execution_failed"} and self.failure_class is None:
             raise ValueError(f"{self.event_type} event requires failure_class")
         if self.event_type == "execution_failed" and self.execution_error_type is None:
