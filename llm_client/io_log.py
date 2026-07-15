@@ -1245,6 +1245,51 @@ def read_structured_attempt_call_ids(trace_id: str) -> list[str]:
     return [str(row[0]) for row in rows]
 
 
+def read_structured_terminal_calls(logical_call_id: str) -> list[dict[str, Any]]:
+    """Return persisted terminal call rows for one structured logical call.
+
+    This is an internal persistence seam. Semantic validation and the public
+    typed contract live in ``observability.selected_attempts``.
+    """
+
+    rows = _get_db().execute(
+        """SELECT id, model, error, caller, task, trace_id, call_fingerprint,
+                  call_snapshot, execution_path, schema_hash,
+                  response_format_type, logical_call_id
+           FROM llm_calls
+           WHERE logical_call_id = ?
+           ORDER BY id""",
+        (logical_call_id,),
+    ).fetchall()
+    keys = (
+        "call_id",
+        "model",
+        "error",
+        "caller",
+        "task",
+        "trace_id",
+        "call_fingerprint",
+        "call_snapshot",
+        "execution_path",
+        "schema_hash",
+        "response_format_type",
+        "logical_call_id",
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(zip(keys, row, strict=True))
+        snapshot = item["call_snapshot"]
+        if snapshot is not None:
+            try:
+                item["call_snapshot"] = json.loads(snapshot)
+            except (TypeError, json.JSONDecodeError) as error:
+                raise ValueError(
+                    f"Logical call {logical_call_id} has malformed call_snapshot JSON."
+                ) from error
+        result.append(item)
+    return result
+
+
 def _write_call_to_db(
     *,
     timestamp: str,

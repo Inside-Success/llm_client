@@ -436,7 +436,10 @@ def _call_llm_structured_impl(
     )
     _logical_call_id = uuid4().hex
     def _log_call_event(**event: Any) -> None:
-        """Bind every terminal structured-call row to its attempt history."""
+        """Bind the returned result and terminal row to one attempt history."""
+        result = event.get("result")
+        if isinstance(result, LLMCallResult):
+            result.logical_call_id = _logical_call_id
         _base_log_call_event(**event, logical_call_id=_logical_call_id)
     timeout = _normalize_timeout(
         timeout,
@@ -1179,7 +1182,10 @@ async def _acall_llm_structured_impl(
     )
     _logical_call_id = uuid4().hex
     def _log_call_event(**event: Any) -> None:
-        """Bind every terminal structured-call row to its attempt history."""
+        """Bind the returned result and terminal row to one attempt history."""
+        result = event.get("result")
+        if isinstance(result, LLMCallResult):
+            result.logical_call_id = _logical_call_id
         _base_log_call_event(**event, logical_call_id=_logical_call_id)
     timeout = _normalize_timeout(
         timeout,

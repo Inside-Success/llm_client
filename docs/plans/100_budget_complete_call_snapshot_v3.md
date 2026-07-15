@@ -1,6 +1,6 @@
 # Plan #100: Budget-Complete Call Snapshot V3
 
-**Status:** In Progress
+**Status:** Complete; merged by PR #58 at `a5a4364`
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None; child branch preserves Plan 97 commit `d74b8ea`

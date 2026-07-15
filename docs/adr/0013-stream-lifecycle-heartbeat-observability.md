@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Last verified: 2026-07-14
-Verification context: v2 effective-policy snapshots remain on non-streaming text/structured call paths, while strict programmatic tool-call lifecycles share trace identity with LLM calls but remain distinct from stream heartbeat state; stream lifecycle, heartbeat, and stagnation semantics are unchanged.
+Verification context: v3 effective-policy snapshots and selected-attempt receipts remain on non-streaming structured paths, while tool-call and stream lifecycle state remain distinct; stream heartbeat and stagnation semantics are unchanged.
 Date: 2026-03-22
 
 ## Context
@@ -68,3 +68,6 @@ Negative:
 Verification context (2026-07-13): structured non-streaming attempt events now
 also use `started`, but are stored in `structured_attempt_events`; they do not
 change stream heartbeat or terminal lifecycle semantics in this ADR.
+
+Plan 101 returns logical receipt identity only on non-streaming structured
+results; stream heartbeat state remains separate and unchanged.
