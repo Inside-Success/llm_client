@@ -196,11 +196,7 @@ def _extract_responses_usage(response: Any) -> dict[str, Any]:
 
 
 def _compute_responses_cost(response: Any, usage: dict[str, Any]) -> tuple[float, str]:
-    """Compute cost for one Responses API call.
-
-    Same ordering as ``cost_utils._compute_cost``: provider-reported actual
-    cost first, then litellm's estimate, then the flat floor.
-    """
+    """Compute Responses cost with the same precedence as Completions."""
 
     provider_cost = _provider_reported_cost(response)
     if provider_cost is not None:

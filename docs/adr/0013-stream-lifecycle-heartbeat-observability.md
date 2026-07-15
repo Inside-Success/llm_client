@@ -1,8 +1,8 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-07-09
-Verification context: the transcript-evidence ledger is separate from stream lifecycle state, treats a missing transcript result as provisional import evidence that may later mature, and does not reinterpret it as a provider stall; existing stream lifecycle semantics are unchanged
+Last verified: 2026-07-15
+Verification context: Plan 105 affects non-streaming cost selection, Instructor construction, and cost-query locking only; stream start, progress, completion, failure, heartbeat, and stagnation semantics remain unchanged. Related client controls pass.
 Date: 2026-03-22
 
 ## Context
@@ -37,6 +37,8 @@ introduced regressions and missing terminal lifecycle rows:
    payload builders, and never into public stream constructors.
 5. Treat stream model constructor arguments as provider iterator + requested model
    (no duplicate positional overloads).
+6. Programmatic tool calls use the separate typed tool-call lifecycle contract;
+   they must not be projected as stream progress or heartbeat events.
 
 ## Consequences
 
@@ -62,3 +64,10 @@ Negative:
    - async iteration error emits `started -> progress -> failed` and captures error metadata
 2. Existing stream fixtures should continue passing for non-streaming and streaming
    behavior after monitor extraction.
+
+Verification context (2026-07-13): structured non-streaming attempt events now
+also use `started`, but are stored in `structured_attempt_events`; they do not
+change stream heartbeat or terminal lifecycle semantics in this ADR.
+
+Plan 101 returns logical receipt identity only on non-streaming structured
+results; stream heartbeat state remains separate and unchanged.

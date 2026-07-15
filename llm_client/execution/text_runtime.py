@@ -11,9 +11,20 @@ from __future__ import annotations
 import asyncio
 import hashlib as _hashlib
 import json as _json
-
 from importlib import import_module
 from typing import Any, Callable, cast
+
+from llm_client.core.client import (
+    AsyncCachePolicy,
+    CachePolicy,
+    ExecutionMode,
+    Hooks,
+    LLMCallResult,
+    RetryPolicy,
+)
+from llm_client.core.config import ClientConfig
+from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
+from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 
 
 def _extract_schema_observability(kwargs: dict[str, Any]) -> tuple[str | None, str | None]:
@@ -44,11 +55,6 @@ def _extract_schema_observability(kwargs: dict[str, Any]) -> tuple[str | None, s
         except (AttributeError, TypeError):
             pass
     return schema_hash, rf_type
-
-from llm_client.core.client import AsyncCachePolicy, CachePolicy, ExecutionMode, Hooks, LLMCallResult, RetryPolicy
-from llm_client.core.config import ClientConfig
-from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
-from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
 
 _client: Any = import_module("llm_client.core.client")
 
@@ -193,7 +199,7 @@ async def _acall_llm_impl(
     # Inject task/trace_id into litellm metadata for callback propagation
     # (e.g. Langfuse). Harmless when no callbacks are configured.
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
-    public_runtime_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     from llm_client.observability.replay import build_call_snapshot
 
     call_snapshot = build_call_snapshot(
@@ -202,6 +208,7 @@ async def _acall_llm_impl(
         requested_model=model,
         messages=messages,
         prompt_ref=prompt_ref,
+        max_budget=max_budget,
         timeout=timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,
@@ -211,6 +218,8 @@ async def _acall_llm_impl(
         retry_on=retry_on,
         fallback_models=fallback_models,
         public_kwargs=snapshot_runtime_kwargs,
+        retry_policy=r,
+        cache_policy=cache,
         execution_mode=execution_mode,
     )
 
@@ -237,7 +246,6 @@ async def _acall_llm_impl(
         config=cfg,
     )
     models = plan.models
-    primary_model = plan.primary_model
     fallback_chain = plan.fallback_models or None
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
     if fallback_chain is not None:
@@ -255,7 +263,6 @@ async def _acall_llm_impl(
     # (lines 742-801) where it participates in the fallback chain. Do NOT
     # add early returns here — that was the cause of the fallback bypass bug.
 
-    r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     if cache is not None and _is_agent_model(model):
         raise ValueError("Caching not supported for agent models — they have side effects.")
     _warnings: list[str] = list(_entry_warnings)

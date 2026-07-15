@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-09
-Verification context: the transcript-backed agent tool-usage importer records explicit transport/application outcomes and may mature provisional `missing` evidence without emitting or recategorizing runtime warnings; existing warning taxonomy behavior is unchanged
+Last verified: 2026-07-15
+Verification context: Plan 105 preserves the existing fallback-cost warning path while selecting valid provider billing before estimates; concurrent construction and SQLite failures remain errors rather than advisories. Focused runtime and observability controls pass.
 
 ## Context
 
@@ -18,6 +18,8 @@ mismatch.
 3. Week 1 locks category semantics; code identifiers can be added later.
 4. Week 1 applies only drift fixes needed to align behavior/tests with this
    taxonomy.
+5. Missing/disabled persistence for a caller that explicitly selects the strict
+   tool-call API is an integrity error, not a warning or best-effort advisory.
 
 ## Rationale
 
@@ -36,3 +38,13 @@ Negative:
 
 Add stable warning codes (`LLMC_WARN_*`) with structured metadata once
 router/kernel contracts are stabilized.
+
+Verification context (2026-07-13): native-schema pre-response failures are
+typed attempt events (`timeout`, `rate_limit`, or `provider_execution`), not
+warnings. The retry kernel records the actual retry/fallback/exhaustion
+disposition; persistence failure remains an integrity error.
+
+Local failures after schema validation now propagate as terminal call errors
+without another provider attempt or an advisory warning.
+
+Plan 101 receipt contradictions remain fail-loud integrity errors, not warnings.

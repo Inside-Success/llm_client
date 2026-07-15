@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-09
-Verification context: the shared substrate now exposes generic Codex/Claude structured tool-usage import and reporting, including explicit inserted/updated/duplicate counts as provisional calls mature, while keeping cross-project observability in `llm_client` rather than a project-specific policy script
+Last verified: 2026-07-15
+Verification context: Plan 105 keeps provider-reported cost precedence, thread-safe public Instructor construction, and serialized shared-SQLite cost queries in the cross-project substrate. Focused client, structured, persistence, and observability controls pass.
 
 ## Context
 
@@ -53,6 +53,8 @@ existing libraries already solve well.
 7. Workflow orchestration is above the core client boundary. `task_graph` may
    remain as a simple orchestrator, but `llm_client` should not turn into a
    bespoke general-purpose workflow engine.
+8. Cross-project callers that require tool execution to be auditable use the
+   shared strict tool-call API rather than implementing project-local sinks.
 
 ## Consequences
 
@@ -80,3 +82,17 @@ Negative:
    shared facility rather than a prompt-specific one.
 3. Integration work in higher-level packages should verify that they can depend
    on `llm_client` without recreating primary execution or analytics backends.
+4. Strict cross-project tool traces must prove sink failures propagate and the
+   persisted event remains joinable to its parent trace.
+5. Cross-project structured traces must prove every provider attempt begins at
+   `started`, preserves pre-response failures, and records the retry kernel's
+   actual disposition with logical-call-global ordinals.
+
+Last verified: 2026-07-14 (DIGIMON-bound Plan 97 transport failure).
+
+The shared runtime now distinguishes provider recovery from local finalization:
+once native structured output validates, hook/cache/log failures fail loud
+without repeating generation or switching models.
+
+Plan 101 consumers pin the logical call identity returned by the same runtime
+result; trace-only lookup is diagnostic.

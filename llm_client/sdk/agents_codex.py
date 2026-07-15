@@ -589,6 +589,7 @@ def _build_codex_cli_command(
     working_directory = str(kwargs.get("working_directory") or os.getcwd())
     sandbox_mode = str(kwargs.get("sandbox_mode") or "workspace-write")
     approval_policy = str(kwargs.get("approval_policy") or "never")
+    yolo_mode = bool(kwargs.get("yolo_mode"))
     reasoning_effort = _agents_mod()._normalize_codex_reasoning_effort(
         kwargs.get("model_reasoning_effort")
     )
@@ -604,10 +605,12 @@ def _build_codex_cli_command(
         "-o",
         output_path,
     ]
-    if approval_policy == "never":
+    if yolo_mode:
         command.append("--dangerously-bypass-approvals-and-sandbox")
     else:
-        command.extend(["-a", approval_policy])
+        # Codex CLI 0.144 removed the old `-a` flag. A config override retains
+        # non-interactive approval semantics without discarding `--sandbox`.
+        command.extend(["-c", f"approval_policy={_json.dumps(approval_policy)}"])
     if kwargs.get("skip_git_repo_check"):
         command.append("--skip-git-repo-check")
     if underlying_model:

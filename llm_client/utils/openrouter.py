@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import threading
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from llm_client.execution.retry import _error_status_code
@@ -37,6 +38,21 @@ OPENROUTER_API_KEYS_ENV = "OPENROUTER_API_KEYS"
 _OPENROUTER_KEY_ROTATION_LOCK = threading.Lock()
 _OPENROUTER_KEY_RING: tuple[str, ...] = ()
 _OPENROUTER_KEY_RING_INDEX: int = 0
+
+
+@dataclass(frozen=True)
+class _OpenRouterKeySource:
+    """One configured OpenRouter credential source and its normalized secrets.
+
+    The structure is intentionally private because secret values must never cross
+    the public provider-observation boundary. Keeping source identity before ring
+    deduplication lets callers detect forbidden rotation configuration even when
+    two sources contain the same secret.
+    """
+
+    name: str
+    values: tuple[str, ...]
+    rotation_source: bool
 
 
 # ---------------------------------------------------------------------------
@@ -64,17 +80,31 @@ def _split_api_keys(raw: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _openrouter_key_candidates_from_env() -> tuple[str, ...]:
-    """Collect OpenRouter keys from supported env vars in stable order."""
-    candidates: list[str] = []
+def _openrouter_key_sources_from_env() -> tuple[_OpenRouterKeySource, ...]:
+    """Collect non-empty OpenRouter credential sources before deduplication."""
+    sources: list[_OpenRouterKeySource] = []
 
     raw_multi = _normalize_api_key_value(os.environ.get(OPENROUTER_API_KEYS_ENV))
     if raw_multi:
-        candidates.extend(_split_api_keys(raw_multi))
+        values = tuple(_split_api_keys(raw_multi))
+        if values:
+            sources.append(
+                _OpenRouterKeySource(
+                    name=OPENROUTER_API_KEYS_ENV,
+                    values=values,
+                    rotation_source=True,
+                )
+            )
 
     primary = _normalize_api_key_value(os.environ.get(OPENROUTER_API_KEY_ENV))
     if primary:
-        candidates.append(primary)
+        sources.append(
+            _OpenRouterKeySource(
+                name=OPENROUTER_API_KEY_ENV,
+                values=(primary,),
+                rotation_source=False,
+            )
+        )
 
     numbered_re = re.compile(rf"^{re.escape(OPENROUTER_API_KEY_ENV)}_(\d+)$")
     numbered: list[tuple[int, str]] = []
@@ -87,7 +117,24 @@ def _openrouter_key_candidates_from_env() -> tuple[str, ...]:
             continue
         numbered.append((int(match.group(1)), normalized))
     numbered.sort(key=lambda item: item[0])
-    candidates.extend(value for _, value in numbered)
+    sources.extend(
+        _OpenRouterKeySource(
+            name=f"{OPENROUTER_API_KEY_ENV}_{index}",
+            values=(value,),
+            rotation_source=True,
+        )
+        for index, value in numbered
+    )
+    return tuple(sources)
+
+
+def _openrouter_key_candidates_from_env() -> tuple[str, ...]:
+    """Collect deduplicated OpenRouter keys from supported sources in stable order."""
+    candidates = [
+        value
+        for source in _openrouter_key_sources_from_env()
+        for value in source.values
+    ]
 
     deduped: list[str] = []
     seen: set[str] = set()

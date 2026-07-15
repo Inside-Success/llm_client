@@ -43,6 +43,10 @@ class LLMCallResultSchema(BaseModel):
         default=None,
         description="Alias for resolved terminal model, kept additive for migration clarity",
     )
+    logical_call_id: str | None = Field(
+        default=None,
+        description="Runtime identity joining a structured result to its persisted attempts",
+    )
     routing_trace: dict[str, Any] | None = Field(
         default=None,
         description="Optional routing/fallback trace for contract characterization and debugging",

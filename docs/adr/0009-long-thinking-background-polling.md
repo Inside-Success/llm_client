@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-06-26
-Verification context: exact gpt-5.4 requests still canonicalize through the typed provider-governance policy instead of OpenRouter drift, shared 429 cooldown coordination still avoids duplicate retry waits or cooldown busy-spins while emitting stable governance warning records, and direct Gemini thinking models no longer depend on a hardcoded zero-budget completion default
+Last verified: 2026-07-15
+Verification context: Plan 105 aligns Responses cost-source precedence with Completions after a response is available; background enablement, retrieval, polling, endpoint validation, and timeout controls remain unchanged. Focused client tests pass.
 
 ## Context
 
@@ -62,3 +62,11 @@ Negative:
 2. Retrieval helper tests must validate:
    - key-presence requirements,
    - OpenAI client invocation shape (api key/base URL/timeout).
+
+Verification context (2026-07-13): Plan 97's native-schema attempt lifecycle is
+limited to Completions native JSON-schema calls. Responses/background polling
+semantics in this ADR remain unchanged.
+
+Within that bounded native-schema path, local finalization after validation is
+terminal and cannot re-enter provider retry or fallback; polling remains out of
+scope and unchanged.

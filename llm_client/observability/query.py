@@ -128,11 +128,9 @@ def get_cost(
             if table == "llm_calls"
             else "COALESCE(SUM(cost), 0)"
         )
-        # This read runs in the hot call path (check_budget on every budgeted
-        # call). The shared sqlite connection allows cross-thread use
-        # (check_same_thread=False) but not CONCURRENT statements: an unlocked
-        # read racing a locked write (or another read) raises InterfaceError
-        # under ThreadPoolExecutor callers. Serialize on the same lock writes use.
+        # ``check_same_thread=False`` permits sharing the connection but does
+        # not make overlapping statements safe. Use the writer lock for every
+        # statement on the shared connection.
         with _io_log._db_write_lock:
             row = db.execute(
                 f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608

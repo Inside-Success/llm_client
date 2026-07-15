@@ -17,20 +17,24 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import importlib
 import json
 import math
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping, Self
 
 import llm_client.io_log as _io_log
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from llm_client.execution.retry import RetryPolicy
 
 JSONScalar = str | int | float | bool | None
 JSONValue = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
 JSONObject = dict[str, JSONValue]
 
-_SNAPSHOT_VERSION = 1
+_SNAPSHOT_VERSION = 3
 _OBSERVABILITY_ONLY_KWARGS = {
     "task",
     "trace_id",
@@ -39,6 +43,172 @@ _OBSERVABILITY_ONLY_KWARGS = {
     "lifecycle_heartbeat_interval_s",
     "lifecycle_stall_after_s",
 }
+_REPLAY_RESERVED_PUBLIC_KWARGS = {
+    "api_base",
+    "base_delay",
+    "cache",
+    "config",
+    "execution_mode",
+    "fallback_models",
+    "hooks",
+    "max_budget",
+    "max_delay",
+    "messages",
+    "model",
+    "num_retries",
+    "on_fallback",
+    "on_retry",
+    "parent_trace_id",
+    "prompt_ref",
+    "reasoning_effort",
+    "response_model",
+    "retry",
+    "retry_on",
+    "structured_output_policy",
+    "task",
+    "timeout",
+    "trace_id",
+}
+_REPLAY_PUBLIC_API_CALL_KINDS = {
+    "call_llm": "text",
+    "acall_llm": "text",
+    "call_llm_structured": "structured",
+    "acall_llm_structured": "structured",
+}
+_UNSUPPORTED_VALUE_MARKER = "__llm_client_replay_unsupported__"
+_LEGACY_DIAGNOSTIC_KEYS = frozenset({"__type__", "__repr__"})
+
+
+class _ReplayRetryPolicyV2(BaseModel):
+    """Replay-safe subset of the effective typed retry policy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    max_retries: int = Field(ge=0)
+    base_delay: float = Field(ge=0)
+    max_delay: float = Field(ge=0)
+    retry_on: list[str] | None
+    on_retry: None
+    backoff: None
+    should_retry: None
+
+
+class _ReplayCachePolicyV2(BaseModel):
+    """Only disabled cache state is reconstructable without a cache registry."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    mode: Literal["disabled"]
+
+
+class _ReplayExecutionPolicyV2(BaseModel):
+    """Typed effective execution controls required for exact v2 replay."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    timeout: int = Field(ge=0)
+    num_retries: int = Field(ge=0)
+    reasoning_effort: str | None
+    api_base: str | None
+    base_delay: float = Field(ge=0)
+    max_delay: float = Field(ge=0)
+    retry_on: list[str] | None
+    fallback_models: list[str] | None
+    execution_mode: Literal["text", "structured", "workspace_agent", "workspace_tools"] | None
+    structured_output_mode: Literal["auto", "require_native_json_schema"] | None
+    retry_policy: _ReplayRetryPolicyV2
+    cache_policy: _ReplayCachePolicyV2
+
+    @model_validator(mode="after")
+    def require_consistent_retry_projection(self) -> Self:
+        """Reject drift between compatibility fields and typed retry authority."""
+
+        retry = self.retry_policy
+        if self.num_retries != retry.max_retries:
+            raise ValueError("num_retries disagrees with retry_policy.max_retries")
+        if self.base_delay != retry.base_delay:
+            raise ValueError("base_delay disagrees with retry_policy.base_delay")
+        if self.max_delay != retry.max_delay:
+            raise ValueError("max_delay disagrees with retry_policy.max_delay")
+        if self.retry_on != retry.retry_on:
+            raise ValueError("retry_on disagrees with retry_policy.retry_on")
+        return self
+
+
+class _ReplayMetadataV2(BaseModel):
+    """Typed replay support declaration stored beside every v2 request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    unsupported_keys: list[str]
+
+
+class _ReplayRequestV2(BaseModel):
+    """Closed replay request envelope for snapshot version 2."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    requested_model: str
+    messages: list[dict[str, Any]]
+    prompt_ref: str | None
+    control: _ReplayExecutionPolicyV2
+    kwargs: dict[str, Any]
+    response_model_fqn: str | None
+    response_model_schema: dict[str, Any] | None
+
+
+class _ReplaySnapshotV2(BaseModel):
+    """Closed versioned envelope whose fields determine exact replay dispatch."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    snapshot_version: Literal[2]
+    public_api: Literal[
+        "call_llm",
+        "acall_llm",
+        "call_llm_structured",
+        "acall_llm_structured",
+    ]
+    call_kind: Literal["text", "structured"]
+    request: _ReplayRequestV2
+    replay: _ReplayMetadataV2
+
+
+class _ReplayExecutionPolicyV3(_ReplayExecutionPolicyV2):
+    """V3 execution controls including the checked original-call spend ceiling."""
+
+    max_budget: float = Field(ge=0, allow_inf_nan=False)
+
+
+class _ReplayRequestV3(BaseModel):
+    """Closed replay request envelope for snapshot version 3."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    requested_model: str
+    messages: list[dict[str, Any]]
+    prompt_ref: str | None
+    control: _ReplayExecutionPolicyV3
+    kwargs: dict[str, Any]
+    response_model_fqn: str | None
+    response_model_schema: dict[str, Any] | None
+
+
+class _ReplaySnapshotV3(BaseModel):
+    """Closed envelope adding budget-complete original-call identity."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    snapshot_version: Literal[3]
+    public_api: Literal[
+        "call_llm",
+        "acall_llm",
+        "call_llm_structured",
+        "acall_llm_structured",
+    ]
+    call_kind: Literal["text", "structured"]
+    request: _ReplayRequestV3
+    replay: _ReplayMetadataV2
 
 
 def _qualified_name(value: type[Any]) -> str:
@@ -47,38 +217,116 @@ def _qualified_name(value: type[Any]) -> str:
     return f"{value.__module__}.{value.__qualname__}"
 
 
-def _normalize_float(value: float) -> JSONValue:
-    """Return a JSON-safe float representation without inventing precision."""
+def _callable_name(value: Any) -> str:
+    """Return a stable diagnostic identity for an unsupported callable."""
 
-    if math.isfinite(value):
-        return value
-    return repr(value)
+    module = getattr(value, "__module__", None)
+    qualname = getattr(value, "__qualname__", None)
+    if isinstance(module, str) and isinstance(qualname, str):
+        return f"{module}.{qualname}"
+    return _qualified_name(type(value))
+
+
+def _unsupported_value(value: Any, *, reason: str) -> JSONObject:
+    """Return an intrinsic diagnostic that can never be mistaken for replay input."""
+
+    return {
+        _UNSUPPORTED_VALUE_MARKER: {
+            "type": f"{value.__class__.__module__}.{value.__class__.__qualname__}",
+            "reason": reason,
+            "repr": repr(value),
+        }
+    }
+
+
+def _is_unsupported_diagnostic(value: Mapping[Any, Any]) -> bool:
+    """Recognize current and historical diagnostics embedded in a snapshot."""
+
+    marker = value.get(_UNSUPPORTED_VALUE_MARKER)
+    if isinstance(marker, Mapping) and all(
+        isinstance(marker.get(key), str) for key in ("type", "reason", "repr")
+    ):
+        return True
+    return (
+        frozenset(value.keys()) == _LEGACY_DIAGNOSTIC_KEYS
+        and isinstance(value.get("__type__"), str)
+        and isinstance(value.get("__repr__"), str)
+    )
+
+
+def _find_unsupported_diagnostic_paths(value: Any, *, path: str) -> list[str]:
+    """Find intrinsic replay-unsupported diagnostics without trusting metadata."""
+
+    if isinstance(value, Mapping):
+        if _is_unsupported_diagnostic(value):
+            return [path]
+        paths: list[str] = []
+        for key, child in value.items():
+            paths.extend(
+                _find_unsupported_diagnostic_paths(
+                    child,
+                    path=f"{path}.{key}",
+                )
+            )
+        return paths
+    if isinstance(value, list):
+        paths = []
+        for index, child in enumerate(value):
+            paths.extend(
+                _find_unsupported_diagnostic_paths(
+                    child,
+                    path=f"{path}[{index}]",
+                )
+            )
+        return paths
+    return []
 
 
 def _normalize_json_value(value: Any) -> tuple[JSONValue, bool]:
     """Normalize arbitrary runtime values into JSON-like storage.
 
-    The boolean indicates whether the value remains replay-safe. Primitive JSON,
-    `Path`, and recursively JSON-like collections remain replay-safe. Everything
-    else is summarized rather than silently dropped, and that summary marks the
-    containing key as replay-unsupported.
+    The boolean indicates whether persistence preserves both value and Python type
+    at the public-call boundary. Only recursively JSON-native values are replay-safe.
+    Every lossy coercion becomes an intrinsic diagnostic so missing or false support
+    metadata cannot make the substituted value dispatchable.
     """
 
-    if value is None or isinstance(value, (str, int, bool)):
+    if value is None or type(value) in {str, int, bool}:
         return value, True
-    if isinstance(value, float):
-        return _normalize_float(value), math.isfinite(value)
+    if type(value) is float:
+        if math.isfinite(value):
+            return value, True
+        return _unsupported_value(value, reason="non-finite float"), False
     if isinstance(value, Path):
-        return str(value), True
-    if isinstance(value, Mapping):
+        return _unsupported_value(value, reason="Path would become str"), False
+    if type(value) is dict:
+        if _is_unsupported_diagnostic(value):
+            return dict(value), False
         normalized: JSONObject = {}
         supported = True
-        for key in sorted(value.keys(), key=lambda item: str(item)):
+        for key in value:
+            if type(key) is not str:
+                return (
+                    _unsupported_value(
+                        value,
+                        reason="mapping key would become str",
+                    ),
+                    False,
+                )
+        for key in sorted(value.keys()):
             child, child_supported = _normalize_json_value(value[key])
-            normalized[str(key)] = child
+            normalized[key] = child
             supported = supported and child_supported
         return normalized, supported
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, Mapping):
+        return (
+            _unsupported_value(
+                value,
+                reason="Mapping implementation would become dict",
+            ),
+            False,
+        )
+    if type(value) is list:
         normalized_items: list[JSONValue] = []
         supported = True
         for item in value:
@@ -86,29 +334,24 @@ def _normalize_json_value(value: Any) -> tuple[JSONValue, bool]:
             normalized_items.append(child)
             supported = supported and child_supported
         return normalized_items, supported
+    if isinstance(value, tuple):
+        return _unsupported_value(value, reason="tuple would become list"), False
     if isinstance(value, set):
-        normalized_items: list[JSONValue] = []
-        supported = True
-        for item in sorted(value, key=repr):
-            child, child_supported = _normalize_json_value(item)
-            normalized_items.append(child)
-            supported = supported and child_supported
-        return normalized_items, supported
+        return _unsupported_value(value, reason="set would become list"), False
+    if isinstance(value, list):
+        return _unsupported_value(value, reason="list subclass would become list"), False
     if isinstance(value, type):
-        return _qualified_name(value), False
+        return _unsupported_value(value, reason="type would become qualified name"), False
 
-    return {
-        "__type__": f"{value.__class__.__module__}.{value.__class__.__qualname__}",
-        "__repr__": repr(value),
-    }, False
+    return _unsupported_value(value, reason="value is not JSON-native"), False
 
 
-def _normalize_messages(messages: list[dict[str, Any]]) -> list[JSONValue]:
-    """Normalize chat messages into a deterministic JSON-like structure."""
+def _normalize_messages(messages: list[dict[str, Any]]) -> tuple[list[JSONValue], bool]:
+    """Normalize messages and report whether replay preserves their exact values."""
 
-    normalized, _ = _normalize_json_value(messages)
+    normalized, supported = _normalize_json_value(messages)
     if isinstance(normalized, list):
-        return normalized
+        return normalized, supported
     raise TypeError("normalized messages must be a list")
 
 
@@ -138,6 +381,39 @@ def _normalize_response_model_schema(response_model: type[Any] | None) -> JSONVa
     return normalized
 
 
+def _normalize_retry_policy(policy: RetryPolicy) -> tuple[JSONObject, list[str]]:
+    """Serialize effective retry state and name fields replay cannot reconstruct."""
+
+    unsupported: list[str] = []
+    callable_fields: JSONObject = {}
+    for field_name in ("on_retry", "backoff", "should_retry"):
+        value = getattr(policy, field_name)
+        if value is None:
+            callable_fields[field_name] = None
+            continue
+        callable_fields[field_name] = _callable_name(value)
+        unsupported.append(f"retry_policy.{field_name}")
+    payload: JSONObject = {
+        "max_retries": policy.max_retries,
+        "base_delay": policy.base_delay,
+        "max_delay": policy.max_delay,
+        "retry_on": list(policy.retry_on) if policy.retry_on is not None else None,
+        **callable_fields,
+    }
+    return payload, unsupported
+
+
+def _normalize_cache_policy(policy: Any | None) -> tuple[JSONObject, list[str]]:
+    """Serialize disabled cache exactly; mark arbitrary enabled caches unsupported."""
+
+    if policy is None:
+        return {"mode": "disabled"}, []
+    return {
+        "mode": "enabled",
+        "type": _qualified_name(type(policy)),
+    }, ["cache_policy"]
+
+
 def build_call_snapshot(
     *,
     public_api: str,
@@ -145,6 +421,7 @@ def build_call_snapshot(
     requested_model: str,
     messages: list[dict[str, Any]],
     prompt_ref: str | None,
+    max_budget: float,
     timeout: int,
     num_retries: int,
     reasoning_effort: str | None,
@@ -154,7 +431,10 @@ def build_call_snapshot(
     retry_on: list[str] | None,
     fallback_models: list[str] | None,
     public_kwargs: Mapping[str, Any],
+    retry_policy: RetryPolicy | None = None,
+    cache_policy: Any | None = None,
     execution_mode: str | None = None,
+    structured_output_mode: str | None = None,
     response_model: type[Any] | None = None,
 ) -> JSONObject:
     """Build the normalized call snapshot used for fingerprinting and replay.
@@ -163,7 +443,25 @@ def build_call_snapshot(
     observability-only metadata out of the replay identity.
     """
 
-    normalized_kwargs, unsupported_keys = _normalize_public_kwargs(public_kwargs)
+    effective_retry = retry_policy or RetryPolicy(
+        max_retries=num_retries,
+        base_delay=base_delay,
+        max_delay=max_delay,
+        retry_on=retry_on,
+    )
+    retry_payload, retry_unsupported = _normalize_retry_policy(effective_retry)
+    cache_payload, cache_unsupported = _normalize_cache_policy(cache_policy)
+    normalized_kwargs, kwargs_unsupported = _normalize_public_kwargs(public_kwargs)
+    normalized_messages, messages_supported = _normalize_messages(messages)
+    message_unsupported = [] if messages_supported else ["messages"]
+    unsupported_keys = sorted(
+        set(
+            kwargs_unsupported
+            + retry_unsupported
+            + cache_unsupported
+            + message_unsupported
+        )
+    )
     response_model_fqn = _qualified_name(response_model) if response_model is not None else None
     snapshot: JSONObject = {
         "snapshot_version": _SNAPSHOT_VERSION,
@@ -171,18 +469,26 @@ def build_call_snapshot(
         "call_kind": call_kind,
         "request": {
             "requested_model": requested_model,
-            "messages": _normalize_messages(messages),
+            "messages": normalized_messages,
             "prompt_ref": prompt_ref,
             "control": {
                 "timeout": timeout,
-                "num_retries": num_retries,
+                "max_budget": max_budget,
+                "num_retries": effective_retry.max_retries,
                 "reasoning_effort": reasoning_effort,
                 "api_base": api_base,
-                "base_delay": base_delay,
-                "max_delay": max_delay,
-                "retry_on": list(retry_on) if retry_on is not None else None,
+                "base_delay": effective_retry.base_delay,
+                "max_delay": effective_retry.max_delay,
+                "retry_on": (
+                    list(effective_retry.retry_on)
+                    if effective_retry.retry_on is not None
+                    else None
+                ),
                 "fallback_models": list(fallback_models) if fallback_models is not None else None,
                 "execution_mode": execution_mode,
+                "structured_output_mode": structured_output_mode,
+                "retry_policy": retry_payload,
+                "cache_policy": cache_payload,
             },
             "kwargs": normalized_kwargs,
             "response_model_fqn": response_model_fqn,
@@ -192,7 +498,20 @@ def build_call_snapshot(
             "unsupported_keys": unsupported_keys,
         },
     }
-    return snapshot
+    if (
+        isinstance(max_budget, bool)
+        or not isinstance(max_budget, (int, float))
+        or not math.isfinite(max_budget)
+        or max_budget < 0
+    ):
+        raise ValueError("invalid v3 call snapshot: max_budget must be finite and nonnegative")
+    if unsupported_keys:
+        return snapshot
+    try:
+        validated = _ReplaySnapshotV3.model_validate(snapshot)
+    except Exception as error:
+        raise ValueError(f"invalid v3 call snapshot: {error}") from error
+    return validated.model_dump(mode="json")
 
 
 def snapshot_request_identity(snapshot: Mapping[str, Any]) -> JSONObject:
@@ -210,8 +529,20 @@ def snapshot_request_identity(snapshot: Mapping[str, Any]) -> JSONObject:
 def snapshot_fingerprint(snapshot: Mapping[str, Any]) -> str:
     """Return a deterministic fingerprint for one normalized call snapshot."""
 
+    request = snapshot_request_identity(snapshot)
+    snapshot_version = snapshot.get("snapshot_version")
+    if snapshot_version in {2, 3}:
+        fingerprint_identity: JSONValue = {
+            "snapshot_version": snapshot_version,
+            "public_api": snapshot.get("public_api"),
+            "call_kind": snapshot.get("call_kind"),
+            "request": request,
+            "replay": snapshot.get("replay"),
+        }
+    else:
+        fingerprint_identity = request
     payload = json.dumps(
-        snapshot_request_identity(snapshot),
+        fingerprint_identity,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
@@ -411,6 +742,28 @@ def _resolve_response_model(model_fqn: str) -> type[Any]:
     return current
 
 
+def _resolve_response_model_for_replay(
+    request: Mapping[str, Any],
+    *,
+    call_id: int,
+    snapshot_version: int,
+) -> type[Any]:
+    """Resolve a structured model and reject closed-envelope schema drift."""
+
+    model_fqn = request.get("response_model_fqn")
+    if not isinstance(model_fqn, str) or not model_fqn:
+        raise ValueError(f"Call id {call_id} snapshot is missing request.response_model_fqn.")
+    response_model = _resolve_response_model(model_fqn)
+    if snapshot_version in {2, 3}:
+        stored_schema = request.get("response_model_schema")
+        current_schema = _normalize_response_model_schema(response_model)
+        if stored_schema != current_schema:
+            raise ValueError(
+                f"Call id {call_id} response model schema no longer matches the captured snapshot."
+            )
+    return response_model
+
+
 def _call_text_for_replay(
     model: str,
     messages: list[dict[str, Any]],
@@ -481,7 +834,7 @@ def replay_call_snapshot(
     *,
     trace_id: str,
     task: str | None = None,
-    max_budget: float = 0.0,
+    max_budget: float | None = None,
     project: str | None = None,
 ) -> dict[str, Any]:
     """Replay one captured call snapshot through the shared runtime.
@@ -496,18 +849,62 @@ def replay_call_snapshot(
     if not isinstance(snapshot, dict):
         raise ValueError(f"Call id {call_id} does not have a replayable call snapshot.")
 
-    replay = snapshot.get("replay")
-    unsupported_keys = (
-        list(replay.get("unsupported_keys", []))
-        if isinstance(replay, Mapping) and isinstance(replay.get("unsupported_keys"), list)
-        else []
+    snapshot_version = snapshot.get("snapshot_version", 1)
+    if type(snapshot_version) is not int or snapshot_version not in {1, 2, 3}:
+        raise ValueError(
+            f"Call id {call_id} has unsupported snapshot_version={snapshot_version!r}."
+        )
+    stored_fingerprint = record.get("call_fingerprint")
+    observed_fingerprint = snapshot_fingerprint(snapshot)
+    if not isinstance(stored_fingerprint, str) or not hmac.compare_digest(
+        stored_fingerprint,
+        observed_fingerprint,
+    ):
+        raise ValueError(
+            f"Call id {call_id} call snapshot does not match its stored fingerprint."
+        )
+
+    unsupported_paths = _find_unsupported_diagnostic_paths(
+        snapshot.get("request"),
+        path="request",
     )
+    if unsupported_paths:
+        raise ValueError(
+            f"Call id {call_id} contains a replay-unsupported normalized value at "
+            f"{', '.join(unsupported_paths)}. Replay would substitute a different "
+            "public-call value, so llm_client refuses it."
+        )
+
+    replay = snapshot.get("replay")
+    validated_snapshot: _ReplaySnapshotV2 | _ReplaySnapshotV3 | None = None
+    if snapshot_version in {2, 3}:
+        try:
+            replay_metadata = _ReplayMetadataV2.model_validate(replay)
+        except Exception as error:
+            raise ValueError(f"Call id {call_id} has invalid replay metadata: {error}") from error
+        unsupported_keys = list(replay_metadata.unsupported_keys)
+    else:
+        unsupported_keys = (
+            list(replay.get("unsupported_keys", []))
+            if isinstance(replay, Mapping) and isinstance(replay.get("unsupported_keys"), list)
+            else []
+        )
     if unsupported_keys:
         joined = ", ".join(sorted(str(key) for key in unsupported_keys))
         raise ValueError(
             f"Call id {call_id} includes replay-unsupported kwargs: {joined}. "
             "Replay would not be exact, so llm_client refuses it."
         )
+    if snapshot_version == 2:
+        try:
+            validated_snapshot = _ReplaySnapshotV2.model_validate(snapshot)
+        except Exception as error:
+            raise ValueError(f"Call id {call_id} has invalid v2 snapshot envelope: {error}") from error
+    elif snapshot_version == 3:
+        try:
+            validated_snapshot = _ReplaySnapshotV3.model_validate(snapshot)
+        except Exception as error:
+            raise ValueError(f"Call id {call_id} has invalid v3 snapshot envelope: {error}") from error
 
     request = snapshot_request_identity(snapshot)
     messages = request.get("messages")
@@ -520,39 +917,163 @@ def replay_call_snapshot(
     if not isinstance(public_kwargs, Mapping):
         raise ValueError(f"Call id {call_id} snapshot is missing request.kwargs.")
 
+    if snapshot_version == 1 and (
+        "retry_policy" in control or "cache_policy" in control
+    ):
+        raise ValueError(
+            f"Call id {call_id} snapshot_version=1 cannot contain v2 replay policy fields."
+        )
+
+    public_api = (
+        validated_snapshot.public_api
+        if validated_snapshot is not None
+        else str(snapshot.get("public_api", "call_llm"))
+    )
+    replay_policy: _ReplayExecutionPolicyV2 | None = None
+    if validated_snapshot is not None:
+        replay_policy = validated_snapshot.request.control
+        expected_call_kind = _REPLAY_PUBLIC_API_CALL_KINDS.get(public_api)
+        if validated_snapshot.call_kind != expected_call_kind:
+            raise ValueError(
+                f"Call id {call_id} public_api={public_api!r} requires "
+                f"call_kind={expected_call_kind!r}."
+            )
+        reserved_kwargs = sorted(
+            str(key) for key in public_kwargs if key in _REPLAY_RESERVED_PUBLIC_KWARGS
+        )
+        if reserved_kwargs:
+            raise ValueError(
+                f"Call id {call_id} request.kwargs contains reserved replay controls: "
+                f"{', '.join(reserved_kwargs)}."
+            )
+        if (
+            expected_call_kind == "structured"
+            and replay_policy.structured_output_mode is None
+        ):
+            raise ValueError(
+                f"Call id {call_id} has invalid replay-safe execution policy state: "
+                "structured calls require structured_output_mode."
+            )
+        if expected_call_kind == "text" and (
+            replay_policy.structured_output_mode is not None
+            or request.get("response_model_fqn") is not None
+            or request.get("response_model_schema") is not None
+        ):
+            raise ValueError(
+                f"Call id {call_id} has invalid replay-safe execution policy state: "
+                "text calls cannot carry structured response policy or schema state."
+            )
+        if expected_call_kind == "structured" and replay_policy.execution_mode is not None:
+            raise ValueError(
+                f"Call id {call_id} has invalid replay-safe execution policy state: "
+                "structured calls cannot carry a text execution_mode."
+            )
+        if expected_call_kind == "text" and replay_policy.execution_mode is None:
+            raise ValueError(
+                f"Call id {call_id} has invalid replay-safe execution policy state: "
+                "text calls require execution_mode."
+            )
+
+    if snapshot_version == 3 and max_budget is None:
+        raise ValueError(
+            f"Call id {call_id} v3 replay requires a fresh explicit max_budget; "
+            "the captured original-call budget is identity, not new spend authority."
+        )
+    effective_replay_budget = 0.0 if max_budget is None else max_budget
+    if (
+        isinstance(effective_replay_budget, bool)
+        or not isinstance(effective_replay_budget, (int, float))
+        or not math.isfinite(effective_replay_budget)
+        or effective_replay_budget < 0
+    ):
+        raise ValueError("replay max_budget must be a finite nonnegative number")
+
     replay_task = task or record["task"] or f"observability.replay.{snapshot.get('public_api', 'call')}"
     replay_project = project if project is not None else record["project"]
-    call_kwargs: dict[str, Any] = {
-        "timeout": control.get("timeout", 60),
-        "num_retries": control.get("num_retries", 0),
-        "reasoning_effort": control.get("reasoning_effort"),
-        "api_base": control.get("api_base"),
-        "base_delay": control.get("base_delay", 1.0),
-        "max_delay": control.get("max_delay", 30.0),
-        "retry_on": control.get("retry_on"),
-        "fallback_models": control.get("fallback_models"),
-        "task": replay_task,
-        "trace_id": trace_id,
-        "max_budget": max_budget,
-        "prompt_ref": request.get("prompt_ref"),
-        **dict(public_kwargs),
-    }
+    if replay_policy is not None:
+        call_kwargs: dict[str, Any] = {
+            "timeout": replay_policy.timeout,
+            "num_retries": replay_policy.num_retries,
+            "reasoning_effort": replay_policy.reasoning_effort,
+            "api_base": replay_policy.api_base,
+            "base_delay": replay_policy.base_delay,
+            "max_delay": replay_policy.max_delay,
+            "retry_on": (
+                list(replay_policy.retry_on)
+                if replay_policy.retry_on is not None
+                else None
+            ),
+            "fallback_models": (
+                list(replay_policy.fallback_models)
+                if replay_policy.fallback_models is not None
+                else None
+            ),
+            "task": replay_task,
+            "trace_id": trace_id,
+            "max_budget": float(effective_replay_budget),
+            "prompt_ref": request.get("prompt_ref"),
+            **dict(public_kwargs),
+        }
+        replay_retry = replay_policy.retry_policy
+        call_kwargs["retry"] = RetryPolicy(
+            max_retries=replay_retry.max_retries,
+            base_delay=replay_retry.base_delay,
+            max_delay=replay_retry.max_delay,
+            retry_on=(
+                list(replay_retry.retry_on)
+                if replay_retry.retry_on is not None
+                else None
+            ),
+        )
+        if replay_policy.cache_policy.mode != "disabled":
+            raise ValueError(f"Call id {call_id} cannot reconstruct enabled cache state.")
+        call_kwargs["cache"] = None
+        if replay_policy.execution_mode is not None:
+            call_kwargs["execution_mode"] = replay_policy.execution_mode
+    else:
+        call_kwargs = {
+            "timeout": control.get("timeout", 60),
+            "num_retries": control.get("num_retries", 0),
+            "reasoning_effort": control.get("reasoning_effort"),
+            "api_base": control.get("api_base"),
+            "base_delay": control.get("base_delay", 1.0),
+            "max_delay": control.get("max_delay", 30.0),
+            "retry_on": control.get("retry_on"),
+            "fallback_models": control.get("fallback_models"),
+            "task": replay_task,
+            "trace_id": trace_id,
+            "max_budget": float(effective_replay_budget),
+            "prompt_ref": request.get("prompt_ref"),
+            **dict(public_kwargs),
+        }
+
+    structured_output_mode = (
+        replay_policy.structured_output_mode
+        if replay_policy is not None
+        else control.get("structured_output_mode")
+    )
+    if structured_output_mode is not None:
+        from llm_client.execution.call_contracts import StructuredOutputPolicy
+
+        call_kwargs["structured_output_policy"] = StructuredOutputPolicy.model_validate(
+            {"mode": structured_output_mode}
+        )
 
     requested_model = request.get("requested_model")
     if not isinstance(requested_model, str) or not requested_model:
         raise ValueError(f"Call id {call_id} snapshot is missing request.requested_model.")
 
-    public_api = str(snapshot.get("public_api", "call_llm"))
     with _temporary_project_override(replay_project):
         if public_api == "call_llm":
             result = _call_text_for_replay(requested_model, messages, **call_kwargs)
         elif public_api == "acall_llm":
             result = asyncio.run(_acall_text_for_replay(requested_model, messages, **call_kwargs))
         elif public_api == "call_llm_structured":
-            model_fqn = request.get("response_model_fqn")
-            if not isinstance(model_fqn, str) or not model_fqn:
-                raise ValueError(f"Call id {call_id} snapshot is missing request.response_model_fqn.")
-            response_model = _resolve_response_model(model_fqn)
+            response_model = _resolve_response_model_for_replay(
+                request,
+                call_id=call_id,
+                snapshot_version=snapshot_version,
+            )
             result = _call_structured_for_replay(
                 requested_model,
                 messages,
@@ -560,10 +1081,11 @@ def replay_call_snapshot(
                 **call_kwargs,
             )
         elif public_api == "acall_llm_structured":
-            model_fqn = request.get("response_model_fqn")
-            if not isinstance(model_fqn, str) or not model_fqn:
-                raise ValueError(f"Call id {call_id} snapshot is missing request.response_model_fqn.")
-            response_model = _resolve_response_model(model_fqn)
+            response_model = _resolve_response_model_for_replay(
+                request,
+                call_id=call_id,
+                snapshot_version=snapshot_version,
+            )
             result = asyncio.run(
                 _acall_structured_for_replay(
                     requested_model,

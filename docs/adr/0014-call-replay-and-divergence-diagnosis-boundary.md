@@ -2,8 +2,11 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-07-09
-Verification context: transcript-backed tool usage preserves the client-observed boundary by distinguishing returned, transport-error, application-error, and provisional missing outcomes, allowing only missing-to-terminal maturation while explicitly leaving correctness and helpfulness unmeasured; it does not claim call replay
+Last verified: 2026-07-15
+Verification context: Plan 105 changes provider-cost selection and statement
+serialization without changing call snapshots, fingerprints, fresh replay
+authority, selected-attempt receipts, raw-artifact links, or historical replay.
+Focused replay, structured-attempt, and observability controls pass.
 
 ## Context
 
@@ -52,6 +55,10 @@ inference; the same discipline is needed here.
    - observability-only metadata must not perturb the fingerprint,
    - meaningful caller-visible request differences must appear either in the
      fingerprint or in the compact diff report.
+   - version 2 and 3 exact-replay fingerprints additionally bind the public API,
+     semantic call kind, and replay-support metadata; trace/project/timing/cost
+     metadata remain excluded.
+   - version 3 also binds the original call's checked effective `max_budget`.
 
 4. `llm_client` must expose compact **call diff** surfaces that compare two
    captured call snapshots and report only the differences needed for the next
@@ -68,6 +75,9 @@ inference; the same discipline is needed here.
      mutating or overwriting the original record,
    - replay is about the call contract, not about reconstructing arbitrary
      workflow state.
+   - a captured budget describes the original call but does not authorize new
+     spend; version 3 replay requires a fresh explicit finite nonnegative
+     budget and dispatches that new value.
 
 6. Workflow-specific reconstruction remains project-local:
    - if reproducing a call requires rebuilding domain workflow state before the
@@ -82,6 +92,10 @@ inference; the same discipline is needed here.
      not truncated,
    - compact metadata and fingerprints must remain query-friendly even when the
      full snapshot lives out-of-row.
+
+8. Programmatic tool-call lifecycles are diagnostic siblings of replayable LLM
+   calls under a shared trace id. They are not call snapshots and cannot be
+   replayed as LLM requests; projects own any operator-input replay adapter.
 
 ## Consequences
 
@@ -111,3 +125,25 @@ Negative:
 4. Existing observability compatibility tests must continue passing.
 5. Any artifact-backed snapshot persistence must prove "no truncation" and
    explicit lookup of the full replayable payload.
+6. Tool-call observability changes must preserve the distinction between
+   lifecycle diagnosis and replayable LLM call contracts.
+7. Structured-attempt lifecycle events diagnose retries and fallback but are
+   not replay envelopes. Replay continues to derive from the final call
+   snapshot; attempt histories bind by `logical_call_id` and `trace_id`.
+8. Budget-complete snapshot tests must cover all four public producer paths,
+   budget-sensitive fingerprints, historical v1/v2 reads, malformed budgets,
+   and rejection before dispatch when v3 fresh authority is absent.
+
+Last verified: 2026-07-14 (Plan 97 Slice 3 lifecycle expansion).
+
+Validated native-schema attempts are now terminal for retry/fallback even when
+later local finalization fails, preventing replay diagnostics from observing a
+fabricated second provider generation for a client-side failure.
+
+Snapshot v3 adds the checked original-call budget to the closed replayable
+envelope without changing historical v1/v2 interpretation. Snapshots already
+marked replay-unsupported remain diagnostic captures and are refused before
+reconstruction.
+
+Plan 101 receipt lookup verifies the same v3 fingerprint but remains a
+trusted-process provenance read, not replay authority or provider attestation.

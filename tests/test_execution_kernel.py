@@ -42,6 +42,61 @@ def test_run_sync_with_retry_retries_and_succeeds() -> None:
     assert len([w for w in warnings if w.startswith("RETRY")]) == 2
 
 
+def test_retry_decision_persists_before_optional_retry_hook() -> None:
+    """A failing notification hook cannot erase the kernel's retry decision."""
+
+    observed: list[tuple[str, object]] = []
+
+    def invoke(_attempt: int) -> str:
+        raise ValueError("transient")
+
+    def on_decision(attempt: int, _exc: Exception, decision: str) -> None:
+        observed.append((decision, attempt))
+
+    def on_retry(_attempt: int, _exc: Exception, _delay: float) -> None:
+        observed.append(("hook", "raised"))
+        raise RuntimeError("notification failed")
+
+    with pytest.raises(RuntimeError, match="notification failed"):
+        run_sync_with_retry(
+            caller="test",
+            model="m",
+            max_retries=1,
+            invoke=invoke,
+            should_retry=lambda _exc: True,
+            compute_delay=lambda _attempt, _exc: (0.0, "none"),
+            warning_sink=[],
+            logger=logging.getLogger("test_execution_kernel"),
+            on_decision=on_decision,
+            on_retry=on_retry,
+        )
+
+    assert observed == [("retry", 0), ("hook", "raised")]
+
+
+def test_non_retryable_failure_reports_exhausted_decision() -> None:
+    """The terminal callback reflects policy, not only max-retry arithmetic."""
+
+    decisions: list[tuple[int, str]] = []
+
+    with pytest.raises(ValueError, match="terminal"):
+        run_sync_with_retry(
+            caller="test",
+            model="m",
+            max_retries=3,
+            invoke=lambda _attempt: (_ for _ in ()).throw(ValueError("terminal")),
+            should_retry=lambda _exc: False,
+            compute_delay=lambda _attempt, _exc: (0.0, "none"),
+            warning_sink=[],
+            logger=logging.getLogger("test_execution_kernel"),
+            on_decision=lambda attempt, _exc, decision: decisions.append(
+                (attempt, decision)
+            ),
+        )
+
+    assert decisions == [(0, "exhausted")]
+
+
 @pytest.mark.asyncio
 async def test_run_async_with_retry_retries_and_succeeds() -> None:
     attempts: list[int] = []
@@ -91,6 +146,25 @@ def test_run_sync_with_fallback_uses_next_model() -> None:
     assert any("FALLBACK: primary -> fallback" in w for w in warnings)
 
 
+def test_run_sync_with_fallback_honors_non_fallback_boundary() -> None:
+    """A caller can mark a local terminal failure as ineligible for fallback."""
+
+    seen: list[str] = []
+
+    def execute_model(_model_idx: int, model_name: str) -> str:
+        seen.append(model_name)
+        raise RuntimeError("local finalization failed")
+
+    with pytest.raises(RuntimeError, match="local finalization failed"):
+        run_sync_with_fallback(
+            models=["primary", "fallback"],
+            execute_model=execute_model,
+            should_fallback=lambda _exc: False,
+        )
+
+    assert seen == ["primary"]
+
+
 @pytest.mark.asyncio
 async def test_run_async_with_fallback_uses_next_model() -> None:
     warnings: list[str] = []
@@ -113,6 +187,26 @@ async def test_run_async_with_fallback_uses_next_model() -> None:
     assert result == "ok"
     assert seen == ["primary", "fallback"]
     assert any("FALLBACK: primary -> fallback" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_run_async_with_fallback_honors_non_fallback_boundary() -> None:
+    """The async kernel preserves the same caller-owned terminal boundary."""
+
+    seen: list[str] = []
+
+    async def execute_model(_model_idx: int, model_name: str) -> str:
+        seen.append(model_name)
+        raise RuntimeError("local finalization failed")
+
+    with pytest.raises(RuntimeError, match="local finalization failed"):
+        await run_async_with_fallback(
+            models=["primary", "fallback"],
+            execute_model=execute_model,
+            should_fallback=lambda _exc: False,
+        )
+
+    assert seen == ["primary"]
 
 
 @pytest.mark.asyncio

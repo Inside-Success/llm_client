@@ -17,6 +17,19 @@ required_reading:
   - CLAUDE.md
 couplings:
 - sources:
+  - llm_client/provider_limits.py
+  - llm_client/cli/provider_limits.py
+  - llm_client/utils/openrouter.py
+  - llm_client/__main__.py
+  - llm_client/__init__.py
+  docs:
+  - docs/adr/0002-routing-config-precedence.md
+  - docs/adr/0003-warning-taxonomy.md
+  - docs/adr/0010-cross-project-runtime-substrate.md
+  - docs/plans/104_openrouter-provider-limit-observer.md
+  type: locked
+  description: Provider-limit inventory, observation, authorization, and public-surface boundary.
+- sources:
   - llm_client/core/client.py
   - llm_client/execution/*_runtime.py
   - llm_client/execution/execution_kernel.py

@@ -25,6 +25,7 @@ from llm_client.cli.deliberate import register_parser as register_deliberate_par
 from llm_client.cli.duet import register_parser as register_duet_parser
 from llm_client.cli.experiments import register_parser as register_experiments_parser
 from llm_client.cli.models import register_parser as register_models_parser
+from llm_client.cli.provider_limits import register_parser as register_provider_limits_parser
 from llm_client.cli.replay import register_parser as register_replay_parser
 from llm_client.cli.review_artifact import register_parser as register_review_artifact_parser
 from llm_client.cli.review_cycle import register_parser as register_review_cycle_parser
@@ -46,6 +47,7 @@ def main() -> None:
     register_deliberate_parser(subparsers)
     register_duet_parser(subparsers)
     register_models_parser(subparsers)
+    register_provider_limits_parser(subparsers)
     register_replay_parser(subparsers)
     register_review_artifact_parser(subparsers)
     register_review_cycle_parser(subparsers)

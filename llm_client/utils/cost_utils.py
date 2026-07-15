@@ -11,6 +11,7 @@ from client.py.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 import litellm
@@ -46,30 +47,30 @@ def _extract_usage(response: Any) -> dict[str, Any]:
 
 
 def _provider_reported_cost(response: Any) -> float | None:
-    """Actual provider-billed cost when the response carries one (e.g. OpenRouter).
+    """Return a finite provider-billed cost when the response carries one.
 
-    litellm surfaces it as ``response._hidden_params["response_cost"]`` and/or
-    ``usage.cost``. Only a real positive number counts — any other shape means
-    "not reported" (mock/absent attributes must never masquerade as cost).
+    LiteLLM exposes provider billing through either
+    ``response._hidden_params["response_cost"]`` or ``response.usage.cost``.
+    Zero is valid for free or credited calls; booleans, strings, negative
+    values, and non-finite floats are not trustworthy billing evidence.
     """
+
     hidden = getattr(response, "_hidden_params", None)
-    if isinstance(hidden, dict):
-        value = hidden.get("response_cost")
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
-            return float(value)
+    candidates = [hidden.get("response_cost") if isinstance(hidden, dict) else None]
     usage = getattr(response, "usage", None)
-    value = getattr(usage, "cost", None) if usage is not None else None
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
-        return float(value)
+    candidates.append(getattr(usage, "cost", None) if usage is not None else None)
+
+    for value in candidates:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            cost = float(value)
+            if math.isfinite(cost) and cost >= 0:
+                return cost
     return None
 
 
 def _compute_cost(response: Any) -> tuple[float, str]:
-    """Compute cost with explicit source tagging, preferring real cost over estimation.
+    """Compute cost, preferring provider billing over computed estimates."""
 
-    Ordering: (1) provider-reported actual cost when the response carries one,
-    (2) litellm.completion_cost, (3) flat per-token floor (warned, last resort).
-    """
     provider_cost = _provider_reported_cost(response)
     if provider_cost is not None:
         return provider_cost, "provider_reported"

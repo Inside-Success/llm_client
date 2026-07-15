@@ -1,8 +1,8 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-09
-Verification context: the agent tool-usage ledger stores only compact call metadata, mutable outcome class for provisional-to-terminal maturation, sizes, repository labels, and provenance hashes; raw transcript payloads and paths remain outside the shared observability database
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes existing cost queries and changes cost-source selection without adding persisted fields, raw payloads, datasets, artifacts, or lineage. Focused observability and raw-artifact controls pass.
 Date: 2026-03-17
 
 ## Context
@@ -45,6 +45,9 @@ We need a clear line between:
    - `llm_client` logs the embedding event and its provenance,
    - vectors, indexes, and large embedding artifacts live in the data plane or
      in project-specific derived stores that are linked back to that event.
+7. Tool-call lifecycle rows may include bounded query metadata and result counts,
+   but bulk tool results remain in project/data-plane artifacts referenced by
+   the trace rather than being copied into the shared observability database.
 
 ## Consequences
 
@@ -71,3 +74,13 @@ Negative:
    missing or inconsistent.
 3. New storage integrations must preserve the distinction between shared
    metadata in `llm_client` and bulk payloads in the data plane.
+4. Strict tool-call tests must prove lifecycle metadata survives both sinks
+   without introducing result-body persistence.
+5. Structured execution-failure events retain only bounded failure class and
+   exception type; exception messages and provider bodies remain outside the
+   shared metadata plane.
+
+Last verified: 2026-07-14 (Plan 97 Slice 3 additive event migration).
+
+Plan 101 receipts retain hashes and typed lifecycle metadata only; raw provider
+content remains external behind the optional artifact reference.

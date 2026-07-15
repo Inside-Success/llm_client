@@ -1,8 +1,11 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-07-09
-Verification context: canonical observability now includes a dedicated transcript-evidence ledger under `llm_client/observability/`; its schema stores normalized metadata and hashes, permits only provisional `missing` outcomes to mature, and excludes arguments, results, transcript text, raw paths, and unhashed session identifiers
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes cost-query statements with writes on
+the shared SQLite connection without changing query inputs, return shape,
+persistence payloads, replay, receipts, raw artifacts, or tool-call policy.
+Focused persistence and observability controls pass.
 Date: 2026-02-23
 
 ## Context
@@ -23,6 +26,10 @@ persisted, how compatibility is preserved, and where behavior should evolve.
    must remain aligned with the warning taxonomy contract in ADR 0003.
 5. Any breaking changes to observability payload shape or sink behavior require
    a dedicated ADR update.
+6. The canonical tool-call surface exposes two explicit policies:
+   - `log_tool_call` preserves compatibility best-effort behavior,
+   - `log_tool_call_strict` is for pipeline-critical evidence and fails when
+     logging is disabled, the trace id is blank, or either configured sink fails.
 
 ## Consequences
 
@@ -40,3 +47,13 @@ Negative:
 1. Compatibility tests must cover `io_log` delegated behavior.
 2. Observability tests must verify default-safe persistence behavior.
 3. Warning/diagnostic emission must remain category-consistent with ADR 0003.
+4. Strict persistence tests must cover both sinks, disabled logging, and null or
+   blank trace identifiers.
+5. Native-schema attempt tests must cover `started` before provider invocation,
+   typed pre-response failure, and retry-kernel recovery disposition. Attempt
+   events exclude exception messages and provider bodies.
+
+Last verified: 2026-07-14 (Plan 97 Slice 3 transport-attempt lifecycle).
+
+Plan 101 adds trusted-process runtime receipts; it does not claim provider
+attestation, source authentication, signatures, or hostile-process security.

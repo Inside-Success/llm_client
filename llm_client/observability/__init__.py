@@ -56,18 +56,44 @@ from llm_client.observability.replay import (
     get_call_snapshot,
     replay_call_snapshot,
 )
-from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
+from llm_client.observability.selected_attempts import (
+    RuntimeSelectedAttemptReceipt,
+    RuntimeSelectedRawContent,
+    SelectedAttemptReceiptError,
+    get_runtime_selected_attempt_receipt,
+    get_runtime_selected_raw_content,
+    diagnose_runtime_selected_attempt_receipt_for_trace,
+)
+from llm_client.observability.raw_artifacts import (
+    StructuredRawArtifactError,
+    cleanup_structured_raw_artifacts,
+)
+from llm_client.observability.tool_calls import (
+    ToolCallResult,
+    log_tool_call,
+    log_tool_call_strict,
+)
+from llm_client.observability.structured_attempts import (
+    StructuredAttemptEvent,
+    StructuredValidationIssue,
+    get_structured_attempt_events,
+    get_structured_attempt_histories,
+    record_structured_attempt_event,
+)
 
 __all__ = [
     "AgentToolUsageEvent",
     "ActiveFeatureProfile",
     "ActiveExperimentRun",
+    "RuntimeSelectedAttemptReceipt",
+    "RuntimeSelectedRawContent",
     "ExperimentRun",
     "activate_experiment_run",
     "activate_feature_profile",
     "compare_runs",
     "compare_cohorts",
     "compare_call_snapshots",
+    "cleanup_structured_raw_artifacts",
     "configure_agent_spec_enforcement",
     "configure_experiment_enforcement",
     "configure_feature_profile",
@@ -80,6 +106,9 @@ __all__ = [
     "get_active_experiment_run_id",
     "get_active_feature_profile",
     "get_active_llm_calls",
+    "get_runtime_selected_attempt_receipt",
+    "get_runtime_selected_raw_content",
+    "diagnose_runtime_selected_attempt_receipt_for_trace",
     "get_background_mode_adoption",
     "get_call_snapshot",
     "get_completed_traces",
@@ -95,6 +124,7 @@ __all__ = [
     "log_experiment_aggregate",
     "log_foundation_event",
     "log_tool_call",
+    "log_tool_call_strict",
     "log_item",
     "lookup_result",
     "parse_claude_transcript",
@@ -102,9 +132,16 @@ __all__ = [
     "persist_usage_events",
     "replay_call_snapshot",
     "start_run",
+    "SelectedAttemptReceiptError",
+    "StructuredRawArtifactError",
     "ToolCallResult",
     "ToolSurfaceMatcher",
     "ToolUsageImportSummary",
     "ToolUsageReport",
     "TranscriptParseError",
+    "StructuredAttemptEvent",
+    "StructuredValidationIssue",
+    "get_structured_attempt_events",
+    "get_structured_attempt_histories",
+    "record_structured_attempt_event",
 ]

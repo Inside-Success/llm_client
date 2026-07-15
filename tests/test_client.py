@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import llm_client.core.client as client_mod
 from llm_client import (
@@ -17,6 +17,7 @@ from llm_client import (
     LLMStream,
     LRUCache,
     RetryPolicy,
+    StructuredOutputPolicy,
     acall_llm,
     acall_llm_batch,
     acall_llm_structured,
@@ -50,8 +51,9 @@ from llm_client.core.model_availability import clear_model_unavailability
 
 @pytest.fixture(autouse=True)
 def _explicit_test_routing_policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Week-1 invariant: routing policy must be explicit in tests."""
+    """Keep mocked client tests independent of routing and shared cooldown state."""
     monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "off")
+    monkeypatch.setattr("llm_client.utils.rate_limit._cooldown_enabled", False)
     monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
     clear_model_unavailability()
     yield
@@ -3864,6 +3866,14 @@ class TestStreamWithTools:
 class TestGPT5StructuredOutput:
     """Tests for GPT-5 structured output via Responses API."""
 
+    def test_structured_output_policy_rejects_unknown_fields_and_modes(self) -> None:
+        """The public policy fails closed on misspelled controls or mode values."""
+
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            StructuredOutputPolicy.model_validate({"mode": "auto", "fallback": True})
+        with pytest.raises(ValidationError, match="Input should be"):
+            StructuredOutputPolicy.model_validate({"mode": "native-ish"})
+
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.responses")
     def test_structured_gpt5_uses_responses_api(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
@@ -4052,6 +4062,242 @@ class TestGPT5StructuredOutput:
         assert meta.model == "gemini/gemini-2.5-flash-lite"
         mock_completion.assert_called_once()
         mock_from_litellm.assert_called_once()
+
+    # mock-ok: provider/adapter spies prove forbidden dispatch without network calls.
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.completion")
+    def test_strict_native_schema_rejects_unsupported_model_before_instructor_sync(
+        self,
+        mock_completion: MagicMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Strict mode must reject an unsupported model without any dispatch."""
+
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(LLMCapabilityError, match="native JSON schema"):
+            call_llm_structured(
+                "provider/no-native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_unsupported_sync",
+                max_budget=0,
+            )
+
+        mock_completion.assert_not_called()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: provider/adapter spies prove the async forbidden-dispatch boundary.
+    @pytest.mark.asyncio
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    async def test_strict_native_schema_rejects_unsupported_model_before_instructor_async(
+        self,
+        mock_acompletion: AsyncMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Async strict mode must reject an unsupported model without dispatch."""
+
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(LLMCapabilityError, match="native JSON schema"):
+            await acall_llm_structured(
+                "provider/no-native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_unsupported_async",
+                max_budget=0,
+            )
+
+        mock_acompletion.assert_not_called()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: controlled provider rejection proves dispatch count and adapter exclusion.
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.completion")
+    def test_strict_native_schema_rejects_provider_schema_fallback_sync(
+        self,
+        mock_completion: MagicMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """A native schema rejection must not change execution path in strict mode."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_completion.side_effect = Exception(
+            "INVALID_ARGUMENT: response_schema nesting depth exceeds limit"
+        )
+
+        with pytest.raises(LLMCapabilityError, match="rejected native JSON schema"):
+            call_llm_structured(
+                "provider/native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_schema_rejection_sync",
+                max_budget=0,
+            )
+
+        mock_completion.assert_called_once()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: controlled async rejection proves dispatch count and adapter exclusion.
+    @pytest.mark.asyncio
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    async def test_strict_native_schema_rejects_provider_schema_fallback_async(
+        self,
+        mock_acompletion: AsyncMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Async native schema rejection must not enter Instructor in strict mode."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_acompletion.side_effect = Exception(
+            "INVALID_ARGUMENT: response_schema nesting depth exceeds limit"
+        )
+
+        with pytest.raises(LLMCapabilityError, match="rejected native JSON schema"):
+            await acall_llm_structured(
+                "provider/native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_schema_rejection_async",
+                max_budget=0,
+            )
+
+        mock_acompletion.assert_awaited_once()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: provider response is controlled; real schema construction and parsing run.
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.completion")
+    def test_strict_native_schema_accepts_native_success_sync(
+        self,
+        mock_completion: MagicMock,
+        mock_cost: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Strict mode preserves a successful native JSON-schema result."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_completion.return_value = _mock_response(content='{"name":"strict"}')
+        parsed, metadata = call_llm_structured(
+            "provider/native-test-model",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            retry=RetryPolicy(max_retries=0),
+            task="test",
+            trace_id="test_strict_native_success_sync",
+            max_budget=0,
+        )
+
+        assert parsed.name == "strict"
+        assert metadata.model == "provider/native-test-model"
+        assert mock_completion.call_args.kwargs["response_format"]["type"] == "json_schema"
+
+    # mock-ok: async response is controlled; real schema construction and parsing run.
+    @pytest.mark.asyncio
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    async def test_strict_native_schema_accepts_native_success_async(
+        self,
+        mock_acompletion: AsyncMock,
+        mock_cost: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Async strict mode preserves a successful native JSON-schema result."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_acompletion.return_value = _mock_response(content='{"name":"strict-async"}')
+        parsed, metadata = await acall_llm_structured(
+            "provider/native-test-model",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            retry=RetryPolicy(max_retries=0),
+            task="test",
+            trace_id="test_strict_native_success_async",
+            max_budget=0,
+        )
+
+        assert parsed.name == "strict-async"
+        assert metadata.model == "provider/native-test-model"
+        assert mock_acompletion.call_args.kwargs["response_format"]["type"] == "json_schema"
+
+    # mock-ok: Agent SDK spy proves strict mode rejects before adapter dispatch.
+    @patch("llm_client.core.client._log_call_event")
+    @patch("llm_client.sdk.agents._route_call_structured")
+    def test_strict_native_schema_rejects_agent_sdk_before_dispatch(
+        self,
+        mock_agent_call: MagicMock,
+        mock_log: MagicMock,
+    ) -> None:
+        """Strict provider-native policy cannot silently use an Agent SDK."""
+
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(LLMCapabilityError, match="Agent SDK"):
+            call_llm_structured(
+                "claude-code",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_agent_sdk",
+                max_budget=0,
+            )
+
+        mock_agent_call.assert_not_called()
+        assert mock_log.call_args.kwargs["execution_path"] == "error"
+        assert isinstance(mock_log.call_args.kwargs["error"], LLMCapabilityError)
 
 
 class TestStrictJsonSchema:

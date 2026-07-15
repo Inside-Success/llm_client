@@ -141,11 +141,16 @@ from llm_client.utils.logging_setup import setup_logging
 from llm_client.observability import (
     ActiveFeatureProfile,
     ActiveExperimentRun,
+    RuntimeSelectedAttemptReceipt,
+    RuntimeSelectedRawContent,
     ExperimentRun,
+    SelectedAttemptReceiptError,
+    StructuredRawArtifactError,
     ToolCallResult,
     activate_feature_profile,
     activate_experiment_run,
     compare_call_snapshots,
+    cleanup_structured_raw_artifacts,
     compare_runs,
     compare_cohorts,
     configure_logging,
@@ -163,6 +168,9 @@ from llm_client.observability import (
     get_active_experiment_run_id,
     get_active_feature_profile,
     get_active_llm_calls,
+    get_runtime_selected_attempt_receipt,
+    get_runtime_selected_raw_content,
+    diagnose_runtime_selected_attempt_receipt_for_trace,
     get_experiment_aggregates,
     get_run,
     get_run_items,
@@ -201,6 +209,16 @@ from llm_client.prompt_assets import (
     resolve_prompt_asset,
 )
 from llm_client.prompts import render_prompt
+from llm_client.provider_limits import (
+    OpenRouterKeyEnvironmentV1,
+    OpenRouterKeyLimitObservationV1,
+    OpenRouterProviderLimitPreflightV1,
+    ProviderLimitErrorCodeV1,
+    ProviderLimitObservationErrorV1,
+    ProviderLimitObserverConfigV1,
+    inspect_openrouter_key_environment_v1,
+    observe_openrouter_key_limit_v1,
+)
 # Relocated: agent_spec → prompt_eval, validators → agentic_scaffolding
 
 if _TYPE_CHECKING:
@@ -283,6 +301,7 @@ from llm_client.core.client import (
     stream_llm_with_tools,
     strip_fences,
 )
+from llm_client.execution.call_contracts import StructuredOutputPolicy
 from llm_client.core.data_types import TurnEvent
 from llm_client.parsing_utils import (
     TruncatedOutputError,
@@ -334,6 +353,7 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "ResolvedCallPlan",
     "resolve_call",
     "RetryPolicy",
+    "StructuredOutputPolicy",
     "acall_llm",
     "acall_llm_batch",
     "acall_llm_structured",
@@ -354,9 +374,17 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "stream_llm",
     "stream_llm_with_tools",
     "compare_call_snapshots",
+    "cleanup_structured_raw_artifacts",
+    "RuntimeSelectedAttemptReceipt",
+    "RuntimeSelectedRawContent",
+    "SelectedAttemptReceiptError",
+    "StructuredRawArtifactError",
     "configure_logging",
     "format_call_diff",
     "get_call_snapshot",
+    "get_runtime_selected_attempt_receipt",
+    "get_runtime_selected_raw_content",
+    "diagnose_runtime_selected_attempt_receipt_for_trace",
     "import_jsonl",
     "log_embedding",
     "log_foundation_event",

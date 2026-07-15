@@ -38,8 +38,30 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Plan #136: Timeout for test subprocess calls to prevent hanging forever
-TEST_TIMEOUT_SECONDS = 300  # 5 minutes
+# Plan #136/99: bounded but configurable subprocess timeout for completion gates.
+DEFAULT_TEST_TIMEOUT_SECONDS = 900
+
+
+def _positive_seconds(value: str) -> int:
+    """Parse a positive whole-second CLI timeout or fail with actionable context."""
+    try:
+        seconds = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("timeout must be a whole number of seconds") from exc
+    if seconds <= 0:
+        raise argparse.ArgumentTypeError("timeout must be greater than zero seconds")
+    return seconds
+
+
+def _timeout_diagnostics(error: subprocess.TimeoutExpired) -> str:
+    """Return bounded captured output so a timed-out test names recent progress."""
+    chunks: list[str] = []
+    for captured in (error.stdout, error.stderr):
+        if isinstance(captured, bytes):
+            chunks.append(captured.decode(errors="replace"))
+        elif isinstance(captured, str):
+            chunks.append(captured)
+    return "\n".join(chunks)[-4000:]
 
 
 def _pytest_command() -> list[str]:
@@ -105,7 +127,11 @@ def print_human_review_instructions(
     print(f"\nThis confirms a human has checked things automated tests cannot verify.")
 
 
-def run_unit_tests(project_root: Path, verbose: bool = True) -> tuple[bool, str]:
+def run_unit_tests(
+    project_root: Path,
+    verbose: bool = True,
+    timeout_seconds: int = DEFAULT_TEST_TIMEOUT_SECONDS,
+) -> tuple[bool, str]:
     """Run unit/component tests (excluding E2E).
 
     Returns (success, summary).
@@ -119,12 +145,16 @@ def run_unit_tests(project_root: Path, verbose: bool = True) -> tuple[bool, str]
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=TEST_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        diagnostics = _timeout_diagnostics(exc)
         if verbose:
-            print(f"    TIMEOUT: Tests did not complete within {TEST_TIMEOUT_SECONDS}s")
-        return False, f"timeout after {TEST_TIMEOUT_SECONDS}s"
+            print(f"    TIMEOUT: Tests did not complete within {timeout_seconds}s")
+            if diagnostics:
+                print("    Last captured test output:")
+                print(diagnostics)
+        return False, f"timeout after {timeout_seconds}s"
 
     # Extract summary from output
     output = result.stdout + result.stderr
@@ -141,7 +171,11 @@ def run_unit_tests(project_root: Path, verbose: bool = True) -> tuple[bool, str]
     return result.returncode == 0, summary
 
 
-def run_e2e_tests(project_root: Path, verbose: bool = True) -> tuple[bool, str]:
+def run_e2e_tests(
+    project_root: Path,
+    verbose: bool = True,
+    timeout_seconds: int = DEFAULT_TEST_TIMEOUT_SECONDS,
+) -> tuple[bool, str]:
     """Run E2E smoke tests.
 
     Returns (success, summary).
@@ -168,12 +202,15 @@ def run_e2e_tests(project_root: Path, verbose: bool = True) -> tuple[bool, str]:
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=TEST_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        diagnostics = _timeout_diagnostics(exc)
         if verbose:
-            print(f"    TIMEOUT: Tests did not complete within {TEST_TIMEOUT_SECONDS}s")
-        return False, f"timeout after {TEST_TIMEOUT_SECONDS}s"
+            print(f"    TIMEOUT: Tests did not complete within {timeout_seconds}s")
+            if diagnostics:
+                print(diagnostics)
+        return False, f"timeout after {timeout_seconds}s"
 
     output = result.stdout + result.stderr
 
@@ -196,7 +233,11 @@ def run_e2e_tests(project_root: Path, verbose: bool = True) -> tuple[bool, str]:
     return result.returncode == 0, summary
 
 
-def run_real_e2e_tests(project_root: Path, verbose: bool = True) -> tuple[bool, str]:
+def run_real_e2e_tests(
+    project_root: Path,
+    verbose: bool = True,
+    timeout_seconds: int = DEFAULT_TEST_TIMEOUT_SECONDS,
+) -> tuple[bool, str]:
     """Run real E2E tests (actual LLM calls).
 
     Returns (success, summary).
@@ -229,12 +270,15 @@ def run_real_e2e_tests(project_root: Path, verbose: bool = True) -> tuple[bool, 
             cwd=project_root,
             capture_output=True,
             text=True,
-            timeout=TEST_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        diagnostics = _timeout_diagnostics(exc)
         if verbose:
-            print(f"    TIMEOUT: Tests did not complete within {TEST_TIMEOUT_SECONDS}s")
-        return False, f"timeout after {TEST_TIMEOUT_SECONDS}s"
+            print(f"    TIMEOUT: Tests did not complete within {timeout_seconds}s")
+            if diagnostics:
+                print(diagnostics)
+        return False, f"timeout after {timeout_seconds}s"
 
     output = result.stdout + result.stderr
 
@@ -427,6 +471,7 @@ def complete_plan(
     force: bool = False,
     human_verified: bool = False,
     verbose: bool = True,
+    test_timeout_seconds: int = DEFAULT_TEST_TIMEOUT_SECONDS,
 ) -> bool:
     """Complete a plan with full verification.
 
@@ -471,7 +516,9 @@ def complete_plan(
     all_passed = True
 
     # 1. Unit tests
-    unit_passed, unit_summary = run_unit_tests(project_root, verbose)
+    unit_passed, unit_summary = run_unit_tests(
+        project_root, verbose, timeout_seconds=test_timeout_seconds
+    )
     if not unit_passed:
         all_passed = False
 
@@ -481,7 +528,9 @@ def complete_plan(
         if verbose:
             print("\n[2/4] E2E smoke tests... SKIPPED (--skip-e2e flag)")
     else:
-        e2e_smoke_passed, e2e_smoke_summary = run_e2e_tests(project_root, verbose)
+        e2e_smoke_passed, e2e_smoke_summary = run_e2e_tests(
+            project_root, verbose, timeout_seconds=test_timeout_seconds
+        )
         if not e2e_smoke_passed:
             all_passed = False
 
@@ -491,7 +540,9 @@ def complete_plan(
         if verbose:
             print("\n[3/4] Real E2E tests... SKIPPED (--skip-real-e2e flag)")
     else:
-        e2e_real_passed, e2e_real_summary = run_real_e2e_tests(project_root, verbose)
+        e2e_real_passed, e2e_real_summary = run_real_e2e_tests(
+            project_root, verbose, timeout_seconds=test_timeout_seconds
+        )
         if not e2e_real_passed:
             all_passed = False
 
@@ -585,6 +636,15 @@ def main() -> int:
         action="store_true",
         help="Minimal output"
     )
+    parser.add_argument(
+        "--test-timeout-seconds",
+        type=_positive_seconds,
+        default=DEFAULT_TEST_TIMEOUT_SECONDS,
+        help=(
+            "Per-test-command timeout in seconds "
+            f"(default: {DEFAULT_TEST_TIMEOUT_SECONDS})"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -599,6 +659,7 @@ def main() -> int:
         force=args.force,
         human_verified=args.human_verified,
         verbose=not args.quiet,
+        test_timeout_seconds=args.test_timeout_seconds,
     )
 
     return 0 if success else 1
