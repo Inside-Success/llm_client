@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-22
 Last verified: 2026-07-14
-Verification context: selected-attempt receipts verify sync/async retry and fallback model transitions without changing call/config routing precedence; v3 replay retains caller-selected retry/fallback/cache controls.
+Verification context: selected-attempt receipts and exact raw-artifact reads verify sync/async retry and fallback model transitions without changing call/config routing precedence; v3 replay retains caller-selected retry/fallback/cache controls.
 
 ## Context
 

@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-02-23
 Last verified: 2026-07-14
-Verification context: additive `LLMCallResult.logical_call_id` binds a structured result to trusted-process receipt evidence without changing `model`, requested/resolved model semantics, or routing traces; focused sync/async controls pass.
+Verification context: additive `LLMCallResult.logical_call_id` binds a structured result to trusted-process receipt and opt-in exact raw-content evidence without changing `model`, requested/resolved model semantics, or routing traces; focused sync/async controls pass.
 
 ## Context
 

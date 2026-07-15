@@ -40,6 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 102 | [Exact selected raw structured content](102_selected_raw_structured_content.md) | High | ✅ Complete | onto-canon6 Plan 0141 transport-receipt construction |
 | 100 | [Budget-complete call snapshot v3](100_budget_complete_call_snapshot_v3.md) | High | ✅ Complete | DoDAF fresh page-window diagnostic |
 | 101 | [Runtime-selected structured attempt receipt](101_runtime_selected_attempt_receipt.md) | High | ✅ Complete | onto-canon6 Plan 0141 trusted-runner receipt pinning |
 | 1 | [LLM Client Master Roadmap](01_master-roadmap.md) | Highest | ✅ Complete | - |

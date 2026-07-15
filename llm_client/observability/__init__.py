@@ -58,9 +58,15 @@ from llm_client.observability.replay import (
 )
 from llm_client.observability.selected_attempts import (
     RuntimeSelectedAttemptReceipt,
+    RuntimeSelectedRawContent,
     SelectedAttemptReceiptError,
     get_runtime_selected_attempt_receipt,
+    get_runtime_selected_raw_content,
     diagnose_runtime_selected_attempt_receipt_for_trace,
+)
+from llm_client.observability.raw_artifacts import (
+    StructuredRawArtifactError,
+    cleanup_structured_raw_artifacts,
 )
 from llm_client.observability.tool_calls import (
     ToolCallResult,
@@ -80,12 +86,14 @@ __all__ = [
     "ActiveFeatureProfile",
     "ActiveExperimentRun",
     "RuntimeSelectedAttemptReceipt",
+    "RuntimeSelectedRawContent",
     "ExperimentRun",
     "activate_experiment_run",
     "activate_feature_profile",
     "compare_runs",
     "compare_cohorts",
     "compare_call_snapshots",
+    "cleanup_structured_raw_artifacts",
     "configure_agent_spec_enforcement",
     "configure_experiment_enforcement",
     "configure_feature_profile",
@@ -99,6 +107,7 @@ __all__ = [
     "get_active_feature_profile",
     "get_active_llm_calls",
     "get_runtime_selected_attempt_receipt",
+    "get_runtime_selected_raw_content",
     "diagnose_runtime_selected_attempt_receipt_for_trace",
     "get_background_mode_adoption",
     "get_call_snapshot",
@@ -124,6 +133,7 @@ __all__ = [
     "replay_call_snapshot",
     "start_run",
     "SelectedAttemptReceiptError",
+    "StructuredRawArtifactError",
     "ToolCallResult",
     "ToolSurfaceMatcher",
     "ToolUsageImportSummary",
