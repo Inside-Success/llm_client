@@ -209,6 +209,16 @@ from llm_client.prompt_assets import (
     resolve_prompt_asset,
 )
 from llm_client.prompts import render_prompt
+from llm_client.provider_limits import (
+    OpenRouterKeyEnvironmentV1,
+    OpenRouterKeyLimitObservationV1,
+    OpenRouterProviderLimitPreflightV1,
+    ProviderLimitErrorCodeV1,
+    ProviderLimitObservationErrorV1,
+    ProviderLimitObserverConfigV1,
+    inspect_openrouter_key_environment_v1,
+    observe_openrouter_key_limit_v1,
+)
 # Relocated: agent_spec → prompt_eval, validators → agentic_scaffolding
 
 if _TYPE_CHECKING:

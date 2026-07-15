@@ -22,3 +22,149 @@ worktree instead uses system Python and misses the declared `langgraph` extra.
 **Next:** Create a bounded static-analysis baseline cleanup plan and make the
 Makefile select the repo-local environment before treating `make check` as a
 required green gate.
+
+### LLM-002: Canonical instruction source is self-contradictory
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | High |
+| Reported | 2026-07-15 during Plan #104 orientation |
+
+`AGENTS.md` is a symlink to `CLAUDE.md`, while `CLAUDE.md` says it is a generated
+file that must not be edited and simultaneously names `CLAUDE.md` as its own
+canonical source. Agents therefore cannot follow both the repository rule that
+`CLAUDE.md` is canonical and the file-local instruction not to edit it.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `canonical-project-instructions`
+- **Friction:** In `llm_client`, `AGENTS.md` symlinks to `CLAUDE.md`, but
+  `CLAUDE.md` is a generated Codex projection that says not to edit it and names
+  itself as the canonical source. The declared canonical/editable instruction
+  authority is therefore circular and unavailable.
+- **Recommendation:** Restore a human-authored canonical `CLAUDE.md` and generate
+  a separate `AGENTS.md`, or declare a different editable canonical source and
+  make both projections point to it; add a negative control rejecting a generated
+  file whose `canonical_claude` resolves to itself.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
+### LLM-007: Declared development install cannot collect the full test suite
+
+| Field | Value |
+|---|---|
+| Status | Confirmed |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #104 full-suite verification |
+
+After a successful `make install`, full pytest collection fails because
+`tests/test_boundary_schemas.py` imports the cross-project `data_contracts`
+package, which is not declared in any project or development dependency. The
+package exists in shared infrastructure but a clean `llm_client` environment
+does not know to install it. After installing `data_contracts`, the suite ran
+1,725 tests successfully but two CLI experiment tests failed because the
+similarly extracted `prompt_eval` package is also undeclared.
+
+**Next:** Declare these shared dependencies through a reproducible
+workspace/development bootstrap, or make dependent tests explicitly gated with
+fail-loud setup checks; add a clean-environment full-suite control.
+
+### LLM-005: Declared development install cannot run the declared lint target
+
+| Field | Value |
+|---|---|
+| Status | Confirmed |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #104 environment verification |
+
+`make install` installs `.[dev]`, and that extra does not declare Ruff. The same
+Makefile's `lint` target invokes `ruff check`, so a clean repository-local setup
+cannot execute its declared quality target without an undeclared global tool.
+
+**Next:** Add a bounded Ruff dependency to the `dev` extra and cover a clean
+environment's ability to execute every declared quality command.
+
+### LLM-006: Capability-certification skill references a missing authority
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | High |
+| Reported | 2026-07-15 during Plan #104 certification |
+
+The mandatory `capability-certification` skill names
+`project-meta/docs/ops/ADVERTISED_CAPABILITY_CERTIFICATION.md` as its canonical
+standard, but that file does not exist and no matching certification authority
+is discoverable in `project-meta`. The skill procedure is readable, but its
+declared governing source cannot be reviewed.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `capability-certification-skill`
+- **Friction:** The required capability-certification skill references
+  `project-meta/docs/ops/ADVERTISED_CAPABILITY_CERTIFICATION.md` as canonical,
+  but the file is absent and no matching authority is discoverable, preventing
+  agents from reading the standard the skill says governs certification.
+- **Recommendation:** Restore the canonical standard or update the skill to the
+  current authoritative path; add a skill-integrity check that fails when a
+  required local reference is missing.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
+### LLM-003: Required-reading gate cannot observe Codex repository reads
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | High |
+| Reported | 2026-07-15 during Plan #104 read-gate verification |
+
+The strict read gate consumes `/tmp/.claude_session_reads`, populated only by a
+Claude `PostToolUse/Read` hook. Codex read every required document completely
+through the repository shell, but `check_required_reading.py` reported all of
+them unread. Its failure message instructs the agent to read the documents but
+does not expose a supported cross-client recording command.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `required-reading-gate`
+- **Friction:** `llm_client` required-reading enforcement observes Claude Read
+  hooks but not Codex shell/file reads, so compliant Codex work is falsely
+  blocked after the required documents were read.
+- **Recommendation:** Provide a client-neutral `record-required-reading` command
+  or integrate Codex read telemetry into the same session ledger; make the gate
+  error name that supported path and add a cross-client positive control.
+
+Plan #104 explicitly invokes the existing tracker for each fully read document
+instead of disabling or weakening the gate. Transfer this entry centrally after
+the active shared claim closes.
+
+### LLM-004: Background execution handles do not survive context compaction
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #104 environment setup |
+
+The repo-local virtual-environment installation was running under execution
+session `88993` when the agent context compacted. After compaction, polling the
+documented session identifier returned `Unknown process id`, with no terminal
+result available. The environment must therefore be inspected to distinguish a
+completed command from an interrupted one.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `long-running-exec-session-continuity`
+- **Friction:** A background `exec_command` session became unqueryable after
+  agent context compaction, so a long-running required command lost its terminal
+  result and completion status even though its session identifier was preserved.
+- **Recommendation:** Preserve execution-session handles across compaction, or
+  persist an explicit terminal result that a resumed agent can query; document
+  the supported recovery command and add a compaction-resume positive control.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
