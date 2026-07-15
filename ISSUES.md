@@ -51,6 +51,33 @@ canonical source. Agents therefore cannot follow both the repository rule that
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
 
+### LLM-013: Inside Success remote routes pushes through the personal credential
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #105 fork publication |
+
+The configured `inside-success` remote uses HTTPS. Fetch succeeds anonymously,
+but push selected the active personal GitHub CLI credential and failed with
+HTTP 403 even though the machine has a working `github-insidesuccess` SSH
+identity with write access to the same repository.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `multi-account-github-remote-routing`
+- **Friction:** The `llm_client` `inside-success` HTTPS remote routes writes
+  through the active personal credential rather than the configured
+  organization SSH identity, so an authorized fork update fails until the
+  agent replaces the remote URL at invocation time.
+- **Recommendation:** Configure the organization remote with the existing
+  `github-insidesuccess` SSH host alias and add a credential-routing check that
+  verifies fetch and dry-run push identity for each multi-account remote.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
 ### LLM-012: Failed pre-commit validation leaves generated docs staged
 
 | Field | Value |

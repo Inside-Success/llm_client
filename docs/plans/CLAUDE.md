@@ -40,7 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
-| 105 | [Personal and Inside Success Fork Reconciliation](105_inside_success_fork_reconciliation.md) | High | 🚧 In Progress | A single current `llm_client` line for personal and Inside Success consumers |
+| 105 | [Personal and Inside Success Fork Reconciliation](105_inside_success_fork_reconciliation.md) | High | ✅ Complete | A single current `llm_client` line for personal and Inside Success consumers |
 | 102 | [Exact selected raw structured content](102_selected_raw_structured_content.md) | High | ✅ Complete | onto-canon6 Plan 0141 transport-receipt construction |
 | 100 | [Budget-complete call snapshot v3](100_budget_complete_call_snapshot_v3.md) | High | ✅ Complete | DoDAF fresh page-window diagnostic |
 | 101 | [Runtime-selected structured attempt receipt](101_runtime_selected_attempt_receipt.md) | High | ✅ Complete | onto-canon6 Plan 0141 trusted-runner receipt pinning |

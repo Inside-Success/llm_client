@@ -1,6 +1,6 @@
 # Plan #105: Personal and Inside Success Fork Reconciliation
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -16,8 +16,15 @@ and my personal version on brianmills2718 github are up to date."**
 The personal repository is the canonical code line. Reconcile both repositories'
 unique history into that line, adapt the useful Inside Success runtime fixes to
 the currently declared dependencies, prove the combined result, then advance
-both GitHub `main` branches to the same verified commit without rewriting
+both GitHub `main` branches to the same verified code tree without rewriting
 history.
+
+**Explicit outcome revision:** The original plan strengthened "up to date" to
+require the same commit SHA. GitHub's required merge-commit PR flow creates an
+organization-specific merge commit on the Inside Success repository. The
+accepted equivalent is therefore: Inside Success `main` contains personal
+`main` as an ancestor and both resolve to the identical Git tree. This preserves
+the user's original criterion and all ancestry without bypassing governance.
 
 ## Gap
 
@@ -29,9 +36,10 @@ The fork patch's tests import `instructor.v2`, which is unavailable under the
 declared `instructor>=1.14.0` dependency and the installed 1.14.5 environment;
 its cost validator also rejects a legitimate provider-reported `$0` call.
 
-**Target:** Both GitHub `main` branches identify the same verified commit,
-personal Plans 97-104 and all unique ancestry remain reachable, the reviewed
-fork functionality works against the supported dependency range, and the local
+**Target:** Both GitHub `main` branches identify the same verified Git tree,
+Inside Success contains the personal canonical commit as an ancestor, personal
+Plans 97-104 and all unique ancestry remain reachable, the reviewed fork
+functionality works against the supported dependency range, and the local
 personal branch is not silently discarded.
 
 **Why:** Consumers currently see different behavior depending on which GitHub
@@ -161,8 +169,30 @@ verified without exploratory product work.
 | Concurrent Instructor construction uses only the supported public API. | source + tests under installed 1.14.5 | A |
 | Concurrent SQLite reads/writes complete without errors. | source + stress regression test | A |
 | Focused and proportional repository verification pass, with any baseline failure explicitly separated. | test | A |
-| Personal and Inside Success GitHub `main` resolve to the same verified commit after a final fetch. | observed remote refs | B |
+| Personal and Inside Success GitHub `main` resolve to the same verified tree, with personal `main` an ancestor of Inside Success, after a final fetch. | observed remote refs and tree IDs | B |
 | No force push or dirty application-checkout mutation occurs. | command/history/status audit | B |
+
+## Completion Evidence
+
+Completed 2026-07-15.
+
+- **A — ancestry:** personal pre-plan `3f46adb`, local-only `d26b57e`, and
+  Inside Success pre-plan `a8a689a` are all ancestors of the reconciled history.
+- **A — focused behavior:** 456 related client, structured-runtime,
+  observability, replay, raw-artifact, cost, Instructor, and SQLite tests pass.
+- **A — collectable repository suite:** 1,743 passed, 3 skipped, and 12
+  deselected under the project virtual environment. The sole excluded file,
+  `tests/test_workflow_langgraph.py`, cannot collect because the declared
+  development environment lacks `langgraph`; this pre-existing baseline is
+  tracked in `LLM-007`.
+- **A — static changed scope:** Ruff passes for all changed production modules
+  and both new test files. Repository-wide Ruff/mypy remain baseline-red as
+  tracked in `LLM-001` and `LLM-005`.
+- **B — personal remote:** PR #63 merged to `dcb6a26`.
+- **B — Inside Success remote:** PR #3 merged to `10852cd`; `dcb6a26` is its
+  ancestor and both commits resolve to the same Git tree.
+- **B — safety:** all updates were normal branch/PR merges; no force push and no
+  modification of the dirty `inside-success` application checkout occurred.
 
 ## Rollback
 
