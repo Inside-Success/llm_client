@@ -51,6 +51,33 @@ canonical source. Agents therefore cannot follow both the repository rule that
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
 
+### LLM-009: Parallel yielded commands lose first-class wait handles
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Medium |
+| Reported | 2026-07-15 during independent Plan #104 review |
+
+Parallel `exec_command` calls that yielded sessions were wrapped by
+`functions.exec` as completed values with nested session IDs. The independent
+reviewer lost direct wait handles and unintentionally started a duplicate focused
+pytest run. Both duplicate processes were terminated and no Plan 104 test process
+remained.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `unified-exec-orchestration`
+- **Friction:** Parallel `exec_command` calls that yielded sessions were wrapped
+  by `functions.exec` as completed values with nested session IDs, so the caller
+  lost direct wait handles and unintentionally started a duplicate focused
+  pytest run.
+- **Recommendation:** Surface yielded session IDs as first-class waitable results
+  from orchestrated calls or reject parallel orchestration of yielding commands.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
 ### LLM-007: Declared development install cannot collect the full test suite
 
 | Field | Value |
@@ -70,6 +97,35 @@ similarly extracted `prompt_eval` package is also undeclared.
 **Next:** Declare these shared dependencies through a reproducible
 workspace/development bootstrap, or make dependent tests explicitly gated with
 fail-loud setup checks; add a clean-environment full-suite control.
+
+### LLM-008: Push claim gate ignores the ecosystem session claim
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | High |
+| Reported | 2026-07-15 during Plan #104 push |
+
+The active ecosystem claim
+`codex_llm-client_plan104-openrouter-provider-limit-observer-20260715.yaml`
+names the exact repository, worktree, and branch and remains unexpired, but the
+`llm_client` pre-push hook reported that the branch had no active claim. The hook
+requires a second repository-specific claim, so the two coordination authorities
+disagree about ownership of the same work.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `cross-client-worktree-claims`
+- **Friction:** An active ecosystem session claim naming the exact `llm_client`
+  repo, worktree, and branch was not recognized by the repository pre-push claim
+  gate, which blocked a normal push and demanded a duplicate local claim.
+- **Recommendation:** Make repository claim verification consume the canonical
+  ecosystem claim schema, or have session start create the one claim authority
+  the hook consumes; add a positive control covering Codex session claim through
+  normal push.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
 
 ### LLM-005: Declared development install cannot run the declared lint target
 
@@ -97,19 +153,23 @@ environment's ability to execute every declared quality command.
 The mandatory `capability-certification` skill names
 `project-meta/docs/ops/ADVERTISED_CAPABILITY_CERTIFICATION.md` as its canonical
 standard, but that file does not exist and no matching certification authority
-is discoverable in `project-meta`. The skill procedure is readable, but its
-declared governing source cannot be reviewed.
+is discoverable in `project-meta`. Its named validator pilot,
+`ecosystem-ops/capability_certification.py`, is also absent. The skill procedure
+is readable, but neither its declared governing source nor its required evidence
+consumer can be executed.
 
 **Exact proposed policy-friction entry:**
 
 - **Policy:** `capability-certification-skill`
 - **Friction:** The required capability-certification skill references
   `project-meta/docs/ops/ADVERTISED_CAPABILITY_CERTIFICATION.md` as canonical,
-  but the file is absent and no matching authority is discoverable, preventing
-  agents from reading the standard the skill says governs certification.
-- **Recommendation:** Restore the canonical standard or update the skill to the
-  current authoritative path; add a skill-integrity check that fails when a
-  required local reference is missing.
+  but the file is absent and no matching authority is discoverable; the skill's
+  named `ecosystem-ops/capability_certification.py` validator is absent too,
+  preventing agents from reading the governing standard or consuming the
+  prescribed evidence record.
+- **Recommendation:** Restore the canonical standard and validator or update the
+  skill to their current authoritative paths; add a skill-integrity check that
+  fails when a required local reference is missing.
 
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.

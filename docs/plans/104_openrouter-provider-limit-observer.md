@@ -1,6 +1,6 @@
 # Plan #104: OpenRouter Provider-Limit Observer
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -127,7 +127,7 @@ owns attempt eligibility, reservation, and semantic execution policy.
 - [x] **AC7 (test, grade A):** focused tests, generated API drift, relationship
   validation, CLI smoke, Ruff, strict mypy for changed modules, and relevant
   repository checks pass.
-- [ ] **AC8 (independent execution review):** a fresh verifier accepts the exact
+- [x] **AC8 (independent execution review):** a fresh verifier accepts the exact
   commit and confirms the licensed claim is provider-reported state only.
 
 ## Verification Evidence
@@ -143,8 +143,21 @@ owns attempt eligibility, reservation, and semantic execution policy.
 - API generation/check and strict relationship validation passed.
 - Pre-landing review fixed post-buffer response-size enforcement by streaming
   under the configured cap; no unresolved critical or informational finding
-  remains. AC8 intentionally remains open until a fresh verifier reviews the
-  committed revision.
+  remains.
+- Exact-revision provider observation: commit
+  `00a90e5d73412c8346924f519abf1855289a12dc`, observed
+  `2026-07-15T19:32:45.794300Z`, schema-valid unlimited/non-resetting standard
+  key, with `strict_invoice_ceiling_supported=false` and no inference request.
+- Independent fresh verifier: **ACCEPT** exact commit `00a90e5d73412c8346924f519abf1855289a12dc`
+  (tree `f11292e8ff2a42303414156b6f4810b7c7f539fa`) for the observation-only
+  library/direct-tool claim. It reran 31 focused tests, Ruff, strict changed-module
+  mypy, API drift, and relationship validation. It performed no second provider
+  read and found no blocking issue.
+
+The provider-facing parser is intentionally permissive and may coerce compatible
+wire values such as numeric strings before producing the strict public model.
+Observation persistence remains a caller responsibility. Neither point upgrades
+provider-reported state into enforcement evidence.
 
 ---
 
