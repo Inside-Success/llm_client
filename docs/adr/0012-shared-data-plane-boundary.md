@@ -1,8 +1,8 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-14
-Verification context: attempt events, v3 call snapshots, selected-attempt receipts, and strict tool-call lifecycles retain bounded control-plane metadata, hashes, and trace links; optional exact raw response bytes live only in a private sidecar, never inline in the metadata ledger. Malformed or expired references fail as typed errors, cleanup remains callable after collection stops, and linked or non-private artifacts are rejected. Focused readback controls pass.
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes existing cost queries and changes cost-source selection without adding persisted fields, raw payloads, datasets, artifacts, or lineage. Focused observability and raw-artifact controls pass.
 Date: 2026-03-17
 
 ## Context

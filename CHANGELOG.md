@@ -118,6 +118,17 @@ All notable changes to `llm-client` are documented in this file.
   (override with `LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT=1`) to avoid known
   platform-side rejections when web search tooling is implicitly enabled.
 
+### Fixed
+
+- Completions and Responses cost accounting now prefer finite nonnegative
+  provider-reported billing (including legitimate zero-cost calls), then
+  LiteLLM's computed estimate, then the fallback floor.
+- Instructor client construction is serialized through its supported public API
+  so concurrent structured calls cannot race process-global registration.
+- Cost queries serialize reads with writes on the shared SQLite connection,
+  preventing concurrent budget checks and call logging from overlapping SQL
+  statements.
+
 ## 0.7.0 - 2026-02-23
 
 ### Breaking Changes

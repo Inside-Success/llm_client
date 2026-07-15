@@ -1,8 +1,8 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-07-14
-Verification context: v3 effective-policy snapshots, selected-attempt receipts, and opt-in exact raw artifacts remain on non-streaming native structured paths, including typed fail-loud reference, expiry, and substitution checks, while tool-call and stream lifecycle state remain distinct; stream heartbeat and stagnation semantics are unchanged.
+Last verified: 2026-07-15
+Verification context: Plan 105 affects non-streaming cost selection, Instructor construction, and cost-query locking only; stream start, progress, completion, failure, heartbeat, and stagnation semantics remain unchanged. Related client controls pass.
 Date: 2026-03-22
 
 ## Context

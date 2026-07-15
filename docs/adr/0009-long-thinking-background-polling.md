@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-14
-Verification context: native-schema sync/async results expose receipt identity and may retain exact raw sidecars when explicitly enabled, while Responses background polling remains a distinct unsupported receipt path with its separate explicit timeout contract.
+Last verified: 2026-07-15
+Verification context: Plan 105 aligns Responses cost-source precedence with Completions after a response is available; background enablement, retrieval, polling, endpoint validation, and timeout controls remain unchanged. Focused client tests pass.
 
 ## Context
 

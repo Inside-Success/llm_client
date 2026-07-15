@@ -1603,3 +1603,52 @@ class TestDateBasedLogRotation:
 
         monkeypatch.setenv("LLM_CLIENT_LOG_RETENTION_DAYS", "invalid")
         assert io_log._get_log_retention_days() == 30  # fallback
+
+
+class TestGetCostThreadSafety:
+    """Regression controls for shared-connection budget queries."""
+
+    def test_concurrent_reads_and_writes_do_not_raise(self):
+        """Budget reads and call writes serialize on the shared DB lock."""
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        io_log.log_call(
+            model="gpt-5",
+            result=_mock_result(cost=0.001),
+            latency_s=0.1,
+            trace_id="threads/seed",
+            task="thread-safety",
+        )
+        errors: list[BaseException] = []
+
+        def reader(_: int) -> None:
+            try:
+                for _ in range(25):
+                    io_log.get_cost(trace_id="threads/seed")
+            except BaseException as error:
+                errors.append(error)
+
+        def writer(worker: int) -> None:
+            try:
+                for index in range(25):
+                    io_log.log_call(
+                        model="gpt-5",
+                        result=_mock_result(cost=0.001),
+                        latency_s=0.1,
+                        trace_id=f"threads/{worker}/{index}",
+                        task="thread-safety",
+                    )
+            except BaseException as error:
+                errors.append(error)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = []
+            for worker in range(4):
+                futures.append(pool.submit(reader, worker))
+                futures.append(pool.submit(writer, worker))
+            for future in futures:
+                future.result()
+
+        assert errors == []
+        assert io_log.get_cost(trace_id="threads/seed") > 0

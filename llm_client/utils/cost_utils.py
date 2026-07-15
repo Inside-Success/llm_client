@@ -11,6 +11,7 @@ from client.py.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 import litellm
@@ -45,8 +46,34 @@ def _extract_usage(response: Any) -> dict[str, Any]:
     return result
 
 
+def _provider_reported_cost(response: Any) -> float | None:
+    """Return a finite provider-billed cost when the response carries one.
+
+    LiteLLM exposes provider billing through either
+    ``response._hidden_params["response_cost"]`` or ``response.usage.cost``.
+    Zero is valid for free or credited calls; booleans, strings, negative
+    values, and non-finite floats are not trustworthy billing evidence.
+    """
+
+    hidden = getattr(response, "_hidden_params", None)
+    candidates = [hidden.get("response_cost") if isinstance(hidden, dict) else None]
+    usage = getattr(response, "usage", None)
+    candidates.append(getattr(usage, "cost", None) if usage is not None else None)
+
+    for value in candidates:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            cost = float(value)
+            if math.isfinite(cost) and cost >= 0:
+                return cost
+    return None
+
+
 def _compute_cost(response: Any) -> tuple[float, str]:
-    """Compute cost via litellm.completion_cost, with explicit source tagging."""
+    """Compute cost, preferring provider billing over computed estimates."""
+
+    provider_cost = _provider_reported_cost(response)
+    if provider_cost is not None:
+        return provider_cost, "provider_reported"
     try:
         cost = float(litellm.completion_cost(completion_response=response))
         return cost, "computed"

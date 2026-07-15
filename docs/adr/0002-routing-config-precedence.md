@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-14
-Verification context: selected-attempt receipts and exact raw-artifact reads verify sync/async retry and fallback model transitions without changing call/config routing precedence; v3 replay retains caller-selected retry/fallback/cache controls.
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes Instructor client construction after the existing native-schema routing decision; call, environment, and default routing precedence remain unchanged. Structured runtime controls pass.
 
 ## Context
 

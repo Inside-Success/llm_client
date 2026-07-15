@@ -128,10 +128,14 @@ def get_cost(
             if table == "llm_calls"
             else "COALESCE(SUM(cost), 0)"
         )
-        row = db.execute(
-            f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
-            params,
-        ).fetchone()
+        # ``check_same_thread=False`` permits sharing the connection but does
+        # not make overlapping statements safe. Use the writer lock for every
+        # statement on the shared connection.
+        with _io_log._db_write_lock:
+            row = db.execute(
+                f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
+                params,
+            ).fetchone()
         total += row[0] if row else 0.0
     return total
 

@@ -30,6 +30,7 @@ from pydantic import BaseModel, ValidationError
 import hashlib as _hashlib
 import json as _json
 import logging as _logging
+import threading as _threading
 
 import litellm
 
@@ -54,6 +55,22 @@ T = TypeVar("T", bound=BaseModel)
 
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
+_INSTRUCTOR_INIT_LOCK = _threading.Lock()
+
+
+def _instructor_from_litellm(create_fn: Any) -> Any:
+    """Construct an Instructor client without racing global registration.
+
+    Instructor client construction may lazily mutate process-global provider
+    registration. Serializing the public construction seam supports both the
+    declared 1.x dependency and newer implementations without importing
+    version-private registry modules.
+    """
+
+    import instructor
+
+    with _INSTRUCTOR_INIT_LOCK:
+        return instructor.from_litellm(create_fn)
 
 
 def _model_supports_native_schema(model: str) -> bool:
@@ -1028,9 +1045,7 @@ def _call_llm_structured_impl(
                 _native_schema_failed = True
 
         if not supports_schema or _native_schema_failed:
-            import instructor
-
-            client = instructor.from_litellm(litellm.completion)
+            client = _instructor_from_litellm(litellm.completion)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,
@@ -1788,9 +1803,7 @@ async def _acall_llm_structured_impl(
                 _native_schema_failed = True
 
         if not supports_schema or _native_schema_failed:
-            import instructor
-
-            client = instructor.from_litellm(litellm.acompletion)
+            client = _instructor_from_litellm(litellm.acompletion)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,

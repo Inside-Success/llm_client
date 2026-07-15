@@ -51,6 +51,34 @@ canonical source. Agents therefore cannot follow both the repository rule that
 The shared `project-meta/policy_friction.md` is actively claimed by
 `plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
 
+### LLM-012: Failed pre-commit validation leaves generated docs staged
+
+| Field | Value |
+|---|---|
+| Status | Pending policy-friction handoff |
+| Severity | Medium |
+| Reported | 2026-07-15 during Plan #105 implementation commit |
+
+The pre-commit hook regenerated and staged both API-reference outputs before
+running doc-code coupling. Coupling then failed, so an unsuccessful commit
+attempt left additional generated mutations in the index and expanded the
+review scope before the agent could satisfy the reported requirement.
+
+**Exact proposed policy-friction entry:**
+
+- **Policy:** `pre-commit-validation-ordering`
+- **Friction:** The `llm_client` pre-commit hook mutates and stages generated API
+  documentation before later doc-code coupling validation can reject the
+  commit, so a failed validation attempt changes the index and obscures the
+  intended commit boundary.
+- **Recommendation:** Run non-mutating validation before generation, or generate
+  into a temporary location, compare, and only update/stage outputs after all
+  blocking checks pass; add a negative control proving failed hooks leave the
+  index unchanged.
+
+The shared `project-meta/policy_friction.md` is actively claimed by
+`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+
 ### LLM-011: Push rejection prescribes an unscoped claim
 
 | Field | Value |

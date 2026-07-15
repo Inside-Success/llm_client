@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-14
-Verification context: additive `LLMCallResult.logical_call_id` binds a structured result to trusted-process receipt and opt-in exact raw-content evidence without changing `model`, requested/resolved model semantics, or routing traces; focused sync/async controls pass.
+Last verified: 2026-07-15
+Verification context: Plan 105 changes only Instructor construction serialization and cost/query internals; `model`, requested/resolved model semantics, and routing traces remain unchanged. Focused sync/async structured controls pass.
 
 ## Context
 
