@@ -1,5 +1,5 @@
 # API Reference
-<!-- Generated: 2026-07-10T06:17:01Z -->
+<!-- Generated: 2026-07-14T21:09:13Z -->
 
 Generated from package docstrings and typed signatures.
 
@@ -28,7 +28,7 @@ Browser view: [API_REFERENCE.html](API_REFERENCE.html)
 
 ## Module Catalog
 
-Generated from 135 importable modules under `llm_client`.
+Generated from 136 importable modules under `llm_client`.
 
 Open the HTML file for the full module-by-module docs surface.
 

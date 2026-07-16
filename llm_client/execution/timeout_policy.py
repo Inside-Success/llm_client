@@ -33,6 +33,16 @@ DEFAULT_SAFETY_TIMEOUT_S = 300  # 5 minutes
 _logger = logging.getLogger(__name__)
 _TIMEOUT_POLICY_LOGGED = False
 
+# Callers that already emitted one TIMEOUT_DISABLED warning this process.
+# Under policy=ban an explicit caller timeout is ignored on every call; one
+# WARNING per caller is signal, per-call repetition is noise (DEBUG).
+_TIMEOUT_DISABLED_WARNED_CALLERS: set[str] = set()
+
+
+def _reset_timeout_disabled_warning_state() -> None:
+    """Test helper: forget which callers already got a TIMEOUT_DISABLED warning."""
+    _TIMEOUT_DISABLED_WARNED_CALLERS.clear()
+
 
 def timeouts_disabled() -> bool:
     """Whether timeout arguments should be ignored globally."""
@@ -120,7 +130,14 @@ def normalize_timeout(
             f"TIMEOUT_DISABLED[{caller}]: timeout={parsed}s ignored "
             f"(set {TIMEOUT_POLICY_ENV}=allow to re-enable)."
         )
-        active_logger.warning(msg)
+        # WARN once per caller per process; repeats are DEBUG. Callers that
+        # only carry the library default never reach here (the default is not
+        # filled under policy=ban), so every record here is a real caller value.
+        if caller in _TIMEOUT_DISABLED_WARNED_CALLERS:
+            active_logger.debug(msg)
+        else:
+            _TIMEOUT_DISABLED_WARNED_CALLERS.add(caller)
+            active_logger.warning(msg)
         if warning_sink is not None and msg not in warning_sink:
             warning_sink.append(msg)
         return 0

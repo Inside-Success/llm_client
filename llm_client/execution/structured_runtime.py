@@ -14,7 +14,11 @@ from typing import Any, Callable, NoReturn, TypeVar, cast
 
 from llm_client.core.client import AsyncCachePolicy, CachePolicy, Hooks, LLMCallResult, RetryPolicy
 from llm_client.core.config import ClientConfig
-from llm_client.core.errors import LLMCapabilityError, _unwrap_instructor_retry
+from llm_client.core.errors import (
+    LLMCapabilityError,
+    LLMProviderResponseError,
+    _unwrap_instructor_retry,
+)
 from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 from pydantic import BaseModel, ValidationError
 
@@ -136,6 +140,46 @@ def _build_validation_repair_message(exc: _StructuredValidationRetry) -> dict[st
             "Please fix these issues and return a corrected response."
         ),
     }
+
+
+# Raw provider finish reasons that mean the generation FAILED. litellm has no
+# mapping for these, normalizes them to 'stop' ("finished normally"), and
+# preserves the original in choice.provider_specific_fields
+# ["native_finish_reason"] — without this check the truncated content flows
+# into schema validation and surfaces as a misleading schema error.
+_PROVIDER_FAILURE_FINISH_REASONS = frozenset({"error"})
+
+
+def _raise_on_provider_failure_finish_reason(
+    choice: Any,
+    *,
+    model: str,
+    task: Any,
+    caller: str,
+) -> None:
+    """Raise a retryable provider error when the RAW finish_reason signals failure.
+
+    Checks the pre-normalization value litellm preserves in
+    ``provider_specific_fields["native_finish_reason"]`` (falling back to the
+    visible ``finish_reason`` for transports that skip normalization) BEFORE
+    schema validation, so a provider-side failure is classified as
+    source=provider instead of a downstream schema-validation failure.
+    """
+    raw: Any = None
+    psf = getattr(choice, "provider_specific_fields", None)
+    if isinstance(psf, dict):
+        raw = psf.get("native_finish_reason")
+    if not isinstance(raw, str) or not raw:
+        candidate = getattr(choice, "finish_reason", None)
+        raw = candidate if isinstance(candidate, str) else None
+    if raw is None or raw.strip().lower() not in _PROVIDER_FAILURE_FINISH_REASONS:
+        return
+    task_part = f" task={task}" if task else ""
+    raise LLMProviderResponseError(
+        f"{caller}: provider reported finish_reason={raw!r} for model={model}"
+        f"{task_part} — response content unreliable, retrying",
+        raw_finish_reason=raw,
+    )
 
 
 def _base_model_name(model: str) -> str:
@@ -481,6 +525,7 @@ def _call_llm_structured_impl(
             return cast(tuple[T, LLMCallResult], run_sync_with_retry(
                 caller="call_llm_structured",
                 model=current_model,
+                task=task,
                 max_retries=r.max_retries,
                 invoke=_invoke_responses_attempt,
                 should_retry=lambda exc: _check_retryable(exc, r),
@@ -548,6 +593,12 @@ def _call_llm_structured_impl(
                         response,
                         model=current_model,
                         provider="litellm_completion_structured",
+                    )
+                    _raise_on_provider_failure_finish_reason(
+                        first_choice,
+                        model=current_model,
+                        task=task,
+                        caller="call_llm_structured",
                     )
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
@@ -621,6 +672,7 @@ def _call_llm_structured_impl(
                 return cast(tuple[T, LLMCallResult], run_sync_with_retry(
                     caller="call_llm_structured",
                     model=current_model,
+                    task=task,
                     max_retries=r.max_retries,
                     invoke=_invoke_native_schema_attempt,
                     should_retry=lambda exc: (
@@ -688,6 +740,12 @@ def _call_llm_structured_impl(
                     model=current_model,
                     provider="instructor_completion_structured",
                 )
+                _raise_on_provider_failure_finish_reason(
+                    completion_choice,
+                    model=current_model,
+                    task=task,
+                    caller="call_llm_structured",
+                )
                 finish_reason = completion_choice.finish_reason or ""
 
                 if attempt > 0:
@@ -734,6 +792,7 @@ def _call_llm_structured_impl(
             return cast(tuple[T, LLMCallResult], run_sync_with_retry(
                 caller="call_llm_structured",
                 model=current_model,
+                task=task,
                 max_retries=r.max_retries,
                 invoke=_invoke_instructor_attempt,
                 should_retry=lambda exc: _check_retryable(exc, r),
@@ -1080,6 +1139,7 @@ async def _acall_llm_structured_impl(
             return cast(tuple[T, LLMCallResult], await run_async_with_retry(
                 caller="acall_llm_structured",
                 model=current_model,
+                task=task,
                 max_retries=r.max_retries,
                 invoke=_invoke_responses_attempt,
                 should_retry=lambda exc: _check_retryable(exc, r),
@@ -1147,6 +1207,12 @@ async def _acall_llm_structured_impl(
                         response,
                         model=current_model,
                         provider="litellm_completion_structured",
+                    )
+                    _raise_on_provider_failure_finish_reason(
+                        first_choice,
+                        model=current_model,
+                        task=task,
+                        caller="acall_llm_structured",
                     )
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
@@ -1220,6 +1286,7 @@ async def _acall_llm_structured_impl(
                 return cast(tuple[T, LLMCallResult], await run_async_with_retry(
                     caller="acall_llm_structured",
                     model=current_model,
+                    task=task,
                     max_retries=r.max_retries,
                     invoke=_invoke_native_schema_attempt,
                     should_retry=lambda exc: (
@@ -1287,6 +1354,12 @@ async def _acall_llm_structured_impl(
                     model=current_model,
                     provider="instructor_completion_structured",
                 )
+                _raise_on_provider_failure_finish_reason(
+                    completion_choice,
+                    model=current_model,
+                    task=task,
+                    caller="acall_llm_structured",
+                )
                 finish_reason = completion_choice.finish_reason or ""
 
                 if attempt > 0:
@@ -1333,6 +1406,7 @@ async def _acall_llm_structured_impl(
             return cast(tuple[T, LLMCallResult], await run_async_with_retry(
                 caller="acall_llm_structured",
                 model=current_model,
+                task=task,
                 max_retries=r.max_retries,
                 invoke=_invoke_instructor_attempt,
                 should_retry=lambda exc: _check_retryable(exc, r),

@@ -11,6 +11,7 @@ errors (for LLMEmptyResponseError). It must not import from client.py.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -19,7 +20,11 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from llm_client.core.data_types import LLMCallResult
-from llm_client.core.errors import LLMEmptyResponseError, _QUOTA_PATTERNS
+from llm_client.core.errors import (
+    LLMEmptyResponseError,
+    LLMProviderResponseError,
+    _QUOTA_PATTERNS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +94,44 @@ def _error_text(error: Exception) -> str:
     if text:
         return text
     return type(error).__name__
+
+
+# Caps for one retry-log line: keep every retry record grep-able and under
+# ~400 chars total even with model/task/source fields around it.
+_RETRY_ERROR_TEXT_CAP = 240
+_RETRY_RAW_SNIPPET_CAP = 120
+
+
+def _schema_title(schema_text: Any) -> str:
+    """Extract just the schema title from a JSON-schema string for logs."""
+    try:
+        parsed = json.loads(schema_text)
+    except Exception:
+        return "<unparsed>"
+    title = parsed.get("title") if isinstance(parsed, dict) else None
+    return str(title) if title else "<untitled>"
+
+
+def _retry_error_summary(error: Exception) -> str:
+    """Compact one-line error text for retry logs.
+
+    litellm's ``JSONSchemaValidationError`` stringifies with the FULL JSON
+    schema embedded (multi-KB per retry) and an empty ``model=`` (litellm's
+    ``validate_schema`` raises it with ``model=""``). Collapse it to the
+    exception class + schema TITLE + capped raw-response snippet; the retry
+    line itself carries the real model id. Other errors keep their text,
+    whitespace-collapsed and capped.
+    """
+    name = type(error).__name__
+    raw_response = getattr(error, "raw_response", None)
+    schema_text = getattr(error, "schema", None)
+    if name == "JSONSchemaValidationError" and schema_text is not None:
+        snippet = " ".join(str(raw_response or "").split())[:_RETRY_RAW_SNIPPET_CAP]
+        return f"{name}: schema={_schema_title(schema_text)} raw={snippet!r}"
+    text = " ".join(_error_text(error).split())
+    if len(text) > _RETRY_ERROR_TEXT_CAP:
+        text = text[:_RETRY_ERROR_TEXT_CAP] + "..."
+    return f"{name}: {text}"
 
 
 def _error_status_code(error: Exception) -> int | None:
@@ -269,6 +312,11 @@ def _is_retryable(error: Exception, extra_patterns: list[str] | None = None) -> 
     """
     if isinstance(error, LLMEmptyResponseError):
         return bool(error.retryable)
+
+    # Provider reported a failed generation (finish_reason='error' masked as
+    # success by the transport) — always worth a fresh attempt.
+    if isinstance(error, LLMProviderResponseError):
+        return True
 
     # Timeout exceptions are transient even when message is empty.
     if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
@@ -490,6 +538,10 @@ def _compute_retry_delay(
     delay = backoff_fn(attempt, policy.base_delay, policy.max_delay)
     hint, hint_source = _retry_delay_hint(error)
     if hint is None:
+        # No provider delay hint. Classify the failure source instead of the
+        # uninformative "none" when the provider itself reported the failure.
+        if isinstance(error, LLMProviderResponseError):
+            return delay, "provider"
         return delay, "none"
     # Use the larger delay to avoid hammering providers before their window.
     return max(delay, hint), hint_source

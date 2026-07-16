@@ -16,7 +16,7 @@ import re
 import threading
 from typing import Any, Callable
 
-from llm_client.execution.retry import _error_status_code
+from llm_client.execution.retry import _error_status_code, _retry_error_summary
 
 logger = logging.getLogger(__name__)
 
@@ -259,16 +259,17 @@ def _maybe_retry_with_openrouter_key_rotation(
     if warning_sink is not None:
         warning_sink.append(
             f"RETRY {attempt + 1}/{max_retries + 1}: "
-            f"{current_model} ({type(error).__name__}: {error}) "
+            f"{current_model} ({_retry_error_summary(error)}) "
             f"[retry_delay_source={retry_delay_source}]"
         )
     logger.warning(
-        "%s attempt %d/%d failed (retrying immediately, source=%s): %s",
+        "%s attempt %d/%d failed for model=%s (retrying immediately, source=%s): %s",
         caller,
         attempt + 1,
         max_retries + 1,
+        current_model,
         retry_delay_source,
-        error,
+        _retry_error_summary(error),
     )
     return True
 
