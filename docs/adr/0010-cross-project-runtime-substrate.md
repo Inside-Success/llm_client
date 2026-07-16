@@ -2,8 +2,11 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-15
-Verification context: Plan 105 keeps provider-reported cost precedence, thread-safe public Instructor construction, and serialized shared-SQLite cost queries in the cross-project substrate. Focused client, structured, persistence, and observability controls pass.
+Last verified: 2026-07-16
+Verification context: The shared experiment substrate now serializes canonical
+run-start insertion before emitting JSONL evidence, preventing duplicate
+run_id starts from appearing as two attempts. Focused persistence and
+observability controls pass.
 
 ## Context
 

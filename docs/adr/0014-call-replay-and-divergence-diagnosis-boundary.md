@@ -2,11 +2,11 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-07-15
-Verification context: Plan 105 changes provider-cost selection and statement
-serialization without changing call snapshots, fingerprints, fresh replay
-authority, selected-attempt receipts, raw-artifact links, or historical replay.
-Focused replay, structured-attempt, and observability controls pass.
+Last verified: 2026-07-16
+Verification context: Experiment-run start now rejects duplicate run_id
+evidence before derivative JSONL append. Call snapshots, fingerprints, replay
+authority, selected-attempt receipts, raw-artifact links, and historical replay
+remain unchanged. Focused replay and observability controls pass.
 
 ## Context
 

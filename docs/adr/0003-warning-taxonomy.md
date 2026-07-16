@@ -2,8 +2,10 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-15
-Verification context: Plan 105 preserves the existing fallback-cost warning path while selecting valid provider billing before estimates; concurrent construction and SQLite failures remain errors rather than advisories. Focused runtime and observability controls pass.
+Last verified: 2026-07-16
+Verification context: Experiment-run start now rejects a duplicate run_id before
+emitting a second JSONL start record; SQLite integrity failure remains an error,
+not an advisory. Focused observability controls pass.
 
 ## Context
 

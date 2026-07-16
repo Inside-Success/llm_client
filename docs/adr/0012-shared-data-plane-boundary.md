@@ -1,8 +1,11 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-15
-Verification context: Plan 105 serializes existing cost queries and changes cost-source selection without adding persisted fields, raw payloads, datasets, artifacts, or lineage. Focused observability and raw-artifact controls pass.
+Last verified: 2026-07-16
+Verification context: Experiment-run start now makes SQLite's existing unique
+run_id row authoritative before appending JSONL metadata; no raw payload,
+dataset, artifact, or lineage field changed. Focused observability controls
+pass.
 Date: 2026-03-17
 
 ## Context

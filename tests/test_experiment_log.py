@@ -5,7 +5,9 @@ import os
 import sqlite3
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 
@@ -274,6 +276,41 @@ class TestStartRun:
         assert record["type"] == "run_start"
         assert record["run_id"] == "jsonl_test"
         assert record["dataset"] == "HotpotQA"
+
+    def test_concurrent_duplicate_run_id_fails_before_second_jsonl_start(self, tmp_path):
+        """Concurrent reuse cannot emit a second start line or return success twice."""
+
+        barrier = Barrier(2)
+
+        def start() -> str:
+            barrier.wait()
+            return io_log.start_run(dataset="X", model="Y", run_id="duplicate-run")
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(start) for _ in range(2)]
+            outcomes = []
+            for future in futures:
+                try:
+                    outcomes.append(future.result())
+                except sqlite3.IntegrityError:
+                    outcomes.append("duplicate")
+
+        assert outcomes.count("duplicate-run") == 1
+        assert outcomes.count("duplicate") == 1
+
+        jsonl = tmp_path / "test_project" / "test_project_llm_client_data" / "experiments.jsonl"
+        starts = [
+            json.loads(line)
+            for line in jsonl.read_text().splitlines()
+            if json.loads(line)["type"] == "run_start"
+        ]
+        assert len(starts) == 1
+        assert starts[0]["run_id"] == "duplicate-run"
+
+        rows = io_log._get_db().execute(
+            "SELECT run_id FROM experiment_runs WHERE run_id = ?", ("duplicate-run",)
+        ).fetchall()
+        assert rows == [("duplicate-run",)]
 
     def test_git_commit_explicit(self, tmp_path):
         io_log.start_run(dataset="X", model="Y", run_id="gc_test", git_commit="abc123")
