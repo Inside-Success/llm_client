@@ -91,7 +91,8 @@ task shape.
 | `openrouter/minimax/minimax-m3` | `default_intelligent` | **Transport reached; output contract not certified** | Plan 0141's provider accepted the structural schema and returned content, but local Pydantic/business validation rejected the monolithic response. This does not prove poor extraction quality, but it does mean MiniMax is not certified for that semantic-authoring schema. Use only after the selected task's smaller contract has a retained passing trace. Evidence: `onto-canon6/docs/runs/2026-07-14_plan0141_minimax_discovery_probe.md`. |
 | `openrouter/x-ai/grok-4.5` | `very_intelligent` | **Native route reached; capacity blocked** | The Jane/Bob coreference request reached the native-schema route but OpenRouter returned HTTP 402 while reserving its default output allowance. This is neither a semantic failure nor a certification. Retry only after the task-profile output ceiling is wired. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
 | `gemini/gemini-2.5-flash` | explicit route | **Unavailable in observed environment** | The Plan 0147 retry received a daily-quota exhaustion response. It produced no accepted semantic output and no capability conclusion. |
-| direct `gpt-5.5` | none | **Rejected for required native-schema transport** | This direct route was rejected before a Plan 0141 structured call. Do not select it for strict native JSON Schema; evaluate a separately certified provider-qualified route instead. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
+| direct `gpt-5.5` | historical only | **Rejected for required native-schema transport** | This is a historical Plan 0141 result, not a current selection recommendation. It was rejected before a structured call; do not select it for strict native JSON Schema. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
+| GPT-5.6 Luna / Terra / Sol | none yet | **Official capability, locally unregistered and uncertified** | [OpenAI documents](https://developers.openai.com/api/docs/models) native structured-output support for the GPT-5.6 family, but no GPT-5.6 route exists in this repository's curated registry and no exact `llm_client` route has a retained passing trace. Do not select it through a raw override. First add a provider-qualified registry entry, then certify the exact route and schema class. |
 
 When a route changes status, update this table together with the retained run
 record. A route may move from declared to certified only after a real call
@@ -99,6 +100,11 @@ returns parseable content under the named contract. A failed call must record
 whether failure occurred before provider dispatch, at schema transport, at
 provider capacity/quota, or during local contract validation; never label all
 of these simply “model failure.”
+
+Provider documentation is useful for deciding which route to register and
+probe, but it does not certify a local route. In particular, the GPT-5.6 row
+above records a provider-declared capability, not a `llm_client` selection
+default or an observed result.
 
 Fable-family models are banned. They must not appear in the registry, project
 config, direct `call_llm(...)` calls, or override fields. Generic
