@@ -327,7 +327,7 @@
       "name": "gpt-5.5-direct",
       "provider": "openai",
       "speed": 40,
-      "structured_output": true,
+      "structured_output": false,
       "tags": [
         "deep-review",
         "frontier",
