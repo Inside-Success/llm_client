@@ -106,6 +106,9 @@ even when a project carries generic human override metadata.
       explicit escalation.
 - [x] The guide distinguishes registry-declared structured capability from a
       runtime-certified `model + route + execution mode + schema class`.
+- [x] The guide carries a route-by-route observed-status inventory, with scoped
+      evidence for DeepSeek V4 Flash, MiniMax M3, Grok 4.5, Gemini Flash, and
+      direct GPT-5.5 rather than a generic supported/unsupported claim.
 - [ ] A runtime certification record and task-configured technical output
       ceiling are implemented. This remains a follow-up to the active
       provider-compatible native-schema repair; do not infer certification from
