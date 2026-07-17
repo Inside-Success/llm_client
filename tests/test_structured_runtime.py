@@ -20,7 +20,9 @@ from llm_client.execution.responses_runtime import (
     _strict_json_schema,
 )
 from llm_client.execution.structured_runtime import (
+    _StructuredValidationRetry,
     _acall_llm_structured_impl,
+    _build_validation_repair_message,
     _call_llm_structured_impl,
     _robust_validate_json,
 )
@@ -335,3 +337,27 @@ def test_litellm_prevalidation_is_disabled_for_local_raw_first_validation() -> N
     """Raw-first local validation is the temporary provider-framing boundary."""
 
     assert litellm.enable_json_schema_validation is False
+
+
+def test_validation_repair_allows_switching_an_invalid_union_variant() -> None:
+    """Repair guidance must not trap the model in its first invalid action choice."""
+
+    class StopDecision(BaseModel):
+        action: Literal["control.stop_retrieval"]
+        covered_obligations: list[str]
+
+    with pytest.raises(ValidationError) as captured:
+        StopDecision.model_validate(
+            {
+                "action": "control.stop_retrieval",
+            }
+        )
+
+    message = _build_validation_repair_message(
+        _StructuredValidationRetry(
+            '{"action":"control.stop_retrieval"}',
+            captured.value,
+        )
+    )
+
+    assert "choose another allowed variant" in message["content"]

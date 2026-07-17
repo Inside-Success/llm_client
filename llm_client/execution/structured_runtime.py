@@ -244,7 +244,10 @@ def _build_validation_repair_message(exc: _StructuredValidationRetry) -> dict[st
         "content": (
             "Your previous response was valid JSON but failed schema validation:\n"
             f"{errors_text}\n\n"
-            "Please fix these issues and return a corrected response."
+            "Return a corrected response. If the selected discriminated-union "
+            "variant cannot truthfully satisfy its required fields from the "
+            "available information, choose another allowed variant instead of "
+            "repeating the invalid one."
         ),
     }
 
