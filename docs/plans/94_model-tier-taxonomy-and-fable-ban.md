@@ -38,6 +38,9 @@ even when a project carries generic human override metadata.
 - `llm_client/model_policy_audit.py` — cross-project raw model literal scanner.
 - `llm_client/execution/call_contracts.py` — hard-blocked/deprecated model gate.
 - `docs/guides/codex-integration.md` — workspace-agent execution-mode guidance.
+- OpenRouter API reference — the completion response supplies a generation ID;
+  the authenticated generation metadata endpoint returns the actual
+  `provider_name` and `upstream_id` for that generation.
 - Artificial Analysis leaderboard snapshot reviewed in the user session for
   speed/cost/intelligence tier candidates.
 
@@ -109,10 +112,26 @@ even when a project carries generic human override metadata.
 - [x] The guide carries a route-by-route observed-status inventory, with scoped
       evidence for DeepSeek V4 Flash, MiniMax M3, Grok 4.5, Gemini Flash, and
       direct GPT-5.5 rather than a generic supported/unsupported claim.
-- [ ] A runtime certification record and task-configured technical output
-      ceiling are implemented. This remains a follow-up to the active
-      provider-compatible native-schema repair; do not infer certification from
-      the static registry.
+- [x] An immutable exact-key route observation registry separates durable
+      transport proof from latest route health.
+- [x] An authenticated OpenRouter generation-evidence reader and trusted
+      post-call compiler bind the public result, selected-attempt receipt,
+      provider-facing schema digest, OpenRouter-reported `provider_name`, and
+      exact successful `endpoint_id` when available. The compiler records
+      OpenRouter's actual returned model permaslug rather than assuming the
+      requested alias was the executed model.
+- [x] An agent-drivable CLI queries one exact model + provider + execution mode
+      + schema class + schema digest without inferring support from the static
+      registry.
+- [x] Generation-metadata enrichment handles OpenRouter's observed eventual
+      consistency with bounded, logged 404-only retries. These retries do not
+      repeat the model call or select another provider, and the evidence records
+      the retrieval attempt count.
+- [ ] The active provider-compatible native-schema repair must land before the
+      compiler is invoked automatically from the structured runtime. Until then,
+      callers explicitly run the post-call compiler; unknown provider identity
+      never certifies a named route.
+- [ ] A task-configured technical output ceiling is implemented.
 
 ### Runtime route-certification follow-up (2026-07-16)
 
@@ -136,6 +155,7 @@ requested model. Task-configured output ceilings remain a separate follow-up.
 - `pytest -q tests/test_models.py tests/test_model_policy_audit.py tests/test_client.py::TestModelDeprecation` — passed, 68 tests.
 - `.venv/bin/python -m pytest -q tests/test_models.py::TestGetModel::test_tier_selectors_resolve_expected_models tests/test_models.py::TestGetModel::test_legacy_task_selectors_remain_compatible tests/test_models.py::TestConfigLoading::test_packaged_registry_has_no_fable_models tests/test_model_policy_audit.py::test_scan_paths_flags_banned_fable_even_with_override_acceptance tests/test_client.py::TestModelDeprecation::test_fable_raises` — passed, 5 tests.
 - `.venv/bin/python scripts/meta/complete_plan.py --plan 94 --skip-e2e` — failed because the full unit-test subprocess timed out at 300 seconds after collection; doc-code coupling passed. Policy friction logged in `project-meta/policy_friction.md`.
+- `pytest -q tests/test_route_certification.py tests/test_openrouter_generation.py tests/test_route_certification_runtime.py tests/test_cli_route_certification.py` — exact observation, authenticated provider evidence, three-source join, corruption, substitution, cache, and CLI query coverage.
 
 ---
 

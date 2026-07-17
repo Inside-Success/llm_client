@@ -63,10 +63,18 @@ class RouteCertificationObservation(BaseModel):
     observation_id: str = Field(pattern=r"^routeobs1_[0-9a-f]{24}$")
     requested_model: str = Field(min_length=1)
     resolved_model: str = Field(min_length=1)
+    upstream_provider_name: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Human-readable upstream provider name reported by the router.",
+    )
     upstream_provider_endpoint: str | None = Field(
         default=None,
         min_length=1,
-        description="Actual OpenRouter endpoint slug; None means it was not observed."
+        description=(
+            "Actual upstream provider identity reported by the routing service; "
+            "None means it was not observed."
+        ),
     )
     execution_mode: ExecutionMode
     schema_class: str = Field(min_length=1)
@@ -90,6 +98,7 @@ class RouteCertificationObservation(BaseModel):
         requested_model: str,
         resolved_model: str,
         upstream_provider_endpoint: str | None,
+        upstream_provider_name: str | None = None,
         execution_mode: ExecutionMode,
         schema_class: str,
         schema_sha256: str,
@@ -121,6 +130,8 @@ class RouteCertificationObservation(BaseModel):
             "selected_attempt_receipt_digest": selected_attempt_receipt_digest,
             "evidence_ref": evidence_ref,
         }
+        if upstream_provider_name is not None:
+            payload["upstream_provider_name"] = upstream_provider_name
         digest = _digest(payload)
         return cls.model_validate(
             payload
@@ -135,8 +146,11 @@ class RouteCertificationObservation(BaseModel):
         """Reject corruption and inconsistent outcome/failure classification."""
 
         payload = self.model_dump(
-            mode="json", exclude={"observation_id", "record_digest"}
+            mode="json",
+            exclude={"observation_id", "record_digest"},
         )
+        if self.upstream_provider_name is None:
+            payload.pop("upstream_provider_name")
         expected = _digest(payload)
         if self.record_digest != expected:
             raise ValueError("route observation digest mismatch")
@@ -177,6 +191,7 @@ class RouteCertificationView(BaseModel):
 
     requested_model: str
     resolved_model: str
+    upstream_provider_name: str | None
     upstream_provider_endpoint: str | None
     execution_mode: str
     schema_class: str
@@ -278,6 +293,7 @@ class RouteCertificationStore:
         return RouteCertificationView(
             requested_model=latest.requested_model,
             resolved_model=latest.resolved_model,
+            upstream_provider_name=latest.upstream_provider_name,
             upstream_provider_endpoint=latest.upstream_provider_endpoint,
             execution_mode=latest.execution_mode,
             schema_class=latest.schema_class,

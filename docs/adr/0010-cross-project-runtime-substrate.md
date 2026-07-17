@@ -8,6 +8,10 @@ run-start insertion before emitting JSONL evidence, preventing duplicate
 run_id starts from appearing as two attempts. Focused persistence and
 observability controls pass.
 
+Plan 94 adds shared authenticated OpenRouter generation evidence, an immutable
+exact route-certification registry, and a provider-free query CLI. Semantic
+acceptance and project-specific promotion remain above this substrate.
+
 ## Context
 
 The intended direction for the project is that any application, coding agent, or
