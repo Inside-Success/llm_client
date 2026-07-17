@@ -114,6 +114,21 @@ even when a project carries generic human override metadata.
       provider-compatible native-schema repair; do not infer certification from
       the static registry.
 
+### Runtime route-certification follow-up (2026-07-16)
+
+The first disjoint implementation slice adds immutable typed observations and
+an exact-key query store. Certification is bound to resolved model, actual
+upstream endpoint, execution mode, schema class, and schema digest. A parseable
+response with an unknown endpoint remains observational rather than certifying
+a named route. Prior transport proof and latest route health are separate, so a
+later timeout remains visible without erasing evidence that the exact route once
+accepted and returned the schema.
+
+Automatic emission remains blocked on the active provider-compatible schema
+repair because the runtime must first preserve the actual OpenRouter endpoint.
+The registry module does not modify routing or infer endpoint identity from the
+requested model. Task-configured output ceilings remain a separate follow-up.
+
 ---
 
 ## Verification Evidence
