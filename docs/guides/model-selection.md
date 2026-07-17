@@ -78,6 +78,28 @@ technical output ceiling centrally and expose it in the call snapshot. Callers
 must not invent one-off token caps; this is a provider-capacity setting, not a
 cost authorization mechanism.
 
+### Current Route Evidence
+
+This table is the current operational answer to “can I use this model?” It is
+not a quality leaderboard. A certification applies only to its named route and
+schema class; do not transfer it to a different provider, response schema, or
+task shape.
+
+| Model route | Tier | Structured-route status | Observed evidence and use decision |
+|---|---|---|---|
+| `openrouter/deepseek/deepseek-v4-flash` | `fast_cheap_mid` | **Certified for one bounded extraction contract** | Plan 0147 retained a successful native-`json_schema` extraction with exact evidence offsets and no cache/fallback. It is the current default for high-volume bounded extraction, not a general semantic-quality winner. Evidence: `onto-canon6/docs/runs/plan0147/2026-07-16_functional_poc_v1.md`. |
+| `openrouter/minimax/minimax-m3` | `default_intelligent` | **Transport reached; output contract not certified** | Plan 0141's provider accepted the structural schema and returned content, but local Pydantic/business validation rejected the monolithic response. This does not prove poor extraction quality, but it does mean MiniMax is not certified for that semantic-authoring schema. Use only after the selected task's smaller contract has a retained passing trace. Evidence: `onto-canon6/docs/runs/2026-07-14_plan0141_minimax_discovery_probe.md`. |
+| `openrouter/x-ai/grok-4.5` | `very_intelligent` | **Native route reached; capacity blocked** | The Jane/Bob coreference request reached the native-schema route but OpenRouter returned HTTP 402 while reserving its default output allowance. This is neither a semantic failure nor a certification. Retry only after the task-profile output ceiling is wired. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
+| `gemini/gemini-2.5-flash` | explicit route | **Unavailable in observed environment** | The Plan 0147 retry received a daily-quota exhaustion response. It produced no accepted semantic output and no capability conclusion. |
+| direct `gpt-5.5` | none | **Rejected for required native-schema transport** | This direct route was rejected before a Plan 0141 structured call. Do not select it for strict native JSON Schema; evaluate a separately certified provider-qualified route instead. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
+
+When a route changes status, update this table together with the retained run
+record. A route may move from declared to certified only after a real call
+returns parseable content under the named contract. A failed call must record
+whether failure occurred before provider dispatch, at schema transport, at
+provider capacity/quota, or during local contract validation; never label all
+of these simply “model failure.”
+
 Fable-family models are banned. They must not appear in the registry, project
 config, direct `call_llm(...)` calls, or override fields. Generic
 `model_override_acceptance` does not authorize Fable.
