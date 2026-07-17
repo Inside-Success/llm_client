@@ -9,6 +9,7 @@ are imported directly from ``call_contracts``, ``model_detection``, and
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json as _json
 import logging
 from typing import Any
@@ -83,23 +84,28 @@ def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[st
     full local validation contract.
     """
 
+    projected = deepcopy(schema)
+    _project_openrouter_compatible_schema(projected)
+    return projected
+
+
+def _project_openrouter_compatible_schema(schema: dict[str, Any]) -> None:
+    """Mutate one private schema copy onto OpenRouter's structural subset."""
+
     for key in _PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS:
         schema.pop(key, None)
     if not schema:
-        # Pydantic's JsonValue definition is an unconstrained ``{}``. Claude's
-        # native schema endpoint rejects it outright. A scalar is the only
-        # portable strict substitute; local Pydantic validation remains the
-        # source of truth for the original value domain.
-        schema["type"] = "string"
-        return schema
+        raise ValueError(
+            "OpenRouter native JSON Schema cannot represent an unconstrained "
+            "value schema; define an explicit structural response contract."
+        )
     for value in schema.values():
         if isinstance(value, dict):
-            _openrouter_compatible_strict_json_schema(value)
+            _project_openrouter_compatible_schema(value)
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
-                    _openrouter_compatible_strict_json_schema(item)
-    return schema
+                    _project_openrouter_compatible_schema(item)
 
 
 def _convert_messages_to_input(messages: list[dict[str, Any]]) -> str:

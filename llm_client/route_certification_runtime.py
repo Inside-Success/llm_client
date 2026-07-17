@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+from importlib.metadata import PackageNotFoundError, version
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -118,7 +120,39 @@ def observe_openrouter_native_success(
     return observation
 
 
+def observe_openrouter_native_success_from_runtime(
+    *,
+    result: LLMCallResult,
+    provider_schema: dict[str, Any],
+    schema_class: str,
+) -> RouteCertificationObservation:
+    """Persist route evidence for one successful public OpenRouter schema call.
+
+    The store root is environment-configurable so production callers can retain
+    route evidence outside the package checkout.  This helper is deliberately
+    post-call only: it never retries the model call, changes its model, or
+    substitutes a provider when OpenRouter metadata is temporarily unavailable.
+    """
+
+    root = Path(
+        os.environ.get("LLM_ROUTE_CERTIFICATION_ROOT", "~/projects/data/llm_route_certification")
+    ).expanduser()
+    try:
+        revision = os.environ.get("LLM_CLIENT_REVISION") or f"package:{version('llm-client')}"
+    except PackageNotFoundError:
+        revision = "package:uninstalled-source"
+    return observe_openrouter_native_success(
+        result=result,
+        provider_schema=provider_schema,
+        schema_class=schema_class,
+        llm_client_revision=revision,
+        generation_store=OpenRouterGenerationEvidenceStore(root / "generations"),
+        certification_store=RouteCertificationStore(root / "observations"),
+    )
+
+
 __all__ = [
     "compile_openrouter_native_success",
     "observe_openrouter_native_success",
+    "observe_openrouter_native_success_from_runtime",
 ]
