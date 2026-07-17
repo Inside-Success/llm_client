@@ -5,13 +5,15 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 from llm_client import LRUCache
 from llm_client.core.errors import LLMCapabilityError
+from llm_client.execution.responses_runtime import _openrouter_compatible_strict_json_schema, _strict_json_schema
 from llm_client.execution.structured_runtime import _acall_llm_structured_impl, _call_llm_structured_impl
 
 
@@ -19,6 +21,125 @@ class _City(BaseModel):
     """Minimal schema used to exercise the structured runtime seam."""
 
     name: str
+
+
+class _BoundedCount(BaseModel):
+    """Response model that distinguishes provider and local validation."""
+
+    count: int = Field(ge=1, description="A strictly positive count.")
+
+
+def test_openrouter_schema_projection_preserves_structural_contract_and_local_validation() -> None:
+    """OpenRouter receives structural JSON Schema while Pydantic keeps value checks."""
+    schema = _strict_json_schema(_BoundedCount.model_json_schema())
+
+    projected = _openrouter_compatible_strict_json_schema(schema)
+
+    assert schema["properties"]["count"]["minimum"] == 1
+    assert projected["additionalProperties"] is False
+    assert projected["required"] == ["count"]
+    assert projected["properties"]["count"]["type"] == "integer"
+    assert "minimum" not in projected["properties"]["count"]
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        _BoundedCount.model_validate({"count": 0})
+
+
+def test_openrouter_schema_projection_rejects_unconstrained_schema() -> None:
+    """An open JSON-value schema must not be silently narrowed to a scalar."""
+    with pytest.raises(ValueError, match="cannot represent an unconstrained"):
+        _openrouter_compatible_strict_json_schema({})
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_structured_call_sends_provider_compatible_schema(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The OpenRouter native path applies the projection to the actual request."""
+    mock_comp.return_value = _mock_structured_response('{"count":1}')
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/anthropic/claude-opus-4.8",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.schema_projection",
+        max_budget=0,
+    )
+
+    sent_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"]["schema"]
+    assert parsed.count == 1
+    assert "minimum" not in sent_schema["properties"]["count"]
+    assert sent_schema["additionalProperties"] is False
+
+
+@patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_native_success_records_route_observation(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    observe: MagicMock,
+) -> None:
+    """A native OpenRouter success sends its exact provider schema to observation."""
+    response = _mock_structured_response('{"count":1}')
+    response.id = "gen-route-observation"
+    mock_comp.return_value = response
+    observe.return_value = SimpleNamespace(observation_id="routeobs1_0123456789abcdef01234567")
+
+    parsed, result = _call_llm_structured_impl(
+        "openrouter/anthropic/claude-opus-4.8",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.route_observation",
+        max_budget=0,
+    )
+
+    assert parsed.count == 1
+    observe.assert_called_once()
+    observed_kwargs = observe.call_args.kwargs
+    assert observed_kwargs["result"] is result
+    assert observed_kwargs["provider_schema"] == mock_comp.call_args.kwargs["response_format"]["json_schema"]["schema"]
+    assert observed_kwargs["schema_class"] == "_BoundedCount"
+    assert result.warning_records[-1]["code"] == "ROUTE_CERTIFICATION_OBSERVED"
+
+
+@patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_route_observation_failure_is_visible_without_model_retry(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    observe: MagicMock,
+) -> None:
+    """Metadata failure preserves the successful result and never reroutes the model."""
+    response = _mock_structured_response('{"count":1}')
+    response.id = "gen-route-observation-failure"
+    mock_comp.return_value = response
+    observe.side_effect = RuntimeError("generation metadata unavailable")
+
+    parsed, result = _call_llm_structured_impl(
+        "openrouter/anthropic/claude-opus-4.8",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.openrouter.route_observation_failure",
+        max_budget=0,
+    )
+
+    assert parsed.count == 1
+    assert mock_comp.call_count == 1
+    assert result.warning_records[-1]["code"] == "ROUTE_CERTIFICATION_OBSERVATION_FAILED"
+    assert "generation metadata unavailable" in result.warnings[-1]
 
 
 def _mock_structured_response(content: str = '{"name":"Tokyo"}') -> MagicMock:

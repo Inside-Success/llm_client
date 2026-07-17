@@ -89,6 +89,62 @@ def _model_supports_native_schema(model: str) -> bool:
     return bool(litellm.supports_response_schema(model=model))
 
 
+def _record_openrouter_native_route_observation(
+    *,
+    result: LLMCallResult,
+    provider_schema: dict[str, Any],
+    response_model: type[BaseModel],
+) -> None:
+    """Record exact OpenRouter route evidence without changing model execution.
+
+    Metadata enrichment occurs only after a successful native-schema response.
+    It cannot cause a model retry or fallback.  A failed enrichment remains
+    visible on the returned result rather than pretending that the route was
+    certified.
+    """
+
+    resolved_model = result.resolved_model or result.model
+    if not resolved_model.startswith("openrouter/") or result.cache_hit:
+        return
+    try:
+        from llm_client.route_certification_runtime import (
+            observe_openrouter_native_success_from_runtime,
+        )
+
+        observation = observe_openrouter_native_success_from_runtime(
+            result=result,
+            provider_schema=provider_schema,
+            schema_class=response_model.__name__,
+        )
+    except Exception as error:
+        message = (
+            "ROUTE_CERTIFICATION_OBSERVATION_FAILED "
+            f"model={resolved_model} error_type={type(error).__name__} error={error}"
+        )
+        _structured_logger.warning(message)
+        result.warnings.append(message)
+        result.warning_records.append(
+            {
+                "code": "ROUTE_CERTIFICATION_OBSERVATION_FAILED",
+                "category": "route_certification",
+                "message": message,
+                "remediation": (
+                    "Inspect the retained structured call and OpenRouter generation metadata; "
+                    "do not infer provider endpoint identity from the requested model."
+                ),
+            }
+        )
+    else:
+        result.warning_records.append(
+            {
+                "code": "ROUTE_CERTIFICATION_OBSERVED",
+                "category": "route_certification",
+                "message": f"Recorded {observation.observation_id}.",
+                "remediation": "Use the route-certification query before treating this route as certified.",
+            }
+        )
+
+
 def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
     """Parse and validate JSON from LLM output with best-effort extraction.
 
@@ -472,6 +528,7 @@ def _call_llm_structured_impl(
     _cache_key = _client._cache_key
     exponential_backoff = _client.exponential_backoff
     _strict_json_schema = _client._strict_json_schema
+    _openrouter_compatible_strict_json_schema = _client._openrouter_compatible_strict_json_schema
     _prepare_responses_kwargs = _client._prepare_responses_kwargs
     _extract_responses_usage = _client._extract_responses_usage
     _parse_cost_result = _client._parse_cost_result
@@ -666,6 +723,8 @@ def _call_llm_structured_impl(
 
         if _is_responses_api_model(current_model):
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             _responses_schema_hash = _hashlib.sha256(
                 _json.dumps(schema, sort_keys=True).encode()
             ).hexdigest()[:16]
@@ -787,6 +846,8 @@ def _call_llm_structured_impl(
         if supports_schema:
             _prepare_raw_artifact_store_for_runtime()
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,
@@ -946,6 +1007,11 @@ def _call_llm_structured_impl(
                         retry_count=attempt,
                         schema_hash=_schema_hash,
                         response_format_type="json_schema",
+                    )
+                    _record_openrouter_native_route_observation(
+                        result=llm_result,
+                        provider_schema=schema,
+                        response_model=response_model,
                     )
                     return parsed, llm_result
                 except Exception as exc:
@@ -1222,6 +1288,7 @@ async def _acall_llm_structured_impl(
     _async_cache_set = _client._async_cache_set
     exponential_backoff = _client.exponential_backoff
     _strict_json_schema = _client._strict_json_schema
+    _openrouter_compatible_strict_json_schema = _client._openrouter_compatible_strict_json_schema
     _prepare_responses_kwargs = _client._prepare_responses_kwargs
     _extract_responses_usage = _client._extract_responses_usage
     _parse_cost_result = _client._parse_cost_result
@@ -1416,6 +1483,8 @@ async def _acall_llm_structured_impl(
 
         if _is_responses_api_model(current_model):
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             _responses_schema_hash_async = _hashlib.sha256(
                 _json.dumps(schema, sort_keys=True).encode()
             ).hexdigest()[:16]
@@ -1541,6 +1610,8 @@ async def _acall_llm_structured_impl(
         if supports_schema:
             _prepare_raw_artifact_store_for_runtime()
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,
@@ -1704,6 +1775,11 @@ async def _acall_llm_structured_impl(
                         retry_count=attempt,
                         schema_hash=_schema_hash_async,
                         response_format_type="json_schema",
+                    )
+                    _record_openrouter_native_route_observation(
+                        result=llm_result,
+                        provider_schema=schema,
+                        response_model=response_model,
                     )
                     return parsed, llm_result
                 except Exception as exc:

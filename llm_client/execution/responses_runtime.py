@@ -9,6 +9,7 @@ are imported directly from ``call_contracts``, ``model_detection``, and
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json as _json
 import logging
 from typing import Any
@@ -34,6 +35,20 @@ from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL
 logger = logging.getLogger(__name__)
 
 
+_PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS = frozenset({
+    "exclusiveMaximum",
+    "exclusiveMinimum",
+    "maxItems",
+    "maxLength",
+    "maximum",
+    "minItems",
+    "minLength",
+    "minimum",
+    "multipleOf",
+    "pattern",
+})
+
+
 def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Add additionalProperties: false to all objects for OpenAI strict mode."""
 
@@ -55,6 +70,42 @@ def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     for defn in schema.get("$defs", {}).values():
         _strict_json_schema(defn)
     return schema
+
+
+def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Project a strict schema onto OpenRouter's structural subset.
+
+    OpenRouter's provider routes reject value-level JSON Schema constraints such
+    as ``minimum`` for some native-schema backends.  Those constraints are not
+    reliably decode-enforced by providers in any case; callers still validate
+    the returned JSON with the original Pydantic response model.  Keep the
+    structural contract (objects, properties, required fields, enums, and
+    additional-properties policy) in the provider request while retaining the
+    full local validation contract.
+    """
+
+    projected = deepcopy(schema)
+    _project_openrouter_compatible_schema(projected)
+    return projected
+
+
+def _project_openrouter_compatible_schema(schema: dict[str, Any]) -> None:
+    """Mutate one private schema copy onto OpenRouter's structural subset."""
+
+    for key in _PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS:
+        schema.pop(key, None)
+    if not schema:
+        raise ValueError(
+            "OpenRouter native JSON Schema cannot represent an unconstrained "
+            "value schema; define an explicit structural response contract."
+        )
+    for value in schema.values():
+        if isinstance(value, dict):
+            _project_openrouter_compatible_schema(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _project_openrouter_compatible_schema(item)
 
 
 def _convert_messages_to_input(messages: list[dict[str, Any]]) -> str:
