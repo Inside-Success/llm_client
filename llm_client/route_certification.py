@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime
 from pathlib import Path
+import tempfile
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -201,15 +203,30 @@ class RouteCertificationStore:
         self.root.mkdir(parents=True, exist_ok=True)
         path = self.root / f"{observation.observation_id}.json"
         encoded = observation.model_dump_json(indent=2) + "\n"
+        temporary_path: Path | None = None
         try:
-            with path.open("x", encoding="utf-8") as handle:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.root,
+                prefix=f".{observation.observation_id}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
                 handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+                temporary_path = Path(handle.name)
+            os.link(temporary_path, path)
         except FileExistsError:
             existing = RouteCertificationObservation.model_validate_json(
                 path.read_text(encoding="utf-8")
             )
             if existing != observation:
                 raise ValueError("route observation identity conflict") from None
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
         return path
 
     def observations(self) -> tuple[RouteCertificationObservation, ...]:

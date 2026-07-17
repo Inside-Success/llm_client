@@ -76,6 +76,7 @@ def test_store_preserves_certification_and_latest_health(tmp_path) -> None:
     assert view.certification_observation_id == passed.observation_id
     assert view.latest_outcome == "timeout"
     assert view.observation_count == 2
+    assert list(tmp_path.glob("*.tmp")) == []
 
 
 def test_unknown_endpoint_never_certifies_named_route(tmp_path) -> None:
