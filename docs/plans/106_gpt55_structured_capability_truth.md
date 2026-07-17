@@ -1,10 +1,10 @@
 # Plan #106: Direct GPT-5.5 Structured Capability Truth
 
-**Status:** Complete
+**Status:** Superseded by Plan 107 (2026-07-16 correction)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
-**Blocks:** truthful structured-output routing for DoDAF Plan 39
+**Blocks:** None - its original direct-route conclusion was disproved
 
 ---
 
@@ -22,6 +22,16 @@ LiteLLM's generic capability map or dispatching a provider request.
 **Why:** Registry visibility must not exceed execution evidence. DoDAF can use
 the separately certified direct Gemini route without preserving a false GPT-5.5
 capability claim.
+
+> **Correction (2026-07-16):** this plan's "direct" observation was actually
+> normalized to `openrouter/openai/gpt-5.5` by the default routing policy before
+> the capability check. A recheck with `LLM_CLIENT_OPENROUTER_ROUTING=off`
+> reached OpenAI Responses API and returned typed strict-schema content for bare
+> `gpt-5.5`. The registry false value and the tests below therefore tested the
+> wrong route boundary. Plan 107 reverts that false disposition, records the
+> provider-qualified evidence, and prevents direct GPT-5.6 routes from being
+> silently proxied. See
+> `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`.
 
 ---
 
@@ -67,9 +77,9 @@ capability claim.
 
 ## Acceptance Criteria
 
-- [x] Direct `gpt-5.5` no longer advertises native JSON-schema support.
-- [x] OpenRouter GPT-5.5 remains unchanged.
-- [x] Unsupported direct routing fails before generic capability fallback.
+- [x] **Retracted:** the original direct-route assertions above were based on
+  the OpenRouter proxy route, not direct OpenAI Responses API.
+- [x] The correction is implemented and covered by Plan 107.
 - [x] Focused tests, Ruff, and registry JSON parsing pass.
 - [x] Verified commit is pushed for review (`7caf6ee`).
 

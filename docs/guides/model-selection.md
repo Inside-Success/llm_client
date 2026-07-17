@@ -91,8 +91,11 @@ task shape.
 | `openrouter/minimax/minimax-m3` | `default_intelligent` | **Transport reached; output contract not certified** | Plan 0141's provider accepted the structural schema and returned content, but local Pydantic/business validation rejected the monolithic response. This does not prove poor extraction quality, but it does mean MiniMax is not certified for that semantic-authoring schema. Use only after the selected task's smaller contract has a retained passing trace. Evidence: `onto-canon6/docs/runs/2026-07-14_plan0141_minimax_discovery_probe.md`. |
 | `openrouter/x-ai/grok-4.5` | `very_intelligent` | **Native route reached; capacity blocked** | The Jane/Bob coreference request reached the native-schema route but OpenRouter returned HTTP 402 while reserving its default output allowance. This is neither a semantic failure nor a certification. Retry only after the task-profile output ceiling is wired. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
 | `gemini/gemini-2.5-flash` | explicit route | **Unavailable in observed environment** | The Plan 0147 retry received a daily-quota exhaustion response. It produced no accepted semantic output and no capability conclusion. |
-| direct `gpt-5.5` | historical only | **Rejected for required native-schema transport** | This is a historical Plan 0141 result, not a current selection recommendation. It was rejected before a structured call; do not select it for strict native JSON Schema. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
-| GPT-5.6 Luna / Terra / Sol | none yet | **Official capability, locally unregistered and uncertified** | [OpenAI documents](https://developers.openai.com/api/docs/models) native structured-output support for the GPT-5.6 family, but no GPT-5.6 route exists in this repository's curated registry and no exact `llm_client` route has a retained passing trace. Do not select it through a raw override. First add a provider-qualified registry entry, then certify the exact route and schema class. |
+| `openrouter/openai/gpt-5.5` | historical proxy route | **Rejected before dispatch by local capability map** | The former Plan 106 result was an OpenRouter-proxy result, not a direct OpenAI result. It is not evidence about direct GPT-5.5 or later GPT-5.6 models. |
+| direct `gpt-5.5` | historical only | **Certified for one bounded strict-schema contract** | Direct OpenAI Responses API returned parseable typed content when routing was explicit. This corrects Plan 106's false direct-route disposition, but GPT-5.5 is superseded for new selection by the GPT-5.6 family. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
+| direct `gpt-5.6` (Sol) | explicit manual selection | **Certified for one bounded strict-schema contract** | Direct OpenAI Responses API returned schema-valid typed content. The provider-policy exact alias preserves this direct route even while normal routing prefers OpenRouter. It is not yet an automatic tier default or semantic-quality certification. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
+| direct `gpt-5.6-terra` | explicit manual selection | **Certified for one bounded strict-schema contract** | Same contract-tested direct Responses API route as Sol, retained as an explicit choice rather than a default. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
+| GPT-5.6 Luna | none yet | **Official capability, locally unregistered and uncertified** | [OpenAI documents](https://developers.openai.com/api/docs/models) native structured-output support, but this exact route has no retained `llm_client` passing trace. Do not select it until registered and certified. |
 
 When a route changes status, update this table together with the retained run
 record. A route may move from declared to certified only after a real call
@@ -102,9 +105,9 @@ provider capacity/quota, or during local contract validation; never label all
 of these simply “model failure.”
 
 Provider documentation is useful for deciding which route to register and
-probe, but it does not certify a local route. In particular, the GPT-5.6 row
-above records a provider-declared capability, not a `llm_client` selection
-default or an observed result.
+probe, but it does not certify a local route. GPT-5.6 Sol and Terra now have
+bounded direct-route evidence; Luna remains a provider-declared capability,
+not a `llm_client` selection default or an observed result.
 
 Fable-family models are banned. They must not appear in the registry, project
 config, direct `call_llm(...)` calls, or override fields. Generic

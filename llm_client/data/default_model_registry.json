@@ -327,12 +327,50 @@
       "name": "gpt-5.5-direct",
       "provider": "openai",
       "speed": 40,
-      "structured_output": false,
+      "structured_output": true,
       "tags": [
         "deep-review",
         "frontier",
         "manual-selection",
         "reasoning"
+      ]
+    },
+    {
+      "api_key_env": "OPENAI_API_KEY",
+      "context": 1050000,
+      "cost": 17.5,
+      "intelligence": 57,
+      "litellm_id": "gpt-5.6",
+      "name": "gpt-5.6-sol-direct",
+      "provider": "openai",
+      "speed": 40,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "direct-provider",
+        "frontier",
+        "manual-selection",
+        "reasoning",
+        "structured-route-certified"
+      ]
+    },
+    {
+      "api_key_env": "OPENAI_API_KEY",
+      "context": 1050000,
+      "cost": 8.75,
+      "intelligence": 55,
+      "litellm_id": "gpt-5.6-terra",
+      "name": "gpt-5.6-terra-direct",
+      "provider": "openai",
+      "speed": 55,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "direct-provider",
+        "frontier",
+        "manual-selection",
+        "reasoning",
+        "structured-route-certified"
       ]
     },
     {
