@@ -42,6 +42,13 @@ def test_openrouter_schema_projection_preserves_structural_contract_and_local_va
         _BoundedCount.model_validate({"count": 0})
 
 
+def test_openrouter_schema_projection_replaces_unconstrained_schema_with_scalar() -> None:
+    """Claude-compatible OpenRouter schemas cannot contain an empty schema object."""
+    projected = _openrouter_compatible_strict_json_schema({})
+
+    assert projected == {"type": "string"}
+
+
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.completion")

@@ -85,6 +85,13 @@ def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[st
 
     for key in _PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS:
         schema.pop(key, None)
+    if not schema:
+        # Pydantic's JsonValue definition is an unconstrained ``{}``. Claude's
+        # native schema endpoint rejects it outright. A scalar is the only
+        # portable strict substitute; local Pydantic validation remains the
+        # source of truth for the original value domain.
+        schema["type"] = "string"
+        return schema
     for value in schema.values():
         if isinstance(value, dict):
             _openrouter_compatible_strict_json_schema(value)
