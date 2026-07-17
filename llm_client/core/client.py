@@ -68,11 +68,15 @@ except ImportError:
             return fn
         return _wrap
 
-# Enable post-generation JSON Schema validation. Providers only enforce
-# structural constraints (type, required, enum) at decode time. Value-level
-# constraints (minProperties, minLength, pattern, minimum) are NOT enforced.
-# This catches violations on the client side so the retry loop can self-correct.
-litellm.enable_json_schema_validation = True
+# TEMPORARY PROVIDER-COMPATIBILITY BOUNDARY (2026-07-16):
+# LiteLLM's pre-return validator rejects otherwise schema-valid responses when
+# some OpenRouter routes wrap their single JSON value in a Markdown fence. Keep
+# it disabled until upstream framing is reliable so llm_client can first retain
+# the exact raw response, remove transport-only framing in
+# ``_robust_validate_json``, and then enforce the same Pydantic response model
+# locally. Provider-native ``response_format=json_schema`` remains enabled; no
+# schema mismatch is accepted by this switch.
+litellm.enable_json_schema_validation = False
 
 from llm_client.core.config import ClientConfig
 import llm_client.io_log as _io_log

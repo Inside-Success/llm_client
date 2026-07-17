@@ -157,19 +157,24 @@ def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
     JSON-level failures trigger the fallback.
     """
     try:
-        return cast(T, response_model.model_validate_json(raw_content))
-    except ValidationError:
-        # Schema validation error -- don't mask with fallback
-        raise
+        return response_model.model_validate_json(raw_content)
+    except ValidationError as error:
+        # Pydantic reports both JSON decoding and schema mismatches through
+        # ValidationError. Normalize transport framing only for the former;
+        # field/type/enum violations must remain terminal validation failures.
+        if not error.errors() or any(
+            issue.get("type") != "json_invalid" for issue in error.errors()
+        ):
+            raise
     except Exception:
-        # JSON decoding or other parse failure -- try robust extraction
-        _structured_logger.debug(
-            "model_validate_json failed on raw content (%d chars), "
-            "falling back to safe_json_loads",
-            len(raw_content),
-        )
-        parsed_data = _safe_json_loads(raw_content)
-        return cast(T, response_model.model_validate(parsed_data))
+        pass
+    _structured_logger.debug(
+        "model_validate_json failed on raw content (%d chars), "
+        "falling back to safe_json_loads",
+        len(raw_content),
+    )
+    parsed_data = _safe_json_loads(raw_content)
+    return response_model.model_validate(parsed_data)
 
 
 class _StructuredValidationRetry(Exception):

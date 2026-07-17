@@ -6,15 +6,24 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Literal
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import litellm
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
 from llm_client import LRUCache
 from llm_client.core.errors import LLMCapabilityError
-from llm_client.execution.responses_runtime import _openrouter_compatible_strict_json_schema, _strict_json_schema
-from llm_client.execution.structured_runtime import _acall_llm_structured_impl, _call_llm_structured_impl
+from llm_client.execution.responses_runtime import (
+    _openrouter_compatible_strict_json_schema,
+    _strict_json_schema,
+)
+from llm_client.execution.structured_runtime import (
+    _acall_llm_structured_impl,
+    _call_llm_structured_impl,
+    _robust_validate_json,
+)
 
 
 class _City(BaseModel):
@@ -300,3 +309,29 @@ async def test_structured_runtime_async_raises_capability_error_for_gpt5_schema_
             trace_id="structured.runtime.async.gpt5_schema",
             max_budget=0,
         )
+
+
+def test_local_structured_validation_accepts_transport_only_json_fence() -> None:
+    """A single fenced JSON value still must satisfy the exact response model."""
+
+    class Decision(BaseModel):
+        action: Literal["answer"]
+        rationale: str
+
+    parsed = _robust_validate_json(
+        Decision,
+        '```json\n{"action":"answer","rationale":"Enough evidence."}\n```',
+    )
+
+    assert parsed == Decision(action="answer", rationale="Enough evidence.")
+    with pytest.raises(ValidationError, match="literal_error"):
+        _robust_validate_json(
+            Decision,
+            '{"action":"search","rationale":"Wrong action."}',
+        )
+
+
+def test_litellm_prevalidation_is_disabled_for_local_raw_first_validation() -> None:
+    """Raw-first local validation is the temporary provider-framing boundary."""
+
+    assert litellm.enable_json_schema_validation is False
