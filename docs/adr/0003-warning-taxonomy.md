@@ -7,6 +7,10 @@ Verification context: Experiment-run start now rejects a duplicate run_id before
 emitting a second JSONL start record; SQLite integrity failure remains an error,
 not an advisory. Focused observability controls pass.
 
+Plan 94's OpenRouter generation enrichment emits a bounded warning for each
+eventual-consistency 404 retry; exhaustion remains an error and never becomes a
+silent model retry or provider fallback.
+
 ## Context
 
 Current warnings include both model deprecation and model advisories

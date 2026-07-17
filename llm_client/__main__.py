@@ -27,6 +27,9 @@ from llm_client.cli.experiments import register_parser as register_experiments_p
 from llm_client.cli.models import register_parser as register_models_parser
 from llm_client.cli.provider_limits import register_parser as register_provider_limits_parser
 from llm_client.cli.replay import register_parser as register_replay_parser
+from llm_client.cli.route_certification import (
+    register_parser as register_route_certification_parser,
+)
 from llm_client.cli.review_artifact import register_parser as register_review_artifact_parser
 from llm_client.cli.review_cycle import register_parser as register_review_cycle_parser
 from llm_client.cli.scores import register_parser as register_scores_parser
@@ -49,6 +52,7 @@ def main() -> None:
     register_models_parser(subparsers)
     register_provider_limits_parser(subparsers)
     register_replay_parser(subparsers)
+    register_route_certification_parser(subparsers)
     register_review_artifact_parser(subparsers)
     register_review_cycle_parser(subparsers)
     register_traces_parser(subparsers)

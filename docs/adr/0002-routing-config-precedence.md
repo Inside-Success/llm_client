@@ -2,8 +2,10 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-15
-Verification context: Plan 105 serializes Instructor client construction after the existing native-schema routing decision; call, environment, and default routing precedence remain unchanged. Structured runtime controls pass.
+Last verified: 2026-07-16
+Verification context: Plan 94 registers a provider-free route-certification
+query command; it does not change call, environment, or default routing
+precedence. Focused CLI and route-contract controls pass.
 
 ## Context
 

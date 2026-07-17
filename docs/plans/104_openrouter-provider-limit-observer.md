@@ -159,6 +159,10 @@ wire values such as numeric strings before producing the strict public model.
 Observation persistence remains a caller responsibility. Neither point upgrades
 provider-reported state into enforcement evidence.
 
+Last verified: 2026-07-16. Plan 94 adds a separate `route-certification` CLI
+registration; the completed provider-limit observer command, authorization
+boundary, and response contract are unchanged.
+
 ---
 
 ## Failure Modes and Next Actions
