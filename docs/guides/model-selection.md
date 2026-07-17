@@ -2,8 +2,8 @@
 
 `llm_client` model selection has two separate decisions:
 
-1. **Raw model tier** — speed/cost/intelligence tradeoff for ordinary text or
-   structured-output calls.
+1. **Raw model tier** — task-shape, latency, and reasoning tradeoff for ordinary
+   text or structured-output calls. Cost is observed, not a launch gate.
 2. **Execution mode** — whether the call needs a workspace-agent SDK lane with
    side effects, tools, and repository context.
 
@@ -31,13 +31,52 @@ For ordinary model selection, prefer tier selectors:
 | `fast_mid` | GPT-5.4 nano | latency-sensitive general work | deep reasoning |
 | `default_intelligent` | MiniMax-M3 | normal project default | workspace side effects |
 | `fast_intelligent` | GLM 5.2 | stronger reasoning without huge latency | final “best possible” escalation |
-| `very_intelligent` | Grok 4.5 | difficult reasoning before max-cost escalation | automatic bulk pipelines |
+| `very_intelligent` | Grok 4.5 | difficult semantic judgment, coreference, ontology authoring, and deep review | automatic bulk pipelines |
 | `max_intelligence` | Claude Opus 4.8 | explicit max-quality escalation | default routing |
 
 Compatibility selectors such as `extraction`, `judging`, `synthesis`, and
 `bulk_cheap` remain available so existing projects do not break. New code
 should use the tier names above and keep task intent in the required
 `task=` observability tag.
+
+## Default Profiles
+
+Select the smallest tier that matches the judgment required. These are defaults,
+not cost approval gates:
+
+| Application situation | Selector to request | Why |
+|---|---|---|
+| High-volume extraction or candidate generation | `fast_cheap_mid` | A reasoning-capable structured route for work where every output is subsequently validated or reviewed. |
+| Ordinary extraction, classification, and structured reasoning | `default_intelligent` | The general project default when the task has normal ambiguity but not difficult document interpretation. |
+| Ambiguous document meaning, cross-chunk coreference, semantic authoring, or substantive review | `very_intelligent` | The default for tasks where a wrong semantic interpretation is more costly than additional latency. |
+| A named, exceptional quality escalation | `max_intelligence` | Use only when the calling plan records why the ordinary semantic-authoring tier is insufficient. |
+
+Do not silently fall back between profiles. A caller may select another profile
+explicitly in project configuration, and the selected route must be visible in
+the call trace. A provider outage or route rejection is a failure to surface,
+not permission to substitute a weaker semantic actor.
+
+## Declared Capability vs. Certified Route
+
+`structured_output: true` in the model registry means the route is **declared**
+as intended to support native JSON-schema output. It is not proof that the
+current provider route accepts this repository's strict schema at runtime.
+
+Before a profile is advertised as runnable for a structured task, maintain a
+route-certification record for the exact:
+
+`model + provider route + execution mode + schema class`.
+
+The record must show one retained real attempt that reached the provider,
+accepted the schema, and returned parseable content. It must distinguish route
+or transport failure from a semantic-quality failure. Until then, selection is
+only a declared default and callers must fail loudly if the provider rejects
+the route.
+
+For small structured calls, the owning task profile must supply any required
+technical output ceiling centrally and expose it in the call snapshot. Callers
+must not invent one-off token caps; this is a provider-capacity setting, not a
+cost authorization mechanism.
 
 Fable-family models are banned. They must not appear in the registry, project
 config, direct `call_llm(...)` calls, or override fields. Generic

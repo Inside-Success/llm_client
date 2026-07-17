@@ -1,6 +1,6 @@
 # Plan #94: Model Tier Taxonomy and Fable Ban
 
-**Status:** In Progress (implemented; focused verified; full helper timeout)
+**Status:** In Progress (tier selectors implemented; route certification follow-up open)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -101,6 +101,15 @@ even when a project carries generic human override metadata.
 - [x] Fable-family literals are audit violations even with generic override
       acceptance.
 - [x] Focused tests pass.
+- [x] The public selection guide defines task-shape defaults for bulk structured
+      work, ordinary structured reasoning, difficult semantic authoring, and
+      explicit escalation.
+- [x] The guide distinguishes registry-declared structured capability from a
+      runtime-certified `model + route + execution mode + schema class`.
+- [ ] A runtime certification record and task-configured technical output
+      ceiling are implemented. This remains a follow-up to the active
+      provider-compatible native-schema repair; do not infer certification from
+      the static registry.
 
 ---
 
