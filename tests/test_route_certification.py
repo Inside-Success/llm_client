@@ -29,7 +29,22 @@ def _observation(**changes: object) -> RouteCertificationObservation:
         "evidence_ref": "artifact://trace-1",
     }
     values.update(changes)
-    return RouteCertificationObservation.build(**values)
+    return RouteCertificationObservation.build(
+        requested_model=str(values["requested_model"]),
+        resolved_model=str(values["resolved_model"]),
+        upstream_provider_endpoint=values["upstream_provider_endpoint"],  # type: ignore[arg-type]
+        execution_mode=values["execution_mode"],  # type: ignore[arg-type]
+        schema_class=str(values["schema_class"]),
+        schema_sha256=str(values["schema_sha256"]),
+        outcome=values["outcome"],  # type: ignore[arg-type]
+        failure_stage=values["failure_stage"],  # type: ignore[arg-type]
+        logical_call_id=str(values["logical_call_id"]),
+        trace_id=str(values["trace_id"]),
+        observed_at=values["observed_at"],  # type: ignore[arg-type]
+        llm_client_revision=str(values["llm_client_revision"]),
+        selected_attempt_receipt_digest=values["selected_attempt_receipt_digest"],  # type: ignore[arg-type]
+        evidence_ref=str(values["evidence_ref"]),
+    )
 
 
 def test_store_preserves_certification_and_latest_health(tmp_path) -> None:

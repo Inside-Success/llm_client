@@ -26,6 +26,16 @@ RouteOutcome = Literal[
     "local_contract_rejected",
     "semantic_review_rejected",
 ]
+ExecutionMode = Literal["native_json_schema", "instructor", "text"]
+FailureStage = Literal[
+    "none",
+    "pre_dispatch",
+    "schema_transport",
+    "provider_capacity",
+    "provider_runtime",
+    "local_validation",
+    "semantic_review",
+]
 
 
 def _digest(payload: object) -> str:
@@ -56,19 +66,11 @@ class RouteCertificationObservation(BaseModel):
         min_length=1,
         description="Actual OpenRouter endpoint slug; None means it was not observed."
     )
-    execution_mode: Literal["native_json_schema", "instructor", "text"]
+    execution_mode: ExecutionMode
     schema_class: str = Field(min_length=1)
     schema_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     outcome: RouteOutcome
-    failure_stage: Literal[
-        "none",
-        "pre_dispatch",
-        "schema_transport",
-        "provider_capacity",
-        "provider_runtime",
-        "local_validation",
-        "semantic_review",
-    ]
+    failure_stage: FailureStage
     logical_call_id: str = Field(min_length=1)
     trace_id: str = Field(min_length=1)
     observed_at: datetime
@@ -80,10 +82,43 @@ class RouteCertificationObservation(BaseModel):
     record_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @classmethod
-    def build(cls, **values: object) -> "RouteCertificationObservation":
+    def build(
+        cls,
+        *,
+        requested_model: str,
+        resolved_model: str,
+        upstream_provider_endpoint: str | None,
+        execution_mode: ExecutionMode,
+        schema_class: str,
+        schema_sha256: str,
+        outcome: RouteOutcome,
+        failure_stage: FailureStage,
+        logical_call_id: str,
+        trace_id: str,
+        observed_at: datetime,
+        llm_client_revision: str,
+        selected_attempt_receipt_digest: str | None,
+        evidence_ref: str,
+    ) -> "RouteCertificationObservation":
         """Build deterministic identity and digest from trusted observation fields."""
 
-        payload = {"schema_version": "route-certification-observation-v1", **values}
+        payload = {
+            "schema_version": "route-certification-observation-v1",
+            "requested_model": requested_model,
+            "resolved_model": resolved_model,
+            "upstream_provider_endpoint": upstream_provider_endpoint,
+            "execution_mode": execution_mode,
+            "schema_class": schema_class,
+            "schema_sha256": schema_sha256,
+            "outcome": outcome,
+            "failure_stage": failure_stage,
+            "logical_call_id": logical_call_id,
+            "trace_id": trace_id,
+            "observed_at": observed_at,
+            "llm_client_revision": llm_client_revision,
+            "selected_attempt_receipt_digest": selected_attempt_receipt_digest,
+            "evidence_ref": evidence_ref,
+        }
         digest = _digest(payload)
         return cls.model_validate(
             payload
@@ -194,7 +229,7 @@ class RouteCertificationStore:
         *,
         resolved_model: str,
         upstream_provider_endpoint: str | None,
-        execution_mode: str,
+        execution_mode: ExecutionMode,
         schema_class: str,
         schema_sha256: str,
     ) -> RouteCertificationView | None:
@@ -242,5 +277,7 @@ __all__ = [
     "RouteCertificationObservation",
     "RouteCertificationStore",
     "RouteCertificationView",
+    "ExecutionMode",
+    "FailureStage",
     "RouteOutcome",
 ]

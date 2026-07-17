@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-17T02:42:44Z -->
+<!-- Generated: 2026-07-17T02:44:10Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -2816,7 +2816,7 @@ schema digest to retained runtime evidence.</pre>
     <h4>Methods</h4>
 
 <details class="symbol" id="module-llm_client-route_certification-build">
-  <summary><code>build</code> <span class="sig">(**values: object) -&gt; &#x27;RouteCertificationObservation&#x27;</span></summary>
+  <summary><code>build</code> <span class="sig">(*, requested_model: str, resolved_model: str, upstream_provider_endpoint: str | None, execution_mode: Literal[&#x27;native_json_schema&#x27;, &#x27;instructor&#x27;, &#x27;text&#x27;], schema_class: str, schema_sha256: str, outcome: Literal[&#x27;parseable&#x27;, &#x27;schema_rejected&#x27;, &#x27;capacity_rejected&#x27;, &#x27;timeout&#x27;, &#x27;invalid_output&#x27;, &#x27;local_contract_rejected&#x27;, &#x27;semantic_review_rejected&#x27;], failure_stage: Literal[&#x27;none&#x27;, &#x27;pre_dispatch&#x27;, &#x27;schema_transport&#x27;, &#x27;provider_capacity&#x27;, &#x27;provider_runtime&#x27;, &#x27;local_validation&#x27;, &#x27;semantic_review&#x27;], logical_call_id: str, trace_id: str, observed_at: datetime.datetime, llm_client_revision: str, selected_attempt_receipt_digest: str | None, evidence_ref: str) -&gt; &#x27;RouteCertificationObservation&#x27;</span></summary>
   <div class="symbol-body">
     <p class="summary">Build deterministic identity and digest from trusted observation fields.</p>
     <p class="meta">Source: <code>llm_client.route_certification</code> method</p>
@@ -2856,7 +2856,7 @@ schema digest to retained runtime evidence.</pre>
 </details>
 
 <details class="symbol" id="module-llm_client-route_certification-query">
-  <summary><code>query</code> <span class="sig">(self, *, resolved_model: str, upstream_provider_endpoint: str | None, execution_mode: str, schema_class: str, schema_sha256: str) -&gt; llm_client.route_certification.RouteCertificationView | None</span></summary>
+  <summary><code>query</code> <span class="sig">(self, *, resolved_model: str, upstream_provider_endpoint: str | None, execution_mode: Literal[&#x27;native_json_schema&#x27;, &#x27;instructor&#x27;, &#x27;text&#x27;], schema_class: str, schema_sha256: str) -&gt; llm_client.route_certification.RouteCertificationView | None</span></summary>
   <div class="symbol-body">
     <p class="summary">Return exact-key certification proof and the latest route outcome.</p>
     <p class="meta">Source: <code>llm_client.route_certification</code> method</p>
