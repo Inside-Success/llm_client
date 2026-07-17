@@ -69,31 +69,32 @@ if [[ -n "$GENERATOR" ]]; then
     fi
 fi
 
-# 2. Generated API reference sync (regenerate before coupling check)
-# This must run BEFORE doc-coupling so generated docs are staged when
-# the coupling check compares against origin.
+# 2. Validate doc coupling before any generator mutates the worktree.
+DOC_COUPLING=$(find_script "check_doc_coupling.py")
+if [[ -n "$DOC_COUPLING" ]]; then
+    echo "Checking doc-code coupling..."
+    ACK_ARGS=()
+    if [[ -f "$REPO_ROOT/.doc-coupling-acks" ]]; then
+        ACK_ARGS=(--ack-file "$REPO_ROOT/.doc-coupling-acks")
+    fi
+    if ! "$PYTHON_BIN" "$DOC_COUPLING" --staged --strict "${ACK_ARGS[@]}"; then
+        echo ""
+        echo "ERROR: Locked doc-coupling violation detected!"
+        echo "Run 'python $DOC_COUPLING --suggest' to see which docs to update."
+        echo "Do not touch unrelated docs solely to satisfy co-modification."
+        echo ""
+        exit 1
+    fi
+fi
+
+# 3. Generated API reference sync after validation succeeds.
 API_REFERENCE_GEN=$(find_script "generate_api_reference.py")
 if [[ -n "$API_REFERENCE_GEN" ]]; then
     STAGED_API=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^(llm_client/.*\.py|docs/API_REFERENCE\.(md|html)|scripts/meta/generate_api_reference\.py|scripts/doc_coupling\.yaml)$' || true)
     if [[ -n "$STAGED_API" ]]; then
         echo "Regenerating API reference docs..."
-        # Regenerate and stage instead of check-only — avoids race condition
-        # where --check compares disk state against staged Python changes.
         "$PYTHON_BIN" "$API_REFERENCE_GEN" --write
         git add docs/API_REFERENCE.md docs/API_REFERENCE.html
-    fi
-fi
-
-# 3. Doc-coupling check (after API docs regenerated)
-DOC_COUPLING=$(find_script "check_doc_coupling.py")
-if [[ -n "$DOC_COUPLING" ]]; then
-    echo "Checking doc-code coupling..."
-    if ! "$PYTHON_BIN" "$DOC_COUPLING" --staged --strict; then
-        echo ""
-        echo "ERROR: Doc-coupling violation detected!"
-        echo "Run 'python $DOC_COUPLING --suggest' to see which docs to update."
-        echo ""
-        exit 1
     fi
 fi
 
