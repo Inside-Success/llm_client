@@ -8,10 +8,11 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 from llm_client import LRUCache
 from llm_client.core.errors import LLMCapabilityError
+from llm_client.execution.responses_runtime import _openrouter_compatible_strict_json_schema, _strict_json_schema
 from llm_client.execution.structured_runtime import _acall_llm_structured_impl, _call_llm_structured_impl
 
 
@@ -19,6 +20,52 @@ class _City(BaseModel):
     """Minimal schema used to exercise the structured runtime seam."""
 
     name: str
+
+
+class _BoundedCount(BaseModel):
+    """Response model that distinguishes provider and local validation."""
+
+    count: int = Field(ge=1, description="A strictly positive count.")
+
+
+def test_openrouter_schema_projection_preserves_structural_contract_and_local_validation() -> None:
+    """OpenRouter receives structural JSON Schema while Pydantic keeps value checks."""
+    schema = _strict_json_schema(_BoundedCount.model_json_schema())
+
+    projected = _openrouter_compatible_strict_json_schema(schema)
+
+    assert projected["additionalProperties"] is False
+    assert projected["required"] == ["count"]
+    assert projected["properties"]["count"]["type"] == "integer"
+    assert "minimum" not in projected["properties"]["count"]
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        _BoundedCount.model_validate({"count": 0})
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_structured_call_sends_provider_compatible_schema(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The OpenRouter native path applies the projection to the actual request."""
+    mock_comp.return_value = _mock_structured_response('{"count":1}')
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/anthropic/claude-opus-4.8",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.schema_projection",
+        max_budget=0,
+    )
+
+    sent_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"]["schema"]
+    assert parsed.count == 1
+    assert "minimum" not in sent_schema["properties"]["count"]
+    assert sent_schema["additionalProperties"] is False
 
 
 def _mock_structured_response(content: str = '{"name":"Tokyo"}') -> MagicMock:

@@ -472,6 +472,7 @@ def _call_llm_structured_impl(
     _cache_key = _client._cache_key
     exponential_backoff = _client.exponential_backoff
     _strict_json_schema = _client._strict_json_schema
+    _openrouter_compatible_strict_json_schema = _client._openrouter_compatible_strict_json_schema
     _prepare_responses_kwargs = _client._prepare_responses_kwargs
     _extract_responses_usage = _client._extract_responses_usage
     _parse_cost_result = _client._parse_cost_result
@@ -666,6 +667,8 @@ def _call_llm_structured_impl(
 
         if _is_responses_api_model(current_model):
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             _responses_schema_hash = _hashlib.sha256(
                 _json.dumps(schema, sort_keys=True).encode()
             ).hexdigest()[:16]
@@ -787,6 +790,8 @@ def _call_llm_structured_impl(
         if supports_schema:
             _prepare_raw_artifact_store_for_runtime()
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,
@@ -1222,6 +1227,7 @@ async def _acall_llm_structured_impl(
     _async_cache_set = _client._async_cache_set
     exponential_backoff = _client.exponential_backoff
     _strict_json_schema = _client._strict_json_schema
+    _openrouter_compatible_strict_json_schema = _client._openrouter_compatible_strict_json_schema
     _prepare_responses_kwargs = _client._prepare_responses_kwargs
     _extract_responses_usage = _client._extract_responses_usage
     _parse_cost_result = _client._parse_cost_result
@@ -1416,6 +1422,8 @@ async def _acall_llm_structured_impl(
 
         if _is_responses_api_model(current_model):
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             _responses_schema_hash_async = _hashlib.sha256(
                 _json.dumps(schema, sort_keys=True).encode()
             ).hexdigest()[:16]
@@ -1541,6 +1549,8 @@ async def _acall_llm_structured_impl(
         if supports_schema:
             _prepare_raw_artifact_store_for_runtime()
             schema = _strict_json_schema(response_model.model_json_schema())
+            if current_model.startswith("openrouter/"):
+                schema = _openrouter_compatible_strict_json_schema(schema)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,

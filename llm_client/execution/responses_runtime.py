@@ -34,6 +34,20 @@ from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL
 logger = logging.getLogger(__name__)
 
 
+_PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS = frozenset({
+    "exclusiveMaximum",
+    "exclusiveMinimum",
+    "maxItems",
+    "maxLength",
+    "maximum",
+    "minItems",
+    "minLength",
+    "minimum",
+    "multipleOf",
+    "pattern",
+})
+
+
 def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Add additionalProperties: false to all objects for OpenAI strict mode."""
 
@@ -54,6 +68,30 @@ def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
             _strict_json_schema(sub_schema)
     for defn in schema.get("$defs", {}).values():
         _strict_json_schema(defn)
+    return schema
+
+
+def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Project a strict schema onto OpenRouter's structural subset.
+
+    OpenRouter's provider routes reject value-level JSON Schema constraints such
+    as ``minimum`` for some native-schema backends.  Those constraints are not
+    reliably decode-enforced by providers in any case; callers still validate
+    the returned JSON with the original Pydantic response model.  Keep the
+    structural contract (objects, properties, required fields, enums, and
+    additional-properties policy) in the provider request while retaining the
+    full local validation contract.
+    """
+
+    for key in _PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS:
+        schema.pop(key, None)
+    for value in schema.values():
+        if isinstance(value, dict):
+            _openrouter_compatible_strict_json_schema(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _openrouter_compatible_strict_json_schema(item)
     return schema
 
 
