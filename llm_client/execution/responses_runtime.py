@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 import litellm
+from pydantic import BaseModel
 
 from llm_client.execution.background_runtime import _needs_background_mode
 from llm_client.execution.call_contracts import (
@@ -70,6 +71,21 @@ def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     for defn in schema.get("$defs", {}).values():
         _strict_json_schema(defn)
     return schema
+
+
+def _strict_openai_response_model_schema(
+    response_model: type[BaseModel],
+) -> dict[str, Any]:
+    """Return the OpenAI SDK's provider-compatible strict Pydantic schema.
+
+    The SDK normalizer resolves a Pydantic ``$ref`` when a field-level
+    description is its sibling and removes unsupported ``None`` defaults.
+    Our generic dictionary helper does neither, and direct Responses rejects
+    those shapes before generation.
+    """
+    from openai.lib._pydantic import to_strict_json_schema
+
+    return to_strict_json_schema(response_model)
 
 
 def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:

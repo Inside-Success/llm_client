@@ -25,6 +25,8 @@ _RESPONSES_API_MODELS = {
     "gpt-5.2-pro",
     "gpt-5.5",
     "gpt-5.5-pro",
+    "gpt-5.6",
+    "gpt-5.6-terra",
 }
 
 
