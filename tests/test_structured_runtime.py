@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from typing import Literal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -138,6 +139,41 @@ def test_openrouter_native_success_records_route_observation(
     assert observed_kwargs["provider_schema"] == mock_comp.call_args.kwargs["response_format"]["json_schema"]["schema"]
     assert observed_kwargs["schema_class"] == "_BoundedCount"
     assert result.warning_records[-1]["code"] == "ROUTE_CERTIFICATION_OBSERVED"
+
+
+@patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_route_observation_can_be_disabled_without_changing_result(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Ordinary PoC inference can skip optional provider-metadata certification."""
+
+    response = _mock_structured_response('{"count":1}')
+    response.id = "gen-route-observation-disabled"
+    mock_comp.return_value = response
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "disabled")
+    caplog.set_level(logging.INFO, logger="llm_client.structured_runtime")
+
+    parsed, result = _call_llm_structured_impl(
+        "openrouter/anthropic/claude-opus-4.8",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.route_observation_disabled",
+        max_budget=0,
+    )
+
+    assert parsed.count == 1
+    assert result.resolved_model == "openrouter/anthropic/claude-opus-4.8"
+    observe.assert_not_called()
+    assert "ROUTE_CERTIFICATION_OBSERVATION_DISABLED" in caplog.text
 
 
 @patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
