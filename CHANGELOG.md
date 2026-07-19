@@ -4,6 +4,22 @@ All notable changes to `llm-client` are documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Structured-output validation authority moved from litellm to llm_client's
+  own ladder: `litellm.enable_json_schema_validation` is now False. litellm's
+  in-call strict check raised on fenced/near-JSON output and DISCARDED the
+  response (usage/cost lost, full paid retry), preempting
+  `_robust_validate_json` + the validation-repair-message retry which handle
+  the same content with the response object in hand. Schema guarantees are
+  unchanged (Pydantic remains the gate).
+- `safe_json_loads` gains a `json_repair` last resort for near-JSON (trailing
+  commas, single quotes, unclosed brackets) after fence/control-char
+  extraction fails. Fabrication-guarded: repair is accepted only for
+  structured shapes (object, or array of objects) - junk like
+  "{invalid json}" still fails loudly. New dependency: `json-repair`.
+
+
 ### Removed
 
 - Dead Gemini native REST path (~730 lines): `_call_gemini_native`,
