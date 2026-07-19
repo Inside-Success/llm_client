@@ -536,6 +536,7 @@ def _call_llm_structured_impl(
     _cache_key = _client._cache_key
     exponential_backoff = _client.exponential_backoff
     _strict_json_schema = _client._strict_json_schema
+    _strict_openai_response_model_schema = _client._strict_openai_response_model_schema
     _openrouter_compatible_strict_json_schema = _client._openrouter_compatible_strict_json_schema
     _prepare_responses_kwargs = _client._prepare_responses_kwargs
     _extract_responses_usage = _client._extract_responses_usage
@@ -730,7 +731,7 @@ def _call_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
-            schema = _strict_json_schema(response_model.model_json_schema())
+            schema = _strict_openai_response_model_schema(response_model)
             if current_model.startswith("openrouter/"):
                 schema = _openrouter_compatible_strict_json_schema(schema)
             _responses_schema_hash = _hashlib.sha256(
@@ -1296,6 +1297,7 @@ async def _acall_llm_structured_impl(
     _async_cache_set = _client._async_cache_set
     exponential_backoff = _client.exponential_backoff
     _strict_json_schema = _client._strict_json_schema
+    _strict_openai_response_model_schema = _client._strict_openai_response_model_schema
     _openrouter_compatible_strict_json_schema = _client._openrouter_compatible_strict_json_schema
     _prepare_responses_kwargs = _client._prepare_responses_kwargs
     _extract_responses_usage = _client._extract_responses_usage
@@ -1490,7 +1492,7 @@ async def _acall_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
-            schema = _strict_json_schema(response_model.model_json_schema())
+            schema = _strict_openai_response_model_schema(response_model)
             if current_model.startswith("openrouter/"):
                 schema = _openrouter_compatible_strict_json_schema(schema)
             _responses_schema_hash_async = _hashlib.sha256(

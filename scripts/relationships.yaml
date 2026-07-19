@@ -27,7 +27,7 @@ couplings:
   - docs/adr/0003-warning-taxonomy.md
   - docs/adr/0010-cross-project-runtime-substrate.md
   - docs/plans/104_openrouter-provider-limit-observer.md
-  type: locked
+  type: validated
   description: Provider-limit inventory, observation, authorization, and public-surface boundary.
 - sources:
   - llm_client/core/client.py
@@ -43,7 +43,7 @@ couplings:
   - docs/adr/0009-long-thinking-background-polling.md
   - docs/adr/0010-cross-project-runtime-substrate.md
   - docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md
-  type: locked
+  type: validated
   description: Core call path identity, routing, warning, and execution contracts.
 - sources:
   - llm_client/agent/mcp_agent.py
@@ -54,7 +54,7 @@ couplings:
   - docs/adr/0005-reason-code-registry-governance.md
   - docs/adr/0006-actor-id-issuance-policy.md
   - docs/adr/0010-cross-project-runtime-substrate.md
-  type: locked
+  type: validated
   description: MCP validation reason-code and Foundation actor identity governance.
 - sources:
   - llm_client/io_log.py
@@ -67,13 +67,13 @@ couplings:
   - docs/adr/0012-shared-data-plane-boundary.md
   - docs/adr/0013-stream-lifecycle-heartbeat-observability.md
   - docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md
-  type: locked
+  type: validated
   description: Observability sink/query compatibility and warning emission surface.
 - sources:
   - llm_client/prompts.py
   - llm_client/prompts/*.yaml
   docs:
   - docs/adr/0011-prompt-assets-explicit-identity.md
-  type: locked
+  type: validated
   description: Prompt asset identity, explicit rendering, and provenance constraints.
 overrides: {}

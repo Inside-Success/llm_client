@@ -252,6 +252,7 @@ from llm_client.execution.responses_runtime import (  # noqa: F401
     _openrouter_compatible_strict_json_schema,
     _prepare_responses_kwargs,
     _strict_json_schema,
+    _strict_openai_response_model_schema,
 )
 from llm_client.execution.completion_runtime import (  # noqa: F401
     _build_result_from_response,

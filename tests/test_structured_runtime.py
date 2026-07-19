@@ -17,6 +17,7 @@ from llm_client import LRUCache
 from llm_client.core.errors import LLMCapabilityError
 from llm_client.execution.responses_runtime import (
     _openrouter_compatible_strict_json_schema,
+    _strict_openai_response_model_schema,
     _strict_json_schema,
 )
 from llm_client.execution.structured_runtime import (
@@ -38,6 +39,24 @@ class _BoundedCount(BaseModel):
     """Response model that distinguishes provider and local validation."""
 
     count: int = Field(ge=1, description="A strictly positive count.")
+
+
+def test_openai_responses_schema_inlines_ref_siblings() -> None:
+    """SDK normalization retains field semantics without illegal ref siblings."""
+    class Hypothesis(BaseModel):
+        read: str
+
+    class Step(BaseModel):
+        hypothesis: Hypothesis = Field(description="The actor's current reading.")
+
+    schema = _strict_openai_response_model_schema(Step)
+    hypothesis = schema["properties"]["hypothesis"]
+
+    assert "$ref" not in hypothesis
+    assert hypothesis["description"] == "The actor's current reading."
+    assert hypothesis["type"] == "object"
+    assert hypothesis["additionalProperties"] is False
+    assert hypothesis["required"] == ["read"]
 
 
 def test_openrouter_schema_projection_preserves_structural_contract_and_local_validation() -> None:
