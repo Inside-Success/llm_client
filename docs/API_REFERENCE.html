@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-17T04:03:55Z -->
+<!-- Generated: 2026-07-18T18:27:51Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -2995,6 +2995,20 @@ schema digest to retained runtime evidence.</pre>
     <p class="summary">Fetch, verify, and persist one successful OpenRouter native-schema route.</p>
     <p class="meta">Source: <code>llm_client.route_certification_runtime</code> functions</p>
     <pre class="doc">Fetch, verify, and persist one successful OpenRouter native-schema route.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-route_certification_runtime-observe_openrouter_native_success_from_runtime">
+  <summary><code>observe_openrouter_native_success_from_runtime</code> <span class="sig">(*, result: llm_client.core.data_types.LLMCallResult, provider_schema: dict[str, typing.Any], schema_class: str) -&gt; llm_client.route_certification.RouteCertificationObservation</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Persist route evidence for one successful public OpenRouter schema call.</p>
+    <p class="meta">Source: <code>llm_client.route_certification_runtime</code> functions</p>
+    <pre class="doc">Persist route evidence for one successful public OpenRouter schema call.
+
+The store root is environment-configurable so production callers can retain
+route evidence outside the package checkout.  This helper is deliberately
+post-call only: it never retries the model call, changes its model, or
+substitutes a provider when OpenRouter metadata is temporarily unavailable.</pre>
   </div>
 </details>
 

@@ -1609,6 +1609,14 @@ class TestResponsesAPIDetection:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-5.5-pro") is True
 
+    def test_gpt56_direct_models_use_responses_api(self) -> None:
+        """Registered direct GPT-5.6 aliases use Responses, never proxy aliases."""
+        from llm_client.core.client import _is_responses_api_model
+
+        assert _is_responses_api_model("gpt-5.6") is True
+        assert _is_responses_api_model("gpt-5.6-terra") is True
+        assert _is_responses_api_model("openrouter/openai/gpt-5.6") is False
+
     def test_gpt4_not_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-4o") is False
