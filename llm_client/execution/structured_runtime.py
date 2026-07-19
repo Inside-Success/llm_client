@@ -30,6 +30,7 @@ from pydantic import BaseModel, ValidationError
 import hashlib as _hashlib
 import json as _json
 import logging as _logging
+import os as _os
 import threading as _threading
 
 import litellm
@@ -56,6 +57,9 @@ T = TypeVar("T", bound=BaseModel)
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
 _INSTRUCTOR_INIT_LOCK = _threading.Lock()
+_ROUTE_CERTIFICATION_OBSERVATION_ENV = (
+    "LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION"
+)
 
 
 def _instructor_from_litellm(create_fn: Any) -> Any:
@@ -106,6 +110,21 @@ def _record_openrouter_native_route_observation(
     resolved_model = result.resolved_model or result.model
     if not resolved_model.startswith("openrouter/") or result.cache_hit:
         return
+    observation_policy = _os.environ.get(
+        _ROUTE_CERTIFICATION_OBSERVATION_ENV,
+        "enabled",
+    ).strip().lower()
+    if observation_policy in {"0", "false", "off", "disabled"}:
+        _structured_logger.info(
+            "ROUTE_CERTIFICATION_OBSERVATION_DISABLED model=%s policy_env=%s",
+            resolved_model,
+            _ROUTE_CERTIFICATION_OBSERVATION_ENV,
+        )
+        return
+    if observation_policy not in {"1", "true", "on", "enabled"}:
+        raise ValueError(
+            f"{_ROUTE_CERTIFICATION_OBSERVATION_ENV} must be enabled or disabled"
+        )
     try:
         from llm_client.route_certification_runtime import (
             observe_openrouter_native_success_from_runtime,
@@ -157,19 +176,24 @@ def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
     JSON-level failures trigger the fallback.
     """
     try:
-        return cast(T, response_model.model_validate_json(raw_content))
-    except ValidationError:
-        # Schema validation error -- don't mask with fallback
-        raise
+        return response_model.model_validate_json(raw_content)
+    except ValidationError as error:
+        # Pydantic reports both JSON decoding and schema mismatches through
+        # ValidationError. Normalize transport framing only for the former;
+        # field/type/enum violations must remain terminal validation failures.
+        if not error.errors() or any(
+            issue.get("type") != "json_invalid" for issue in error.errors()
+        ):
+            raise
     except Exception:
-        # JSON decoding or other parse failure -- try robust extraction
-        _structured_logger.debug(
-            "model_validate_json failed on raw content (%d chars), "
-            "falling back to safe_json_loads",
-            len(raw_content),
-        )
-        parsed_data = _safe_json_loads(raw_content)
-        return cast(T, response_model.model_validate(parsed_data))
+        pass
+    _structured_logger.debug(
+        "model_validate_json failed on raw content (%d chars), "
+        "falling back to safe_json_loads",
+        len(raw_content),
+    )
+    parsed_data = _safe_json_loads(raw_content)
+    return response_model.model_validate(parsed_data)
 
 
 class _StructuredValidationRetry(Exception):
@@ -239,7 +263,10 @@ def _build_validation_repair_message(exc: _StructuredValidationRetry) -> dict[st
         "content": (
             "Your previous response was valid JSON but failed schema validation:\n"
             f"{errors_text}\n\n"
-            "Please fix these issues and return a corrected response."
+            "Return a corrected response. If the selected discriminated-union "
+            "variant cannot truthfully satisfy its required fields from the "
+            "available information, choose another allowed variant instead of "
+            "repeating the invalid one."
         ),
     }
 

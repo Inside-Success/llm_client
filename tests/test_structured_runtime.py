@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
+from typing import Literal
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import litellm
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
@@ -19,8 +22,11 @@ from llm_client.execution.responses_runtime import (
     _strict_json_schema,
 )
 from llm_client.execution.structured_runtime import (
+    _StructuredValidationRetry,
     _acall_llm_structured_impl,
+    _build_validation_repair_message,
     _call_llm_structured_impl,
+    _robust_validate_json,
 )
 
 
@@ -133,6 +139,41 @@ def test_openrouter_native_success_records_route_observation(
     assert observed_kwargs["provider_schema"] == mock_comp.call_args.kwargs["response_format"]["json_schema"]["schema"]
     assert observed_kwargs["schema_class"] == "_BoundedCount"
     assert result.warning_records[-1]["code"] == "ROUTE_CERTIFICATION_OBSERVED"
+
+
+@patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_route_observation_can_be_disabled_without_changing_result(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Ordinary PoC inference can skip optional provider-metadata certification."""
+
+    response = _mock_structured_response('{"count":1}')
+    response.id = "gen-route-observation-disabled"
+    mock_comp.return_value = response
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "disabled")
+    caplog.set_level(logging.INFO, logger="llm_client.structured_runtime")
+
+    parsed, result = _call_llm_structured_impl(
+        "openrouter/anthropic/claude-opus-4.8",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.route_observation_disabled",
+        max_budget=0,
+    )
+
+    assert parsed.count == 1
+    assert result.resolved_model == "openrouter/anthropic/claude-opus-4.8"
+    observe.assert_not_called()
+    assert "ROUTE_CERTIFICATION_OBSERVATION_DISABLED" in caplog.text
 
 
 @patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
@@ -325,3 +366,53 @@ async def test_structured_runtime_async_raises_capability_error_for_gpt5_schema_
             trace_id="structured.runtime.async.gpt5_schema",
             max_budget=0,
         )
+
+
+def test_local_structured_validation_accepts_transport_only_json_fence() -> None:
+    """A single fenced JSON value still must satisfy the exact response model."""
+
+    class Decision(BaseModel):
+        action: Literal["answer"]
+        rationale: str
+
+    parsed = _robust_validate_json(
+        Decision,
+        '```json\n{"action":"answer","rationale":"Enough evidence."}\n```',
+    )
+
+    assert parsed == Decision(action="answer", rationale="Enough evidence.")
+    with pytest.raises(ValidationError, match="literal_error"):
+        _robust_validate_json(
+            Decision,
+            '{"action":"search","rationale":"Wrong action."}',
+        )
+
+
+def test_litellm_prevalidation_is_disabled_for_local_raw_first_validation() -> None:
+    """Raw-first local validation is the temporary provider-framing boundary."""
+
+    assert litellm.enable_json_schema_validation is False
+
+
+def test_validation_repair_allows_switching_an_invalid_union_variant() -> None:
+    """Repair guidance must not trap the model in its first invalid action choice."""
+
+    class StopDecision(BaseModel):
+        action: Literal["control.stop_retrieval"]
+        covered_obligations: list[str]
+
+    with pytest.raises(ValidationError) as captured:
+        StopDecision.model_validate(
+            {
+                "action": "control.stop_retrieval",
+            }
+        )
+
+    message = _build_validation_repair_message(
+        _StructuredValidationRetry(
+            '{"action":"control.stop_retrieval"}',
+            captured.value,
+        )
+    )
+
+    assert "choose another allowed variant" in message["content"]
