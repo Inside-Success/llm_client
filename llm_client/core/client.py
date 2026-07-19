@@ -72,7 +72,13 @@ except ImportError:
 # structural constraints (type, required, enum) at decode time. Value-level
 # constraints (minProperties, minLength, pattern, minimum) are NOT enforced.
 # This catches violations on the client side so the retry loop can self-correct.
-litellm.enable_json_schema_validation = True
+# False (2026-07-19): litellm's in-call strict validation PREEMPTED
+# llm_client's own richer ladder — it raises on fenced/near-JSON output and
+# discards the response (usage/cost lost, full paid retry), while
+# _robust_validate_json + the validation-repair-message retry handle the same
+# content with the response object in hand (cost accounted, model told what
+# to fix, json_repair last resort). Validation authority lives in llm_client.
+litellm.enable_json_schema_validation = False
 
 from llm_client.core.config import ClientConfig
 import llm_client.io_log as _io_log

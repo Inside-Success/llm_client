@@ -136,7 +136,27 @@ def safe_json_loads(text: str) -> dict[str, Any] | list[Any]:
     """
     cleaned = strip_control_chars(text)
     extracted = extract_json(cleaned)
-    return json.loads(extracted, strict=False)
+    try:
+        return json.loads(extracted, strict=False)
+    except json.JSONDecodeError:
+        # Last resort (2026-07-19): repair-parse near-JSON (trailing commas,
+        # single quotes, unclosed brackets) instead of forcing a full paid
+        # retry. json_repair is deterministic; the result still passes the
+        # caller's Pydantic validation, so schema guarantees are unchanged.
+        import json_repair
+
+        repaired = json_repair.loads(extracted)
+        # Accept repair ONLY for structured shapes (an object, or an array of
+        # objects) - json_repair fabricates string-lists out of junk like
+        # "{invalid json}", and fabrication must fail loudly, not parse.
+        ok = (isinstance(repaired, dict) and bool(repaired)) or (
+            isinstance(repaired, list)
+            and bool(repaired)
+            and all(isinstance(item, dict) for item in repaired)
+        )
+        if not ok:
+            raise  # repair produced nothing structured - surface the original error
+        return repaired
 
 
 # ---------------------------------------------------------------------------
