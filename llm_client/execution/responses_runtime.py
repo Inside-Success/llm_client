@@ -88,6 +88,125 @@ def _strict_openai_response_model_schema(
     return to_strict_json_schema(response_model)
 
 
+def _provider_compatible_discriminated_union_schema(
+    schema: dict[str, Any],
+) -> dict[str, Any]:
+    """Project provably disjoint ``oneOf`` unions onto provider-safe ``anyOf``.
+
+    Some OpenAI-compatible structured-output routes reject ``oneOf`` even when
+    Pydantic emits it for a discriminated union.  ``anyOf`` has identical
+    acceptance semantics when every branch requires the same property with a
+    distinct literal value.  Rewrite only that provable case; leave arbitrary
+    or overlapping ``oneOf`` schemas unchanged so unsupported contracts still
+    fail visibly at the provider boundary.  Callers continue to validate the
+    response with the original Pydantic model.
+    """
+
+    projected = deepcopy(schema)
+    _project_disjoint_one_of_unions(projected, root=projected, visited=set())
+    return projected
+
+
+def _project_disjoint_one_of_unions(
+    node: dict[str, Any],
+    *,
+    root: dict[str, Any],
+    visited: set[int],
+) -> None:
+    """Mutate one private schema copy without expanding internal references."""
+
+    node_identity = id(node)
+    if node_identity in visited:
+        return
+    visited.add(node_identity)
+
+    branches = node.get("oneOf")
+    if isinstance(branches, list) and len(branches) >= 2:
+        resolved = [
+            _resolve_local_schema_branch(branch, root)
+            for branch in branches
+            if isinstance(branch, dict)
+        ]
+        if len(resolved) == len(branches) and _branches_have_disjoint_literals(
+            resolved,
+            discriminator=node.get("discriminator"),
+        ):
+            node["anyOf"] = node.pop("oneOf")
+
+    for value in node.values():
+        if isinstance(value, dict):
+            _project_disjoint_one_of_unions(value, root=root, visited=visited)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _project_disjoint_one_of_unions(item, root=root, visited=visited)
+
+
+def _resolve_local_schema_branch(
+    branch: dict[str, Any],
+    root: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve a bare local JSON Pointer used by Pydantic union branches."""
+
+    ref = branch.get("$ref")
+    if not isinstance(ref, str) or not ref.startswith("#/") or len(branch) != 1:
+        return branch
+    current: Any = root
+    for raw_part in ref[2:].split("/"):
+        part = raw_part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or part not in current:
+            return branch
+        current = current[part]
+    return current if isinstance(current, dict) else branch
+
+
+def _branches_have_disjoint_literals(
+    branches: list[dict[str, Any]],
+    *,
+    discriminator: Any,
+) -> bool:
+    """Return true only for a common required property with unique constants."""
+
+    requested_property: str | None = None
+    if isinstance(discriminator, dict):
+        property_name = discriminator.get("propertyName")
+        if isinstance(property_name, str) and property_name:
+            requested_property = property_name
+
+    candidates: set[str] | None = None
+    for branch in branches:
+        properties = branch.get("properties")
+        required = branch.get("required")
+        if not isinstance(properties, dict) or not isinstance(required, list):
+            return False
+        literal_properties = {
+            name
+            for name, value in properties.items()
+            if name in required and isinstance(value, dict) and "const" in value
+        }
+        candidates = (
+            literal_properties
+            if candidates is None
+            else candidates.intersection(literal_properties)
+        )
+
+    if requested_property is not None:
+        if not candidates or requested_property not in candidates:
+            return False
+        candidates = {requested_property}
+    if not candidates:
+        return False
+
+    for property_name in candidates:
+        values = [branch["properties"][property_name]["const"] for branch in branches]
+        try:
+            if len(set(values)) == len(values):
+                return True
+        except TypeError:
+            continue
+    return False
+
+
 def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Project a strict schema onto OpenRouter's structural subset.
 
@@ -100,7 +219,7 @@ def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[st
     full local validation contract.
     """
 
-    projected = deepcopy(schema)
+    projected = _provider_compatible_discriminated_union_schema(schema)
     _project_openrouter_compatible_schema(projected)
     return projected
 
