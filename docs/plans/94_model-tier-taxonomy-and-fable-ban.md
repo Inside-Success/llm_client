@@ -127,10 +127,11 @@ even when a project carries generic human override metadata.
       consistency with bounded, logged 404-only retries. These retries do not
       repeat the model call or select another provider, and the evidence records
       the retrieval attempt count.
-- [ ] The active provider-compatible native-schema repair must land before the
-      compiler is invoked automatically from the structured runtime. Until then,
-      callers explicitly run the post-call compiler; unknown provider identity
-      never certifies a named route.
+- [x] Provider-facing schema projection removes unsupported value constraints
+      and rewrites only provably disjoint literal `oneOf` unions to `anyOf`;
+      local Pydantic validation retains the original contract. The structured
+      runtime invokes route observation only after a successful validated call,
+      and unknown provider identity never certifies a named route.
 - [ ] A task-configured technical output ceiling is implemented.
 
 ### Runtime route-certification follow-up (2026-07-16)
@@ -156,6 +157,8 @@ requested model. Task-configured output ceilings remain a separate follow-up.
 - `.venv/bin/python -m pytest -q tests/test_models.py::TestGetModel::test_tier_selectors_resolve_expected_models tests/test_models.py::TestGetModel::test_legacy_task_selectors_remain_compatible tests/test_models.py::TestConfigLoading::test_packaged_registry_has_no_fable_models tests/test_model_policy_audit.py::test_scan_paths_flags_banned_fable_even_with_override_acceptance tests/test_client.py::TestModelDeprecation::test_fable_raises` — passed, 5 tests.
 - `.venv/bin/python scripts/meta/complete_plan.py --plan 94 --skip-e2e` — failed because the full unit-test subprocess timed out at 300 seconds after collection; doc-code coupling passed. Policy friction logged in `project-meta/policy_friction.md`.
 - `pytest -q tests/test_route_certification.py tests/test_openrouter_generation.py tests/test_route_certification_runtime.py tests/test_cli_route_certification.py` — exact observation, authenticated provider evidence, three-source join, corruption, substitution, cache, and CLI query coverage.
+- `pytest -q tests/test_structured_runtime.py tests/test_models.py::TestGetModel::test_openrouter_gpt56_planner_routes_are_registered` — 18 passed; includes positive disjoint-union transport projection, an overlapping-union negative control, unchanged local Pydantic validation, and route registration.
+- Retained DIGIMON planner prompt probes — Terra and Luna both returned JSON that validates against the original planner schema after provider-only `oneOf` to `anyOf` projection. Evidence: `docs/runs/2026-07-21_openrouter_gpt56_planner_schema_compatibility.md`.
 
 ---
 

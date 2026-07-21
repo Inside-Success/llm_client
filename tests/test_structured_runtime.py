@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-from typing import Literal
+from typing import Annotated, Literal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import litellm
@@ -18,6 +18,7 @@ from llm_client import LRUCache
 from llm_client.core.errors import LLMCapabilityError
 from llm_client.execution.responses_runtime import (
     _openrouter_compatible_strict_json_schema,
+    _provider_compatible_discriminated_union_schema,
     _strict_openai_response_model_schema,
     _strict_json_schema,
 )
@@ -40,6 +41,23 @@ class _BoundedCount(BaseModel):
     """Response model that distinguishes provider and local validation."""
 
     count: int = Field(ge=1, description="A strictly positive count.")
+
+
+class _SearchDecision(BaseModel):
+    action: Literal["search"]
+    query: str
+
+
+class _TraverseDecision(BaseModel):
+    action: Literal["traverse"]
+    seed_id: str
+
+
+class _PlannerEnvelope(BaseModel):
+    decision: Annotated[
+        _SearchDecision | _TraverseDecision,
+        Field(discriminator="action"),
+    ]
 
 
 def test_openai_responses_schema_inlines_ref_siblings() -> None:
@@ -81,6 +99,37 @@ def test_openrouter_schema_projection_rejects_unconstrained_schema() -> None:
         _openrouter_compatible_strict_json_schema({})
 
 
+def test_provider_projection_rewrites_only_disjoint_literal_union() -> None:
+    """Provider projection preserves the local contract and proves disjointness."""
+
+    schema = _strict_openai_response_model_schema(_PlannerEnvelope)
+    projected = _provider_compatible_discriminated_union_schema(schema)
+
+    assert "oneOf" in schema["properties"]["decision"]
+    assert "oneOf" not in projected["properties"]["decision"]
+    assert "anyOf" in projected["properties"]["decision"]
+    with pytest.raises(ValidationError, match="union_tag_invalid"):
+        _PlannerEnvelope.model_validate(
+            {"decision": {"action": "unknown", "query": "shipping"}}
+        )
+
+
+def test_provider_projection_preserves_overlapping_one_of() -> None:
+    """An arbitrary oneOf is not weakened into anyOf without a proof."""
+
+    schema = {
+        "oneOf": [
+            {"type": "object", "properties": {"value": {"type": "string"}}},
+            {"type": "object", "properties": {"value": {"type": "string"}}},
+        ]
+    }
+
+    projected = _provider_compatible_discriminated_union_schema(schema)
+
+    assert "oneOf" in projected
+    assert "anyOf" not in projected
+
+
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.completion")
@@ -105,6 +154,37 @@ def test_openrouter_structured_call_sends_provider_compatible_schema(
     assert parsed.count == 1
     assert "minimum" not in sent_schema["properties"]["count"]
     assert sent_schema["additionalProperties"] is False
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_planner_call_sends_disjoint_union_as_any_of(
+    mock_comp: MagicMock,
+    _mock_cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The actual OpenRouter native request receives the compatible planner schema."""
+
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "disabled")
+    mock_comp.return_value = _mock_structured_response(
+        '{"decision":{"action":"search","query":"shipping roster"}}'
+    )
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-terra",
+        [{"role": "user", "content": "Find the shipping roster."}],
+        _PlannerEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.discriminated_union",
+        max_budget=0,
+    )
+
+    decision_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "search"
+    assert "anyOf" in decision_schema
+    assert "oneOf" not in decision_schema
 
 
 @patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
