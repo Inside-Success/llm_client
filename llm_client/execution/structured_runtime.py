@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import asyncio
 from importlib import import_module
-from typing import Any, Callable, Literal, NoReturn, TypeVar, cast
+import queue
+import threading
+from typing import Any, Awaitable, Callable, Literal, NoReturn, TypeVar, cast
 from uuid import uuid4
 
 from llm_client.core.client import (
@@ -53,6 +55,7 @@ from llm_client.observability.structured_attempts import (
 )
 
 T = TypeVar("T", bound=BaseModel)
+R = TypeVar("R")
 
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
@@ -162,6 +165,61 @@ def _record_openrouter_native_route_observation(
                 "remediation": "Use the route-certification query before treating this route as certified.",
             }
         )
+
+
+def _deadline_message(timeout: float) -> str:
+    """Return the stable error emitted by client-enforced attempt deadlines."""
+
+    return f"structured provider attempt exceeded {timeout:g}s client deadline"
+
+
+def _run_sync_with_deadline(invoke: Callable[[], R], *, timeout: float) -> R:
+    """Run one sync provider attempt behind a caller-visible hard deadline.
+
+    Python cannot terminate a thread blocked in a third-party HTTP stack. A
+    timed-out attempt therefore finishes in a daemon thread while the caller
+    receives ``TimeoutError`` and continues through retry/fallback policy.
+    """
+
+    if timeout <= 0:
+        return invoke()
+
+    outcomes: queue.Queue[tuple[bool, R | BaseException]] = queue.Queue(maxsize=1)
+
+    def run() -> None:
+        try:
+            outcomes.put((True, invoke()))
+        except BaseException as error:
+            outcomes.put((False, error))
+
+    thread = threading.Thread(
+        target=run,
+        name="llm-client-structured-attempt",
+        daemon=True,
+    )
+    thread.start()
+    try:
+        succeeded, outcome = outcomes.get(timeout=timeout)
+    except queue.Empty as error:
+        raise TimeoutError(_deadline_message(timeout)) from error
+    if succeeded:
+        return cast(R, outcome)
+    raise cast(BaseException, outcome)
+
+
+async def _run_async_with_deadline(
+    invoke: Callable[[], Awaitable[R]],
+    *,
+    timeout: float,
+) -> R:
+    """Await one async provider attempt behind a cancellation deadline."""
+
+    if timeout <= 0:
+        return await invoke()
+    try:
+        return await asyncio.wait_for(invoke(), timeout=timeout)
+    except TimeoutError as error:
+        raise TimeoutError(_deadline_message(timeout)) from error
 
 
 def _robust_validate_json(response_model: type[T], raw_content: str) -> T:
@@ -775,9 +833,12 @@ def _call_llm_structured_impl(
             }
 
             def _invoke_responses_attempt(attempt: int) -> tuple[T, LLMCallResult]:
-                try:
+                def provider_call() -> Any:
                     with _rate_limit.acquire(current_model):
-                        response = litellm.responses(**resp_kwargs)
+                        return litellm.responses(**resp_kwargs)
+
+                try:
+                    response = _run_sync_with_deadline(provider_call, timeout=timeout)
                 except Exception as exc:
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
@@ -960,9 +1021,13 @@ def _call_llm_structured_impl(
                     _pending_repair_message = None
                     logger.info("call_llm_structured: appended validation repair message for attempt %d", attempt)
                 attempt_validated = False
-                try:
+
+                def provider_call() -> Any:
                     with _rate_limit.acquire(current_model):
-                        response = litellm.completion(**base_kwargs)
+                        return litellm.completion(**base_kwargs)
+
+                try:
+                    response = _run_sync_with_deadline(provider_call, timeout=timeout)
                     first_choice = _first_choice_or_empty_error(
                         response,
                         model=current_model,
@@ -1156,8 +1221,9 @@ def _call_llm_structured_impl(
             ).hexdigest()[:16]
 
             def _invoke_instructor_attempt(attempt: int) -> tuple[T, LLMCallResult]:
-                parsed, completion_response = client.chat.completions.create_with_completion(
-                    **call_kwargs,
+                parsed, completion_response = _run_sync_with_deadline(
+                    lambda: client.chat.completions.create_with_completion(**call_kwargs),
+                    timeout=timeout,
                 )
 
                 usage = _extract_usage(completion_response)
@@ -1536,13 +1602,16 @@ async def _acall_llm_structured_impl(
             }
 
             async def _invoke_responses_attempt(attempt: int) -> tuple[T, LLMCallResult]:
-                try:
+                async def provider_call() -> Any:
                     async with _rate_limit.aacquire(current_model):
-                        response = await _await_with_safety_ceiling(
+                        return await _await_with_safety_ceiling(
                             litellm.aresponses(**resp_kwargs),
                             caller="acall_llm_structured.responses_api",
                             model=current_model,
                         )
+
+                try:
+                    response = await _run_async_with_deadline(provider_call, timeout=timeout)
                 except Exception as exc:
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
@@ -1725,13 +1794,16 @@ async def _acall_llm_structured_impl(
                     _pending_repair_message_async = None
                     logger.info("acall_llm_structured: appended validation repair message for attempt %d", attempt)
                 attempt_validated = False
-                try:
+                async def provider_call() -> Any:
                     async with _rate_limit.aacquire(current_model):
-                        response = await _await_with_safety_ceiling(
+                        return await _await_with_safety_ceiling(
                             litellm.acompletion(**base_kwargs),
                             caller="acall_llm_structured.native_schema",
                             model=current_model,
                         )
+
+                try:
+                    response = await _run_async_with_deadline(provider_call, timeout=timeout)
                     first_choice = _first_choice_or_empty_error(
                         response,
                         model=current_model,
@@ -1925,10 +1997,16 @@ async def _acall_llm_structured_impl(
             ).hexdigest()[:16]
 
             async def _invoke_instructor_attempt(attempt: int) -> tuple[T, LLMCallResult]:
-                parsed, completion_response = await _await_with_safety_ceiling(
-                    client.chat.completions.create_with_completion(**call_kwargs),
-                    caller="acall_llm_structured.instructor",
-                    model=current_model,
+                async def instructor_call() -> Any:
+                    return await _await_with_safety_ceiling(
+                        client.chat.completions.create_with_completion(**call_kwargs),
+                        caller="acall_llm_structured.instructor",
+                        model=current_model,
+                    )
+
+                parsed, completion_response = await _run_async_with_deadline(
+                    instructor_call,
+                    timeout=timeout,
                 )
 
                 usage = _extract_usage(completion_response)

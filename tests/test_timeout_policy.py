@@ -54,8 +54,8 @@ def test_default_timeout_for_structured_calls_is_finite(monkeypatch) -> None:
     monkeypatch.delenv("LLM_CLIENT_DEFAULT_TIMEOUT", raising=False)
     monkeypatch.delenv("LLM_CLIENT_DEFAULT_STRUCTURED_TIMEOUT", raising=False)
 
-    assert default_timeout_for_caller(caller="call_llm_structured") == 180
-    assert default_timeout_for_caller(caller="acall_llm_structured") == 180
+    assert default_timeout_for_caller(caller="call_llm_structured") == 60
+    assert default_timeout_for_caller(caller="acall_llm_structured") == 60
 
 
 def test_default_timeout_for_structured_calls_honors_env_override(monkeypatch) -> None:

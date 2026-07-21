@@ -600,7 +600,7 @@ def call_llm_structured(
         messages: Chat messages in OpenAI format
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
-            runtime policy supplies a longer finite default.
+            runtime policy supplies a finite default.
         num_retries: Number of retries on failure
         reasoning_effort: Reasoning effort level (Claude models only)
         api_base: Optional API base URL (e.g., for OpenRouter)
@@ -884,7 +884,7 @@ async def acall_llm_structured(
         messages: Chat messages in OpenAI format
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
-            runtime policy supplies a longer finite default.
+            runtime policy supplies a finite default.
         num_retries: Number of retries on failure
         reasoning_effort: Reasoning effort level (Claude models only)
         api_base: Optional API base URL (e.g., for OpenRouter)
