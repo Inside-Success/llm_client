@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-from llm_client.core.client import _prepare_call_kwargs
+from llm_client.core.client import _prepare_call_kwargs, _prepare_responses_kwargs
 
 
 def test_prepare_call_kwargs_strips_internal_runtime_objects() -> None:
@@ -32,6 +32,88 @@ def test_prepare_call_kwargs_strips_internal_runtime_objects() -> None:
 
     assert "_lifecycle_monitor" not in call_kwargs
     assert call_kwargs["metadata"] == {"scope": "test"}
+
+
+def test_openrouter_completion_requests_inline_route_metadata() -> None:
+    """Ordinary OpenRouter calls should receive routing evidence inline."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={"extra_headers": {"X-Trace": "trace-1"}},
+    )
+
+    assert call_kwargs["extra_headers"] == {
+        "X-Trace": "trace-1",
+        "X-OpenRouter-Metadata": "enabled",
+    }
+
+
+def test_openrouter_metadata_respects_explicit_caller_disable() -> None:
+    """Header injection must not override an explicit per-call policy."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={"extra_headers": {"x-openrouter-metadata": "disabled"}},
+    )
+
+    assert call_kwargs["extra_headers"] == {"x-openrouter-metadata": "disabled"}
+
+
+def test_non_openrouter_completion_does_not_receive_router_header() -> None:
+    """Provider-specific metadata headers must not leak to direct routes."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "deepseek/deepseek-chat",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={},
+    )
+
+    assert "extra_headers" not in call_kwargs
+
+
+def test_explicit_openrouter_api_base_requests_inline_metadata() -> None:
+    """A bare model on OpenRouter's API base is still an OpenRouter call."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "deepseek/deepseek-chat",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base="https://openrouter.ai/api/v1",
+        kwargs={},
+    )
+
+    assert call_kwargs["extra_headers"] == {"X-OpenRouter-Metadata": "enabled"}
+
+
+def test_openrouter_responses_requests_inline_route_metadata() -> None:
+    """The Responses transport should use the same inline evidence policy."""
+
+    call_kwargs = _prepare_responses_kwargs(
+        "openrouter/openai/gpt-5.5",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={},
+    )
+
+    assert call_kwargs["extra_headers"] == {"X-OpenRouter-Metadata": "enabled"}
 
 
 @patch("litellm.get_supported_openai_params", return_value=["thinking"])

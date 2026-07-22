@@ -73,6 +73,13 @@ or transport failure from a semantic-quality failure. Until then, selection is
 only a declared default and callers must fail loudly if the provider rejects
 the route.
 
+Ordinary OpenRouter inference requests inline router metadata and does not
+block on the eventually consistent generation-history endpoint. Exact
+endpoint-level certification is deliberately opt-in: set
+`LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION=enabled` only for a bounded
+certification run. A certification lookup enriches an already-successful call;
+it is not part of model execution and must not be used as a quality verdict.
+
 For small structured calls, the owning task profile must supply any required
 technical output ceiling centrally and expose it in the call snapshot. Callers
 must not invent one-off token caps; this is a provider-capacity setting, not a

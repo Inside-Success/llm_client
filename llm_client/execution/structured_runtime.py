@@ -115,7 +115,7 @@ def _record_openrouter_native_route_observation(
         return
     observation_policy = _os.environ.get(
         _ROUTE_CERTIFICATION_OBSERVATION_ENV,
-        "enabled",
+        "disabled",
     ).strip().lower()
     if observation_policy in {"0", "false", "off", "disabled"}:
         _structured_logger.info(

@@ -116,8 +116,10 @@ def test_openrouter_native_success_records_route_observation(
     _mock_supports_schema: MagicMock,
     _mock_cost: MagicMock,
     observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A native OpenRouter success sends its exact provider schema to observation."""
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "enabled")
     response = _mock_structured_response('{"count":1}')
     response.id = "gen-route-observation"
     mock_comp.return_value = response
@@ -145,7 +147,7 @@ def test_openrouter_native_success_records_route_observation(
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.completion")
-def test_openrouter_route_observation_can_be_disabled_without_changing_result(
+def test_openrouter_route_observation_is_disabled_by_default(
     mock_comp: MagicMock,
     _mock_supports_schema: MagicMock,
     _mock_cost: MagicMock,
@@ -158,7 +160,7 @@ def test_openrouter_route_observation_can_be_disabled_without_changing_result(
     response = _mock_structured_response('{"count":1}')
     response.id = "gen-route-observation-disabled"
     mock_comp.return_value = response
-    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "disabled")
+    monkeypatch.delenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", raising=False)
     caplog.set_level(logging.INFO, logger="llm_client.structured_runtime")
 
     parsed, result = _call_llm_structured_impl(
@@ -185,8 +187,10 @@ def test_openrouter_route_observation_failure_is_visible_without_model_retry(
     _mock_supports_schema: MagicMock,
     _mock_cost: MagicMock,
     observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Metadata failure preserves the successful result and never reroutes the model."""
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "enabled")
     response = _mock_structured_response('{"count":1}')
     response.id = "gen-route-observation-failure"
     mock_comp.return_value = response
