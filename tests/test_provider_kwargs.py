@@ -7,6 +7,7 @@ kwargs must stay JSON-serializable and must not receive those private values.
 
 from __future__ import annotations
 
+import litellm
 import pytest
 from unittest.mock import patch
 
@@ -53,6 +54,108 @@ def test_openrouter_completion_requests_inline_route_metadata() -> None:
     }
 
 
+def test_openrouter_deepseek_forwards_max_reasoning_and_broadcast_trace() -> None:
+    """Normalized reasoning and required identity should reach OpenRouter."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort="max",
+        api_base=None,
+        kwargs={
+            "metadata": {
+                "_llm_client_logged": True,
+                "task": "service_desk",
+                "trace_id": "service-desk/trial-0/triager/0",
+            }
+        },
+    )
+
+    assert call_kwargs["reasoning_effort"] == "max"
+    assert call_kwargs["allowed_openai_params"] == ["reasoning_effort"]
+    assert call_kwargs["trace"] == {
+        "trace_id": "service-desk/trial-0/triager/0",
+        "trace_name": "service_desk",
+        "generation_name": "service_desk",
+    }
+
+
+def test_openrouter_max_reasoning_survives_installed_litellm_normalization() -> None:
+    """The transport dependency must preserve max effort without a network call."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort="max",
+        api_base=None,
+        kwargs={},
+    )
+
+    normalized = litellm.get_optional_params(
+        model=call_kwargs.pop("model"),
+        custom_llm_provider="openrouter",
+        **{
+            key: value
+            for key, value in call_kwargs.items()
+            if key not in {"messages", "timeout", "extra_headers"}
+        },
+    )
+
+    assert normalized["reasoning_effort"] == "max"
+
+
+def test_openrouter_normalized_passthrough_merges_caller_allowlist() -> None:
+    """Compatibility declaration should preserve caller-owned allowed params."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort="max",
+        api_base=None,
+        kwargs={"allowed_openai_params": ["verbosity"]},
+    )
+
+    assert call_kwargs["allowed_openai_params"] == [
+        "reasoning_effort",
+        "verbosity",
+    ]
+
+
+def test_openrouter_broadcast_trace_preserves_explicit_caller_fields() -> None:
+    """Automatic trace identity must not replace caller-owned hierarchy."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort="max",
+        api_base=None,
+        kwargs={
+            "metadata": {"task": "service_desk", "trace_id": "automatic"},
+            "trace": {
+                "trace_id": "caller-trace",
+                "parent_span_id": "parent-7",
+                "feature": "simulation",
+            },
+        },
+    )
+
+    assert call_kwargs["trace"] == {
+        "trace_id": "caller-trace",
+        "trace_name": "service_desk",
+        "generation_name": "service_desk",
+        "parent_span_id": "parent-7",
+        "feature": "simulation",
+    }
+
+
 def test_openrouter_metadata_respects_explicit_caller_disable() -> None:
     """Header injection must not override an explicit per-call policy."""
 
@@ -83,6 +186,23 @@ def test_non_openrouter_completion_does_not_receive_router_header() -> None:
     )
 
     assert "extra_headers" not in call_kwargs
+    assert "trace" not in call_kwargs
+
+
+def test_normalized_reasoning_is_not_family_allowlisted() -> None:
+    """Unknown/new provider routes should receive normalized controls unchanged."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "future-provider/new-reasoning-model",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort="xhigh",
+        api_base=None,
+        kwargs={},
+    )
+
+    assert call_kwargs["reasoning_effort"] == "xhigh"
 
 
 def test_explicit_openrouter_api_base_requests_inline_metadata() -> None:

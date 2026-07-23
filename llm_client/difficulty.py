@@ -148,6 +148,13 @@ def _is_ollama_available() -> bool:
 
 def _is_model_available(model: str) -> bool:
     """Check if a model is available (has API key or is local)."""
+    from llm_client.core.errors import DeprecatedModelError
+    from llm_client.execution.call_contracts import _check_model_deprecation
+
+    try:
+        _check_model_deprecation(model)
+    except DeprecatedModelError:
+        return False
     if model.startswith("ollama/"):
         return _is_ollama_available()
     if model in ("codex", "claude-code") or model.startswith("codex/") or model.startswith("claude-code/"):

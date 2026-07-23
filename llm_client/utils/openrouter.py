@@ -32,6 +32,7 @@ OPENROUTER_API_BASE_ENV = "OPENROUTER_API_BASE"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_API_KEYS_ENV = "OPENROUTER_API_KEYS"
 OPENROUTER_METADATA_HEADER = "X-OpenRouter-Metadata"
+_OPENROUTER_NORMALIZED_PASSTHROUGH_PARAMS = frozenset({"reasoning_effort"})
 
 # ---------------------------------------------------------------------------
 # Module-level state for key rotation
@@ -174,12 +175,18 @@ def _enable_openrouter_inline_metadata(
     model: str,
     call_kwargs: dict[str, Any],
 ) -> None:
-    """Request inline route evidence without overriding caller header policy.
+    """Request route evidence and project trace identity without overriding callers.
 
     OpenRouter can return the selected provider/model and fallback attempts on
     the original completion response.  Requesting that evidence avoids a
     synchronous generation-history lookup on ordinary calls.  A caller may
     still explicitly disable the header for one request.
+
+    OpenRouter Broadcast consumes a separate ``trace`` object. The required
+    llm_client ``task`` and ``trace_id`` already live in LiteLLM ``metadata``;
+    copy those values into otherwise-unset Broadcast fields so account-side
+    destinations can join their traces to local evidence. Explicit caller
+    trace hierarchy and custom fields always win.
     """
 
     api_base = call_kwargs.get("api_base")
@@ -188,6 +195,22 @@ def _enable_openrouter_inline_metadata(
         str(api_base) if api_base is not None else None,
     ):
         return
+
+    normalized_present = sorted(
+        key for key in _OPENROUTER_NORMALIZED_PASSTHROUGH_PARAMS if key in call_kwargs
+    )
+    if normalized_present:
+        configured_allowed = call_kwargs.get("allowed_openai_params")
+        if configured_allowed is None:
+            allowed: list[str] = []
+        elif isinstance(configured_allowed, (list, tuple, set, frozenset)):
+            allowed = [str(value) for value in configured_allowed]
+        else:
+            raise TypeError("allowed_openai_params must be a sequence")
+        call_kwargs["allowed_openai_params"] = sorted(
+            set([*allowed, *normalized_present])
+        )
+
     configured = call_kwargs.get("extra_headers")
     if configured is None:
         headers: dict[str, Any] = {}
@@ -201,6 +224,29 @@ def _enable_openrouter_inline_metadata(
     ):
         headers[OPENROUTER_METADATA_HEADER] = "enabled"
     call_kwargs["extra_headers"] = headers
+
+    metadata = call_kwargs.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return
+    task = metadata.get("task")
+    trace_id = metadata.get("trace_id")
+    if not isinstance(task, str) and not isinstance(trace_id, str):
+        return
+
+    configured_trace = call_kwargs.get("trace")
+    if configured_trace is None:
+        trace: dict[str, Any] = {}
+    elif isinstance(configured_trace, Mapping):
+        trace = dict(configured_trace)
+    else:
+        raise TypeError("trace must be a mapping")
+    if isinstance(trace_id, str) and trace_id.strip():
+        trace.setdefault("trace_id", trace_id)
+    if isinstance(task, str) and task.strip():
+        trace.setdefault("trace_name", task)
+        trace.setdefault("generation_name", task)
+    if trace:
+        call_kwargs["trace"] = trace
 
 
 # ---------------------------------------------------------------------------

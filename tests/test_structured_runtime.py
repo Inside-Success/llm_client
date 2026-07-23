@@ -93,7 +93,7 @@ def test_openrouter_structured_call_sends_provider_compatible_schema(
     mock_comp.return_value = _mock_structured_response('{"count":1}')
 
     parsed, _meta = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         task="test",
@@ -126,7 +126,7 @@ def test_openrouter_native_success_records_route_observation(
     observe.return_value = SimpleNamespace(observation_id="routeobs1_0123456789abcdef01234567")
 
     parsed, result = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         task="test",
@@ -164,7 +164,7 @@ def test_openrouter_route_observation_is_disabled_by_default(
     caplog.set_level(logging.INFO, logger="llm_client.structured_runtime")
 
     parsed, result = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         task="test",
@@ -173,7 +173,7 @@ def test_openrouter_route_observation_is_disabled_by_default(
     )
 
     assert parsed.count == 1
-    assert result.resolved_model == "openrouter/anthropic/claude-opus-4.8"
+    assert result.resolved_model == "openrouter/deepseek/deepseek-v4-flash"
     observe.assert_not_called()
     assert "ROUTE_CERTIFICATION_OBSERVATION_DISABLED" in caplog.text
 
@@ -197,7 +197,7 @@ def test_openrouter_route_observation_failure_is_visible_without_model_retry(
     observe.side_effect = RuntimeError("generation metadata unavailable")
 
     parsed, result = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         num_retries=0,

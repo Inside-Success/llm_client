@@ -328,7 +328,7 @@ def test_stalled_when_both_agents_emit_empty_positions(
 def test_two_agent_default_uses_codex_and_claude_code(
     harness: _DeliberationHarness, tmp_path: Path
 ) -> None:
-    """When agents=None, defaults to codex/gpt-5.4 + claude-code/opus."""
+    """When agents=None, defaults to codex/gpt-5.4 + claude-code/sonnet."""
     run_dir = tmp_path / "run"
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -362,7 +362,7 @@ def test_two_agent_default_uses_codex_and_claude_code(
 
     models_seen = {model for _, model in harness.call_log}
     assert "codex/gpt-5.4" in models_seen
-    assert "claude-code/opus" in models_seen
+    assert "claude-code/sonnet" in models_seen
 
 
 def test_position_artifacts_persisted_to_run_dir(
@@ -548,7 +548,7 @@ def test_wrong_agent_count_raises_at_build_time(tmp_path: Path) -> None:
             max_budget=1.0,
             agents=[
                 ("a", "codex/gpt-5.4"),
-                ("b", "claude-code/opus"),
+                ("b", "claude-code/sonnet"),
                 ("c", "codex/gpt-5.4"),
             ],
         )
@@ -692,7 +692,7 @@ def test_anonymization_strips_peer_agent_name_and_reviewer_model(
 
     harness.push("agent_a", Position(
         agent_name="agent_a", round=1, claims=[_claim("a1", "AGENT_A_R1")],
-        reviewer_model="claude-code/opus",
+        reviewer_model="claude-code/sonnet",
     ))
     harness.push("agent_b", Position(
         agent_name="agent_b", round=1, claims=[_claim("b1", "AGENT_B_R1")],

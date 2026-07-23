@@ -46,6 +46,17 @@ couplings:
   type: validated
   description: Core call path identity, routing, warning, and execution contracts.
 - sources:
+  - llm_client/execution/completion_runtime.py
+  - llm_client/execution/call_contracts.py
+  - llm_client/utils/openrouter.py
+  - llm_client/model_policy_audit.py
+  - llm_client/data/default_model_registry.json
+  docs:
+  - docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md
+  - docs/plans/110_provider-capabilities-opus-ban.md
+  type: validated
+  description: Generic provider controls, OpenRouter telemetry projection, and complete model-ban invariants.
+- sources:
   - llm_client/agent/mcp_agent.py
   - llm_client/foundation.py
   - llm_client/sdk/agents.py

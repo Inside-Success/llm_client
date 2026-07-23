@@ -60,9 +60,9 @@ logger = logging.getLogger(__name__)
 # Codex with a ChatGPT account."). Operators with API auth can override per
 # stage via ``DuetRoles(plan="codex/gpt-5-codex", ...)``.
 DEFAULT_PLAN_MODEL = "codex/gpt-5.4"
-DEFAULT_PLAN_REVIEW_MODEL = "claude-code/opus"
+DEFAULT_PLAN_REVIEW_MODEL = "claude-code/sonnet"
 DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5.4"
-DEFAULT_IMPLEMENT_REVIEW_MODEL = "claude-code/opus"
+DEFAULT_IMPLEMENT_REVIEW_MODEL = "claude-code/sonnet"
 
 # Codex agent calls legitimately take minutes — codex auto-explores the
 # workspace (sed reads, glob walks) before answering. The framework-wide
@@ -111,7 +111,7 @@ class DuetRoles(BaseModel):
     """Per-stage model assignment.
 
     Defaults to ``codex/gpt-5.4`` for implement stages and
-    ``claude-code/opus`` for review stages. Override per stage as needed.
+    ``claude-code/sonnet`` for review stages. Override per stage as needed.
     Operators with Codex API auth (not ChatGPT-account auth) can switch
     implement stages to ``codex/gpt-5-codex`` for stronger code performance.
     """

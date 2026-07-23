@@ -11,9 +11,9 @@ Usage::
         --task-file question.json \\
         --workspace /abs/path/to/repo \\
         --out runs/my-debate \\
-        --agents agent_a:codex/gpt-5.4,agent_b:claude-code/opus \\
+        --agents agent_a:codex/gpt-5.4,agent_b:claude-code/sonnet \\
         --max-rounds 3 \\
-        --synthesis-model claude-code/opus
+        --synthesis-model claude-code/sonnet
 
 The task file is JSON or YAML with at minimum ``task_id``, ``title``,
 ``question``. Optional: ``success_criteria`` (list), ``constraints`` (list),
@@ -128,9 +128,9 @@ def cmd_deliberate_task(args: argparse.Namespace) -> None:
         f"=== deliberate-task ({task_data.get('task_id', '?')}) ===",
         flush=True,
     )
-    print(f"  agents: {agents or 'default(codex/gpt-5.4,claude-code/opus)'}")
+    print(f"  agents: {agents or 'default(codex/gpt-5.4,claude-code/sonnet)'}")
     print(f"  max_rounds: {args.max_rounds}")
-    print(f"  synthesis_model: {args.synthesis_model or 'claude-code/opus (default)'}")
+    print(f"  synthesis_model: {args.synthesis_model or 'claude-code/sonnet (default)'}")
     print()
 
     result = app.invoke(
@@ -177,7 +177,7 @@ def register_parser(subparsers: Any) -> None:
         "--agents",
         help=(
             "Comma-separated agent assignments 'name1:model1,name2:model2'. "
-            "Default: agent_a:codex/gpt-5.4,agent_b:claude-code/opus"
+            "Default: agent_a:codex/gpt-5.4,agent_b:claude-code/sonnet"
         ),
     )
     p.add_argument(
@@ -188,7 +188,7 @@ def register_parser(subparsers: Any) -> None:
     )
     p.add_argument(
         "--synthesis-model",
-        help="Model for the synthesis stage. Default: claude-code/opus.",
+        help="Model for the synthesis stage. Default: claude-code/sonnet.",
     )
     p.add_argument(
         "--trace-id",

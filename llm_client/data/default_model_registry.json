@@ -264,26 +264,6 @@
     },
     {
       "api_key_env": "OPENROUTER_API_KEY",
-      "context": 1000000,
-      "cost": 3.85,
-      "intelligence": 56,
-      "litellm_id": "openrouter/anthropic/claude-opus-4.8",
-      "name": "claude-opus-4.8",
-      "provider": "openrouter",
-      "speed": 63,
-      "structured_output": true,
-      "tags": [
-        "1m-context",
-        "deep-review",
-        "frontier",
-        "long-thinking",
-        "manual-selection",
-        "quality-optimal-review",
-        "tier-max-intelligence"
-      ]
-    },
-    {
-      "api_key_env": "OPENROUTER_API_KEY",
       "context": 1050000,
       "cost": 4.35,
       "intelligence": 55,

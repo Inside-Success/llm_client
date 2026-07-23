@@ -74,6 +74,27 @@ def test_scan_paths_flags_banned_fable_even_with_override_acceptance(tmp_path: P
     assert violations[0].model == "anthropic/claude-fable-5"
 
 
+def test_scan_paths_flags_banned_opus_even_with_override_acceptance(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "proj"
+    project.mkdir()
+    config = project / "config.yaml"
+    config.write_text(
+        'fallback_model: "claude-code/opus"\n'
+        "model_override_acceptance:\n"
+        "  accepted_by: brian\n"
+        '  reason: "temporary review override"\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project])
+
+    assert len(violations) == 1
+    assert violations[0].kind == "banned_model_literal"
+    assert violations[0].model == "claude-code/opus"
+
+
 def test_scan_paths_allows_default_minimax_literal(tmp_path: Path) -> None:
     project = tmp_path / "proj"
     project.mkdir()

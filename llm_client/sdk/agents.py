@@ -57,7 +57,7 @@ def _parse_agent_model(model: str) -> tuple[str, str | None]:
 
     Examples:
         "claude-code"         → ("claude-code", None)
-        "claude-code/opus"    → ("claude-code", "opus")
+        "claude-code/sonnet"  → ("claude-code", "sonnet")
         "codex"               → ("codex", None)
         "codex/gpt-5"         → ("codex", "gpt-5")
         "gpt-5.3-codex"      → ("codex", "gpt-5.3-codex")

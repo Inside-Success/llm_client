@@ -33,7 +33,7 @@ Supported providers (just change the model string):
     call_llm("ollama/llama3", messages)               # Local Ollama
     call_llm("bedrock/anthropic.claude-v2", messages)  # AWS Bedrock
     call_llm("claude-code", messages)                 # Claude Agent SDK
-    call_llm("claude-code/opus", messages)            # Claude Agent SDK (specific model)
+    call_llm("claude-code/sonnet", messages)          # Claude Agent SDK (specific model)
     call_llm("codex", messages)                       # Codex SDK
     call_llm("codex/gpt-5", messages)                 # Codex SDK (specific model)
 
@@ -486,7 +486,7 @@ def call_llm(
         model: Model name (e.g., "gpt-4o", "gpt-5-mini",
                "anthropic/claude-sonnet-4-5-20250929",
                "gemini/gemini-2.0-flash", "claude-code",
-               "claude-code/opus")
+               "claude-code/sonnet")
         messages: Chat messages in OpenAI format
                   [{"role": "user", "content": "Hello"}]
         timeout: Request timeout in seconds
@@ -779,7 +779,7 @@ async def acall_llm(
     Args:
         model: Model name (e.g., "gpt-4o", "gpt-5-mini",
                "anthropic/claude-sonnet-4-5-20250929",
-               "claude-code", "claude-code/opus")
+               "claude-code", "claude-code/sonnet")
         messages: Chat messages in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on transient failure
