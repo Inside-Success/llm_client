@@ -250,6 +250,7 @@ from llm_client.execution.responses_runtime import (  # noqa: F401
     _convert_tools_for_responses_api,
     _extract_responses_usage,
     _openrouter_compatible_strict_json_schema,
+    _provider_compatible_discriminated_union_schema,
     _prepare_responses_kwargs,
     _strict_json_schema,
     _strict_openai_response_model_schema,

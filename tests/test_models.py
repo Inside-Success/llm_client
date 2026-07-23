@@ -21,6 +21,8 @@ from llm_client.core.models import (
     get_model,
     list_models,
     query_performance,
+    supports_structured_output,
+    supports_tool_calling,
 )
 
 
@@ -38,6 +40,16 @@ def _reset():
 
 
 class TestGetModel:
+    def test_openrouter_gpt56_planner_routes_are_registered(self):
+        """Current OpenRouter planner candidates expose their tested capabilities."""
+
+        for model in (
+            "openrouter/openai/gpt-5.6-terra",
+            "openrouter/openai/gpt-5.6-luna",
+        ):
+            assert supports_structured_output(model) is True
+            assert supports_tool_calling(model) is True
+
     def test_extraction_returns_highest_intelligence_structured(self):
         # available_only=False so we don't need env vars set
         model = get_model("extraction", available_only=False, use_performance=False)
