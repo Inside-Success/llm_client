@@ -15,6 +15,11 @@ All notable changes to `llm-client` are documented in this file.
 
 ### Added
 
+- Sync/async `call_llm_json_schema` APIs and a versioned
+  `python -m llm_client json-schema-call` bridge for non-Python consumers.
+  Caller schemas use the established provider projection, structured repair,
+  budget, cost, and observability runtime; the CLI contract contains no
+  credential or endpoint fields.
 - Shared execution-kernel primitives in `llm_client.execution_kernel`:
   - `run_sync_with_retry` / `run_async_with_retry`
   - `run_sync_with_fallback` / `run_async_with_fallback`

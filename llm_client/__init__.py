@@ -302,6 +302,13 @@ from llm_client.core.client import (
     strip_fences,
 )
 from llm_client.execution.call_contracts import StructuredOutputPolicy
+from llm_client.json_schema import (
+    JsonScalar,
+    JsonValue,
+    acall_llm_json_schema,
+    call_llm_json_schema,
+    json_schema_response_model,
+)
 from llm_client.core.data_types import TurnEvent
 from llm_client.parsing_utils import (
     TruncatedOutputError,

@@ -92,6 +92,18 @@ sentiment, meta = call_llm_structured(
 print(sentiment.label, sentiment.score, f"${meta.cost:.4f}")
 ```
 
+Callers that own JSON Schema outside Python can use `call_llm_json_schema` or
+the versioned local bridge:
+
+```bash
+python -m llm_client json-schema-call --request request.json
+```
+
+The request requires a model, messages, `responseSchema`, `task`, `traceId`,
+and `maxBudget`. Credentials and provider endpoints are intentionally absent.
+Results are validated against the original schema even when a provider needs
+a narrower projected schema.
+
 ### Async
 
 ```python

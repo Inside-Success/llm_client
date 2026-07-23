@@ -24,6 +24,9 @@ from llm_client.cli.cost import register_parser as register_cost_parser
 from llm_client.cli.deliberate import register_parser as register_deliberate_parser
 from llm_client.cli.duet import register_parser as register_duet_parser
 from llm_client.cli.experiments import register_parser as register_experiments_parser
+from llm_client.cli.json_schema_call import (
+    register_parser as register_json_schema_call_parser,
+)
 from llm_client.cli.models import register_parser as register_models_parser
 from llm_client.cli.provider_limits import register_parser as register_provider_limits_parser
 from llm_client.cli.replay import register_parser as register_replay_parser
@@ -58,6 +61,7 @@ def main() -> None:
     register_traces_parser(subparsers)
     register_scores_parser(subparsers)
     register_experiments_parser(subparsers)
+    register_json_schema_call_parser(subparsers)
     register_adoption_parser(subparsers)
     register_backfill_parser(subparsers)
     register_tool_lint_parser(subparsers)
