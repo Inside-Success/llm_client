@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -30,6 +31,7 @@ OPENROUTER_DEFAULT_API_BASE = "https://openrouter.ai/api/v1"
 OPENROUTER_API_BASE_ENV = "OPENROUTER_API_BASE"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_API_KEYS_ENV = "OPENROUTER_API_KEYS"
+OPENROUTER_METADATA_HEADER = "X-OpenRouter-Metadata"
 
 # ---------------------------------------------------------------------------
 # Module-level state for key rotation
@@ -166,6 +168,39 @@ def _is_openrouter_call(model: str, api_base: str | None) -> bool:
         return True
     base_lower = str(api_base or "").strip().lower()
     return "openrouter.ai" in base_lower
+
+
+def _enable_openrouter_inline_metadata(
+    model: str,
+    call_kwargs: dict[str, Any],
+) -> None:
+    """Request inline route evidence without overriding caller header policy.
+
+    OpenRouter can return the selected provider/model and fallback attempts on
+    the original completion response.  Requesting that evidence avoids a
+    synchronous generation-history lookup on ordinary calls.  A caller may
+    still explicitly disable the header for one request.
+    """
+
+    api_base = call_kwargs.get("api_base")
+    if not _is_openrouter_call(
+        model,
+        str(api_base) if api_base is not None else None,
+    ):
+        return
+    configured = call_kwargs.get("extra_headers")
+    if configured is None:
+        headers: dict[str, Any] = {}
+    elif isinstance(configured, Mapping):
+        headers = dict(configured)
+    else:
+        raise TypeError("extra_headers must be a mapping")
+    if not any(
+        str(name).lower() == OPENROUTER_METADATA_HEADER.lower()
+        for name in headers
+    ):
+        headers[OPENROUTER_METADATA_HEADER] = "enabled"
+    call_kwargs["extra_headers"] = headers
 
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ DEFAULT_TIMEOUT_ENV = "LLM_CLIENT_DEFAULT_TIMEOUT"
 DEFAULT_STRUCTURED_TIMEOUT_ENV = "LLM_CLIENT_DEFAULT_STRUCTURED_TIMEOUT"
 
 DEFAULT_TIMEOUT_S = 60
-DEFAULT_STRUCTURED_TIMEOUT_S = 180
+DEFAULT_STRUCTURED_TIMEOUT_S = 60
 
 # Safety ceiling: when an async provider attempt reaches this duration, request
 # cancellation independently of request-timeout policy. This is not a claim

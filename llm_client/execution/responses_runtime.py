@@ -32,6 +32,7 @@ from llm_client.utils.cost_utils import (
 )
 from llm_client.core.data_types import LLMCallResult
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
+from llm_client.utils.openrouter import _enable_openrouter_inline_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +362,7 @@ def _prepare_responses_kwargs(
         provider_kwargs["tools"] = _convert_tools_for_responses_api(provider_kwargs["tools"])
 
     resp_kwargs.update(provider_kwargs)
+    _enable_openrouter_inline_metadata(model, resp_kwargs)
     return resp_kwargs
 
 

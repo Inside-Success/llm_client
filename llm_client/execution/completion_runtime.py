@@ -24,6 +24,7 @@ from llm_client.core.data_types import LLMCallResult
 from llm_client.core.model_detection import _is_claude_model, _is_openai_reasoning_model, _is_responses_api_model, _is_thinking_model
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
 from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
+from llm_client.utils.openrouter import _enable_openrouter_inline_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,8 @@ def _prepare_call_kwargs(
         call_kwargs["timeout"] = _safety_timeout_s()
     if api_base is not None:
         call_kwargs["api_base"] = api_base
+
+    _enable_openrouter_inline_metadata(model, call_kwargs)
 
     if reasoning_effort and (_is_claude_model(model) or _is_openai_reasoning_model(model)):
         call_kwargs["reasoning_effort"] = reasoning_effort
