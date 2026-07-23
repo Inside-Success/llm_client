@@ -1,6 +1,6 @@
 # Plan #110: Provider Capabilities and Opus Ban
 
-**Status:** In Progress
+**Status:** Complete (2026-07-22)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -162,7 +162,7 @@ remain green.
       Opus.
 - [x] Focused tests and feasible repository gates pass.
 - [x] Slice 1 adversarial audit, cleanup, and concern triage are complete.
-- [ ] Slice 2 binds and verifies the downstream simulator configuration.
+- [x] Slice 2 binds and verifies the downstream simulator configuration.
 
 ## Slice 1 Verification Evidence
 
@@ -194,3 +194,14 @@ remain green.
   stay account-side.
 - The value of max reasoning for simulation fidelity is an **empirical
   parameter** evaluated only by the downstream bounded experiment.
+
+## Slice 2 Verification Evidence
+
+- Cybernetic Influence binds `deepseek-v4-flash` and normalized
+  `reasoning_effort="max"` into the active implementation identity, durable
+  definition digest, preview, and visible launch facts.
+- A zero-spend deployed-path fake observed the exact option on every
+  service-desk shared-client call; changing it to `high` changes the digest.
+- The retained live job `dj_c9014c076b80425e` exercised the configured route.
+  Its later failure concerned aggregate retry pricing, not parameter loss; Plan
+  111 and the downstream integrity repair close that separate defect.
