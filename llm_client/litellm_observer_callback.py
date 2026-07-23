@@ -27,6 +27,8 @@ from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
 
+from llm_client.utils.cost_utils import _add_token_details
+
 logger = logging.getLogger(__name__)
 
 
@@ -105,6 +107,11 @@ class LLMClientObserverCallback(CustomLogger):
                 cache_hit=bool(slp.get("cache_hit")),
                 finish_reason=None,
             )
+            _add_token_details(
+                result.usage,
+                prompt_details=slp.get("prompt_tokens_details"),
+                completion_details=slp.get("completion_tokens_details"),
+            )
             task = metadata.get("task", f"litellm_callback/{slp.get('call_type', 'completion')}")
         elif response_obj is not None:
             usage_raw = getattr(response_obj, "usage", None)
@@ -115,6 +122,15 @@ class LLMClientObserverCallback(CustomLogger):
                     "completion_tokens": getattr(usage_raw, "completion_tokens", 0) or 0,
                     "total_tokens": getattr(usage_raw, "total_tokens", 0) or 0,
                 }
+                _add_token_details(
+                    usage,
+                    prompt_details=getattr(usage_raw, "prompt_tokens_details", None),
+                    completion_details=getattr(
+                        usage_raw,
+                        "completion_tokens_details",
+                        None,
+                    ),
+                )
             content = None
             choices = getattr(response_obj, "choices", None)
             if choices and len(choices) > 0:
@@ -166,7 +182,7 @@ class _SLPResult:
         self,
         *,
         content: str | None,
-        usage: dict[str, int],
+        usage: dict[str, Any],
         cost: float,
         cost_source: str,
         cache_hit: bool,

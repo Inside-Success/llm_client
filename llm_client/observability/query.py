@@ -37,13 +37,20 @@ def lookup_result(trace_id: str) -> dict[str, Any] | None:
         return None
     row = db.execute(
         "SELECT response, model, cost, latency_s, finish_reason, "
-        "prompt_tokens, completion_tokens, timestamp, prompt_ref "
+        "prompt_tokens, completion_tokens, timestamp, prompt_ref, "
+        "reasoning_tokens, cached_tokens, cache_creation_tokens, usage_details "
         "FROM llm_calls WHERE trace_id = ? AND error IS NULL "
         "ORDER BY timestamp DESC LIMIT 1",
         (trace_id,),
     ).fetchone()
     if row is None:
         return None
+    usage_details = None
+    if row[12] is not None:
+        try:
+            usage_details = json.loads(row[12])
+        except (TypeError, json.JSONDecodeError):
+            usage_details = None
     return {
         "response": row[0],
         "model": row[1],
@@ -54,6 +61,10 @@ def lookup_result(trace_id: str) -> dict[str, Any] | None:
         "completion_tokens": row[6],
         "timestamp": row[7],
         "prompt_ref": row[8],
+        "reasoning_tokens": row[9],
+        "cached_tokens": row[10],
+        "cache_creation_tokens": row[11],
+        "usage_details": usage_details,
     }
 
 

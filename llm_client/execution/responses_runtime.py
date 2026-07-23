@@ -27,6 +27,7 @@ from llm_client.execution.call_contracts import (
 )
 from llm_client.utils.cost_utils import (
     FALLBACK_COST_FLOOR_USD_PER_TOKEN,
+    _add_token_details,
     _parse_cost_result,
     _provider_reported_cost,
 )
@@ -376,9 +377,11 @@ def _extract_responses_usage(response: Any) -> dict[str, Any]:
             "completion_tokens": getattr(usage, "output_tokens", 0) or 0,
             "total_tokens": getattr(usage, "total_tokens", 0) or 0,
         }
-        itd = getattr(usage, "input_tokens_details", None)
-        if itd is not None:
-            result["cached_tokens"] = getattr(itd, "cached_tokens", None) or 0
+        _add_token_details(
+            result,
+            prompt_details=getattr(usage, "input_tokens_details", None),
+            completion_details=getattr(usage, "output_tokens_details", None),
+        )
         return result
     return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 

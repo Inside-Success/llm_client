@@ -737,6 +737,10 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     prompt_tokens INTEGER,
     completion_tokens INTEGER,
     total_tokens INTEGER,
+    reasoning_tokens INTEGER,
+    cached_tokens INTEGER,
+    cache_creation_tokens INTEGER,
+    usage_details TEXT,
     cost REAL,
     cost_source TEXT,
     billing_mode TEXT,
@@ -1047,6 +1051,14 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
     if "logical_call_id" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN logical_call_id TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id)")
+    if "reasoning_tokens" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN reasoning_tokens INTEGER")
+    if "cached_tokens" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN cached_tokens INTEGER")
+    if "cache_creation_tokens" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN cache_creation_tokens INTEGER")
+    if "usage_details" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN usage_details TEXT")
 
     attempt_cols = {row[1] for row in conn.execute("PRAGMA table_info(structured_attempt_events)")}
     if "execution_error_type" not in attempt_cols:
@@ -1290,6 +1302,53 @@ def read_structured_terminal_calls(logical_call_id: str) -> list[dict[str, Any]]
     return result
 
 
+def _valid_token_count(value: Any) -> int | None:
+    """Return a provider token count only when it is a non-negative integer."""
+
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def _bounded_usage_details(usage: dict[str, Any] | None) -> str | None:
+    """Serialize allowlisted numeric token details without provider content."""
+
+    allowed = {
+        "prompt_tokens_details": (
+            "audio_tokens",
+            "cache_write_tokens",
+            "cached_tokens",
+            "cache_creation_tokens",
+            "cache_read_input_tokens",
+            "image_tokens",
+            "text_tokens",
+            "video_tokens",
+        ),
+        "completion_tokens_details": (
+            "reasoning_tokens",
+            "audio_tokens",
+            "image_tokens",
+            "text_tokens",
+            "video_tokens",
+            "accepted_prediction_tokens",
+            "rejected_prediction_tokens",
+        ),
+    }
+    result: dict[str, dict[str, int]] = {}
+    for group, fields in allowed.items():
+        raw = (usage or {}).get(group)
+        if not isinstance(raw, dict):
+            continue
+        bounded = {
+            field: count
+            for field in fields
+            if (count := _valid_token_count(raw.get(field))) is not None
+        }
+        if bounded:
+            result[group] = bounded
+    return json.dumps(result) if result else None
+
+
 def _write_call_to_db(
     *,
     timestamp: str,
@@ -1322,26 +1381,37 @@ def _write_call_to_db(
 ) -> None:
     """Insert a call record into SQLite. Never raises."""
     try:
-        prompt_tokens = (usage or {}).get("prompt_tokens")
-        completion_tokens = (usage or {}).get("completion_tokens")
-        total_tokens = (usage or {}).get("total_tokens")
+        prompt_tokens = _valid_token_count((usage or {}).get("prompt_tokens"))
+        completion_tokens = _valid_token_count((usage or {}).get("completion_tokens"))
+        total_tokens = _valid_token_count((usage or {}).get("total_tokens"))
+        reasoning_tokens = _valid_token_count((usage or {}).get("reasoning_tokens"))
+        cached_tokens = _valid_token_count((usage or {}).get("cached_tokens"))
+        cache_creation_tokens = _valid_token_count(
+            (usage or {}).get("cache_creation_tokens")
+        )
+        usage_details = _bounded_usage_details(usage)
+
         def _write(db: sqlite3.Connection) -> None:
             db.execute(
                 """INSERT INTO llm_calls
                    (timestamp, project, model, messages, response,
                     prompt_tokens, completion_tokens, total_tokens,
+                    reasoning_tokens, cached_tokens, cache_creation_tokens,
+                    usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
                     causal_parent_id, logical_call_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, _get_project(), model,
                     json.dumps(messages, default=str) if messages else None,
                     response,
                     prompt_tokens, completion_tokens, total_tokens,
+                    reasoning_tokens, cached_tokens, cache_creation_tokens,
+                    usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint,
@@ -1542,16 +1612,22 @@ def import_jsonl(jsonl_path: str | Path, table: str = "llm_calls") -> int:
                 """INSERT INTO llm_calls
                    (timestamp, project, model, messages, response,
                     prompt_tokens, completion_tokens, total_tokens,
+                    reasoning_tokens, cached_tokens, cache_creation_tokens,
+                    usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint, call_snapshot)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     r.get("timestamp"), project, r.get("model"),
                     json.dumps(r.get("messages"), default=str) if r.get("messages") else None,
                     r.get("response"),
                     usage.get("prompt_tokens"), usage.get("completion_tokens"),
                     usage.get("total_tokens"),
+                    _valid_token_count(usage.get("reasoning_tokens")),
+                    _valid_token_count(usage.get("cached_tokens")),
+                    _valid_token_count(usage.get("cache_creation_tokens")),
+                    _bounded_usage_details(usage),
                     r.get("cost"),
                     r.get("cost_source"),
                     r.get("billing_mode"),
