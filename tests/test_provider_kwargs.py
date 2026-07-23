@@ -337,6 +337,21 @@ def test_openrouter_responses_requests_inline_route_metadata() -> None:
     assert call_kwargs["extra_headers"] == {"X-OpenRouter-Metadata": "enabled"}
 
 
+def test_direct_gpt56_terra_forwards_max_reasoning() -> None:
+    """Terra's supported max setting reaches the direct Responses request."""
+
+    call_kwargs = _prepare_responses_kwargs(
+        "gpt-5.6-terra",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        reasoning_effort="max",
+        api_base=None,
+        kwargs={},
+    )
+
+    assert call_kwargs["reasoning"] == {"effort": "max"}
+
+
 @patch("litellm.get_supported_openai_params", return_value=["thinking"])
 def test_prepare_call_kwargs_uses_configured_direct_gemini_thinking_budget(
     _mock_supported: object,
