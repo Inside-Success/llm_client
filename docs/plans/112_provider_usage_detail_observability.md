@@ -1,6 +1,6 @@
 # Plan #112: Provider Usage-Detail Observability
 
-**Status:** In Progress
+**Status:** Complete (2026-07-23; scoped verification)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -116,13 +116,34 @@ all findings are fixed or registered.
 
 ## Acceptance Criteria
 
-- [ ] Provider-reported reasoning tokens are retained when present.
-- [ ] Prompt cache and cache-creation details remain compatible.
-- [ ] SQLite stores queryable scalar counts and bounded token-detail JSON.
-- [ ] Existing databases migrate additively and idempotently.
-- [ ] Historical aggregate-only records remain unchanged and valid.
-- [ ] No reasoning text or arbitrary response body is persisted as usage detail.
-- [ ] Focused tests, changed-surface lint, relationship validation, and adversarial audit pass.
+- [x] Provider-reported reasoning tokens are retained when present.
+- [x] Prompt cache and cache-creation details remain compatible.
+- [x] SQLite stores queryable scalar counts and bounded token-detail JSON.
+- [x] Existing databases migrate additively and idempotently.
+- [x] Historical aggregate-only records remain unchanged and valid.
+- [x] No reasoning text or arbitrary response body is persisted as usage detail.
+- [x] Focused tests, changed-surface lint, relationship validation, and adversarial audit pass.
+
+## Closeout Evidence
+
+- The complete declared affected surface passed 397 tests across Completion,
+  Responses, structured/text runtimes, SQLite/JSONL observability, LiteLLM
+  callback parity, and provider-cost precedence.
+- Fresh and legacy SQLite schemas retain nullable scalar reasoning/cache counts
+  plus bounded allowlisted numeric detail JSON. Aggregate-only historical rows
+  remain valid and are not retroactively relabeled.
+- Adversarial fixtures prove arbitrary reasoning content, booleans, negative
+  values, floats, and unknown provider fields do not cross the usage boundary.
+- Focused Ruff passes for the clean changed modules and for `io_log`/legacy
+  tests with only their pre-existing full-file lint findings excluded;
+  relationship validation, plan-test validation, and diff hygiene pass. A
+  downstream Luna control then directly recorded 9,385 provider-labeled
+  reasoning tokens without exposing reasoning content.
+- Repository-wide collection was attempted but is not a valid closeout signal
+  in this checkout because optional `data_contracts` and `langgraph` packages
+  are absent. This is the same pre-existing optional-dependency baseline
+  recorded by Plans #109–111; no failure implicated the changed usage or
+  observability paths, and this closeout makes no broader collection claim.
 
 ## Rollback
 
