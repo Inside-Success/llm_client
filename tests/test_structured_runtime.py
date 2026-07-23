@@ -27,6 +27,7 @@ from llm_client.execution.structured_runtime import (
     _acall_llm_structured_impl,
     _build_validation_repair_message,
     _call_llm_structured_impl,
+    _provider_schema_name,
     _robust_validate_json,
 )
 
@@ -58,6 +59,28 @@ class _PlannerEnvelope(BaseModel):
         _SearchDecision | _TraverseDecision,
         Field(discriminator="action"),
     ]
+
+
+def test_provider_schema_name_preserves_short_names() -> None:
+    """Provider metadata remains readable when already within the limit."""
+
+    assert _provider_schema_name(_PlannerEnvelope) == "_PlannerEnvelope"
+
+
+def test_provider_schema_name_bounds_long_names_without_collisions() -> None:
+    """Dynamic model names remain bounded and collision-resistant."""
+
+    prefix = "CoverageEnvelope" + "A" * 60
+    first = type(f"{prefix}First", (BaseModel,), {})
+    second = type(f"{prefix}Second", (BaseModel,), {})
+
+    first_name = _provider_schema_name(first)
+    second_name = _provider_schema_name(second)
+
+    assert len(first_name) == 64
+    assert len(second_name) == 64
+    assert first_name != second_name
+    assert first_name.startswith(prefix[:51])
 
 
 def test_openai_responses_schema_inlines_ref_siblings() -> None:

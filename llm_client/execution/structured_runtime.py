@@ -60,6 +60,18 @@ _INSTRUCTOR_INIT_LOCK = _threading.Lock()
 _ROUTE_CERTIFICATION_OBSERVATION_ENV = (
     "LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION"
 )
+_PROVIDER_SCHEMA_NAME_MAX_LENGTH = 64
+
+
+def _provider_schema_name(response_model: type[BaseModel]) -> str:
+    """Return stable provider metadata within OpenAI's 64-character limit."""
+
+    name = response_model.__name__
+    if len(name) <= _PROVIDER_SCHEMA_NAME_MAX_LENGTH:
+        return name
+    suffix = _hashlib.sha256(name.encode("utf-8")).hexdigest()[:12]
+    prefix_length = _PROVIDER_SCHEMA_NAME_MAX_LENGTH - len(suffix) - 1
+    return f"{name[:prefix_length]}_{suffix}"
 
 
 def _instructor_from_litellm(create_fn: Any) -> Any:
@@ -773,7 +785,7 @@ def _call_llm_structured_impl(
             resp_kwargs["text"] = {
                 "format": {
                     "type": "json_schema",
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 }
@@ -897,7 +909,7 @@ def _call_llm_structured_impl(
             base_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 },
@@ -1539,7 +1551,7 @@ async def _acall_llm_structured_impl(
             resp_kwargs["text"] = {
                 "format": {
                     "type": "json_schema",
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 }
@@ -1667,7 +1679,7 @@ async def _acall_llm_structured_impl(
             base_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 },
