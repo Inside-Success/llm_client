@@ -392,6 +392,7 @@ def _attempt_event(
     model: str,
     schema_hash: str,
     event_type: AttemptEventType,
+    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
     raw_content: str | None = None,
     raw_artifact_ref: str | None = None,
     validation_error: ValidationError | None = None,
@@ -419,7 +420,7 @@ def _attempt_event(
         task=task,
         attempt_ordinal=attempt,
         model=model,
-        execution_path="native_schema",
+        execution_path=execution_path,
         schema_hash=schema_hash,
         event_type=event_type,
         raw_sha256=(
@@ -444,6 +445,7 @@ def _received_attempt_event(
     model: str,
     schema_hash: str,
     raw_content: str,
+    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
 ) -> StructuredAttemptEvent:
     """Persist exact raw bytes first, then build their received metadata event."""
 
@@ -460,6 +462,7 @@ def _received_attempt_event(
         model=model,
         schema_hash=schema_hash,
         event_type="received",
+        execution_path=execution_path,
         raw_content=raw_content,
         raw_artifact_ref=(artifact.artifact_ref if artifact is not None else None),
     )
@@ -490,6 +493,7 @@ def _record_execution_failure(
     attempt: int,
     model: str,
     schema_hash: str,
+    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
 ) -> None:
     """Persist one bounded pre-response failure without message or body."""
 
@@ -502,6 +506,7 @@ def _record_execution_failure(
             model=model,
             schema_hash=schema_hash,
             event_type="execution_failed",
+            execution_path=execution_path,
             failure_class=_execution_failure_class(error),
             execution_error_type=type(error).__name__[:128],
         )
@@ -801,11 +806,11 @@ def _call_llm_structured_impl(
     _warnings: list[str] = list(_entry_warnings)
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
-    next_native_attempt_ordinal = 0
-    native_attempt_costs = _AttemptCostLedger()
+    next_structured_attempt_ordinal = 0
+    structured_attempt_costs = _AttemptCostLedger()
 
     def _execute_model(model_idx: int, current_model: str) -> tuple[T, LLMCallResult]:
-        nonlocal last_model_attempted, next_native_attempt_ordinal
+        nonlocal last_model_attempted, next_structured_attempt_ordinal
         last_model_attempted = current_model
         current_api_base = _resolve_api_base_for_model(current_model, api_base, cfg)
         background_mode = _background_mode_for_model(
@@ -856,6 +861,7 @@ def _call_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
+            _prepare_raw_artifact_store_for_runtime()
             schema = _provider_compatible_discriminated_union_schema(
                 _strict_openai_response_model_schema(response_model)
             )
@@ -884,9 +890,64 @@ def _call_llm_structured_impl(
 
             response_input = str(resp_kwargs["input"])
             pending_repair_message: dict[str, str] | None = None
+            responses_recovery_pending: set[int] = set()
+            responses_attempt_ordinals: dict[int, int] = {}
+
+            def _responses_attempt_ordinal(local_attempt: int) -> int:
+                """Assign one logical-call-global ordinal to a Responses attempt."""
+
+                nonlocal next_structured_attempt_ordinal
+                if local_attempt not in responses_attempt_ordinals:
+                    responses_attempt_ordinals[local_attempt] = (
+                        next_structured_attempt_ordinal
+                    )
+                    next_structured_attempt_ordinal += 1
+                return responses_attempt_ordinals[local_attempt]
+
+            def _record_responses_recovery(
+                attempt: int,
+                _error: Exception,
+                decision: Literal["retry", "exhausted"],
+            ) -> None:
+                """Persist the retry kernel's actual Responses disposition once."""
+
+                logical_attempt = _responses_attempt_ordinal(attempt)
+                if logical_attempt not in responses_recovery_pending:
+                    return
+                responses_recovery_pending.remove(logical_attempt)
+                recovery_decision: RecoveryDecision = decision
+                if decision == "exhausted" and model_idx < len(models) - 1:
+                    recovery_decision = "fallback"
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_responses_schema_hash,
+                        event_type="recovery_decided",
+                        execution_path="responses_api",
+                        recovery_decision=recovery_decision,
+                    )
+                )
 
             def _invoke_responses_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal pending_repair_message
+                logical_attempt = _responses_attempt_ordinal(attempt)
+                structured_attempt_costs.mark_started(logical_attempt)
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_responses_schema_hash,
+                        event_type="started",
+                        execution_path="responses_api",
+                    )
+                )
                 call_kwargs = dict(resp_kwargs)
                 if pending_repair_message is not None:
                     call_kwargs["input"] = (
@@ -898,81 +959,175 @@ def _call_llm_structured_impl(
                         attempt,
                     )
 
+                attempt_received = False
+                attempt_validated = False
+
                 def provider_call() -> Any:
                     with _rate_limit.acquire(current_model):
                         return litellm.responses(**call_kwargs)
 
                 try:
                     response = _run_sync_with_deadline(provider_call, timeout=timeout)
+                    raw_content = getattr(response, "output_text", None) or ""
+                    if not raw_content.strip():
+                        raise ValueError(
+                            "Empty content from LLM (responses API structured)"
+                        )
+                    record_structured_attempt_event(
+                        _received_attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash,
+                            raw_content=raw_content,
+                            execution_path="responses_api",
+                        )
+                    )
+                    attempt_received = True
+                    usage = _extract_responses_usage(response)
+                    attempt_cost, attempt_cost_source = _parse_cost_result(
+                        _compute_responses_cost(response, usage),
+                        default_source="computed",
+                    )
+                    structured_attempt_costs.record_response(
+                        logical_attempt,
+                        cost=attempt_cost,
+                        cost_source=attempt_cost_source,
+                    )
+                    try:
+                        parsed = _robust_validate_json(response_model, raw_content)
+                    except ValidationError as validation_error:
+                        record_structured_attempt_event(
+                            _attempt_event(
+                                logical_call_id=_logical_call_id,
+                                trace_id=trace_id,
+                                task=task,
+                                attempt=logical_attempt,
+                                model=current_model,
+                                schema_hash=_responses_schema_hash,
+                                event_type="validation_failed",
+                                execution_path="responses_api",
+                                validation_error=validation_error,
+                            )
+                        )
+                        responses_recovery_pending.add(logical_attempt)
+                        retry_exc = _StructuredValidationRetry(
+                            raw_content, validation_error
+                        )
+                        pending_repair_message = _build_validation_repair_message(
+                            retry_exc
+                        )
+                        raise retry_exc from validation_error
+                    attempt_validated = True
+                    record_structured_attempt_event(
+                        _attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash,
+                            event_type="validated",
+                            execution_path="responses_api",
+                        )
+                    )
+
+                    if attempt > 0:
+                        logger.info(
+                            "call_llm_structured (responses) succeeded after %d retries",
+                            attempt,
+                        )
+
+                    llm_result = _build_structured_call_result(
+                        parsed=parsed,
+                        usage=usage,
+                        cost=attempt_cost,
+                        cost_source=attempt_cost_source,
+                        current_model=current_model,
+                        finish_reason="stop",
+                        raw_response=response,
+                        warnings=_warnings,
+                        requested_model=model,
+                        attempted_models=models[:model_idx + 1],
+                        requested_api_base=api_base,
+                        effective_api_base=current_api_base,
+                        background_mode=background_mode,
+                        routing_policy=routing_policy,
+                    )
+                    structured_attempt_costs.apply(llm_result)
+                    if hooks and hooks.after_call:
+                        hooks.after_call(llm_result)
+                    if cache is not None and key is not None:
+                        cache.set(key, llm_result)
+                    _log_call_event(
+                        model=current_model,
+                        messages=messages,
+                        result=llm_result,
+                        latency_s=time.monotonic() - _log_t0,
+                        caller="call_llm_structured",
+                        task=task,
+                        trace_id=trace_id,
+                        prompt_ref=prompt_ref,
+                        call_snapshot=call_snapshot,
+                        execution_path="responses_api",
+                        retry_count=attempt,
+                        schema_hash=_responses_schema_hash,
+                        response_format_type="responses_api",
+                    )
+                    return parsed, llm_result
                 except Exception as exc:
+                    if attempt_validated:
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    if isinstance(exc, StructuredRawArtifactError):
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    if attempt_received and not isinstance(
+                        exc, _StructuredValidationRetry
+                    ):
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    if not isinstance(exc, _StructuredValidationRetry):
+                        _record_execution_failure(
+                            error=exc,
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash,
+                            execution_path="responses_api",
+                        )
+                        responses_recovery_pending.add(logical_attempt)
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
                         error=exc,
                         caller="call_llm_structured",
                     )
                     raise
-                raw_content = getattr(response, "output_text", None) or ""
-                if not raw_content.strip():
-                    raise ValueError("Empty content from LLM (responses API structured)")
-                try:
-                    parsed = _robust_validate_json(response_model, raw_content)
-                except ValidationError as exc:
-                    retry_exc = _StructuredValidationRetry(raw_content, exc)
-                    pending_repair_message = _build_validation_repair_message(retry_exc)
-                    raise retry_exc from exc
-                usage = _extract_responses_usage(response)
-                cost, cost_source = _parse_cost_result(
-                    _compute_responses_cost(response, usage),
-                    default_source="computed",
-                )
 
-                if attempt > 0:
-                    logger.info("call_llm_structured (responses) succeeded after %d retries", attempt)
-
-                llm_result = _build_structured_call_result(
-                    parsed=parsed,
-                    usage=usage,
-                    cost=cost,
-                    cost_source=cost_source,
-                    current_model=current_model,
-                    finish_reason="stop",
-                    raw_response=response,
-                    warnings=_warnings,
-                    requested_model=model,
-                    attempted_models=models[:model_idx + 1],
-                    requested_api_base=api_base,
-                    effective_api_base=current_api_base,
-                    background_mode=background_mode,
-                    routing_policy=routing_policy,
-                )
-                if hooks and hooks.after_call:
-                    hooks.after_call(llm_result)
-                if cache is not None and key is not None:
-                    cache.set(key, llm_result)
-                _log_call_event(
-                    model=current_model,
-                    messages=messages,
-                    result=llm_result,
-                    latency_s=time.monotonic() - _log_t0,
-                    caller="call_llm_structured",
-                    task=task,
-                    trace_id=trace_id,
-                    prompt_ref=prompt_ref,
-                    call_snapshot=call_snapshot,
-                    execution_path="responses_api",
-                    retry_count=attempt,
-                    schema_hash=_responses_schema_hash,
-                    response_format_type="responses_api",
-                )
-                return parsed, llm_result
+            def _on_responses_error(exc: Exception, attempt: int) -> None:
+                if hooks and hooks.on_error:
+                    try:
+                        hooks.on_error(
+                            _unwrap_structured_finalization_failure(exc), attempt
+                        )
+                    except Exception as hook_error:
+                        if isinstance(exc, _StructuredFinalizationFailure):
+                            raise _StructuredFinalizationFailure(hook_error) from exc
+                        raise
 
             return cast(tuple[T, LLMCallResult], run_sync_with_retry(
                 caller="call_llm_structured",
                 model=current_model,
                 max_retries=r.max_retries,
                 invoke=_invoke_responses_attempt,
-                should_retry=lambda exc: isinstance(exc, _StructuredValidationRetry)
-                or _check_retryable(exc, r),
+                should_retry=lambda exc: not isinstance(
+                    exc, _StructuredFinalizationFailure
+                )
+                and (
+                    isinstance(exc, _StructuredValidationRetry)
+                    or _check_retryable(exc, r)
+                ),
                 compute_delay=lambda attempt, exc: _compute_retry_delay(
                     attempt=attempt,
                     error=exc,
@@ -981,18 +1136,23 @@ def _call_llm_structured_impl(
                 ),
                 warning_sink=_warnings,
                 logger=logger,
-                on_error=(hooks.on_error if hooks and hooks.on_error else None),
+                on_error=_on_responses_error,
                 on_retry=r.on_retry,
-                maybe_retry_hook=lambda exc, attempt, max_retries: _maybe_retry_with_openrouter_key_rotation(
-                    error=exc,
-                    attempt=attempt,
-                    max_retries=max_retries,
-                    current_model=current_model,
-                    current_api_base=current_api_base,
-                    user_kwargs=public_kwargs,
-                    warning_sink=_warnings,
-                    on_retry=r.on_retry,
-                    caller="call_llm_structured",
+                on_decision=_record_responses_recovery,
+                maybe_retry_hook=lambda exc, attempt, max_retries: (
+                    False
+                    if isinstance(exc, _StructuredFinalizationFailure)
+                    else _maybe_retry_with_openrouter_key_rotation(
+                        error=exc,
+                        attempt=attempt,
+                        max_retries=max_retries,
+                        current_model=current_model,
+                        current_api_base=current_api_base,
+                        user_kwargs=public_kwargs,
+                        warning_sink=_warnings,
+                        on_retry=r.on_retry,
+                        caller="call_llm_structured",
+                    )
                 ),
             ))
 
@@ -1037,10 +1197,10 @@ def _call_llm_structured_impl(
             def _native_attempt_ordinal(local_attempt: int) -> int:
                 """Assign one contiguous ordinal when an attempt actually starts."""
 
-                nonlocal next_native_attempt_ordinal
+                nonlocal next_structured_attempt_ordinal
                 if local_attempt not in _attempt_ordinals:
-                    _attempt_ordinals[local_attempt] = next_native_attempt_ordinal
-                    next_native_attempt_ordinal += 1
+                    _attempt_ordinals[local_attempt] = next_structured_attempt_ordinal
+                    next_structured_attempt_ordinal += 1
                 return _attempt_ordinals[local_attempt]
 
             def _record_native_recovery(
@@ -1076,7 +1236,7 @@ def _call_llm_structured_impl(
             def _invoke_native_schema_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal _pending_repair_message
                 logical_attempt = _native_attempt_ordinal(attempt)
-                native_attempt_costs.mark_started(logical_attempt)
+                structured_attempt_costs.mark_started(logical_attempt)
                 record_structured_attempt_event(
                     _attempt_event(
                         logical_call_id=_logical_call_id,
@@ -1116,7 +1276,7 @@ def _call_llm_structured_impl(
                     attempt_cost, attempt_cost_source = _parse_cost_result(
                         _compute_cost(response)
                     )
-                    native_attempt_costs.record_response(
+                    structured_attempt_costs.record_response(
                         logical_attempt,
                         cost=attempt_cost,
                         cost_source=attempt_cost_source,
@@ -1162,7 +1322,7 @@ def _call_llm_structured_impl(
                         background_mode=background_mode,
                         routing_policy=routing_policy,
                     )
-                    native_attempt_costs.apply(llm_result)
+                    structured_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
                         hooks.after_call(llm_result)
                     if cache is not None and key is not None:
@@ -1607,11 +1767,11 @@ async def _acall_llm_structured_impl(
     _warnings: list[str] = list(_entry_warnings)
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
-    next_native_attempt_ordinal = 0
-    native_attempt_costs = _AttemptCostLedger()
+    next_structured_attempt_ordinal = 0
+    structured_attempt_costs = _AttemptCostLedger()
 
     async def _execute_model(model_idx: int, current_model: str) -> tuple[T, LLMCallResult]:
-        nonlocal last_model_attempted, next_native_attempt_ordinal
+        nonlocal last_model_attempted, next_structured_attempt_ordinal
         last_model_attempted = current_model
         current_api_base = _resolve_api_base_for_model(current_model, api_base, cfg)
         background_mode = _background_mode_for_model(
@@ -1662,6 +1822,7 @@ async def _acall_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
+            _prepare_raw_artifact_store_for_runtime()
             schema = _provider_compatible_discriminated_union_schema(
                 _strict_openai_response_model_schema(response_model)
             )
@@ -1690,9 +1851,64 @@ async def _acall_llm_structured_impl(
 
             response_input = str(resp_kwargs["input"])
             pending_repair_message_async: dict[str, str] | None = None
+            responses_recovery_pending_async: set[int] = set()
+            responses_attempt_ordinals_async: dict[int, int] = {}
+
+            def _responses_attempt_ordinal_async(local_attempt: int) -> int:
+                """Assign one logical-call-global ordinal to an async Responses attempt."""
+
+                nonlocal next_structured_attempt_ordinal
+                if local_attempt not in responses_attempt_ordinals_async:
+                    responses_attempt_ordinals_async[local_attempt] = (
+                        next_structured_attempt_ordinal
+                    )
+                    next_structured_attempt_ordinal += 1
+                return responses_attempt_ordinals_async[local_attempt]
+
+            def _record_responses_recovery_async(
+                attempt: int,
+                _error: Exception,
+                decision: Literal["retry", "exhausted"],
+            ) -> None:
+                """Persist the async retry kernel's Responses disposition once."""
+
+                logical_attempt = _responses_attempt_ordinal_async(attempt)
+                if logical_attempt not in responses_recovery_pending_async:
+                    return
+                responses_recovery_pending_async.remove(logical_attempt)
+                recovery_decision: RecoveryDecision = decision
+                if decision == "exhausted" and model_idx < len(models) - 1:
+                    recovery_decision = "fallback"
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_responses_schema_hash_async,
+                        event_type="recovery_decided",
+                        execution_path="responses_api",
+                        recovery_decision=recovery_decision,
+                    )
+                )
 
             async def _invoke_responses_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal pending_repair_message_async
+                logical_attempt = _responses_attempt_ordinal_async(attempt)
+                structured_attempt_costs.mark_started(logical_attempt)
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_responses_schema_hash_async,
+                        event_type="started",
+                        execution_path="responses_api",
+                    )
+                )
                 call_kwargs = dict(resp_kwargs)
                 if pending_repair_message_async is not None:
                     call_kwargs["input"] = (
@@ -1704,6 +1920,9 @@ async def _acall_llm_structured_impl(
                         attempt,
                     )
 
+                attempt_received = False
+                attempt_validated = False
+
                 async def provider_call() -> Any:
                     async with _rate_limit.aacquire(current_model):
                         return await _await_with_safety_ceiling(
@@ -1714,75 +1933,166 @@ async def _acall_llm_structured_impl(
 
                 try:
                     response = await _run_async_with_deadline(provider_call, timeout=timeout)
+                    raw_content = getattr(response, "output_text", None) or ""
+                    if not raw_content.strip():
+                        raise ValueError(
+                            "Empty content from LLM (responses API structured)"
+                        )
+                    record_structured_attempt_event(
+                        _received_attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash_async,
+                            raw_content=raw_content,
+                            execution_path="responses_api",
+                        )
+                    )
+                    attempt_received = True
+                    usage = _extract_responses_usage(response)
+                    attempt_cost, attempt_cost_source = _parse_cost_result(
+                        _compute_responses_cost(response, usage),
+                        default_source="computed",
+                    )
+                    structured_attempt_costs.record_response(
+                        logical_attempt,
+                        cost=attempt_cost,
+                        cost_source=attempt_cost_source,
+                    )
+                    try:
+                        parsed = _robust_validate_json(response_model, raw_content)
+                    except ValidationError as validation_error:
+                        record_structured_attempt_event(
+                            _attempt_event(
+                                logical_call_id=_logical_call_id,
+                                trace_id=trace_id,
+                                task=task,
+                                attempt=logical_attempt,
+                                model=current_model,
+                                schema_hash=_responses_schema_hash_async,
+                                event_type="validation_failed",
+                                execution_path="responses_api",
+                                validation_error=validation_error,
+                            )
+                        )
+                        responses_recovery_pending_async.add(logical_attempt)
+                        retry_exc = _StructuredValidationRetry(
+                            raw_content, validation_error
+                        )
+                        pending_repair_message_async = (
+                            _build_validation_repair_message(retry_exc)
+                        )
+                        raise retry_exc from validation_error
+                    attempt_validated = True
+                    record_structured_attempt_event(
+                        _attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash_async,
+                            event_type="validated",
+                            execution_path="responses_api",
+                        )
+                    )
+
+                    if attempt > 0:
+                        logger.info(
+                            "acall_llm_structured (responses) succeeded after %d retries",
+                            attempt,
+                        )
+
+                    llm_result = _build_structured_call_result(
+                        parsed=parsed,
+                        usage=usage,
+                        cost=attempt_cost,
+                        cost_source=attempt_cost_source,
+                        current_model=current_model,
+                        finish_reason="stop",
+                        raw_response=response,
+                        warnings=_warnings,
+                        requested_model=model,
+                        attempted_models=models[:model_idx + 1],
+                        requested_api_base=api_base,
+                        effective_api_base=current_api_base,
+                        background_mode=background_mode,
+                        routing_policy=routing_policy,
+                    )
+                    structured_attempt_costs.apply(llm_result)
+                    if hooks and hooks.after_call:
+                        hooks.after_call(llm_result)
+                    if cache is not None and key is not None:
+                        await _async_cache_set(cache, key, llm_result)
+                    _log_call_event(
+                        model=current_model,
+                        messages=messages,
+                        result=llm_result,
+                        latency_s=time.monotonic() - _log_t0,
+                        caller="acall_llm_structured",
+                        task=task,
+                        trace_id=trace_id,
+                        prompt_ref=prompt_ref,
+                        call_snapshot=call_snapshot,
+                        execution_path="responses_api",
+                        retry_count=attempt,
+                        schema_hash=_responses_schema_hash_async,
+                        response_format_type="responses_api",
+                    )
+                    return parsed, llm_result
                 except Exception as exc:
+                    if attempt_validated:
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    if isinstance(exc, StructuredRawArtifactError):
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    if attempt_received and not isinstance(
+                        exc, _StructuredValidationRetry
+                    ):
+                        raise _StructuredFinalizationFailure(exc) from exc
+                    if not isinstance(exc, _StructuredValidationRetry):
+                        _record_execution_failure(
+                            error=exc,
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash_async,
+                            execution_path="responses_api",
+                        )
+                        responses_recovery_pending_async.add(logical_attempt)
                     _raise_if_unsupported_gpt5_structured_schema(
                         model=current_model,
                         error=exc,
                         caller="acall_llm_structured",
                     )
                     raise
-                raw_content = getattr(response, "output_text", None) or ""
-                if not raw_content.strip():
-                    raise ValueError("Empty content from LLM (responses API structured)")
-                try:
-                    parsed = _robust_validate_json(response_model, raw_content)
-                except ValidationError as exc:
-                    retry_exc = _StructuredValidationRetry(raw_content, exc)
-                    pending_repair_message_async = _build_validation_repair_message(retry_exc)
-                    raise retry_exc from exc
-                usage = _extract_responses_usage(response)
-                cost, cost_source = _parse_cost_result(
-                    _compute_responses_cost(response, usage),
-                    default_source="computed",
-                )
 
-                if attempt > 0:
-                    logger.info("acall_llm_structured (responses) succeeded after %d retries", attempt)
-
-                llm_result = _build_structured_call_result(
-                    parsed=parsed,
-                    usage=usage,
-                    cost=cost,
-                    cost_source=cost_source,
-                    current_model=current_model,
-                    finish_reason="stop",
-                    raw_response=response,
-                    warnings=_warnings,
-                    requested_model=model,
-                    attempted_models=models[:model_idx + 1],
-                    requested_api_base=api_base,
-                    effective_api_base=current_api_base,
-                    background_mode=background_mode,
-                    routing_policy=routing_policy,
-                )
-                if hooks and hooks.after_call:
-                    hooks.after_call(llm_result)
-                if cache is not None and key is not None:
-                    await _async_cache_set(cache, key, llm_result)
-                _log_call_event(
-                    model=current_model,
-                    messages=messages,
-                    result=llm_result,
-                    latency_s=time.monotonic() - _log_t0,
-                    caller="acall_llm_structured",
-                    task=task,
-                    trace_id=trace_id,
-                    prompt_ref=prompt_ref,
-                    call_snapshot=call_snapshot,
-                    execution_path="responses_api",
-                    retry_count=attempt,
-                    schema_hash=_responses_schema_hash_async,
-                    response_format_type="responses_api",
-                )
-                return parsed, llm_result
+            def _on_responses_error_async(exc: Exception, attempt: int) -> None:
+                if hooks and hooks.on_error:
+                    try:
+                        hooks.on_error(
+                            _unwrap_structured_finalization_failure(exc), attempt
+                        )
+                    except Exception as hook_error:
+                        if isinstance(exc, _StructuredFinalizationFailure):
+                            raise _StructuredFinalizationFailure(hook_error) from exc
+                        raise
 
             return cast(tuple[T, LLMCallResult], await run_async_with_retry(
                 caller="acall_llm_structured",
                 model=current_model,
                 max_retries=r.max_retries,
                 invoke=_invoke_responses_attempt,
-                should_retry=lambda exc: isinstance(exc, _StructuredValidationRetry)
-                or _check_retryable(exc, r),
+                should_retry=lambda exc: not isinstance(
+                    exc, _StructuredFinalizationFailure
+                )
+                and (
+                    isinstance(exc, _StructuredValidationRetry)
+                    or _check_retryable(exc, r)
+                ),
                 compute_delay=lambda attempt, exc: _compute_retry_delay(
                     attempt=attempt,
                     error=exc,
@@ -1791,18 +2101,23 @@ async def _acall_llm_structured_impl(
                 ),
                 warning_sink=_warnings,
                 logger=logger,
-                on_error=(hooks.on_error if hooks and hooks.on_error else None),
+                on_error=_on_responses_error_async,
                 on_retry=r.on_retry,
-                maybe_retry_hook=lambda exc, attempt, max_retries: _maybe_retry_with_openrouter_key_rotation(
-                    error=exc,
-                    attempt=attempt,
-                    max_retries=max_retries,
-                    current_model=current_model,
-                    current_api_base=current_api_base,
-                    user_kwargs=public_kwargs,
-                    warning_sink=_warnings,
-                    on_retry=r.on_retry,
-                    caller="acall_llm_structured",
+                on_decision=_record_responses_recovery_async,
+                maybe_retry_hook=lambda exc, attempt, max_retries: (
+                    False
+                    if isinstance(exc, _StructuredFinalizationFailure)
+                    else _maybe_retry_with_openrouter_key_rotation(
+                        error=exc,
+                        attempt=attempt,
+                        max_retries=max_retries,
+                        current_model=current_model,
+                        current_api_base=current_api_base,
+                        user_kwargs=public_kwargs,
+                        warning_sink=_warnings,
+                        on_retry=r.on_retry,
+                        caller="acall_llm_structured",
+                    )
                 ),
             ))
 
@@ -1847,10 +2162,10 @@ async def _acall_llm_structured_impl(
             def _native_attempt_ordinal_async(local_attempt: int) -> int:
                 """Assign one contiguous ordinal when an async attempt starts."""
 
-                nonlocal next_native_attempt_ordinal
+                nonlocal next_structured_attempt_ordinal
                 if local_attempt not in _attempt_ordinals_async:
-                    _attempt_ordinals_async[local_attempt] = next_native_attempt_ordinal
-                    next_native_attempt_ordinal += 1
+                    _attempt_ordinals_async[local_attempt] = next_structured_attempt_ordinal
+                    next_structured_attempt_ordinal += 1
                 return _attempt_ordinals_async[local_attempt]
 
             def _record_native_recovery_async(
@@ -1886,7 +2201,7 @@ async def _acall_llm_structured_impl(
             async def _invoke_native_schema_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal _pending_repair_message_async
                 logical_attempt = _native_attempt_ordinal_async(attempt)
-                native_attempt_costs.mark_started(logical_attempt)
+                structured_attempt_costs.mark_started(logical_attempt)
                 record_structured_attempt_event(
                     _attempt_event(
                         logical_call_id=_logical_call_id,
@@ -1929,7 +2244,7 @@ async def _acall_llm_structured_impl(
                     attempt_cost, attempt_cost_source = _parse_cost_result(
                         _compute_cost(response)
                     )
-                    native_attempt_costs.record_response(
+                    structured_attempt_costs.record_response(
                         logical_attempt,
                         cost=attempt_cost,
                         cost_source=attempt_cost_source,
@@ -1975,7 +2290,7 @@ async def _acall_llm_structured_impl(
                         background_mode=background_mode,
                         routing_policy=routing_policy,
                     )
-                    native_attempt_costs.apply(llm_result)
+                    structured_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
                         hooks.after_call(llm_result)
                     if cache is not None and key is not None:
