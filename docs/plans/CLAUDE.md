@@ -40,6 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 114 | [JSON-Schema-Native Bridge](114_json-schema-native-bridge.md) | High | ✅ Complete | learning-environment migration away from direct provider transport |
 | 113 | [Responses Structured Custody Reconciliation](113_responses_structured_custody_reconciliation.md) | Critical | 🧪 Implemented; focused verified | onto-canon6 Plan 0145 reviewed preprocessing replay |
 | 112 | [Provider Usage-Detail Observability](112_provider_usage_detail_observability.md) | High | ✅ Complete | Exact hidden-reasoning attribution in downstream cost experiments |
 | 111 | [All-Attempt Structured Cost Coverage](111_all_attempt_cost_coverage.md) | Critical | ✅ Complete | Honest recovered structured calls in strict-budget consumers |
