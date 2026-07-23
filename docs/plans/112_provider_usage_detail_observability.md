@@ -80,24 +80,39 @@ all findings are fixed or registered.
 - `llm_client/utils/cost_utils.py`
 - `llm_client/execution/responses_runtime.py`
 - `llm_client/io_log.py`
+- `llm_client/observability/query.py`
 - `llm_client/litellm_observer_callback.py`
 - `tests/test_client.py`
 - `tests/test_model_identity_contract.py`
 - `tests/test_io_log.py`
+- `tests/test_litellm_observer_callback.py`
 - `docs/adr/0007-observability-contract-boundary.md`
 - `docs/plans/CLAUDE.md`
 - this plan
 
 ## Required Tests
 
-| Test surface | What it verifies |
+### New Tests (TDD)
+
+| Test File | Test Function | What it verifies |
+|---|---|---|
+| `tests/test_client.py` | `test_extracts_bounded_provider_usage_details` | Completion details and scalar reasoning/cache counts survive without content |
+| `tests/test_model_identity_contract.py` | `test_responses_usage_preserves_bounded_token_details` | Responses output reasoning and input cache details survive |
+| `tests/test_io_log.py` | `test_writes_provider_usage_details_to_sqlite` | Fresh SQLite values and query API round-trip |
+| `tests/test_io_log.py` | `test_migrate_adds_trace_id` | Legacy schemas receive additive detail columns |
+| `tests/test_io_log.py` | `test_import_calls_preserves_usage_details` | Detail accounting survives JSONL import |
+| `tests/test_litellm_observer_callback.py` | `test_standard_logging_object_preserves_bounded_usage_details` | Catch-all callback retains counts without content |
+
+### Existing Tests (Must Pass)
+
+| Test Pattern | Why |
 |---|---|
-| Completion usage extraction | Nested details and scalar reasoning/cache counts survive |
-| Responses usage extraction | Output reasoning and input cache details survive |
-| SQLite fresh schema/write | Scalars and bounded details are queryable |
-| SQLite legacy migration | Columns are added without rewriting historical facts |
-| JSONL import | Detail accounting survives replay/import |
-| Negative controls | Missing, malformed, and content-bearing details do not invent counts or persist reasoning text |
+| `tests/test_client.py` | Completion runtime compatibility |
+| `tests/test_model_identity_contract.py` | Completion/Responses identity and extraction compatibility |
+| `tests/test_io_log.py` | JSONL, SQLite, migration, and query compatibility |
+| `tests/test_structured_runtime.py` | Structured Completion usage compatibility |
+| `tests/test_text_runtime.py` | Text Completion usage compatibility |
+| `tests/test_cost_source_ordering.py` | Provider billing precedence remains unchanged |
 
 ## Acceptance Criteria
 

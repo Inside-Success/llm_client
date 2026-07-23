@@ -187,6 +187,42 @@ class TestCallLLM:
         assert result.usage["completion_tokens"] == 5
         assert result.usage["total_tokens"] == 15
 
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_extracts_bounded_provider_usage_details(
+        self,
+        mock_comp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        response = _mock_response()
+        response.usage.prompt_tokens_details = SimpleNamespace(
+            cached_tokens=4,
+            cache_creation_tokens=2,
+        )
+        response.usage.completion_tokens_details = SimpleNamespace(
+            reasoning_tokens=3,
+            reasoning="must not persist",
+        )
+        mock_comp.return_value = response
+
+        result = call_llm(
+            "gpt-4",
+            [{"role": "user", "content": "Hi"}],
+            task="test",
+            trace_id="test_extracts_bounded_provider_usage_details",
+            max_budget=0,
+        )
+
+        assert result.usage["reasoning_tokens"] == 3
+        assert result.usage["cached_tokens"] == 4
+        assert result.usage["cache_creation_tokens"] == 2
+        assert result.usage["prompt_tokens_details"] == {
+            "cached_tokens": 4,
+            "cache_creation_tokens": 2,
+        }
+        assert result.usage["completion_tokens_details"] == {"reasoning_tokens": 3}
+        assert "must not persist" not in str(result.usage)
+
     @patch("llm_client.core.client.litellm.completion_cost", side_effect=Exception("no pricing"))
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_cost_fallback(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:

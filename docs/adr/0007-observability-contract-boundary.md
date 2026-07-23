@@ -1,11 +1,11 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-07-16
-Verification context: Experiment-run start now writes the canonical SQLite row
-before derivative JSONL evidence, so duplicate run_id reuse fails loudly rather
-than producing contradictory start records. Focused persistence and
-observability controls pass.
+Last verified: 2026-07-23
+Verification context: Provider-reported prompt and completion token details are
+preserved as bounded numeric metadata, with reasoning/cache counts queryable in
+SQLite. Hidden reasoning content and arbitrary provider payload fields remain
+outside the observability store.
 Date: 2026-02-23
 
 ## Context
@@ -29,7 +29,10 @@ persisted, how compatibility is preserved, and where behavior should evolve.
 6. The canonical tool-call surface exposes two explicit policies:
    - `log_tool_call` preserves compatibility best-effort behavior,
    - `log_tool_call_strict` is for pipeline-critical evidence and fails when
-     logging is disabled, the trace id is blank, or either configured sink fails.
+   logging is disabled, the trace id is blank, or either configured sink fails.
+7. LLM usage accounting preserves bounded provider-reported numeric token
+   details when available. Aggregate counts remain authoritative as reported;
+   missing detail fields are not inferred, and reasoning content is not stored.
 
 ## Consequences
 
@@ -52,6 +55,9 @@ Negative:
 5. Native-schema attempt tests must cover `started` before provider invocation,
    typed pre-response failure, and retry-kernel recovery disposition. Attempt
    events exclude exception messages and provider bodies.
+6. Usage-detail tests must cover Completion and Responses normalization, fresh
+   and migrated SQLite schemas, JSONL import, query round-trip, and
+   content-bearing negative controls.
 
 Last verified: 2026-07-14 (Plan 97 Slice 3 transport-attempt lifecycle).
 
