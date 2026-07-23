@@ -75,6 +75,12 @@ class LLMCallResult:
     """Billing mode: api_metered, subscription_included, or unknown."""
     marginal_cost: float | None = None
     """Incremental cost attributed to this call; defaults to ``cost`` when omitted."""
+    cost_covers_all_attempts: bool | None = None
+    """Whether ``cost`` covers every provider attempt behind this logical call.
+
+    ``None`` means the execution path does not expose enough attempt-level
+    evidence to make the claim. Native structured calls set this explicitly.
+    """
     cache_hit: bool = False
     """Whether this result came from cache instead of a model call."""
 

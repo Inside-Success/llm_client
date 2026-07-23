@@ -286,6 +286,50 @@ class _StructuredFinalizationFailure(Exception):
         super().__init__(str(cause) or type(cause).__name__)
 
 
+class _AttemptCostLedger:
+    """Aggregate priceable responses without inventing pre-response charges."""
+
+    def __init__(self) -> None:
+        self._started: set[int] = set()
+        self._observed: dict[int, tuple[float, str]] = {}
+
+    def mark_started(self, attempt_ordinal: int) -> None:
+        """Record that one provider attempt crossed the dispatch boundary."""
+
+        self._started.add(attempt_ordinal)
+
+    def record_response(
+        self,
+        attempt_ordinal: int,
+        *,
+        cost: float,
+        cost_source: str,
+    ) -> None:
+        """Bind one returned provider response to its observed price."""
+
+        if attempt_ordinal not in self._started:
+            raise RuntimeError("cannot price a structured attempt before it starts")
+        if attempt_ordinal in self._observed:
+            raise RuntimeError("structured attempt cost recorded more than once")
+        self._observed[attempt_ordinal] = (float(cost), cost_source)
+
+    def apply(self, result: LLMCallResult) -> None:
+        """Apply logical-call cost and exact coverage to a terminal result."""
+
+        observed = list(self._observed.values())
+        if observed:
+            total = sum(cost for cost, _source in observed)
+            result.cost = total
+            result.marginal_cost = total
+            if len(observed) > 1:
+                result.cost_source = "attempt_aggregate"
+            else:
+                result.cost_source = observed[0][1]
+        result.cost_covers_all_attempts = bool(self._started) and (
+            self._started == set(self._observed)
+        )
+
+
 def _prepare_raw_artifact_store_for_runtime() -> None:
     """Make raw-artifact configuration failure terminal for this public call."""
 
@@ -758,6 +802,7 @@ def _call_llm_structured_impl(
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
     next_native_attempt_ordinal = 0
+    native_attempt_costs = _AttemptCostLedger()
 
     def _execute_model(model_idx: int, current_model: str) -> tuple[T, LLMCallResult]:
         nonlocal last_model_attempted, next_native_attempt_ordinal
@@ -1010,6 +1055,7 @@ def _call_llm_structured_impl(
             def _invoke_native_schema_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal _pending_repair_message
                 logical_attempt = _native_attempt_ordinal(attempt)
+                native_attempt_costs.mark_started(logical_attempt)
                 record_structured_attempt_event(
                     _attempt_event(
                         logical_call_id=_logical_call_id,
@@ -1046,6 +1092,14 @@ def _call_llm_structured_impl(
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
                         raw_content=raw_content,
                     ))
+                    attempt_cost, attempt_cost_source = _parse_cost_result(
+                        _compute_cost(response)
+                    )
+                    native_attempt_costs.record_response(
+                        logical_attempt,
+                        cost=attempt_cost,
+                        cost_source=attempt_cost_source,
+                    )
                     try:
                         parsed = _robust_validate_json(response_model, raw_content)
                     except ValidationError as ve:
@@ -1065,7 +1119,7 @@ def _call_llm_structured_impl(
                         event_type="validated",
                     ))
                     usage = _extract_usage(response)
-                    cost, cost_source = _parse_cost_result(_compute_cost(response))
+                    cost, cost_source = attempt_cost, attempt_cost_source
                     finish_reason: str = first_choice.finish_reason or "stop"
 
                     if attempt > 0:
@@ -1087,6 +1141,7 @@ def _call_llm_structured_impl(
                         background_mode=background_mode,
                         routing_policy=routing_policy,
                     )
+                    native_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
                         hooks.after_call(llm_result)
                     if cache is not None and key is not None:
@@ -1532,6 +1587,7 @@ async def _acall_llm_structured_impl(
     _model_fqn = f"{response_model.__module__}.{response_model.__qualname__}"
     last_model_attempted = model
     next_native_attempt_ordinal = 0
+    native_attempt_costs = _AttemptCostLedger()
 
     async def _execute_model(model_idx: int, current_model: str) -> tuple[T, LLMCallResult]:
         nonlocal last_model_attempted, next_native_attempt_ordinal
@@ -1788,6 +1844,7 @@ async def _acall_llm_structured_impl(
             async def _invoke_native_schema_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 nonlocal _pending_repair_message_async
                 logical_attempt = _native_attempt_ordinal_async(attempt)
+                native_attempt_costs.mark_started(logical_attempt)
                 record_structured_attempt_event(
                     _attempt_event(
                         logical_call_id=_logical_call_id,
@@ -1827,6 +1884,14 @@ async def _acall_llm_structured_impl(
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
                         raw_content=raw_content,
                     ))
+                    attempt_cost, attempt_cost_source = _parse_cost_result(
+                        _compute_cost(response)
+                    )
+                    native_attempt_costs.record_response(
+                        logical_attempt,
+                        cost=attempt_cost,
+                        cost_source=attempt_cost_source,
+                    )
                     try:
                         parsed = _robust_validate_json(response_model, raw_content)
                     except ValidationError as ve:
@@ -1846,7 +1911,7 @@ async def _acall_llm_structured_impl(
                         event_type="validated",
                     ))
                     usage = _extract_usage(response)
-                    cost, cost_source = _parse_cost_result(_compute_cost(response))
+                    cost, cost_source = attempt_cost, attempt_cost_source
                     finish_reason: str = first_choice.finish_reason or "stop"
 
                     if attempt > 0:
@@ -1868,6 +1933,7 @@ async def _acall_llm_structured_impl(
                         background_mode=background_mode,
                         routing_policy=routing_policy,
                     )
+                    native_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
                         hooks.after_call(llm_result)
                     if cache is not None and key is not None:
