@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from llm_client.difficulty import (
-    DifficultyTier,
     get_effective_tier,
     get_model_for_difficulty,
     load_model_floors,
@@ -100,11 +98,12 @@ def test_deepseek_unavailable():
     assert _is_model_available("deepseek/deepseek-chat") is False
 
 
-def test_agent_models_always_available():
+def test_agent_models_available_unless_policy_banned():
     assert _is_model_available("codex") is True
     assert _is_model_available("claude-code") is True
     assert _is_model_available("codex/gpt-5.3-codex") is True
-    assert _is_model_available("claude-code/opus") is True
+    assert _is_model_available("claude-code/sonnet") is True
+    assert _is_model_available("claude-code/opus") is False
     assert _is_model_available("gpt-5.4") is True
     assert _is_model_available("openrouter/openai/gpt-5.4") is True
     # Codex-family models (bare, without codex/ prefix) should also be available

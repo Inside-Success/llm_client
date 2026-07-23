@@ -21,7 +21,7 @@ from llm_client.execution.call_contracts import (
 from llm_client.utils.cost_utils import _compute_cost, _extract_tool_calls, _extract_usage, _parse_cost_result
 from llm_client.core.config import ClientConfig
 from llm_client.core.data_types import LLMCallResult
-from llm_client.core.model_detection import _is_claude_model, _is_openai_reasoning_model, _is_responses_api_model, _is_thinking_model
+from llm_client.core.model_detection import _is_responses_api_model, _is_thinking_model
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
 from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
 from llm_client.utils.openrouter import _enable_openrouter_inline_metadata
@@ -76,16 +76,10 @@ def _prepare_call_kwargs(
     if api_base is not None:
         call_kwargs["api_base"] = api_base
 
-    _enable_openrouter_inline_metadata(model, call_kwargs)
-
-    if reasoning_effort and (_is_claude_model(model) or _is_openai_reasoning_model(model)):
+    if reasoning_effort:
         call_kwargs["reasoning_effort"] = reasoning_effort
-    elif reasoning_effort:
-        logger.debug(
-            "reasoning_effort=%s ignored for non-reasoning model %s",
-            reasoning_effort,
-            model,
-        )
+
+    _enable_openrouter_inline_metadata(model, call_kwargs)
 
     if _is_thinking_model(model) and "thinking" not in provider_kwargs:
         try:

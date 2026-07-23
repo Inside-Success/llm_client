@@ -160,17 +160,17 @@ class TestCallLLM:
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_reasoning_effort_for_claude(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:
         mock_comp.return_value = _mock_response()
-        call_llm("anthropic/claude-opus-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_reasoning_claude", max_budget=0)
+        call_llm("anthropic/claude-sonnet-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_reasoning_claude", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
         assert kwargs["reasoning_effort"] == "high"
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-    def test_reasoning_effort_ignored_for_non_claude(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:
+    def test_reasoning_effort_forwarded_for_non_claude(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:
         mock_comp.return_value = _mock_response()
         call_llm("gpt-4", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_reasoning_non_claude", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert "reasoning_effort" not in kwargs
+        assert kwargs["reasoning_effort"] == "high"
 
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_raises_on_error(self, mock_comp: MagicMock) -> None:
@@ -394,9 +394,34 @@ class TestAcallLLM:
     @patch("llm_client.core.client.litellm.acompletion")
     async def test_reasoning_effort_for_claude(self, mock_acomp: MagicMock, mock_cost: MagicMock) -> None:
         mock_acomp.return_value = _mock_response()
-        await acall_llm("anthropic/claude-opus-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_async_reasoning_claude", max_budget=0)
+        await acall_llm("anthropic/claude-sonnet-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_async_reasoning_claude", max_budget=0)
         kwargs = mock_acomp.call_args.kwargs
         assert kwargs["reasoning_effort"] == "high"
+
+    @pytest.mark.asyncio
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
+    @patch("llm_client.core.client.litellm.acompletion")
+    async def test_reasoning_effort_for_openrouter_deepseek(
+        self,
+        mock_acomp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        """Async calls preserve DeepSeek max effort through OpenRouter."""
+        mock_acomp.return_value = _mock_response()
+
+        await acall_llm(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "Hi"}],
+            reasoning_effort="max",
+            task="test",
+            trace_id="test_async_reasoning_deepseek_max",
+            max_budget=0,
+        )
+
+        kwargs = mock_acomp.call_args.kwargs
+        assert kwargs["reasoning_effort"] == "max"
+        assert kwargs["allowed_openai_params"] == ["reasoning_effort"]
+        assert kwargs["trace"]["trace_id"] == "test_async_reasoning_deepseek_max"
 
     @pytest.mark.asyncio
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
@@ -4454,6 +4479,69 @@ class TestModelDeprecation:
         from llm_client.core.errors import DeprecatedModelError
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*fable"):
             call_llm("anthropic/claude-fable-5", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_fable", max_budget=0)
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "anthropic/claude-opus-4-8",
+            "openrouter/anthropic/claude-opus-4.8",
+            "claude-code/opus",
+        ],
+    )
+    def test_opus_raises_before_any_execution_lane(self, model):
+        """Opus is banned for raw, routed, and workspace-agent calls."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*opus"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_depr_opus",
+                max_budget=0,
+            )
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "openrouter/auto",
+            "openrouter/auto-beta",
+            "@preset/account-default",
+            "openrouter/deepseek/deepseek-chat@preset/account-default",
+        ],
+    )
+    def test_opaque_model_selectors_raise_before_any_execution_lane(self, model):
+        """Account-side model selectors cannot prove that Opus is excluded."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_opaque_selector",
+                max_budget=0,
+            )
+
+    def test_opus_fallback_raises_before_primary_execution(self):
+        """The hard ban applies to every leg, not only the primary model."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with (
+            patch("litellm.completion") as mock_completion,
+            patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion,
+        ):
+            with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*opus"):
+                call_llm(
+                    "deepseek/deepseek-chat",
+                    [{"role": "user", "content": "hi"}],
+                    fallback_models=["openrouter/anthropic/claude-opus-4.8"],
+                    task="test",
+                    trace_id="test_opus_fallback",
+                    max_budget=0,
+                )
+        mock_completion.assert_not_called()
+        mock_acompletion.assert_not_called()
 
     def test_hard_block_not_bypassed_by_strict_env(self, monkeypatch):
         """Hard-blocked models raise even without LLM_CLIENT_STRICT_MODELS=1."""

@@ -40,7 +40,7 @@ artifacts:
   adversarial review of a patch, plan, decision, or text artifact. It is
   designed to run in the background while the foreground agent keeps working.
 - `python -m llm_client deliberate-task --help` runs a two-agent symmetric
-  debate, usually `codex/gpt-5.4` plus `claude-code/opus`, with persisted
+  debate, usually `codex/gpt-5.4` plus `claude-code/sonnet`, with persisted
   positions and synthesis.
 
 See [docs/guides/agent-collaboration.md](docs/guides/agent-collaboration.md)

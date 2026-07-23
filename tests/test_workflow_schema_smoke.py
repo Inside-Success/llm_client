@@ -49,7 +49,7 @@ pytestmark = [
 
 @pytest.mark.parametrize(
     "reviewer_model",
-    ["claude-code/opus", "codex/gpt-5.4"],
+    ["claude-code/sonnet", "codex/gpt-5.4"],
 )
 @pytest.mark.parametrize(
     "schema_cls",
@@ -95,7 +95,7 @@ def test_reviewer_schema_accepted_by_real_llm(
 
 @pytest.mark.parametrize(
     "reviewer_model",
-    ["claude-code/opus", "codex/gpt-5.4"],
+    ["claude-code/sonnet", "codex/gpt-5.4"],
 )
 def test_deliberation_position_accepted_by_real_llm(reviewer_model: str) -> None:
     """Same idea for the deliberation Position schema — verifies the

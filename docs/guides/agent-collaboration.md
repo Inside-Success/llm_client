@@ -13,7 +13,7 @@ pip install -e ".[workflow,structured,agents,codex]"
 ```
 
 Use the same auth that the agent SDKs expect for the selected models. The
-examples below assume `codex/gpt-5.4` and `claude-code/opus` are available in
+examples below assume `codex/gpt-5.4` and `claude-code/sonnet` are available in
 your local agent environment.
 
 ## Choose The Workflow
@@ -64,7 +64,7 @@ python -m llm_client review-artifact \
   --artifact-file /tmp/agent-collab.patch \
   --artifact-label "agent collaboration package" \
   --context-text "Review the packaged Claude/Codex collaboration workflow for correctness, missing docs, and scope drift." \
-  --reviewer claude-code/opus \
+  --reviewer claude-code/sonnet \
   --workspace "$PWD" \
   --out runs/background-review-agent-collab/review.json &
 ```
@@ -100,9 +100,9 @@ python -m llm_client deliberate-task \
   --task-file task.json \
   --workspace "$PWD" \
   --out runs/my-deliberation \
-  --agents agent_a:codex/gpt-5.4,agent_b:claude-code/opus \
+  --agents agent_a:codex/gpt-5.4,agent_b:claude-code/sonnet \
   --max-rounds 3 \
-  --synthesis-model claude-code/opus
+  --synthesis-model claude-code/sonnet
 ```
 
 Outputs include per-round positions, verifier ledgers when enabled, synthesis,

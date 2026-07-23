@@ -65,6 +65,14 @@ All notable changes to `llm-client` are documented in this file.
 
 ### Changed
 
+- Normalized reasoning controls now pass through generically. OpenRouter calls
+  declare lagging LiteLLM-compatible controls, require a provider that supports
+  them, and project local task/trace identity into the vendor Broadcast
+  envelope without replacing local execution evidence.
+- Opus-family models are hard-blocked across explicit routes, agent aliases,
+  fallback legs, provider model arrays, registries, and workflow defaults.
+  Opaque OpenRouter Auto Router and preset selection is rejected so an
+  account-side route cannot bypass the ban.
 - `call_llm` / `acall_llm` now use shared retry+fallback kernel paths instead
   of duplicated in-function retry/fallback loops.
 - Timeout/error observability hardening:

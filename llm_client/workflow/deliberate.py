@@ -65,7 +65,7 @@ ClaimSeverity = Literal["info", "warn", "high"]
 # at builder time or ``--agents`` at the CLI.
 DEFAULT_AGENT_PAIR: tuple[tuple[str, str], tuple[str, str]] = (
     ("agent_a", "codex/gpt-5.4"),
-    ("agent_b", "claude-code/opus"),
+    ("agent_b", "claude-code/sonnet"),
 )
 
 # Stage timeouts mirror the duet defaults — agent calls take minutes when
@@ -342,7 +342,7 @@ def _anonymize_peer_for_prompt(peer_latest: dict[str, Any]) -> dict[str, Any]:
 
     Replaces the peer's ``agent_name`` (e.g. ``"agent_a"``) with the neutral
     label ``"peer"`` and clears ``reviewer_model`` (which would otherwise leak
-    the underlying model identity like ``"claude-code/opus"`` /
+    the underlying model identity like ``"claude-code/sonnet"`` /
     ``"codex/gpt-5.4"``). The arXiv:2510.07517 result (Identity Bias in
     Multi-Agent Debate, 2025) shows prompt-level anonymization drops the
     conformity-obstinacy gap from 0.608 to 0.024 on MMLU; this is the cheapest
@@ -740,13 +740,13 @@ def build_deliberation_workflow(
         trace_id: Shared trace_id across all LLM calls in the run.
         max_budget: USD budget for the entire run.
         agents: List of ``(name, model)`` pairs. Defaults to the
-            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/opus).
+            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/sonnet).
             Two-agent only in v1; N-agent is a future extension.
         max_rounds: Cap on cycle count. Hitting this with residual
             disagreement promotes the verdict to ``productive_disagreement``.
         task_prefix: Task-label prefix for observability.
         synthesis_model: Model for the synthesis stage. Defaults to
-            ``claude-code/opus`` for structured-output reliability.
+            ``claude-code/sonnet`` for structured-output reliability.
         checkpointer: LangGraph checkpointer. Defaults to ``InMemorySaver``.
 
     Returns:
@@ -776,7 +776,7 @@ def build_deliberation_workflow(
     agent_a = DeliberationAgent(name=agent_a_name, model=agent_a_model)
     agent_b = DeliberationAgent(name=agent_b_name, model=agent_b_model)
 
-    resolved_synthesis = synthesis_model or "claude-code/opus"
+    resolved_synthesis = synthesis_model or "claude-code/sonnet"
 
     agent_a_node = _make_agent_position_node(agent_a, peer_name=agent_b_name)
     agent_b_node = _make_agent_position_node(agent_b, peer_name=agent_a_name)

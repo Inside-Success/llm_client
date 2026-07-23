@@ -27,10 +27,10 @@ Usage:
         max_budget=0,
     )
     result = call_llm(
-        "claude-code/opus",
+        "claude-code/sonnet",
         [{"role": "user", "content": "Review code"}],
         task="demo_agent",
-        trace_id="init/agent_opus",
+        trace_id="init/agent_sonnet",
         max_budget=0,
     )
 

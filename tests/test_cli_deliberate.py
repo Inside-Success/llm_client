@@ -13,15 +13,15 @@ import pytest
 def test_parse_agents_two_agents() -> None:
     from llm_client.cli.deliberate import _parse_agents
 
-    pairs = _parse_agents("a:codex/gpt-5.4,b:claude-code/opus")
-    assert pairs == [("a", "codex/gpt-5.4"), ("b", "claude-code/opus")]
+    pairs = _parse_agents("a:codex/gpt-5.4,b:claude-code/sonnet")
+    assert pairs == [("a", "codex/gpt-5.4"), ("b", "claude-code/sonnet")]
 
 
 def test_parse_agents_strips_whitespace() -> None:
     from llm_client.cli.deliberate import _parse_agents
 
-    pairs = _parse_agents("  a : codex/gpt-5.4 , b : claude-code/opus  ")
-    assert pairs == [("a", "codex/gpt-5.4"), ("b", "claude-code/opus")]
+    pairs = _parse_agents("  a : codex/gpt-5.4 , b : claude-code/sonnet  ")
+    assert pairs == [("a", "codex/gpt-5.4"), ("b", "claude-code/sonnet")]
 
 
 def test_parse_agents_rejects_malformed() -> None:
@@ -154,13 +154,13 @@ def test_cli_threads_explicit_agents_into_builder(tmp_path: Path, monkeypatch: p
 
     args = _make_cli_args(
         task_path, workspace, out,
-        agents="myA:codex/gpt-5.4,myB:claude-code/opus",
+        agents="myA:codex/gpt-5.4,myB:claude-code/sonnet",
     )
     cli_mod.cmd_deliberate_task(args)
 
     assert captured["agents"] == [
         ("myA", "codex/gpt-5.4"),
-        ("myB", "claude-code/opus"),
+        ("myB", "claude-code/sonnet"),
     ]
 
 

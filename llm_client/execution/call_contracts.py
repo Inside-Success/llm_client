@@ -453,7 +453,7 @@ def _is_codex_family_model(model: str) -> bool:
 def _is_agent_model(model: str) -> bool:
     """Check if model routes to an agent SDK instead of litellm.
 
-    Agent models like "claude-code" or "claude-code/opus" use the Claude
+    Agent models like "claude-code" or "claude-code/sonnet" use the Claude
     Agent SDK. "openai-agents/*" is reserved for future OpenAI Agents SDK.
     Codex-family models (e.g. "gpt-5.3-codex") are also recognized.
     """
@@ -610,8 +610,24 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "openrouter/auto": (
+        "an explicit, policy-approved model ID",
+        "OpenRouter Auto Router selects the final model account-side, so "
+        "llm_client cannot prove before dispatch that a banned model is excluded.",
+    ),
+    "@preset/": (
+        "an explicit, policy-approved model ID and provider routing kwargs",
+        "OpenRouter presets can replace the requested model or add fallbacks "
+        "account-side, so llm_client cannot enforce its model ban before dispatch.",
+    ),
+    "opus": (
+        "claude-code/sonnet for Claude workspace-agent review OR "
+        "the appropriate non-banned llm_client model tier for ordinary calls",
+        "Opus-family models are banned by ecosystem policy in every execution "
+        "lane, including raw provider routes and claude-code aliases.",
+    ),
     "fable": (
-        "openrouter/anthropic/claude-opus-4.8 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
+        "openrouter/openai/gpt-5.5 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
         "Fable-family models are banned by ecosystem policy. Do not use them for "
         "new calls, even with ordinary model_override_acceptance metadata.",
     ),
@@ -665,11 +681,6 @@ _DEPRECATED_MODELS: dict[str, tuple[str, str]] = {
         "anthropic/claude-sonnet-4-5-20250929 OR anthropic/claude-haiku-4-5-20251001",
         "Claude 3.5 models are superseded by 4.5 equivalents at the same price "
         "with better quality.",
-    ),
-    "claude-3-opus": (
-        "anthropic/claude-opus-4-6",
-        "Claude 3 Opus is superseded by Opus 4.5/4.6 at a lower price with "
-        "dramatically better quality.",
     ),
     "claude-3-sonnet": (
         "anthropic/claude-sonnet-4-5-20250929",

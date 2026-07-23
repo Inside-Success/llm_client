@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-23T05:07:13Z -->
+<!-- Generated: 2026-07-23T05:08:54Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -203,10 +203,10 @@ Usage:
         max_budget=0,
     )
     result = call_llm(
-        &quot;claude-code/opus&quot;,
+        &quot;claude-code/sonnet&quot;,
         [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Review code&quot;}],
         task=&quot;demo_agent&quot;,
-        trace_id=&quot;init/agent_opus&quot;,
+        trace_id=&quot;init/agent_sonnet&quot;,
         max_budget=0,
     )
 
@@ -1501,7 +1501,7 @@ Attributes:
   </thead>
   <tbody>
     <tr><td><code>ALLOW_LINE_TOKENS</code></td><td><code>(&#x27;model-policy: allow-raw-model&#x27;,)</code></td><td>tuple</td></tr>
-<tr><td><code>BANNED_MODEL_PATTERNS</code></td><td><code>frozenset({&#x27;fable&#x27;})</code></td><td>frozenset</td></tr>
+<tr><td><code>BANNED_MODEL_PATTERNS</code></td><td><code>frozenset({&#x27;fable&#x27;, &#x27;opus&#x27;})</code></td><td>frozenset</td></tr>
 <tr><td><code>CALL_RE</code></td><td><code>re.compile(&#x27;\\b(?:a?call_llm(?:_structured|_with_tools|_batch)?|stream_llm|astream_llm)\\(\\s*([\&#x27;\\&quot;])(?P&lt;model&gt;[^\&#x27;\\&quot;]+)\\1&#x27;)</code></td><td>Pattern</td></tr>
 <tr><td><code>CODE_EXTENSIONS</code></td><td><code>{&#x27;.ini&#x27;, &#x27;.json&#x27;, &#x27;.py&#x27;, &#x27;.toml&#x27;, &#x27;.yaml&#x27;, &#x27;.yml&#x27;}</code></td><td>set</td></tr>
 <tr><td><code>DEFAULT_MODEL_IDS</code></td><td><code>frozenset({&#x27;minimax-m3&#x27;, &#x27;minimax/minimax-m3&#x27;, &#x27;openrouter/minimax/minimax-m3&#x27;})</code></td><td>frozenset</td></tr>
@@ -3945,14 +3945,14 @@ specific line should use ``unverified_test_claims`` or a free-text
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-DuetRoles">
-  <summary><code>DuetRoles</code> <span class="sig">(*, plan: str = &#x27;codex/gpt-5.4&#x27;, plan_review: str = &#x27;claude-code/opus&#x27;, implement: str = &#x27;codex/gpt-5.4&#x27;, implement_review: str = &#x27;claude-code/opus&#x27;) -&gt; None</span></summary>
+  <summary><code>DuetRoles</code> <span class="sig">(*, plan: str = &#x27;codex/gpt-5.4&#x27;, plan_review: str = &#x27;claude-code/sonnet&#x27;, implement: str = &#x27;codex/gpt-5.4&#x27;, implement_review: str = &#x27;claude-code/sonnet&#x27;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Per-stage model assignment.</p>
     <p class="meta">Source: <code>llm_client.workflow.duet</code> class</p>
     <pre class="doc">Per-stage model assignment.
 
 Defaults to ``codex/gpt-5.4`` for implement stages and
-``claude-code/opus`` for review stages. Override per stage as needed.
+``claude-code/sonnet`` for review stages. Override per stage as needed.
 Operators with Codex API auth (not ChatGPT-account auth) can switch
 implement stages to ``codex/gpt-5-codex`` for stronger code performance.</pre>
 
@@ -4217,7 +4217,7 @@ or deny against the implementation diff.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-ReviewCycleTask">
-  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/opus&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0.0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0.0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/sonnet&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0.0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0.0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Configuration for one local review cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>
@@ -6295,9 +6295,9 @@ Usage::
         --task-file question.json \
         --workspace /abs/path/to/repo \
         --out runs/my-debate \
-        --agents agent_a:codex/gpt-5.4,agent_b:claude-code/opus \
+        --agents agent_a:codex/gpt-5.4,agent_b:claude-code/sonnet \
         --max-rounds 3 \
-        --synthesis-model claude-code/opus
+        --synthesis-model claude-code/sonnet
 
 The task file is JSON or YAML with at minimum ``task_id``, ``title``,
 ``question``. Optional: ``success_criteria`` (list), ``constraints`` (list),
@@ -6650,7 +6650,7 @@ Usage::
         --artifact-file /tmp/slice-12.patch \
         --artifact-label &quot;slice 12: barrier topology&quot; \
         --context-text &quot;Implementing Plan #35 barrier semantics; the agent_b prompt must not see agent_a freshest round-N output.&quot; \
-        --reviewer claude-code/opus \
+        --reviewer claude-code/sonnet \
         --workspace /path/to/repo \
         --out /tmp/review-slice-12.json &amp;
 
@@ -6955,7 +6955,7 @@ Supported providers (just change the model string):
     call_llm(&quot;ollama/llama3&quot;, messages)               # Local Ollama
     call_llm(&quot;bedrock/anthropic.claude-v2&quot;, messages)  # AWS Bedrock
     call_llm(&quot;claude-code&quot;, messages)                 # Claude Agent SDK
-    call_llm(&quot;claude-code/opus&quot;, messages)            # Claude Agent SDK (specific model)
+    call_llm(&quot;claude-code/sonnet&quot;, messages)          # Claude Agent SDK (specific model)
     call_llm(&quot;codex&quot;, messages)                       # Codex SDK
     call_llm(&quot;codex/gpt-5&quot;, messages)                 # Codex SDK (specific model)
 
@@ -6975,7 +6975,7 @@ Accepts both sync ``CachePolicy`` and async ``AsyncCachePolicy`` caches.
 Args:
     model: Model name (e.g., &quot;gpt-4o&quot;, &quot;gpt-5-mini&quot;,
            &quot;anthropic/claude-sonnet-4-5-20250929&quot;,
-           &quot;claude-code&quot;, &quot;claude-code/opus&quot;)
+           &quot;claude-code&quot;, &quot;claude-code/sonnet&quot;)
     messages: Chat messages in OpenAI format
     timeout: Request timeout in seconds
     num_retries: Number of retries on transient failure
@@ -7181,7 +7181,7 @@ Args:
     model: Model name (e.g., &quot;gpt-4o&quot;, &quot;gpt-5-mini&quot;,
            &quot;anthropic/claude-sonnet-4-5-20250929&quot;,
            &quot;gemini/gemini-2.0-flash&quot;, &quot;claude-code&quot;,
-           &quot;claude-code/opus&quot;)
+           &quot;claude-code/sonnet&quot;)
     messages: Chat messages in OpenAI format
               [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello&quot;}]
     timeout: Request timeout in seconds
@@ -10564,7 +10564,7 @@ re-exported from agents.py for backward compatibility.</pre>
     <tr><th>Name</th><th>Value</th><th>Type</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>CLAUDE_CODE_MODEL_ALIASES</code></td><td><code>{&#x27;haiku&#x27;: &#x27;claude-haiku-4-5-20251001&#x27;, &#x27;opus&#x27;: &#x27;claude-opus-4-7&#x27;, &#x27;sonnet&#x27;: &#x27;claude-sonnet-4-6&#x27;}</code></td><td>dict</td></tr>
+    <tr><td><code>CLAUDE_CODE_MODEL_ALIASES</code></td><td><code>{&#x27;haiku&#x27;: &#x27;claude-haiku-4-5-20251001&#x27;, &#x27;sonnet&#x27;: &#x27;claude-sonnet-4-6&#x27;}</code></td><td>dict</td></tr>
   </tbody>
 </table>
 
@@ -12317,13 +12317,13 @@ Args:
     trace_id: Shared trace_id across all LLM calls in the run.
     max_budget: USD budget for the entire run.
     agents: List of ``(name, model)`` pairs. Defaults to the
-        ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/opus).
+        ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/sonnet).
         Two-agent only in v1; N-agent is a future extension.
     max_rounds: Cap on cycle count. Hitting this with residual
         disagreement promotes the verdict to ``productive_disagreement``.
     task_prefix: Task-label prefix for observability.
     synthesis_model: Model for the synthesis stage. Defaults to
-        ``claude-code/opus`` for structured-output reliability.
+        ``claude-code/sonnet`` for structured-output reliability.
     checkpointer: LangGraph checkpointer. Defaults to ``InMemorySaver``.
 
 Returns:
@@ -12589,7 +12589,7 @@ when the ledger is empty.</pre>
     <tr><th>Name</th><th>Value</th><th>Type</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>DEFAULT_AGENT_PAIR</code></td><td><code>((&#x27;agent_a&#x27;, &#x27;codex/gpt-5.4&#x27;), (&#x27;agent_b&#x27;, &#x27;claude-code/opus&#x27;))</code></td><td>tuple</td></tr>
+    <tr><td><code>DEFAULT_AGENT_PAIR</code></td><td><code>((&#x27;agent_a&#x27;, &#x27;codex/gpt-5.4&#x27;), (&#x27;agent_b&#x27;, &#x27;claude-code/sonnet&#x27;))</code></td><td>tuple</td></tr>
   </tbody>
 </table>
 
@@ -12923,14 +12923,14 @@ specific line should use ``unverified_test_claims`` or a free-text
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-duet-DuetRoles">
-  <summary><code>DuetRoles</code> <span class="sig">(*, plan: str = &#x27;codex/gpt-5.4&#x27;, plan_review: str = &#x27;claude-code/opus&#x27;, implement: str = &#x27;codex/gpt-5.4&#x27;, implement_review: str = &#x27;claude-code/opus&#x27;) -&gt; None</span></summary>
+  <summary><code>DuetRoles</code> <span class="sig">(*, plan: str = &#x27;codex/gpt-5.4&#x27;, plan_review: str = &#x27;claude-code/sonnet&#x27;, implement: str = &#x27;codex/gpt-5.4&#x27;, implement_review: str = &#x27;claude-code/sonnet&#x27;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Per-stage model assignment.</p>
     <p class="meta">Source: <code>llm_client.workflow.duet</code> class</p>
     <pre class="doc">Per-stage model assignment.
 
 Defaults to ``codex/gpt-5.4`` for implement stages and
-``claude-code/opus`` for review stages. Override per stage as needed.
+``claude-code/sonnet`` for review stages. Override per stage as needed.
 Operators with Codex API auth (not ChatGPT-account auth) can switch
 implement stages to ``codex/gpt-5-codex`` for stronger code performance.</pre>
 
@@ -13637,7 +13637,7 @@ contracts so tests can prove loop safety without model credentials.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-workflow-review_cycle-ReviewCycleTask">
-  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/opus&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0.0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0.0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
+  <summary><code>ReviewCycleTask</code> <span class="sig">(*, task_id: str, artifact_paths: list[str], workspace_path: str, review_profile: str = &#x27;generic&#x27;, reviewer_model: str = &#x27;claude-code/sonnet&#x27;, implementer_model: str = &#x27;codex/gpt-5.4&#x27;, max_cycles: Annotated[int, Ge(ge=1)] = 3, max_budget: Annotated[float, Ge(ge=0.0)] = 10.0, per_call_max_budget: Annotated[float, Ge(ge=0.0)] = 2.0, out_dir: str | None = None, allow_workspace_wide_edits: bool = False, runtime_cache_carveouts: list[typing.Literal[&#x27;python_bytecode&#x27;]] = &lt;factory&gt;) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Configuration for one local review cycle run.</p>
     <p class="meta">Source: <code>llm_client.workflow.review_cycle</code> class</p>

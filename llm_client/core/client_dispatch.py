@@ -31,6 +31,7 @@ from llm_client.execution.call_contracts import (
     _DEPRECATED_MODEL_EXCEPTIONS,
     _DEPRECATED_MODELS,
     _WARNED_MODELS,
+    _check_model_deprecation,
 )
 from llm_client.core.config import ClientConfig
 from llm_client.core.data_types import LLMCallResult
@@ -101,6 +102,8 @@ def _resolve_call_plan(
         CallRequest(model=model, fallback_models=fallback_models, api_base=api_base),
         cfg,
     )
+    for resolved_model in resolved_plan.models:
+        _check_model_deprecation(resolved_model)
     available_models, suppressed_models = filter_available_models(resolved_plan.models)
     if not available_models:
         suppressed_summary = ", ".join(

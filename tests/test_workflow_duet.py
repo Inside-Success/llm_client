@@ -257,9 +257,9 @@ def test_duet_uses_role_assignment(harness: _DuetHarness, tmp_path: Path) -> Non
     harness.impl_reviews = [ImplementReview(verdict="pass")]
 
     roles = DuetRoles(
-        plan="claude-code/opus",
+        plan="claude-code/sonnet",
         plan_review="codex/gpt-5-codex",
-        implement="claude-code/opus",
+        implement="claude-code/sonnet",
         implement_review="codex/gpt-5-codex",
     )
     app, init = build_duet_workflow(
@@ -272,9 +272,9 @@ def test_duet_uses_role_assignment(harness: _DuetHarness, tmp_path: Path) -> Non
     _run(app, init, "t-roles")
 
     by_kind = dict(harness.call_log)
-    assert by_kind["plan"] == "claude-code/opus"
+    assert by_kind["plan"] == "claude-code/sonnet"
     assert by_kind["plan_review"] == "codex/gpt-5-codex"
-    assert by_kind["implement"] == "claude-code/opus"
+    assert by_kind["implement"] == "claude-code/sonnet"
     assert by_kind["implement_review"] == "codex/gpt-5-codex"
 
 
