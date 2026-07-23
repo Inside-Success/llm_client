@@ -46,6 +46,7 @@ def _mock_responses_api_output(raw_json: str) -> MagicMock:
     response.usage.output_tokens = 5
     response.usage.total_tokens = 15
     response.usage.input_tokens_details.cached_tokens = 0
+    response.usage.output_tokens_details.reasoning_tokens = 0
     response.usage.cost = None
     return response
 
@@ -65,6 +66,34 @@ class _StructuredPayload(BaseModel):
 
 
 class TestModelIdentityContract:
+    @patch("llm_client.core.client.litellm.responses")
+    def test_responses_usage_preserves_bounded_token_details(
+        self,
+        mock_responses: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "off")
+        response = _mock_responses_api_output('{"message":"Hi"}')
+        response.usage.input_tokens_details.cached_tokens = 6
+        response.usage.output_tokens_details.reasoning_tokens = 7
+        response.usage.output_tokens_details.reasoning = "must not persist"
+        mock_responses.return_value = response
+
+        _, result = call_llm_structured(
+            "gpt-5",
+            [{"role": "user", "content": "Hi"}],
+            _StructuredPayload,
+            task="test",
+            trace_id="identity.responses.usage-details",
+            max_budget=0,
+        )
+
+        assert result.usage["cached_tokens"] == 6
+        assert result.usage["reasoning_tokens"] == 7
+        assert result.usage["prompt_tokens_details"] == {"cached_tokens": 6}
+        assert result.usage["completion_tokens_details"] == {"reasoning_tokens": 7}
+        assert "must not persist" not in str(result.usage)
+
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_sync_identity_fields_with_explicit_routing_off(

@@ -187,6 +187,42 @@ class TestCallLLM:
         assert result.usage["completion_tokens"] == 5
         assert result.usage["total_tokens"] == 15
 
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_extracts_bounded_provider_usage_details(
+        self,
+        mock_comp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        response = _mock_response()
+        response.usage.prompt_tokens_details = SimpleNamespace(
+            cached_tokens=4,
+            cache_creation_tokens=2,
+        )
+        response.usage.completion_tokens_details = SimpleNamespace(
+            reasoning_tokens=3,
+            reasoning="must not persist",
+        )
+        mock_comp.return_value = response
+
+        result = call_llm(
+            "gpt-4",
+            [{"role": "user", "content": "Hi"}],
+            task="test",
+            trace_id="test_extracts_bounded_provider_usage_details",
+            max_budget=0,
+        )
+
+        assert result.usage["reasoning_tokens"] == 3
+        assert result.usage["cached_tokens"] == 4
+        assert result.usage["cache_creation_tokens"] == 2
+        assert result.usage["prompt_tokens_details"] == {
+            "cached_tokens": 4,
+            "cache_creation_tokens": 2,
+        }
+        assert result.usage["completion_tokens_details"] == {"reasoning_tokens": 3}
+        assert "must not persist" not in str(result.usage)
+
     @patch("llm_client.core.client.litellm.completion_cost", side_effect=Exception("no pricing"))
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_cost_fallback(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:
@@ -3955,6 +3991,39 @@ class TestGPT5StructuredOutput:
         assert "name" in fmt["schema"]["properties"]
         assert fmt["schema"]["additionalProperties"] is False
 
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.responses")
+    def test_structured_gpt5_repairs_local_validation_error(
+        self, mock_resp: MagicMock, mock_cost: MagicMock
+    ) -> None:
+        """Responses API retries local schema failures with actionable feedback."""
+        from pydantic import Field
+
+        class Item(BaseModel):
+            count: int = Field(ge=1)
+
+        mock_resp.side_effect = [
+            _mock_responses_api_response(output_text='{"count": 0}'),
+            _mock_responses_api_response(output_text='{"count": 1}'),
+        ]
+
+        result, _ = call_llm_structured(
+            "gpt-5-mini",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            num_retries=1,
+            base_delay=0,
+            task="test",
+            trace_id="test_gpt5_structured_repair",
+            max_budget=0,
+        )
+
+        assert result.count == 1
+        assert mock_resp.call_count == 2
+        repair_input = mock_resp.call_args_list[1].kwargs["input"]
+        assert isinstance(repair_input, str)
+        assert "User: Your previous response was valid JSON but failed schema validation" in repair_input
+
     @pytest.mark.asyncio
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.aresponses")
@@ -3975,6 +4044,40 @@ class TestGPT5StructuredOutput:
         )
         assert result.name == "async_test"
         mock_aresp.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.aresponses", new_callable=AsyncMock)
+    async def test_async_structured_gpt5_repairs_local_validation_error(
+        self, mock_aresp: AsyncMock, mock_cost: MagicMock
+    ) -> None:
+        """Async Responses API uses the same local validation repair contract."""
+        from pydantic import Field
+
+        class Item(BaseModel):
+            count: int = Field(ge=1)
+
+        mock_aresp.side_effect = [
+            _mock_responses_api_response(output_text='{"count": 0}'),
+            _mock_responses_api_response(output_text='{"count": 1}'),
+        ]
+
+        result, _ = await acall_llm_structured(
+            "gpt-5-mini",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            num_retries=1,
+            base_delay=0,
+            task="test",
+            trace_id="test_async_gpt5_structured_repair",
+            max_budget=0,
+        )
+
+        assert result.count == 1
+        assert mock_aresp.call_count == 2
+        repair_input = mock_aresp.call_args_list[1].kwargs["input"]
+        assert isinstance(repair_input, str)
+        assert "User: Your previous response was valid JSON but failed schema validation" in repair_input
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.completion")

@@ -51,6 +51,20 @@ def _native_response(content: str) -> MagicMock:
     return response
 
 
+def _responses_response(content: str) -> MagicMock:
+    """Build a Responses-API structured response for custody verification."""
+
+    response = MagicMock()
+    response.output_text = content
+    response.status = "completed"
+    response.output = []
+    response.usage.input_tokens = 1
+    response.usage.output_tokens = 1
+    response.usage.total_tokens = 2
+    response.usage.cost = None
+    return response
+
+
 @pytest.fixture(autouse=True)
 def _isolated_observability(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -99,6 +113,175 @@ def test_raw_artifacts_are_disabled_by_default(tmp_path: Path) -> None:
     assert prepare_structured_raw_artifact_store() is False
     assert write_structured_raw_artifact("logical-1", 0, '{"action":"accept"}') is None
     assert not (tmp_path / "llm_client_structured_raw").exists()
+
+
+# mock-ok: provider bytes are controlled; runtime lifecycle, SQLite joining, and
+# sidecar reopening are real.
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.responses")
+def test_responses_api_selected_output_has_exact_raw_custody(
+    responses: MagicMock, _cost: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Responses structured output is replayable like Completions output."""
+
+    _enable(monkeypatch)
+    raw = '{\n"action":"accept"\n}'
+    responses.return_value = _responses_response(raw)
+
+    parsed, result = call_llm_structured(
+        "gpt-5.6-terra",
+        [{"role": "user", "content": "Choose"}],
+        response_model=_Decision,
+        task="raw-artifact.responses",
+        trace_id="trace-raw-responses",
+        max_budget=0,
+        num_retries=0,
+    )
+
+    assert parsed.action == "accept"
+    assert result.logical_call_id is not None
+    receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
+    selected = get_runtime_selected_raw_content(result.logical_call_id)
+    events = get_structured_attempt_events(result.logical_call_id)
+    assert [event.event_type for event in events] == [
+        "started",
+        "received",
+        "validated",
+    ]
+    assert all(event.execution_path == "responses_api" for event in events)
+    assert receipt.raw_artifact_ref is not None
+    assert selected.raw_content == raw
+
+
+# mock-ok: both provider responses are controlled while retry, persistence,
+# aggregate cost, and selected-attempt reconciliation execute normally.
+@patch(
+    "llm_client.core.client.litellm.completion_cost",
+    side_effect=[0.001, 0.002],
+)
+@patch("llm_client.core.client.litellm.responses")
+def test_responses_api_validation_repair_retains_both_attempts_and_cost(
+    responses: MagicMock, _cost: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A paid invalid response remains visible after successful repair."""
+
+    _enable(monkeypatch)
+    responses.side_effect = [
+        _responses_response("{}"),
+        _responses_response('{"action":"accept"}'),
+    ]
+
+    parsed, result = call_llm_structured(
+        "gpt-5.6-terra",
+        [{"role": "user", "content": "Choose"}],
+        response_model=_Decision,
+        task="raw-artifact.responses.repair",
+        trace_id="trace-raw-responses-repair",
+        max_budget=0,
+        num_retries=1,
+        base_delay=0,
+        max_delay=0,
+    )
+
+    assert parsed.action == "accept"
+    assert result.logical_call_id is not None
+    assert result.cost == pytest.approx(0.003)
+    assert result.cost_source == "attempt_aggregate"
+    assert result.cost_covers_all_attempts is True
+    events = get_structured_attempt_events(result.logical_call_id)
+    assert [event.event_type for event in events] == [
+        "started",
+        "received",
+        "validation_failed",
+        "recovery_decided",
+        "started",
+        "received",
+        "validated",
+    ]
+    assert events[3].recovery_decision == "retry"
+    assert get_runtime_selected_raw_content(
+        result.logical_call_id
+    ).raw_content == '{"action":"accept"}'
+
+
+# mock-ok: provider failure and response are controlled; fallback routing,
+# logical ordinals, cost coverage, and custody execute normally.
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.002)
+@patch("llm_client.core.client.litellm.responses")
+@patch("llm_client.core.client.litellm.completion")
+def test_responses_api_fallback_keeps_one_logical_attempt_history(
+    completion: MagicMock,
+    responses: MagicMock,
+    _cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Responses model fallback preserves one contiguous custody history."""
+
+    _enable(monkeypatch)
+    responses.side_effect = TimeoutError("provider timeout")
+    completion.return_value = _native_response('{"action":"accept"}')
+
+    _parsed, result = call_llm_structured(
+        "gpt-5.6-terra",
+        [{"role": "user", "content": "Choose"}],
+        response_model=_Decision,
+        task="raw-artifact.responses.fallback",
+        trace_id="trace-raw-responses-fallback",
+        max_budget=0,
+        num_retries=0,
+        fallback_models=["gpt-5.6-luna"],
+    )
+
+    assert result.logical_call_id is not None
+    assert result.cost == pytest.approx(0.002)
+    assert result.cost_covers_all_attempts is False
+    events = get_structured_attempt_events(result.logical_call_id)
+    assert [event.attempt_ordinal for event in events] == [0, 0, 0, 1, 1, 1]
+    assert [event.event_type for event in events] == [
+        "started",
+        "execution_failed",
+        "recovery_decided",
+        "started",
+        "received",
+        "validated",
+    ]
+    assert events[2].recovery_decision == "fallback"
+    assert events[0].model != events[-1].model
+    assert get_runtime_selected_raw_content(
+        result.logical_call_id
+    ).raw_content == '{"action":"accept"}'
+
+
+# mock-ok: provider bytes are controlled; async runtime and custody are real.
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.aresponses", new_callable=AsyncMock)
+async def test_async_responses_api_selected_output_has_exact_raw_custody(
+    responses: AsyncMock, _cost: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Async direct Responses output has the same custody contract."""
+
+    _enable(monkeypatch)
+    raw = '{"action":"accept"}'
+    responses.return_value = _responses_response(raw)
+
+    parsed, result = await acall_llm_structured(
+        "gpt-5.6-terra",
+        [{"role": "user", "content": "Choose"}],
+        response_model=_Decision,
+        task="raw-artifact.responses.async",
+        trace_id="trace-raw-responses-async",
+        max_budget=0,
+        num_retries=0,
+    )
+
+    assert parsed.action == "accept"
+    assert result.logical_call_id is not None
+    assert get_runtime_selected_raw_content(result.logical_call_id).raw_content == raw
+    assert [
+        event.event_type
+        for event in get_structured_attempt_events(result.logical_call_id)
+    ] == ["started", "received", "validated"]
 
 
 def test_enabled_store_requires_observability_logging(

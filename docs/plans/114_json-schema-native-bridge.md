@@ -1,4 +1,4 @@
-# Plan #113: JSON-Schema-Native Bridge
+# Plan #114: JSON-Schema-Native Bridge
 
 **Status:** Complete
 **Type:** implementation
@@ -7,6 +7,10 @@
 **Blocks:** learning-environment migration away from direct provider transport
 
 ---
+
+This plan was initially allocated number 113. A concurrent mainline plan used
+that number before integration, so this authority was renumbered to 114 during
+the current-main merge.
 
 ## Gap
 
@@ -72,7 +76,7 @@ the existing repair-retry path.
 - `tests/test_cli_json_schema_call.py` (create)
 - `tests/test_cli_smoke.py` (modify if command inventory requires it)
 - `docs/API_REFERENCE.md` and `docs/API_REFERENCE.html` (regenerate)
-- `docs/plans/113_json-schema-native-bridge.md` (create/update)
+- `docs/plans/114_json-schema-native-bridge.md` (create/update)
 - `docs/plans/CLAUDE.md` (modify)
 
 ---
@@ -126,7 +130,8 @@ the existing repair-retry path.
 ## Completion Evidence
 
 - Focused wrapper and CLI tests: `11 passed`.
-- Full repository suite: `1836 passed, 3 skipped, 12 deselected`.
+- Full repository suite after current-main integration:
+  `1849 passed, 3 skipped, 12 deselected`.
 - Ruff and strict mypy: passed.
 - Generated API reference drift check: passed.
 - Strict relationship validation and `git diff --check`: passed.
