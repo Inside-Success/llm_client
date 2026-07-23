@@ -4455,6 +4455,20 @@ class TestModelDeprecation:
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*fable"):
             call_llm("anthropic/claude-fable-5", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_fable", max_budget=0)
 
+    @pytest.mark.parametrize("model", ["gpt-5.5", "openrouter/openai/gpt-5.5"])
+    def test_gpt55_raises(self, model: str):
+        """GPT-5.5 is retired across direct and OpenRouter route aliases."""
+        from llm_client.core.errors import DeprecatedModelError
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.5"):
+            call_llm(model, [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_gpt55", max_budget=0)
+
+    @pytest.mark.parametrize("model", ["gpt-5.4-mini", "openrouter/openai/gpt-5.4-mini"])
+    def test_gpt54_mini_raises(self, model: str):
+        """GPT-5.4 Mini is retired across direct and OpenRouter route aliases."""
+        from llm_client.core.errors import DeprecatedModelError
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.4-mini"):
+            call_llm(model, [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_gpt54mini", max_budget=0)
+
     def test_hard_block_not_bypassed_by_strict_env(self, monkeypatch):
         """Hard-blocked models raise even without LLM_CLIENT_STRICT_MODELS=1."""
         from llm_client.core.errors import DeprecatedModelError

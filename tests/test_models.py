@@ -40,6 +40,12 @@ def _reset():
 
 
 class TestGetModel:
+    def test_retired_gpt_models_are_absent_from_registry(self):
+        """Selectable registry must not advertise hard-blocked model families."""
+        identifiers = {model["litellm_id"] for model in _load_packaged_default_config()["models"]}
+        assert not any("gpt-5.5" in identifier for identifier in identifiers)
+        assert not any("gpt-5.4-mini" in identifier for identifier in identifiers)
+
     def test_openrouter_gpt56_planner_routes_are_registered(self):
         """Current OpenRouter planner candidates expose their tested capabilities."""
 

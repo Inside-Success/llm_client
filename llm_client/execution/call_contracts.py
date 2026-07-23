@@ -610,6 +610,18 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "gpt-5.5": (
+        "gpt-5.6 (Sol) OR gpt-5.6-terra",
+        "GPT-5.5 is superseded by the GPT-5.6 family. GPT-5.6 Sol Medium has "
+        "higher current general intelligence at the same listed price; retain "
+        "a task-specific benchmark only as historical evidence, not a live route.",
+    ),
+    "gpt-5.4-mini": (
+        "openrouter/openai/gpt-5.6-luna OR gpt-5.6-terra",
+        "GPT-5.4 Mini is retired from ecosystem routing. Use Luna for bounded "
+        "low-cost decisions after route evidence, or Terra for stronger judgment; "
+        "do not retain Mini as a fallback.",
+    ),
     "fable": (
         "openrouter/anthropic/claude-opus-4.8 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
         "Fable-family models are banned by ecosystem policy. Do not use them for "
