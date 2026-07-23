@@ -882,10 +882,25 @@ def _call_llm_structured_impl(
                 }
             }
 
+            response_input = str(resp_kwargs["input"])
+            pending_repair_message: dict[str, str] | None = None
+
             def _invoke_responses_attempt(attempt: int) -> tuple[T, LLMCallResult]:
+                nonlocal pending_repair_message
+                call_kwargs = dict(resp_kwargs)
+                if pending_repair_message is not None:
+                    call_kwargs["input"] = (
+                        f"{response_input}\n\nUser: {pending_repair_message['content']}"
+                    )
+                    pending_repair_message = None
+                    logger.info(
+                        "call_llm_structured: appended validation repair message for responses attempt %d",
+                        attempt,
+                    )
+
                 def provider_call() -> Any:
                     with _rate_limit.acquire(current_model):
-                        return litellm.responses(**resp_kwargs)
+                        return litellm.responses(**call_kwargs)
 
                 try:
                     response = _run_sync_with_deadline(provider_call, timeout=timeout)
@@ -899,7 +914,12 @@ def _call_llm_structured_impl(
                 raw_content = getattr(response, "output_text", None) or ""
                 if not raw_content.strip():
                     raise ValueError("Empty content from LLM (responses API structured)")
-                parsed = _robust_validate_json(response_model, raw_content)
+                try:
+                    parsed = _robust_validate_json(response_model, raw_content)
+                except ValidationError as exc:
+                    retry_exc = _StructuredValidationRetry(raw_content, exc)
+                    pending_repair_message = _build_validation_repair_message(retry_exc)
+                    raise retry_exc from exc
                 usage = _extract_responses_usage(response)
                 cost, cost_source = _parse_cost_result(
                     _compute_responses_cost(response, usage),
@@ -951,7 +971,8 @@ def _call_llm_structured_impl(
                 model=current_model,
                 max_retries=r.max_retries,
                 invoke=_invoke_responses_attempt,
-                should_retry=lambda exc: _check_retryable(exc, r),
+                should_retry=lambda exc: isinstance(exc, _StructuredValidationRetry)
+                or _check_retryable(exc, r),
                 compute_delay=lambda attempt, exc: _compute_retry_delay(
                     attempt=attempt,
                     error=exc,
@@ -1667,11 +1688,26 @@ async def _acall_llm_structured_impl(
                 }
             }
 
+            response_input = str(resp_kwargs["input"])
+            pending_repair_message_async: dict[str, str] | None = None
+
             async def _invoke_responses_attempt(attempt: int) -> tuple[T, LLMCallResult]:
+                nonlocal pending_repair_message_async
+                call_kwargs = dict(resp_kwargs)
+                if pending_repair_message_async is not None:
+                    call_kwargs["input"] = (
+                        f"{response_input}\n\nUser: {pending_repair_message_async['content']}"
+                    )
+                    pending_repair_message_async = None
+                    logger.info(
+                        "acall_llm_structured: appended validation repair message for responses attempt %d",
+                        attempt,
+                    )
+
                 async def provider_call() -> Any:
                     async with _rate_limit.aacquire(current_model):
                         return await _await_with_safety_ceiling(
-                            litellm.aresponses(**resp_kwargs),
+                            litellm.aresponses(**call_kwargs),
                             caller="acall_llm_structured.responses_api",
                             model=current_model,
                         )
@@ -1688,7 +1724,12 @@ async def _acall_llm_structured_impl(
                 raw_content = getattr(response, "output_text", None) or ""
                 if not raw_content.strip():
                     raise ValueError("Empty content from LLM (responses API structured)")
-                parsed = _robust_validate_json(response_model, raw_content)
+                try:
+                    parsed = _robust_validate_json(response_model, raw_content)
+                except ValidationError as exc:
+                    retry_exc = _StructuredValidationRetry(raw_content, exc)
+                    pending_repair_message_async = _build_validation_repair_message(retry_exc)
+                    raise retry_exc from exc
                 usage = _extract_responses_usage(response)
                 cost, cost_source = _parse_cost_result(
                     _compute_responses_cost(response, usage),
@@ -1740,7 +1781,8 @@ async def _acall_llm_structured_impl(
                 model=current_model,
                 max_retries=r.max_retries,
                 invoke=_invoke_responses_attempt,
-                should_retry=lambda exc: _check_retryable(exc, r),
+                should_retry=lambda exc: isinstance(exc, _StructuredValidationRetry)
+                or _check_retryable(exc, r),
                 compute_delay=lambda attempt, exc: _compute_retry_delay(
                     attempt=attempt,
                     error=exc,
