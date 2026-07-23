@@ -610,6 +610,16 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "openrouter/auto": (
+        "an explicit, policy-approved model ID",
+        "OpenRouter Auto Router selects the final model account-side, so "
+        "llm_client cannot prove before dispatch that a banned model is excluded.",
+    ),
+    "@preset/": (
+        "an explicit, policy-approved model ID and provider routing kwargs",
+        "OpenRouter presets can replace the requested model or add fallbacks "
+        "account-side, so llm_client cannot enforce its model ban before dispatch.",
+    ),
     "opus": (
         "claude-code/sonnet for Claude workspace-agent review OR "
         "the appropriate non-banned llm_client model tier for ordinary calls",

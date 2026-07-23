@@ -39,7 +39,8 @@ an invariant, not a UI preference.
 - `docs/adr/0007-observability-contract-boundary.md`,
   `docs/adr/0010-cross-project-runtime-substrate.md`, and
   `docs/adr/0015-provider-governance-and-shared-coordination.md`.
-- OpenRouter API parameter, reasoning-token, and Broadcast documentation.
+- OpenRouter API parameter, reasoning-token, Broadcast, Auto Router, provider
+  selection, preset, fallback, and Guardrail documentation.
 - DeepSeek V4 thinking-mode documentation.
 - LiteLLM DeepSeek reasoning documentation and the retained upstream V4 effort
   loss issue.
@@ -48,7 +49,10 @@ The zero-spend dependency probe reproduced the upstream seam: direct DeepSeek
 collapsed graded effort to a thinking toggle, while OpenRouter rejected
 `reasoning_effort` unless it appeared in `allowed_openai_params`. Plan 110
 therefore declares the normalized control at the OpenRouter transport boundary;
-it does not add a DeepSeek application branch.
+it does not add a DeepSeek application branch. The adversarial audit also found
+two vendor-routing seams: OpenRouter may ignore unsupported parameters unless
+`provider.require_parameters` is true, and account-side Auto Router/presets can
+replace an explicit model after `llm_client`'s pre-dispatch check.
 
 ---
 
@@ -87,11 +91,12 @@ runtime ban, static audit, registry, workflow defaults, docs, and deterministic
 tests.
 
 **De-risks:** silent parameter loss and incomplete bans hidden behind agent
-aliases/defaults.
+aliases/defaults, fallback legs, or opaque account-side model selection.
 
 **Success:** focused tests prove exact provider kwargs and trace merge,
-pre-dispatch raw/agent Opus rejection, no selectable Opus registry entry, and
-non-Opus defaults.
+parameter-capable OpenRouter routing, pre-dispatch raw/agent/fallback Opus
+rejection, rejection of opaque model selectors, no selectable Opus registry
+entry, and non-Opus defaults.
 
 **Audit:** search every active source/config/default for Opus; attack caller
 trace precedence, explicit OpenRouter API-base routing, async/structured paths,
@@ -132,8 +137,8 @@ are dispositioned, and both concern registers are triaged.
 
 | Test File | Test | What It Verifies |
 |---|---|---|
-| `tests/test_provider_kwargs.py` | DeepSeek reasoning and Broadcast metadata cases | Generic parameter forwarding and caller-preserving trace projection |
-| `tests/test_client.py` | Opus raw and workspace-agent cases | Every runtime lane fails before dispatch |
+| `tests/test_provider_kwargs.py` | DeepSeek reasoning, capability-required provider routing, Broadcast metadata, and opaque-selector cases | Generic parameter forwarding, fail-loud capability handling, policy-safe payloads, and caller-preserving trace projection |
+| `tests/test_client.py` | Opus raw, workspace-agent, fallback, Auto Router, and preset cases | Every runtime and selection lane fails before dispatch |
 | `tests/test_model_policy_audit.py` | Opus with override acceptance | Static ban cannot be bypassed |
 | `tests/test_models.py` | packaged registry and max tier | Opus is absent and a non-banned tier resolves |
 | workflow/CLI focused tests | default model assertions | No executable default selects Opus |
@@ -146,10 +151,13 @@ remain green.
 ## Acceptance Criteria
 
 - [x] DeepSeek/OpenRouter `reasoning_effort="max"` is not silently discarded.
+- [x] OpenRouter routes carrying normalized controls require provider support
+      rather than allowing unsupported parameters to be ignored.
 - [x] OpenRouter Broadcast metadata receives task/trace identity without
       overriding caller fields.
 - [x] Local observability remains authoritative and unchanged.
-- [x] All Opus routes and aliases are hard-blocked before dispatch.
+- [x] All explicit Opus routes, aliases, and fallback legs are hard-blocked
+      before dispatch; opaque OpenRouter model selectors are rejected.
 - [x] Registry, audit, workflows, CLI help, and active examples do not select
       Opus.
 - [x] Focused tests and feasible repository gates pass.
@@ -158,10 +166,15 @@ remain green.
 
 ## Slice 1 Verification Evidence
 
-- Plan gate: 328 tests passed.
+- Plan gate: 341 tests passed.
 - Broader affected surface: 560 tests passed, 10 deselected.
 - Exact installed-LiteLLM, zero-network normalization test preserves
   `reasoning_effort="max"` for the OpenRouter DeepSeek request.
+- OpenRouter provider sorting remains caller-controlled while
+  `require_parameters=true` is enforced for normalized controls; explicit
+  opt-out fails before dispatch.
+- Auto Router, presets, auto-router plugins, and Opus-bearing provider model
+  arrays fail before dispatch. Fixed explicit models remain supported.
 - Strict relationship validation, generated API-reference refresh, JSON/YAML
   parsing, focused Ruff, and `git diff --check` pass.
 - Active-tree audit leaves `opus` only in the hard-ban implementation,

@@ -4501,6 +4501,48 @@ class TestModelDeprecation:
                 max_budget=0,
             )
 
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "openrouter/auto",
+            "openrouter/auto-beta",
+            "@preset/account-default",
+            "openrouter/deepseek/deepseek-chat@preset/account-default",
+        ],
+    )
+    def test_opaque_model_selectors_raise_before_any_execution_lane(self, model):
+        """Account-side model selectors cannot prove that Opus is excluded."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_opaque_selector",
+                max_budget=0,
+            )
+
+    def test_opus_fallback_raises_before_primary_execution(self):
+        """The hard ban applies to every leg, not only the primary model."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with (
+            patch("litellm.completion") as mock_completion,
+            patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion,
+        ):
+            with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*opus"):
+                call_llm(
+                    "deepseek/deepseek-chat",
+                    [{"role": "user", "content": "hi"}],
+                    fallback_models=["openrouter/anthropic/claude-opus-4.8"],
+                    task="test",
+                    trace_id="test_opus_fallback",
+                    max_budget=0,
+                )
+        mock_completion.assert_not_called()
+        mock_acompletion.assert_not_called()
+
     def test_hard_block_not_bypassed_by_strict_env(self, monkeypatch):
         """Hard-blocked models raise even without LLM_CLIENT_STRICT_MODELS=1."""
         from llm_client.core.errors import DeprecatedModelError

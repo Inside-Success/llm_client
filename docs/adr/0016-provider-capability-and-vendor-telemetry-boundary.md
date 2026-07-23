@@ -28,7 +28,9 @@ enforcement.
 
 The user also requires Opus-family models to be unavailable through
 `llm_client`, including workspace-agent aliases. A ban that applies only to raw
-chat routes would be misleading.
+chat routes would be misleading. OpenRouter Auto Router, presets, and provider
+fallback arrays can select a final model after the primary model string is
+checked, so opaque model selection is also inside the ban's threat model.
 
 ## Decision
 
@@ -37,7 +39,9 @@ chat routes would be misleading.
    rejecting the control. `llm_client` must not silently discard it.
    When an installed LiteLLM capability table lags a documented OpenRouter
    normalized control, the OpenRouter transport declares that control through
-   LiteLLM's `allowed_openai_params` compatibility seam.
+   LiteLLM's `allowed_openai_params` compatibility seam and sets
+   `provider.require_parameters=true`. A caller may still choose provider
+   sorting and fallback policy, but may not opt into silently ignored controls.
 2. The existing broad provider-kwargs surface remains the escape hatch for new
    provider features that do not yet have a normalized public option.
 3. For OpenRouter calls, `llm_client` projects its required `task` and
@@ -50,7 +54,13 @@ chat routes would be misleading.
 5. Opus-family model IDs and aliases are hard-blocked before dispatch in every
    execution mode. The model registry, model-policy audit, public examples, and
    workflow defaults must not select Opus.
-6. Claude workspace-agent defaults that previously selected Opus move to
+6. Every resolved fallback leg is checked. OpenRouter Auto Router, presets, and
+   the auto-router plugin are rejected because their candidate sets are not
+   locally inspectable; provider `models`/`fallbacks` arrays are accepted only
+   when they contain no banned or opaque selector. Fixed-model provider sorting
+   remains supported. Account Guardrails are recommended defense in depth, not
+   a substitute for local enforcement.
+7. Claude workspace-agent defaults that previously selected Opus move to
    Sonnet. The ordinary `max_intelligence` tier selects the best remaining
    non-banned registered candidate under its existing ordering; this decision
    does not create a special replacement route.
@@ -71,7 +81,8 @@ Positive:
 1. Newly standardized controls can work without adding model-family branches.
 2. OpenRouter users can enable existing observability destinations without
    application instrumentation while retaining local forensic evidence.
-3. Opus cannot be reached indirectly through agent aliases or defaults.
+3. Opus cannot be reached indirectly through agent aliases, defaults,
+   fallbacks, Auto Router, or presets.
 
 Negative:
 
@@ -80,6 +91,8 @@ Negative:
 2. Local and vendor traces may both exist and need a shared trace identifier.
 3. Existing workflows that depended on Opus change model behavior when their
    defaults move to Sonnet.
+4. Callers cannot use account-side model selectors while the non-overridable
+   local model ban is active; they must request an explicit model.
 
 ## Testing Contract
 
@@ -88,8 +101,10 @@ Negative:
 2. OpenRouter calls must merge `task` and `trace_id` into Broadcast metadata
    while preserving explicit caller fields; non-OpenRouter calls must not gain
    the vendor envelope.
-3. Raw Opus IDs, OpenRouter Opus IDs, and `claude-code/opus` must all fail before
-   provider or agent dispatch.
+3. Raw Opus IDs, OpenRouter Opus IDs, `claude-code/opus`, Opus fallback legs,
+   Auto Router, and presets must all fail before provider or agent dispatch.
 4. Opus must not appear as a selectable packaged-registry model or workflow
    default.
 5. Local observability tests remain unchanged and green.
+6. OpenRouter reasoning controls must set `provider.require_parameters=true`,
+   preserve other provider-routing fields, and reject an explicit false value.

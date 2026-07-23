@@ -171,6 +171,49 @@ def _is_openrouter_call(model: str, api_base: str | None) -> bool:
     return "openrouter.ai" in base_lower
 
 
+def _reject_unsafe_openrouter_model_selection(call_kwargs: Mapping[str, Any]) -> None:
+    """Reject payload-level routes that can bypass pre-dispatch model policy."""
+
+    primary_model = str(call_kwargs.get("model", "") or "").strip().lower()
+    if primary_model in {"auto", "auto-beta", "openrouter/auto", "openrouter/auto-beta"}:
+        raise ValueError(
+            "OpenRouter model-selection policy rejects Auto Router; "
+            "use an explicit policy-approved model ID"
+        )
+
+    if call_kwargs.get("preset") is not None:
+        raise ValueError(
+            "OpenRouter model-selection policy rejects account-side presets; "
+            "use an explicit policy-approved model ID"
+        )
+
+    plugins = call_kwargs.get("plugins")
+    if isinstance(plugins, (list, tuple)):
+        for plugin in plugins:
+            if isinstance(plugin, Mapping) and str(plugin.get("id", "")).lower() == "auto-router":
+                raise ValueError(
+                    "OpenRouter model-selection policy rejects the auto-router plugin; "
+                    "use an explicit policy-approved model ID"
+                )
+
+    for key in ("models", "fallbacks"):
+        candidates = call_kwargs.get(key)
+        if candidates is None:
+            continue
+        if not isinstance(candidates, (list, tuple)):
+            raise TypeError(f"{key} must be a sequence")
+        for candidate in candidates:
+            if isinstance(candidate, Mapping):
+                candidate = candidate.get("model")
+            model_id = str(candidate or "").strip().lower()
+            if not model_id:
+                continue
+            # Import lazily to keep the utility module acyclic at import time.
+            from llm_client.execution.call_contracts import _check_model_deprecation
+
+            _check_model_deprecation(model_id)
+
+
 def _enable_openrouter_inline_metadata(
     model: str,
     call_kwargs: dict[str, Any],
@@ -196,6 +239,8 @@ def _enable_openrouter_inline_metadata(
     ):
         return
 
+    _reject_unsafe_openrouter_model_selection(call_kwargs)
+
     normalized_present = sorted(
         key for key in _OPENROUTER_NORMALIZED_PASSTHROUGH_PARAMS if key in call_kwargs
     )
@@ -210,6 +255,21 @@ def _enable_openrouter_inline_metadata(
         call_kwargs["allowed_openai_params"] = sorted(
             set([*allowed, *normalized_present])
         )
+
+        configured_provider = call_kwargs.get("provider")
+        if configured_provider is None:
+            provider: dict[str, Any] = {}
+        elif isinstance(configured_provider, Mapping):
+            provider = dict(configured_provider)
+        else:
+            raise TypeError("provider must be a mapping")
+        if provider.get("require_parameters") is False:
+            raise ValueError(
+                "OpenRouter provider.require_parameters=False would allow a "
+                "normalized control to be silently ignored"
+            )
+        provider["require_parameters"] = True
+        call_kwargs["provider"] = provider
 
     configured = call_kwargs.get("extra_headers")
     if configured is None:

@@ -42,13 +42,33 @@ result = call_llm_structured(
 `llm_client` forwards normalized controls without a model-family allowlist.
 OpenRouter transport explicitly admits those documented controls through
 LiteLLM even when the installed LiteLLM capability table lags the provider.
-Unsupported controls fail at the transport/provider boundary rather than being
-silently discarded.
+It also requires a provider route that supports the controls. Unsupported
+controls fail at the transport/provider boundary rather than being silently
+discarded.
 
 New provider options do not require a new `llm_client` feature merely to pass
 through. Public calls already accept broad provider kwargs. Promote an option
 to a named public control only when it has stable cross-provider meaning,
 requires shared validation, or must be bound into replay/policy.
+
+### OpenRouter routing settings
+
+Provider selection and model selection are different:
+
+- Provider sorting such as OpenRouter's balanced default may choose which
+  upstream serves a fixed explicit model. `llm_client` preserves these settings.
+- Auto Router, presets, and the auto-router plugin may choose a different final
+  model. They are rejected because `llm_client` cannot inspect the account-side
+  candidate set before enforcing its non-overridable model bans.
+- Provider `models` and `fallbacks` arrays are checked for banned or opaque
+  candidates before dispatch.
+- An OpenRouter Guardrail model allowlist is useful defense in depth. Do not use
+  `anthropic/*` when Opus must be excluded: the wildcard includes every
+  Anthropic model. Prefer explicit approved model IDs.
+
+An account-level default model does not replace an explicit model in a normal
+`llm_client` call. Keep explicit model selection in code/config and use
+OpenRouter provider routing only to choose a compatible endpoint.
 
 ## Local and Vendor Observability
 
@@ -162,9 +182,10 @@ bounded direct-route evidence; Luna remains a provider-declared capability,
 not a `llm_client` selection default or an observed result.
 
 Fable- and Opus-family models are banned. They must not appear in the registry,
-project config, direct `call_llm(...)` calls, workspace-agent aliases, or
-override fields. Generic `model_override_acceptance` does not authorize either
-family.
+project config, direct `call_llm(...)` calls, fallback chains, provider model
+arrays, workspace-agent aliases, or override fields. Opaque account-side model
+selectors are rejected. Generic `model_override_acceptance` does not authorize
+either family.
 
 ## Should every project register through `llm_client`?
 
