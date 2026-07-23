@@ -41,6 +41,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
 | 108 | [Agent-schema Responses compatibility](108_agent_schema_responses_compatibility.md) | High | ✅ Complete | Cybernetic simulator exact-schema route certification |
+| 109 | [Billing-Identity Observability](109_billing_identity_observability.md) | Medium | ⏸️ Deferred | Exact provider-dashboard spend reconciliation by account/credential |
 | 107 | [Direct GPT-5.6 Route Registration](107_gpt56_direct_route_registration.md) | High | ✅ Complete | Direct GPT-5.6 Sol and Terra strict-schema routes explicitly selectable; no automatic tier-default change |
 | 106 | [Direct GPT-5.5 Structured Capability Truth](106_gpt55_structured_capability_truth.md) | High | ↩️ Superseded | Its alleged direct result was an OpenRouter-proxy route; corrected by Plan 107 |
 | 105 | [Personal and Inside Success Fork Reconciliation](105_inside_success_fork_reconciliation.md) | High | ✅ Complete | A single current `llm_client` line for personal and Inside Success consumers |
