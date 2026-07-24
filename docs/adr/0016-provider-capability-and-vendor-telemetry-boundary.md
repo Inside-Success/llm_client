@@ -4,6 +4,25 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-07-23 Amendment: Explicit Reasoning Policy
+
+Plan #117 makes reasoning selection an explicit pre-dispatch policy for exact
+allowlisted routes that expose configurable effort. Omission is no longer
+interpreted as provider default. The caller must resolve an effort, including
+`none` for explicit off where supported; unsupported values, forbidden off
+states, and incompatible fallback chains fail locally.
+
+Reviewed per-model capability metadata is enforcement authority. LiteLLM and
+provider transports still own payload translation. `llm_client` does not fetch
+mutable provider metadata during calls or implement provider-specific
+application payloads. The resolved policy is bound into routing evidence,
+replay identity, and cache identity.
+
+Direct Gemini's prior automatic thinking default is superseded for governed
+reasoning-policy calls. Codex receives the same normalized decision through its
+SDK-specific `model_reasoning_effort` transport rather than choosing `high`
+when omitted.
+
 ## 2026-07-23 Amendment: Exact Model Execution Allowlist
 
 Plan #115 supersedes this ADR's ban-oriented model-selection policy while

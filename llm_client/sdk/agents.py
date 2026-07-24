@@ -22,7 +22,7 @@ import concurrent.futures
 import json as _json
 import logging
 import os
-from typing import Any, Awaitable, Callable, TypeVar, cast
+from typing import Any, Awaitable, Callable, TypeVar
 
 from pydantic import BaseModel
 
@@ -217,38 +217,22 @@ _AGENT_KWARGS = frozenset({
 _CODEX_PROCESS_ISOLATION_ENV = "LLM_CLIENT_CODEX_PROCESS_ISOLATION"
 _CODEX_PROCESS_START_METHOD_ENV = "LLM_CLIENT_CODEX_PROCESS_START_METHOD"
 _CODEX_PROCESS_GRACE_ENV = "LLM_CLIENT_CODEX_PROCESS_GRACE_S"
-_CODEX_ALLOW_MINIMAL_EFFORT_ENV = "LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT"
 _CODEX_TRANSPORT_ENV = "LLM_CLIENT_CODEX_TRANSPORT"
 
 
 def _normalize_codex_reasoning_effort(value: Any) -> str:
-    """Normalize Codex reasoning effort to SDK-accepted values.
+    """Validate an explicit Codex reasoning effort without coercion."""
 
-    Some Codex-backed models reject ``xhigh``; normalize aliases to
-    minimal/low/medium/high and default to ``high`` when omitted.
-    """
-    raw = str(value or "").strip().lower()
-    if not raw:
-        return "high"
+    if value is None or not str(value).strip():
+        raise ValueError(
+            "Codex requires explicit reasoning_effort: low, medium, or high"
+        )
+    raw = str(value).strip().lower()
     if raw in {"low", "medium", "high"}:
         return raw
-    if raw == "minimal":
-        # Codex ChatGPT-account lanes can reject minimal effort because the
-        # platform auto-enables web_search tooling. Keep a controlled override
-        # for environments where minimal has been validated.
-        if _as_bool(os.environ.get(_CODEX_ALLOW_MINIMAL_EFFORT_ENV), default=False):
-            return "minimal"
-        logger.warning(
-            "Codex model_reasoning_effort=minimal is often rejected by the platform; "
-            "coercing to low (set %s=1 to force minimal).",
-            _CODEX_ALLOW_MINIMAL_EFFORT_ENV,
-        )
-        return "low"
-    if raw in {"xhigh", "very_high", "highest", "max"}:
-        return "high"
-    if raw in {"none", "off", "disabled"}:
-        return "minimal"
-    return "high"
+    raise ValueError(
+        f"Unsupported Codex reasoning effort {value!r}; allowed: low, medium, high"
+    )
 
 
 def _apply_agent_yolo_defaults(agent_name: str, agent_kw: dict[str, Any]) -> dict[str, Any]:

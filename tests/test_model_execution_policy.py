@@ -7,11 +7,14 @@ import pytest
 from llm_client import call_llm
 from llm_client.core.client_dispatch import _resolve_call_plan
 from llm_client.core.config import ClientConfig
+from llm_client.core.data_types import _cache_key
 from llm_client.core.errors import LLMConfigurationError
 from llm_client.core.model_execution_policy import (
     ALLOWED_EXECUTION_MODELS,
     DEFAULT_EXECUTION_MODEL,
+    REASONING_CAPABILITIES,
     evaluate_model_execution_policy,
+    evaluate_reasoning_policy,
 )
 
 
@@ -28,15 +31,17 @@ def _mock_response() -> MagicMock:
     return response
 
 
-def test_default_route_needs_no_justification() -> None:
+def test_default_route_needs_no_justification_but_requires_reasoning_policy() -> None:
     decision = evaluate_model_execution_policy(
         [DEFAULT_EXECUTION_MODEL],
         mode="enforce_allowlist",
+        reasoning_effort="NONE",
     )
 
     assert decision.enforced is True
     assert decision.uses_only_default is True
     assert decision.justification is None
+    assert decision.reasoning_policy.effort == "none"
 
 
 def test_allowed_alternate_requires_and_records_justification() -> None:
@@ -45,6 +50,7 @@ def test_allowed_alternate_requires_and_records_justification() -> None:
         [alternate],
         mode="enforce_allowlist",
         justification="Hard semantic review requires the certified Terra route.",
+        reasoning_effort="low",
     )
 
     assert alternate in ALLOWED_EXECUTION_MODELS
@@ -59,6 +65,7 @@ def test_allowed_alternate_without_justification_fails() -> None:
         evaluate_model_execution_policy(
             ["openrouter/openai/gpt-5.6-terra"],
             mode="enforce_allowlist",
+            reasoning_effort="low",
         )
 
 
@@ -88,6 +95,7 @@ def test_unjustified_fallback_rejects_the_whole_chain() -> None:
             api_base=None,
             config=ClientConfig(routing_policy="openrouter"),
             model_policy="enforce_allowlist",
+            reasoning_effort="none",
         )
 
 
@@ -99,12 +107,64 @@ def test_resolved_plan_records_alternate_justification() -> None:
         config=ClientConfig(routing_policy="openrouter"),
         model_policy="enforce_allowlist",
         model_justification="Use the reviewed Terra planner route.",
+        reasoning_effort="low",
     )
 
     assert plan.primary_model == "openrouter/openai/gpt-5.6-terra"
     assert plan.routing_trace["model_policy"]["justification"] == (
         "Use the reviewed Terra planner route."
     )
+    assert plan.routing_trace["model_policy"]["reasoning_policy"]["effort"] == "low"
+
+
+def test_configurable_reasoning_model_rejects_omission() -> None:
+    with pytest.raises(LLMConfigurationError, match="reasoning_effort is required"):
+        evaluate_reasoning_policy(
+            [DEFAULT_EXECUTION_MODEL],
+            reasoning_effort=None,
+        )
+
+
+def test_mandatory_reasoning_model_rejects_explicit_off() -> None:
+    with pytest.raises(LLMConfigurationError, match="none.*forbidden"):
+        evaluate_reasoning_policy(
+            ["openrouter/x-ai/grok-4.5"],
+            reasoning_effort="none",
+        )
+
+
+def test_model_rejects_unsupported_effort_before_provider_remapping() -> None:
+    with pytest.raises(LLMConfigurationError, match="unsupported.*allowed"):
+        evaluate_reasoning_policy(
+            [DEFAULT_EXECUTION_MODEL],
+            reasoning_effort="medium",
+        )
+
+
+def test_fallback_chain_requires_one_effort_valid_for_every_configurable_leg() -> None:
+    with pytest.raises(LLMConfigurationError, match="unsupported for"):
+        evaluate_reasoning_policy(
+            [
+                "openrouter/openai/gpt-5.6-terra",
+                "openrouter/deepseek/deepseek-v4-flash",
+            ],
+            reasoning_effort="low",
+        )
+
+
+def test_reasoning_capability_routes_are_all_allowlisted() -> None:
+    assert set(REASONING_CAPABILITIES).issubset(ALLOWED_EXECUTION_MODELS)
+
+
+def test_reasoning_effort_changes_cache_identity() -> None:
+    messages = [{"role": "user", "content": "same"}]
+
+    keys = {
+        _cache_key(DEFAULT_EXECUTION_MODEL, messages, reasoning_effort=effort)
+        for effort in ("none", "high", "xhigh")
+    }
+
+    assert len(keys) == 3
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -124,12 +184,38 @@ def test_public_default_call_enforces_without_provider_policy_kwargs(
         task="test",
         trace_id="test-model-allowlist-default",
         max_budget=0,
+        reasoning_effort="NONE",
     )
 
     assert result.routing_trace["model_policy"]["uses_only_default"] is True
+    assert (
+        result.routing_trace["model_policy"]["reasoning_policy"]["effort"]
+        == "none"
+    )
     provider_kwargs = completion.call_args.kwargs
+    assert provider_kwargs["reasoning_effort"] == "none"
     assert "model_policy" not in provider_kwargs
     assert "model_justification" not in provider_kwargs
+
+
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+def test_public_default_call_rejects_omitted_reasoning_before_dispatch(
+    completion: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "on")
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
+
+    with pytest.raises(LLMConfigurationError, match="reasoning_effort is required"):
+        call_llm(
+            DEFAULT_EXECUTION_MODEL,
+            [{"role": "user", "content": "hello"}],
+            task="test",
+            trace_id="test-reasoning-policy-required",
+            max_budget=0,
+        )
+
+    completion.assert_not_awaited()
 
 
 @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)

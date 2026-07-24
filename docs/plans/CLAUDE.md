@@ -40,6 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 117 | [Explicit Reasoning Policy](117_explicit_reasoning_policy.md) | Critical | ✅ Complete | Cost- and latency-controlled reasoning-model execution |
 | 116 | [Ecosystem Allowlist Cutover](116_ecosystem-allowlist-cutover.md) | Critical | ✅ Complete | Unconditional allowed-model enforcement |
 | 115 | [Allowed-Model Execution Policy](115_allowed-model-execution-policy.md) | Critical | ✅ Complete | Safe cross-project model-policy enforcement |
 | 114 | [JSON-Schema-Native Bridge](114_json-schema-native-bridge.md) | High | ✅ Complete | learning-environment migration away from direct provider transport |

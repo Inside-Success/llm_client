@@ -442,22 +442,22 @@ class TestAcallLLM:
         mock_acomp: MagicMock,
         mock_cost: MagicMock,
     ) -> None:
-        """Async calls preserve DeepSeek max effort through OpenRouter."""
+        """Async calls preserve DeepSeek xhigh effort through OpenRouter."""
         mock_acomp.return_value = _mock_response()
 
         await acall_llm(
             "openrouter/deepseek/deepseek-v4-flash",
             [{"role": "user", "content": "Hi"}],
-            reasoning_effort="max",
+            reasoning_effort="xhigh",
             task="test",
-            trace_id="test_async_reasoning_deepseek_max",
+            trace_id="test_async_reasoning_deepseek_xhigh",
             max_budget=0,
         )
 
         kwargs = mock_acomp.call_args.kwargs
-        assert kwargs["reasoning_effort"] == "max"
+        assert kwargs["reasoning_effort"] == "xhigh"
         assert kwargs["allowed_openai_params"] == ["reasoning_effort"]
-        assert kwargs["trace"]["trace_id"] == "test_async_reasoning_deepseek_max"
+        assert kwargs["trace"]["trace_id"] == "test_async_reasoning_deepseek_xhigh"
 
     @pytest.mark.asyncio
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
@@ -1289,35 +1289,33 @@ class TestOpenRouterKeyRotation:
 
 
 class TestThinkingModelDetection:
-    """Tests for automatic thinking model configuration."""
+    """Tests that direct Gemini no longer receives automatic thinking config."""
 
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-    def test_gemini_3_gets_thinking_config(
+    def test_gemini_3_does_not_get_automatic_thinking_config(
         self,
         mock_comp: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         mock_comp.return_value = _mock_response()
-        call_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini3_thinking", max_budget=0)
+        call_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], reasoning_effort="low", task="test", trace_id="test_gemini3_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert kwargs["reasoning_effort"] == "low"
+        assert "thinking" not in kwargs
 
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-    def test_gemini_4_gets_thinking_config(
+    def test_gemini_4_does_not_get_automatic_thinking_config(
         self,
         mock_comp: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         mock_comp.return_value = _mock_response()
-        call_llm("gemini/gemini-4-pro", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini4_thinking", max_budget=0)
+        call_llm("gemini/gemini-4-pro", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_gemini4_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert kwargs["reasoning_effort"] == "high"
+        assert "thinking" not in kwargs
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1352,28 +1350,25 @@ class TestThinkingModelDetection:
         assert kwargs["thinking"] == custom
 
     @pytest.mark.asyncio
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion")
-    async def test_async_gemini_3_gets_thinking_config(
+    async def test_async_gemini_3_does_not_get_automatic_thinking_config(
         self,
         mock_acomp: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         mock_acomp.return_value = _mock_response()
-        await acall_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gemini3_thinking", max_budget=0)
+        await acall_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], reasoning_effort="low", task="test", trace_id="test_async_gemini3_thinking", max_budget=0)
         kwargs = mock_acomp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert kwargs["reasoning_effort"] == "low"
+        assert "thinking" not in kwargs
 
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("instructor.from_litellm")
-    def test_structured_gemini_3_gets_thinking_config(
+    def test_structured_gemini_3_does_not_get_automatic_thinking_config(
         self,
         mock_from_litellm: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         class Item(BaseModel):
             name: str
@@ -1391,12 +1386,14 @@ class TestThinkingModelDetection:
             "gemini/gemini-3-flash",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
+            reasoning_effort="low",
             task="test",
             trace_id="test_structured_gemini3_thinking",
             max_budget=0,
         )
         call_kwargs = mock_client.chat.completions.create_with_completion.call_args.kwargs
-        assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert call_kwargs["reasoning_effort"] == "low"
+        assert "thinking" not in call_kwargs
 
 
 class TestStripFences:

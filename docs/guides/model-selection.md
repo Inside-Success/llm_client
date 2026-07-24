@@ -15,6 +15,7 @@ New and migrated production callers use:
 result = call_llm(
     "openrouter/deepseek/deepseek-v4-flash",
     messages,
+    reasoning_effort="none",
     task="bounded_decision",
     trace_id=trace_id,
     max_budget=0.05,
@@ -40,6 +41,7 @@ result = call_llm(
     "codex/gpt-5.4",
     messages,
     execution_mode="workspace_agent",
+    reasoning_effort="medium",
     task="repo_edit",
     trace_id=trace_id,
     max_budget=5.00,
@@ -48,8 +50,9 @@ result = call_llm(
 
 ## Provider Capabilities
 
-Use normalized public controls when one exists. For example, DeepSeek V4 Flash
-max reasoning through OpenRouter is the ordinary model plus an effort setting,
+Reasoning-configurable routes require a reviewed explicit effort. Omission is
+rejected before cache lookup or provider dispatch. For example, DeepSeek V4
+Flash xhigh reasoning through OpenRouter is the ordinary model plus an effort setting,
 not a second model ID:
 
 ```python
@@ -57,7 +60,7 @@ result = call_llm_structured(
     "openrouter/deepseek/deepseek-v4-flash",
     messages,
     response_model=Decision,
-    reasoning_effort="max",
+    reasoning_effort="xhigh",
     task="bounded_decision",
     trace_id=trace_id,
     max_budget=0.05,

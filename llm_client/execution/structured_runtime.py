@@ -24,7 +24,11 @@ from llm_client.core.client import (
     RetryPolicy,
 )
 from llm_client.core.config import ClientConfig
-from llm_client.core.errors import LLMCapabilityError, _unwrap_instructor_retry
+from llm_client.core.errors import (
+    LLMCapabilityError,
+    LLMConfigurationError,
+    _unwrap_instructor_retry,
+)
 from llm_client.execution.call_contracts import StructuredOutputPolicy
 from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 from pydantic import BaseModel, ValidationError
@@ -640,6 +644,11 @@ def _call_llm_structured_impl(
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Run the synchronous structured-call runtime behind ``client.call_llm_structured``."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     time = _client.time
     logger = _client.logger
     litellm = _client.litellm
@@ -751,10 +760,21 @@ def _call_llm_structured_impl(
         config=cfg,
         model_policy=model_policy,
         model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
     model_policy_trace = plan.routing_trace.get("model_policy")
+    if plan.primary_model.startswith("codex"):
+        legacy_effort = public_kwargs.get("model_reasoning_effort")
+        if (
+            legacy_effort is not None
+            and str(legacy_effort).strip().lower() != reasoning_effort
+        ):
+            raise LLMConfigurationError(
+                "reasoning_effort conflicts with model_reasoning_effort for Codex"
+            )
+        public_kwargs["model_reasoning_effort"] = reasoning_effort
 
     if _is_agent_model(model):
         if require_native_json_schema:
@@ -830,7 +850,13 @@ def _call_llm_structured_impl(
         )
         key: str | None = None
         if cache is not None:
-            key = _cache_key(current_model, messages, response_model=_model_fqn, **public_kwargs)
+            key = _cache_key(
+                current_model,
+                messages,
+                response_model=_model_fqn,
+                reasoning_effort=reasoning_effort,
+                **public_kwargs,
+            )
             cached = cache.get(key)
             if cached is not None:
                 reparsed = response_model.model_validate_json(cached.content)
@@ -1613,6 +1639,11 @@ async def _acall_llm_structured_impl(
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Run the async structured-call runtime behind ``client.acall_llm_structured``."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     time = _client.time
     logger = _client.logger
     litellm = _client.litellm
@@ -1726,10 +1757,21 @@ async def _acall_llm_structured_impl(
         config=cfg,
         model_policy=model_policy,
         model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
     model_policy_trace = plan.routing_trace.get("model_policy")
+    if plan.primary_model.startswith("codex"):
+        legacy_effort = public_kwargs.get("model_reasoning_effort")
+        if (
+            legacy_effort is not None
+            and str(legacy_effort).strip().lower() != reasoning_effort
+        ):
+            raise LLMConfigurationError(
+                "reasoning_effort conflicts with model_reasoning_effort for Codex"
+            )
+        public_kwargs["model_reasoning_effort"] = reasoning_effort
 
     if _is_agent_model(model):
         if require_native_json_schema:
@@ -1805,7 +1847,13 @@ async def _acall_llm_structured_impl(
         )
         key: str | None = None
         if cache is not None:
-            key = _cache_key(current_model, messages, response_model=_model_fqn, **public_kwargs)
+            key = _cache_key(
+                current_model,
+                messages,
+                response_model=_model_fqn,
+                reasoning_effort=reasoning_effort,
+                **public_kwargs,
+            )
             cached = await _async_cache_get(cache, key)
             if cached is not None:
                 reparsed = response_model.model_validate_json(cached.content)

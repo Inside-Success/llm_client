@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import litellm
 import pytest
-from unittest.mock import patch
 
 from llm_client.core.client import _prepare_call_kwargs, _prepare_responses_kwargs
 from llm_client.core.errors import DeprecatedModelError
@@ -55,7 +54,7 @@ def test_openrouter_completion_requests_inline_route_metadata() -> None:
     }
 
 
-def test_openrouter_deepseek_forwards_max_reasoning_and_broadcast_trace() -> None:
+def test_openrouter_deepseek_forwards_xhigh_reasoning_and_broadcast_trace() -> None:
     """Normalized reasoning and required identity should reach OpenRouter."""
 
     call_kwargs = _prepare_call_kwargs(
@@ -63,7 +62,7 @@ def test_openrouter_deepseek_forwards_max_reasoning_and_broadcast_trace() -> Non
         [{"role": "user", "content": "hello"}],
         timeout=0,
         num_retries=0,
-        reasoning_effort="max",
+        reasoning_effort="xhigh",
         api_base=None,
         kwargs={
             "metadata": {
@@ -74,7 +73,7 @@ def test_openrouter_deepseek_forwards_max_reasoning_and_broadcast_trace() -> Non
         },
     )
 
-    assert call_kwargs["reasoning_effort"] == "max"
+    assert call_kwargs["reasoning_effort"] == "xhigh"
     assert call_kwargs["allowed_openai_params"] == ["reasoning_effort"]
     assert call_kwargs["provider"] == {"require_parameters": True}
     assert call_kwargs["trace"] == {
@@ -84,15 +83,15 @@ def test_openrouter_deepseek_forwards_max_reasoning_and_broadcast_trace() -> Non
     }
 
 
-def test_openrouter_max_reasoning_survives_installed_litellm_normalization() -> None:
-    """The transport dependency must preserve max effort without a network call."""
+def test_openrouter_xhigh_reasoning_survives_installed_litellm_normalization() -> None:
+    """The transport dependency must preserve xhigh effort without a network call."""
 
     call_kwargs = _prepare_call_kwargs(
         "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "hello"}],
         timeout=0,
         num_retries=0,
-        reasoning_effort="max",
+        reasoning_effort="xhigh",
         api_base=None,
         kwargs={},
     )
@@ -107,7 +106,7 @@ def test_openrouter_max_reasoning_survives_installed_litellm_normalization() -> 
         },
     )
 
-    assert normalized["reasoning_effort"] == "max"
+    assert normalized["reasoning_effort"] == "xhigh"
 
 
 def test_openrouter_normalized_passthrough_merges_caller_allowlist() -> None:
@@ -118,7 +117,7 @@ def test_openrouter_normalized_passthrough_merges_caller_allowlist() -> None:
         [{"role": "user", "content": "hello"}],
         timeout=0,
         num_retries=0,
-        reasoning_effort="max",
+        reasoning_effort="xhigh",
         api_base=None,
         kwargs={"allowed_openai_params": ["verbosity"]},
     )
@@ -137,7 +136,7 @@ def test_openrouter_normalized_passthrough_preserves_provider_routing() -> None:
         [{"role": "user", "content": "hello"}],
         timeout=0,
         num_retries=0,
-        reasoning_effort="max",
+        reasoning_effort="xhigh",
         api_base=None,
         kwargs={"provider": {"sort": "throughput", "allow_fallbacks": False}},
     )
@@ -158,7 +157,7 @@ def test_openrouter_normalized_passthrough_rejects_capability_opt_out() -> None:
             [{"role": "user", "content": "hello"}],
             timeout=0,
             num_retries=0,
-            reasoning_effort="max",
+            reasoning_effort="xhigh",
             api_base=None,
             kwargs={"provider": {"require_parameters": False}},
         )
@@ -221,7 +220,7 @@ def test_openrouter_broadcast_trace_preserves_explicit_caller_fields() -> None:
         [{"role": "user", "content": "hello"}],
         timeout=0,
         num_retries=0,
-        reasoning_effort="max",
+        reasoning_effort="xhigh",
         api_base=None,
         kwargs={
             "metadata": {"task": "service_desk", "trace_id": "automatic"},
@@ -352,43 +351,35 @@ def test_direct_gpt56_terra_forwards_max_reasoning() -> None:
     assert call_kwargs["reasoning"] == {"effort": "max"}
 
 
-@patch("litellm.get_supported_openai_params", return_value=["thinking"])
-def test_prepare_call_kwargs_uses_configured_direct_gemini_thinking_budget(
-    _mock_supported: object,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Direct Gemini thinking defaults should come from shared config, not a hardcoded zero."""
+def test_prepare_call_kwargs_uses_explicit_direct_gemini_reasoning_effort() -> None:
+    """Direct Gemini should receive normalized effort without an automatic budget."""
 
-    monkeypatch.setenv("LLM_CLIENT_DIRECT_GEMINI_THINKING_BUDGET", "512")
     call_kwargs = _prepare_call_kwargs(
-        "gemini/gemini-2.5-pro",
+        "gemini/gemini-2.5-flash",
         [{"role": "user", "content": "hello"}],
         timeout=0,
         num_retries=0,
-        reasoning_effort=None,
+        reasoning_effort="low",
         api_base=None,
         kwargs={},
     )
 
-    assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 512}
+    assert call_kwargs["reasoning_effort"] == "low"
+    assert "thinking" not in call_kwargs
 
 
-@patch("litellm.get_supported_openai_params", return_value=["thinking"])
-def test_prepare_call_kwargs_allows_disabling_direct_gemini_auto_thinking(
-    _mock_supported: object,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Consumers can disable auto-injected direct-Gemini thinking config entirely."""
+def test_prepare_call_kwargs_uses_explicit_direct_gemini_off() -> None:
+    """Direct Gemini off is an explicit normalized control, not an omitted default."""
 
-    monkeypatch.setenv("LLM_CLIENT_DIRECT_GEMINI_THINKING_BUDGET", "off")
     call_kwargs = _prepare_call_kwargs(
-        "gemini/gemini-2.5-pro",
+        "gemini/gemini-2.5-flash",
         [{"role": "user", "content": "hello"}],
         timeout=0,
         num_retries=0,
-        reasoning_effort=None,
+        reasoning_effort="none",
         api_base=None,
         kwargs={},
     )
 
+    assert call_kwargs["reasoning_effort"] == "none"
     assert "thinking" not in call_kwargs

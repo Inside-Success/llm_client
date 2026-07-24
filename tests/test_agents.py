@@ -262,13 +262,16 @@ class TestWorkspaceKwargAliasing:
 
 
 class TestCodexReasoningEffortNormalization:
-    def test_minimal_coerces_to_low_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT", raising=False)
-        assert _normalize_codex_reasoning_effort("minimal") == "low"
+    def test_omission_fails_instead_of_defaulting_high(self) -> None:
+        with pytest.raises(ValueError, match="requires explicit reasoning_effort"):
+            _normalize_codex_reasoning_effort(None)
 
-    def test_minimal_can_be_forced_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT", "1")
-        assert _normalize_codex_reasoning_effort("minimal") == "minimal"
+    def test_unsupported_effort_fails_instead_of_coercing(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported Codex reasoning effort"):
+            _normalize_codex_reasoning_effort("xhigh")
+
+    def test_supported_effort_is_preserved(self) -> None:
+        assert _normalize_codex_reasoning_effort("low") == "low"
 
     def test_bare_codex(self) -> None:
         assert _parse_agent_model("codex") == ("codex", None)
@@ -1283,7 +1286,7 @@ class TestCodexGuards:
 class TestCodexCall:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     def test_call_llm_sync(self) -> None:
-        result = call_llm("codex", [{"role": "user", "content": "What is 2+2?"}], task="test", trace_id="test_codex_call_sync", max_budget=0)
+        result = call_llm("codex", [{"role": "user", "content": "What is 2+2?"}], reasoning_effort="medium", task="test", trace_id="test_codex_call_sync", max_budget=0)
         assert isinstance(result, LLMCallResult)
         assert "4" in result.content
         assert result.model == "codex"
@@ -1292,7 +1295,7 @@ class TestCodexCall:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     @pytest.mark.asyncio
     async def test_acall_llm_async(self) -> None:
-        result = await acall_llm("codex", [{"role": "user", "content": "What is 2+2?"}], task="test", trace_id="test_codex_call_async", max_budget=0)
+        result = await acall_llm("codex", [{"role": "user", "content": "What is 2+2?"}], reasoning_effort="medium", task="test", trace_id="test_codex_call_async", max_budget=0)
         assert isinstance(result, LLMCallResult)
         assert "4" in result.content
         assert result.finish_reason == "stop"
@@ -1338,7 +1341,7 @@ class TestCodexCall:
             before_call=lambda m, msgs, kw: before_calls.append(m),
             after_call=lambda r: after_calls.append(r),
         )
-        result = call_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, task="test", trace_id="test_codex_hooks", max_budget=0)
+        result = call_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, reasoning_effort="medium", task="test", trace_id="test_codex_hooks", max_budget=0)
         assert len(before_calls) == 1
         assert before_calls[0] == "codex"
         assert len(after_calls) == 1
@@ -1346,7 +1349,7 @@ class TestCodexCall:
 
     @pytest.mark.usefixtures("_mock_codex_sdk")
     def test_model_suffix(self) -> None:
-        result = call_llm("codex/gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_model_suffix", max_budget=0)
+        result = call_llm("codex/gpt-5", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_model_suffix", max_budget=0)
         assert result.model == "codex/gpt-5"
 
     def test_codex_timeout_is_explicit(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1365,6 +1368,7 @@ class TestCodexCall:
                 "codex",
                 [{"role": "user", "content": "Hi"}],
                 timeout=1,
+                reasoning_effort="medium",
                 task="test",
                 trace_id="test_codex_timeout_explicit",
                 max_budget=0,
@@ -1402,6 +1406,7 @@ class TestCodexCall:
             [{"role": "user", "content": "Hi"}],
             codex_process_isolation=True,
             timeout=17,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_isolation_dispatch",
             max_budget=0,
@@ -1437,6 +1442,7 @@ class TestCodexCall:
             "codex",
             [{"role": "user", "content": "Hi"}],
             timeout=17,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_isolation_dispatch_env",
             max_budget=0,
@@ -1470,6 +1476,7 @@ class TestCodexCall:
             "codex",
             [{"role": "user", "content": "Hi"}],
             timeout=99,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_agent_timeout_policy_ban",
             max_budget=0,
@@ -1534,6 +1541,7 @@ class TestCodexCall:
             codex_transport="auto",
             timeout=99,
             agent_hard_timeout=21,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_agent_timeout_ban_cli_auto",
             max_budget=0,
@@ -1573,6 +1581,7 @@ class TestCodexStructured:
             "codex",
             [{"role": "user", "content": "Info about Tokyo"}],
             response_model=_CityInfo,
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_structured_sync", max_budget=0,
         )
         assert isinstance(parsed, _CityInfo)
@@ -1588,6 +1597,7 @@ class TestCodexStructured:
             "codex",
             [{"role": "user", "content": "Info about Tokyo"}],
             response_model=_CityInfo,
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_structured_async", max_budget=0,
         )
         assert isinstance(parsed, _CityInfo)
@@ -1632,6 +1642,7 @@ class TestCodexStructured:
             response_model=_CityInfo,
             codex_process_isolation=True,
             timeout=19,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_structured_isolation_dispatch",
             max_budget=0,
@@ -1660,6 +1671,7 @@ class TestCodexStructured:
             "codex",
             [{"role": "user", "content": "Info about Berlin"}],
             response_model=_CityInfo,
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_structured_fenced", max_budget=0,
         )
         assert parsed.name == "Berlin"
@@ -1674,7 +1686,7 @@ class TestCodexStructured:
 class TestCodexStream:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     def test_stream_sync(self) -> None:
-        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_stream_sync", max_budget=0)
+        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_stream_sync", max_budget=0)
         chunks: list[str] = []
         for chunk in stream:
             chunks.append(chunk)
@@ -1687,7 +1699,7 @@ class TestCodexStream:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     @pytest.mark.asyncio
     async def test_astream_async(self) -> None:
-        stream = await astream_llm("codex", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_astream_async", max_budget=0)
+        stream = await astream_llm("codex", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_astream_async", max_budget=0)
         chunks: list[str] = []
         async for chunk in stream:
             chunks.append(chunk)
@@ -1704,7 +1716,7 @@ class TestCodexStream:
             before_call=lambda m, msgs, kw: before_calls.append(m),
             after_call=lambda r: after_calls.append(r),
         )
-        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, task="test", trace_id="test_codex_stream_hooks", max_budget=0)
+        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, reasoning_effort="medium", task="test", trace_id="test_codex_stream_hooks", max_budget=0)
         for _ in stream:
             pass
         assert len(before_calls) == 1
@@ -1726,7 +1738,7 @@ class TestCodexStream:
         monkeypatch.setitem(sys.modules, "openai_codex_sdk", fake_mod)
         monkeypatch.setitem(sys.modules, "openai_codex_sdk.codex", codex_submod)
 
-        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_stream_multi", max_budget=0)
+        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_stream_multi", max_budget=0)
         chunks = list(stream)
         assert len(chunks) == 2
         assert chunks[0] == "First. "
@@ -1745,7 +1757,7 @@ class TestCodexBatch:
             [{"role": "user", "content": f"What is {i}+{i}?"}]
             for i in range(3)
         ]
-        results = call_llm_batch("codex", messages_list, max_concurrent=3, task="test", trace_id="test_codex_batch_sync", max_budget=0)
+        results = call_llm_batch("codex", messages_list, max_concurrent=3, reasoning_effort="medium", task="test", trace_id="test_codex_batch_sync", max_budget=0)
         assert len(results) == 3
         for r in results:
             assert isinstance(r, LLMCallResult)
@@ -1758,7 +1770,7 @@ class TestCodexBatch:
             [{"role": "user", "content": f"What is {i}+{i}?"}]
             for i in range(2)
         ]
-        results = await acall_llm_batch("codex", messages_list, task="test", trace_id="test_codex_batch_async", max_budget=0)
+        results = await acall_llm_batch("codex", messages_list, reasoning_effort="medium", task="test", trace_id="test_codex_batch_async", max_budget=0)
         assert len(results) == 2
 
 
@@ -2084,6 +2096,7 @@ class TestCodexFallback:
             [{"role": "user", "content": "Hi"}],
             codex_transport="cli",
             timeout=19,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_transport_cli_async",
             max_budget=0,
@@ -2104,7 +2117,7 @@ class TestCodexFallback:
                 "approval_policy": "never",
                 "sandbox_mode": "workspace-write",
                 "skip_git_repo_check": True,
-                "model_reasoning_effort": "xhigh",
+                "model_reasoning_effort": "high",
             },
             output_path=str(tmp_path / "last.txt"),
             schema_path=None,
@@ -2124,6 +2137,7 @@ class TestCodexFallback:
             kwargs={
                 "working_directory": str(tmp_path),
                 "yolo_mode": True,
+                "model_reasoning_effort": "medium",
             },
             output_path=str(tmp_path / "last.txt"),
             schema_path=None,
@@ -2144,6 +2158,7 @@ class TestCodexFallback:
                 "working_directory": str(tmp_path),
                 "approval_policy": "never",
                 "sandbox_mode": "read-only",
+                "model_reasoning_effort": "medium",
             },
             output_path=str(tmp_path / "last.txt"),
             schema_path=None,
@@ -2165,6 +2180,7 @@ class TestCodexFallback:
                 "working_directory": str(tmp_path),
                 "approval_policy": "on-request",
                 "sandbox_mode": "read-only",
+                "model_reasoning_effort": "medium",
             },
             output_path=str(tmp_path / "last.txt"),
             schema_path=None,
@@ -2197,6 +2213,7 @@ class TestCodexFallback:
             approval_policy="never",
             sandbox_mode="workspace-write",
             skip_git_repo_check=True,
+            model_reasoning_effort="medium",
         )
 
         assert result.content == "cli transport ok"
@@ -2317,6 +2334,7 @@ class TestCodexMcpServers:
                     "args": ["hello"],
                 },
             },
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_mcp_e2e", max_budget=0,
         )
         assert isinstance(result, LLMCallResult)

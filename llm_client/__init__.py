@@ -12,6 +12,7 @@ Usage:
     result = call_llm(
         "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
         model_policy="enforce_allowlist",
         task="demo",
         trace_id="init/sync",
@@ -43,6 +44,7 @@ Usage:
     results = call_llm_batch(
         "openrouter/deepseek/deepseek-v4-flash",
         [msgs1, msgs2, msgs3],
+        reasoning_effort="none",
         model_policy="enforce_allowlist",
         max_concurrent=5,
         task="demo_batch",
@@ -54,6 +56,7 @@ Usage:
     for chunk in stream_llm(
         "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
         model_policy="enforce_allowlist",
         task="demo_stream",
         trace_id="init/stream",
@@ -67,6 +70,7 @@ Usage:
     result = await acall_llm(
         "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
         model_policy="enforce_allowlist",
         task="demo_async",
         trace_id="init/async",
