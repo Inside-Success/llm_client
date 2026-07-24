@@ -54,3 +54,13 @@ when available. Missing values are explicit nulls; no value is invented.
   dispatch-without-terminal fixtures;
 - migration and ordering tests;
 - one real structured call after deterministic coverage is green.
+
+## Live evidence
+
+On 2026-07-24, a bounded DeepSeek V4 Flash structured call used trace
+`llm_client.lifecycle_probe.20260724.terminal` and logical call
+`cbf9dcb9f4d845e9b6d597206cb5b01f`. The shared database recorded ordered
+`provider_dispatched`, `provider_response`, `parse_or_validation_succeeded`,
+and `completed` events. The result was `{"status": "ok"}` at $0.0000028.
+This proves this exact structured route and terminal binding; it does not prove
+timeout, cancellation, or every text/stream path.
