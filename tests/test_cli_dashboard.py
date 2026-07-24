@@ -23,3 +23,11 @@ def test_dashboard_json_exposes_rate_and_accountability(capsys) -> None:
     assert any("INSERT OR IGNORE INTO cost_alerts" in call.args[0] for call in db.execute.call_args_list)
     first_query = db.execute.call_args_list[0].args[0]
     assert "cost_source IS NOT NULL OR billing_mode IS NOT NULL" in first_query
+
+
+def test_dashboard_alert_history_json(capsys) -> None:
+    db = MagicMock()
+    db.execute.return_value.fetchall.return_value = [("2026-07-24T19:00:00+00:00", 1, 0.5, 0.435, "2026-07-24T19:25:00+00:00")]
+    with patch("llm_client.cli.dashboard._io_log._get_db", return_value=db):
+        cmd_dashboard(argparse.Namespace(format="json", alerts=True, alert_limit=20, hourly_budget=None, daily_budget=None))
+    assert '"window_hours": 1' in capsys.readouterr().out
