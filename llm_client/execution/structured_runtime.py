@@ -621,6 +621,25 @@ def _raise_gpt5_structured_schema_capability_error(
     ) from error
 
 
+def _native_provider_schema(
+    response_model: type[BaseModel],
+    *,
+    model: str,
+) -> dict[str, Any]:
+    """Build a strict native schema, resolving ref siblings for OpenRouter."""
+
+    if model.startswith("openrouter/"):
+        schema = _client._strict_openai_response_model_schema(response_model)
+        return cast(
+            dict[str, Any],
+            _client._openrouter_compatible_strict_json_schema(schema),
+        )
+    return cast(
+        dict[str, Any],
+        _client._strict_json_schema(response_model.model_json_schema()),
+    )
+
+
 def _call_llm_structured_impl(
     model: str,
     messages: list[dict[str, Any]],
@@ -1203,9 +1222,7 @@ def _call_llm_structured_impl(
             )
         if supports_schema:
             _prepare_raw_artifact_store_for_runtime()
-            schema = _strict_json_schema(response_model.model_json_schema())
-            if current_model.startswith("openrouter/"):
-                schema = _openrouter_compatible_strict_json_schema(schema)
+            schema = _native_provider_schema(response_model, model=current_model)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,
@@ -2204,9 +2221,7 @@ async def _acall_llm_structured_impl(
             )
         if supports_schema:
             _prepare_raw_artifact_store_for_runtime()
-            schema = _strict_json_schema(response_model.model_json_schema())
-            if current_model.startswith("openrouter/"):
-                schema = _openrouter_compatible_strict_json_schema(schema)
+            schema = _native_provider_schema(response_model, model=current_model)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
                 messages,
