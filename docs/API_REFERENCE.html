@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-24T20:17:39Z -->
+<!-- Generated: 2026-07-24T20:19:08Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -10195,7 +10195,11 @@ The log format is the task-graph `ExperimentRecord` JSONL, where
   <div class="symbol-body">
     <p class="summary">Read typed lifecycle evidence and classify a missing terminal event honestly.</p>
     <p class="meta">Source: <code>llm_client.observability.query</code> functions</p>
-    <pre class="doc">Read typed lifecycle evidence and classify a missing terminal event honestly.</pre>
+    <pre class="doc">Read typed lifecycle evidence and classify a missing terminal event honestly.
+
+Non-terminal calls from a demonstrably live local process are reported as
+``active``. A missing terminal row with no live-process proof remains
+``interrupted_or_abandoned`` rather than silently disappearing.</pre>
   </div>
 </details>
 

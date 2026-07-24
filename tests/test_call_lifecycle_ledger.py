@@ -27,6 +27,8 @@ def test_terminal_lifecycle_remains_terminal() -> None:
     io_log.record_call_lifecycle_event(_event("completed", "logical-2"))
     result = get_call_lifecycle(trace_id="trace-logical-2")
     assert result[0]["state"] == "completed"
+    assert result[0]["latest_event"]["phase"] == "completed"
+    assert result[0]["elapsed_s"] is not None
 
 
 def test_structured_timeout_is_not_misclassified_as_provider_error() -> None:
