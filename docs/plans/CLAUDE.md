@@ -92,6 +92,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress (Slice 3 + post-validation terminal boundary verified; DIGIMON consumer trace pending) | DIGIMON Plan #111 bound-trace refresh |
 | 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | 🚧 In Progress | DIGIMON Plan #111 bound-trace refresh |
 | 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | 🚧 In Progress (exact repair accepted; downstream binding verification pending) | onto-canon6 Plan 0141 R2 runtime authorization |
+| 106 | [Port ref-safe OpenRouter schemas to Inside Success](106_port-ref-safe-openrouter-schemas-to-inside-success.md) | High | 🚧 In Progress | - |
 
 
 ## Status Key

@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-15
-Verification context: Plan 105 preserves the existing fallback-cost warning path while selecting valid provider billing before estimates; concurrent construction and SQLite failures remain errors rather than advisories. Focused runtime and observability controls pass.
+Last verified: 2026-07-24
+Verification context: Plan 106 preserves provider schema rejection as an execution failure while projecting supported OpenRouter schemas before dispatch. Warning categories are unchanged; focused structured-runtime controls pass.
 
 ## Context
 

@@ -2,11 +2,11 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-07-15
-Verification context: Plan 105 changes provider-cost selection and statement
-serialization without changing call snapshots, fingerprints, fresh replay
-authority, selected-attempt receipts, raw-artifact links, or historical replay.
-Focused replay, structured-attempt, and observability controls pass.
+Last verified: 2026-07-24
+Verification context: Plan 106 projects provider-compatible OpenRouter schemas
+without changing call snapshots, fingerprints, fresh replay authority,
+selected-attempt receipts, raw-artifact links, or historical replay. Focused
+structured-runtime controls pass.
 
 ## Context
 
