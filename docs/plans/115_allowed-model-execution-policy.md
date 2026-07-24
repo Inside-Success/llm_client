@@ -1,6 +1,6 @@
 # Plan #115: Allowed-Model Execution Policy
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -118,18 +118,36 @@ and consumer migration is required before changing the shared default mode.
 
 ## Acceptance Criteria
 
-- [ ] Shared exact allowlist and DeepSeek V4 Flash default exist.
-- [ ] Enforced calls reject unknown and GPT-5 Mini-family routes before dispatch.
-- [ ] Every allowed non-default route requires and records a justification.
-- [ ] Fallback legs, text, structured, tools, batches, and streams pass through
+- [x] Shared exact allowlist and DeepSeek V4 Flash default exist.
+- [x] Enforced calls reject unknown and GPT-5 Mini-family routes before dispatch.
+- [x] Every allowed non-default route requires and records a justification.
+- [x] Fallback legs, text, structured, tools, batches, and streams pass through
       the shared policy boundary.
-- [ ] Twin contains no independent model denylist and opts into shared
+- [x] Twin contains no independent model denylist and opts into shared
       enforcement.
-- [ ] Focused and full feasible gates pass.
-- [ ] Exact deployed Twin canonical and negative probes pass with DeepSeek V4
+- [x] Focused and full feasible gates pass.
+- [x] Exact deployed Twin canonical and negative probes pass with DeepSeek V4
       Flash.
-- [ ] Documentation states that compatibility mode is temporary and does not
+- [x] Documentation states that compatibility mode is temporary and does not
       claim ecosystem-wide enforcement before consumer migration.
+
+## Verification
+
+- Shared focused policy/routing/runtime/replay gate: `108 passed`.
+- Broader feasible shared suite: `1837 passed, 4 skipped`; three unrelated
+  environment/baseline failures remained (missing extracted `prompt_eval` and
+  one lifecycle test polluted by suite-level heartbeat state). The lifecycle
+  test passed in isolation.
+- Twin intended suite: `229 passed`, `53 subtests passed`.
+- Real default-route canary
+  `twin-model-policy-deepseek-v4-flash-canary-20260723` returned the exact
+  expected response and retained `model_policy=enforce_allowlist`.
+- Mac deployment: Twin `e9f7278`, `llm_client` `a1915aa`.
+- Canonical trace `b2a68f7c-8ba3-47ac-87a8-70b1be1c3b64`: DeepSeek V4 Flash,
+  enforced policy, no justification, eight validated citations across eight
+  videos.
+- Negative trace `61031848-3369-44ec-8156-d40bc1b30fb0`: abstained before
+  generation.
 
 ---
 
