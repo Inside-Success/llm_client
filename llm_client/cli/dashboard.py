@@ -105,8 +105,8 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
 def register_parser(subparsers: Any) -> None:
     parser = subparsers.add_parser("dashboard", help="Show recent spend rate and accountable route")
     parser.add_argument("--format", choices=["table", "json"], default="table")
-    parser.add_argument("--hourly-budget", type=float, help="Warn at 80% of this last-hour USD budget")
-    parser.add_argument("--daily-budget", type=float, help="Warn at 80% of this last-24-hours USD budget")
+    parser.add_argument("--hourly-budget", type=float, help="Warn at 80%% of this last-hour USD budget")
+    parser.add_argument("--daily-budget", type=float, help="Warn at 80%% of this last-24-hours USD budget")
     parser.add_argument("--alerts", action="store_true", help="Show persisted threshold crossings")
     parser.add_argument("--alert-limit", type=int, default=20, help="Maximum persisted alerts to show")
     parser.add_argument("--serve", action="store_true", help="Serve a loopback browser dashboard")
