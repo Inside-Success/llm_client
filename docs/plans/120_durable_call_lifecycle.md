@@ -55,6 +55,14 @@ when available. Missing values are explicit nulls; no value is invented.
 - migration and ordering tests;
 - one real structured call after deterministic coverage is green.
 
+## Required Tests
+
+- `tests/test_call_lifecycle_ledger.py`
+- `tests/test_client_lifecycle.py`
+- `tests/test_structured_attempts.py`
+- `tests/test_structured_runtime.py`
+- `tests/test_io_log.py`
+
 ## Live evidence
 
 On 2026-07-24, a bounded DeepSeek V4 Flash structured call used trace
