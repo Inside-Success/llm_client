@@ -18,3 +18,5 @@ def test_dashboard_json_exposes_rate_and_accountability(capsys) -> None:
     assert '"rate_per_hour": 1.0' in output
     assert '"unpriced_calls": 2' in output
     assert '"project": "greer"' in output
+    first_query = db.execute.call_args_list[0].args[0]
+    assert "cost_source IS NOT NULL OR billing_mode IS NOT NULL" in first_query

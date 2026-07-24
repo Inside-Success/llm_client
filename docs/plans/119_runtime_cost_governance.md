@@ -74,6 +74,14 @@ control.
   without a manual database query; otherwise replace it with a browser surface
   only after a concrete interaction need is observed.
 
+**Performance boundary (2026-07-24):** the shared ledger contains millions of
+non-billable boundary-observability records. Dashboard queries deliberately
+select only rows carrying LLM accounting metadata (`cost_source` or
+`billing_mode`) before aggregation; this retains priced and explicitly
+unpriced LLM calls without treating instrumentation volume as LLM traffic. An
+additive partial timestamp index accelerates this exact predicate and does not
+index the boundary-event flood.
+
 ## Sources consulted
 
 - `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md`
