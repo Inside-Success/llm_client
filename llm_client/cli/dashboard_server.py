@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import sqlite3
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -12,18 +13,30 @@ import llm_client.io_log as _io_log
 from llm_client.cli.dashboard import _window
 
 
+def _open_read_only_db() -> sqlite3.Connection:
+    """Open the shared ledger without migrations or writer locks."""
+
+    uri = f"{_io_log._db_path.resolve().as_uri()}?mode=ro"
+    db = sqlite3.connect(uri, uri=True, timeout=3.0)
+    db.execute("PRAGMA busy_timeout = 3000")
+    return db
+
+
 def _data(hourly_budget: float | None, daily_budget: float | None, granularity: str = "hour") -> dict[str, Any]:
-    db = _io_log._get_db()
     if granularity not in {"hour", "day"}:
         raise ValueError("granularity must be hour or day")
-    bucket = "%Y-%m-%d %H:00" if granularity == "hour" else "%Y-%m-%d"
-    hours = 72 if granularity == "hour" else 30 * 24
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-    where = "timestamp >= ? AND error IS NULL AND (cost_source IS NOT NULL OR billing_mode IS NOT NULL)"
-    series = db.execute(f"SELECT strftime('{bucket}', timestamp), COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 1", (cutoff,)).fetchall()
-    projects = db.execute(f"SELECT COALESCE(project,'unknown'), COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
-    models = db.execute(f"SELECT model, COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
-    return {"last_hour": _window(db, 1, hourly_budget), "last_day": _window(db, 24, daily_budget), "granularity": granularity, "series": series, "projects": projects, "models": models}
+    db = _open_read_only_db()
+    try:
+        bucket = "%Y-%m-%d %H:00" if granularity == "hour" else "%Y-%m-%d"
+        hours = 72 if granularity == "hour" else 30 * 24
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        where = "timestamp >= ? AND error IS NULL AND (cost_source IS NOT NULL OR billing_mode IS NOT NULL)"
+        series = db.execute(f"SELECT strftime('{bucket}', timestamp), COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 1", (cutoff,)).fetchall()
+        projects = db.execute(f"SELECT COALESCE(project,'unknown'), COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
+        models = db.execute(f"SELECT model, COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
+        return {"last_hour": _window(db, 1, hourly_budget), "last_day": _window(db, 24, daily_budget), "granularity": granularity, "series": series, "projects": projects, "models": models}
+    finally:
+        db.close()
 
 
 def _page(data: dict[str, Any]) -> str:
@@ -36,9 +49,7 @@ def _page(data: dict[str, Any]) -> str:
 
 
 def serve(*, host: str, port: int, hourly_budget: float | None, daily_budget: float | None) -> None:
-    # Initialize the shared SQLite connection before entering the request loop.
-    # Its migrations are serialized; doing them lazily in a request handler can
-    # make the first browser request appear to hang while another client writes.
+    # Verify the ledger is readable before binding the browser endpoint.
     _data(hourly_budget, daily_budget)
 
     class Handler(BaseHTTPRequestHandler):
