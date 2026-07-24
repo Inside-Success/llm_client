@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import llm_client.io_log as _io_log
-from llm_client.cli.dashboard import _window
 
 
 def _open_read_only_db() -> sqlite3.Connection:
@@ -22,6 +21,26 @@ def _open_read_only_db() -> sqlite3.Connection:
     return db
 
 
+def _rollup_window(db: sqlite3.Connection, hours: int, budget: float | None) -> dict[str, Any]:
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).replace(minute=0, second=0, microsecond=0).isoformat()
+    calls, cost, unpriced = db.execute(
+        """SELECT COALESCE(SUM(call_count), 0), COALESCE(SUM(total_cost), 0),
+                  COALESCE(SUM(unpriced_call_count), 0)
+           FROM dashboard_spend_hourly WHERE bucket_start >= ?""", (cutoff,)
+    ).fetchone()
+    top = db.execute(
+        """SELECT project, model, SUM(total_cost) FROM dashboard_spend_hourly
+           WHERE bucket_start >= ? GROUP BY project, model ORDER BY 3 DESC LIMIT 1""", (cutoff,)
+    ).fetchone()
+    data = {"hours": hours, "calls": calls, "cost": cost, "rate_per_hour": cost / hours,
+            "unpriced_calls": unpriced, "top_route": None if top is None else {"project": top[0], "model": top[1], "cost": top[2]}}
+    if budget is not None:
+        if budget <= 0:
+            raise ValueError("dashboard budgets must be positive USD values")
+        data.update(budget=budget, budget_ratio=cost / budget, alert=cost >= budget * 0.8)
+    return data
+
+
 def _data(hourly_budget: float | None, daily_budget: float | None, granularity: str = "hour") -> dict[str, Any]:
     if granularity not in {"hour", "day"}:
         raise ValueError("granularity must be hour or day")
@@ -30,11 +49,10 @@ def _data(hourly_budget: float | None, daily_budget: float | None, granularity: 
         bucket = "%Y-%m-%d %H:00" if granularity == "hour" else "%Y-%m-%d"
         hours = 72 if granularity == "hour" else 30 * 24
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-        where = "timestamp >= ? AND error IS NULL AND (cost_source IS NOT NULL OR billing_mode IS NOT NULL)"
-        series = db.execute(f"SELECT strftime('{bucket}', timestamp), COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 1", (cutoff,)).fetchall()
-        projects = db.execute(f"SELECT COALESCE(project,'unknown'), COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
-        models = db.execute(f"SELECT model, COALESCE(SUM(COALESCE(marginal_cost,cost)),0) FROM llm_calls WHERE {where} GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
-        return {"last_hour": _window(db, 1, hourly_budget), "last_day": _window(db, 24, daily_budget), "granularity": granularity, "series": series, "projects": projects, "models": models}
+        series = db.execute(f"SELECT strftime('{bucket}', bucket_start), COALESCE(SUM(total_cost),0) FROM dashboard_spend_hourly WHERE bucket_start >= ? GROUP BY 1 ORDER BY 1", (cutoff,)).fetchall()
+        projects = db.execute("SELECT project, COALESCE(SUM(total_cost),0) FROM dashboard_spend_hourly WHERE bucket_start >= ? GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
+        models = db.execute("SELECT model, COALESCE(SUM(total_cost),0) FROM dashboard_spend_hourly WHERE bucket_start >= ? GROUP BY 1 ORDER BY 2 DESC LIMIT 12", (cutoff,)).fetchall()
+        return {"last_hour": _rollup_window(db, 1, hourly_budget), "last_day": _rollup_window(db, 24, daily_budget), "granularity": granularity, "series": series, "projects": projects, "models": models}
     finally:
         db.close()
 

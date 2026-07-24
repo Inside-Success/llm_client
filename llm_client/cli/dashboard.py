@@ -44,6 +44,10 @@ def _window(db: Any, hours: int, budget: float | None = None) -> dict[str, Any]:
 
 
 def cmd_dashboard(args: argparse.Namespace) -> None:
+    if getattr(args, "backfill_rollup", False):
+        count = _io_log.rebuild_dashboard_spend_hourly()
+        print(f"Rebuilt {count} hourly dashboard rollup rows.")
+        return
     if getattr(args, "serve", False):
         from llm_client.cli.dashboard_server import serve
         serve(host=args.host, port=args.port, hourly_budget=args.hourly_budget, daily_budget=args.daily_budget)
@@ -106,6 +110,7 @@ def register_parser(subparsers: Any) -> None:
     parser.add_argument("--alerts", action="store_true", help="Show persisted threshold crossings")
     parser.add_argument("--alert-limit", type=int, default=20, help="Maximum persisted alerts to show")
     parser.add_argument("--serve", action="store_true", help="Serve a loopback browser dashboard")
+    parser.add_argument("--backfill-rollup", action="store_true", help="Rebuild hourly browser-dashboard totals from the ledger")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: loopback only)")
     parser.add_argument("--port", type=int, default=8765, help="Browser dashboard port")
     parser.set_defaults(handler=cmd_dashboard)

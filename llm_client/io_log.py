@@ -987,6 +987,16 @@ CREATE TABLE IF NOT EXISTS cost_alerts (
     created_at TEXT NOT NULL,
     UNIQUE(period_start, window_hours, budget)
 );
+
+CREATE TABLE IF NOT EXISTS dashboard_spend_hourly (
+    bucket_start TEXT NOT NULL,
+    project TEXT NOT NULL,
+    model TEXT NOT NULL,
+    call_count INTEGER NOT NULL DEFAULT 0,
+    unpriced_call_count INTEGER NOT NULL DEFAULT 0,
+    total_cost REAL NOT NULL DEFAULT 0.0,
+    PRIMARY KEY (bucket_start, project, model)
+);
 """
 
 _INDEXES_SQL = """
@@ -1001,6 +1011,7 @@ CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
 CREATE INDEX IF NOT EXISTS idx_calls_trace_id ON llm_calls(trace_id);
 CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref);
 CREATE INDEX IF NOT EXISTS idx_calls_fingerprint ON llm_calls(call_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_dashboard_spend_hourly_bucket ON dashboard_spend_hourly(bucket_start);
 CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_call ON structured_attempt_events(logical_call_id, id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_trace ON structured_attempt_events(trace_id);
@@ -1465,6 +1476,14 @@ def _write_call_to_db(
         )
         usage_details = _bounded_usage_details(usage)
 
+        project = _get_project() or "unknown"
+        bucket_start = datetime.fromisoformat(timestamp).replace(
+            minute=0, second=0, microsecond=0
+        ).isoformat()
+        accounted = cost_source is not None or billing_mode is not None
+        unpriced = cost_source is None or cost_source in {"unspecified", "unavailable"}
+        recorded_cost = marginal_cost if marginal_cost is not None else (cost or 0.0)
+
         def _write(db: sqlite3.Connection) -> None:
             db.execute(
                 """INSERT INTO llm_calls
@@ -1480,7 +1499,7 @@ def _write_call_to_db(
                     causal_parent_id, logical_call_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    timestamp, _get_project(), model,
+                    timestamp, project, model,
                     json.dumps(messages, default=str) if messages else None,
                     response,
                     prompt_tokens, completion_tokens, total_tokens,
@@ -1495,10 +1514,44 @@ def _write_call_to_db(
                     causal_parent_id, logical_call_id,
                 ),
             )
+            if error is None and accounted:
+                db.execute(
+                    """INSERT INTO dashboard_spend_hourly
+                       (bucket_start, project, model, call_count, unpriced_call_count, total_cost)
+                       VALUES (?, ?, ?, 1, ?, ?)
+                       ON CONFLICT(bucket_start, project, model) DO UPDATE SET
+                           call_count = call_count + 1,
+                           unpriced_call_count = unpriced_call_count + excluded.unpriced_call_count,
+                           total_cost = total_cost + excluded.total_cost""",
+                    (bucket_start, project, model, 1 if unpriced else 0, recorded_cost),
+                )
 
         _run_db_write(_write)
     except Exception:
         logger.debug("io_log._write_call_to_db failed", exc_info=True)
+
+
+def rebuild_dashboard_spend_hourly() -> int:
+    """Rebuild the derived hourly cost view from the immutable call ledger."""
+
+    with _db_write_lock:
+        db = _get_db()
+        db.execute("DELETE FROM dashboard_spend_hourly")
+        db.execute(
+            """INSERT INTO dashboard_spend_hourly
+               (bucket_start, project, model, call_count, unpriced_call_count, total_cost)
+               SELECT
+                 strftime('%Y-%m-%dT%H:00:00+00:00', timestamp),
+                 COALESCE(project, 'unknown'), model, COUNT(*),
+                 SUM(CASE WHEN cost_source IS NULL OR cost_source IN ('unspecified', 'unavailable') THEN 1 ELSE 0 END),
+                 COALESCE(SUM(COALESCE(marginal_cost, cost)), 0)
+               FROM llm_calls
+               WHERE error IS NULL AND (cost_source IS NOT NULL OR billing_mode IS NOT NULL)
+               GROUP BY 1, 2, 3"""
+        )
+        count = db.execute("SELECT COUNT(*) FROM dashboard_spend_hourly").fetchone()[0]
+        db.commit()
+        return int(count)
 
 
 def _write_embedding_to_db(
