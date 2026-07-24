@@ -180,6 +180,7 @@ from llm_client.observability import (
     get_active_experiment_run_id,
     get_active_feature_profile,
     get_active_llm_calls,
+    get_call_lifecycle,
     get_runtime_selected_attempt_receipt,
     get_runtime_selected_raw_content,
     diagnose_runtime_selected_attempt_receipt_for_trace,
@@ -474,6 +475,7 @@ _COMPAT_HOLD_EXPORTS: tuple[str, ...] = (
     "get_active_experiment_run_id",
     "get_active_feature_profile",
     "get_active_llm_calls",
+    "get_call_lifecycle",
     "get_background_mode_adoption",
     "get_completed_traces",
     # Relocated: agent_spec, validators

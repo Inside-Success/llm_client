@@ -40,6 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 120 | [Durable Cross-Project Call Lifecycle](120_durable_call_lifecycle.md) | Critical | 🚧 In Progress | Truthful localization of missing-terminal calls |
 | 119 | [Runtime Cost Governance](119_runtime_cost_governance.md) | Critical | 🚧 In Progress | Trustworthy real-time cost control and cross-provider spend analysis |
 | 118 | [OpenRouter Discriminated-Union Projection](118_openrouter_schema_compaction.md) | High | ✅ Complete | DoDAF Plan 75 Army publication extraction |
 | 117 | [Explicit Reasoning Policy](117_explicit_reasoning_policy.md) | Critical | ✅ Complete | Cost- and latency-controlled reasoning-model execution |
