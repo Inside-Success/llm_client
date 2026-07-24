@@ -44,8 +44,10 @@ control.
    Cover text, structured, and stream entry paths with deterministic tests.
 2. Tighten cost-source/billing-mode normalization and extend `llm-client cost`
    reporting with accounting-state totals and explicit unpriced counts.
-3. Add a `cost watch` operator surface backed by persisted alerts/rate windows,
-   after its notification channel and cross-process SQLite behavior are proven.
+3. Add a dependency-free terminal dashboard backed by the existing SQLite
+   ledger: last-hour/last-day spend rate, top project/model, and accounting
+   state. Its JSON mode is the agent/API equivalent. This is a PoC operator
+   surface, not a hosted web service.
 4. Extend Plan 109 with a non-secret billing identity and a funded account
    reconciliation control. This is intentionally not fabricated from local
    model strings.
@@ -57,6 +59,20 @@ control.
   the corresponding slice.
 - `python scripts/meta/check_plan_tests.py --plan 119`
 - `git diff --check`
+
+## Dashboard PoC
+
+- **Actor/job:** Brian checks whether current work is consuming money too
+  quickly and what route is responsible.
+- **Critical flow:** run `python -m llm_client dashboard`; inspect the last hour
+  and day, then use the reported project/model/accounting state to decide
+  whether to stop or change a route.
+- **Boundary:** read-only SQLite queries; JSON output is the equivalent API.
+- **Non-claim:** this does not reconcile provider invoices or send push
+  notifications.
+- **Continue readout:** the screen identifies one accountable route and rate
+  without a manual database query; otherwise replace it with a browser surface
+  only after a concrete interaction need is observed.
 
 ## Sources consulted
 
