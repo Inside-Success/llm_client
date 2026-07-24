@@ -121,12 +121,12 @@ same behavior invalidates trace and capability evidence.
 
 ## Acceptance Criteria
 
-- [ ] Provider projection changes only a private schema copy.
-- [ ] Original Pydantic response model remains the local validation authority.
-- [ ] Sync and async unit tests pass with positive and negative controls.
-- [ ] Original DIGIMON Luna single-action failure passes from the clean
+- [x] Provider projection changes only a private schema copy.
+- [x] Original Pydantic response model remains the local validation authority.
+- [x] Sync and async unit tests pass with positive and negative controls.
+- [x] Original DIGIMON Luna single-action failure passes from the clean
       candidate revision with no fallback.
-- [ ] Ruff, focused mypy, plan validation, and whitespace checks pass.
+- [x] Ruff, focused mypy, plan validation, and whitespace checks pass.
 - [ ] Reviewed PR lands on `Inside-Success/llm_client` before DIGIMON advances
       its pin.
 
@@ -145,3 +145,9 @@ same behavior invalidates trace and capability evidence.
   reaches two pre-existing `no-any-return` findings in
   `llm_client/parsing_utils.py`; the changed runtime files are checked
   separately without following imports.
+- Clean candidate commit `569e0c7` passed the original DIGIMON single-action
+  planner counterexample under trace
+  `digimon.luna_dual_role.planner.medium.inside_candidate.20260724`.
+  Luna medium executed as both requested and resolved model with no retry or
+  fallback, returning `entity.vdb` in 1.678 seconds using 2,105 total tokens at
+  the provider-reported cost of `$0.00311825`.
