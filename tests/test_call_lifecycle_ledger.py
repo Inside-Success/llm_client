@@ -42,6 +42,47 @@ def test_structured_timeout_is_not_misclassified_as_provider_error() -> None:
     assert result[0]["events"][0]["phase"] == "timeout_observed"
 
 
+@pytest.mark.parametrize(
+    ("event_type", "failure_class", "recovery_decision", "expected_phase"),
+    [
+        ("execution_failed", "provider_execution", None, "provider_error"),
+        ("validation_failed", "schema_validation", None, "parse_or_validation_failed"),
+        ("recovery_decided", None, "retry", "retry_retry"),
+    ],
+)
+def test_structured_attempt_outcomes_project_to_ordered_lifecycle_phases(
+    event_type: str,
+    failure_class: str | None,
+    recovery_decision: str | None,
+    expected_phase: str,
+) -> None:
+    """Provider, parse, and retry outcomes remain distinguishable in the ledger."""
+
+    logical_call_id = f"projection-{uuid4().hex}"
+    record_structured_attempt_event(
+        StructuredAttemptEvent(
+            logical_call_id=logical_call_id,
+            trace_id=f"trace-{logical_call_id}",
+            task="test",
+            attempt_ordinal=0,
+            model="openrouter/deepseek/deepseek-v4-flash",
+            execution_path="native_schema",
+            schema_hash="b" * 64,
+            event_type=event_type,
+            failure_class=failure_class,
+            recovery_decision=recovery_decision,
+            execution_error_type="ProviderError" if failure_class == "provider_execution" else None,
+            validation_issues=(
+                [{"location": ("field",), "code": "missing", "message": "invalid"}]
+                if event_type == "validation_failed"
+                else []
+            ),
+        )
+    )
+    result = get_call_lifecycle(logical_call_id=logical_call_id)
+    assert result[0]["events"][0]["phase"] == expected_phase
+
+
 @pytest.mark.asyncio
 async def test_async_cancellation_leaves_a_terminal_lifecycle_event() -> None:
     """Caller cancellation is durable and distinct from a provider failure."""
