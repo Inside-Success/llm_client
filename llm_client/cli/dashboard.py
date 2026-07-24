@@ -7,7 +7,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from llm_client.cli.common import connect, format_cost
+import llm_client.io_log as _io_log
+from llm_client.cli.common import format_cost
 
 
 def _window(db: Any, hours: int, budget: float | None = None) -> dict[str, Any]:
@@ -43,13 +44,27 @@ def _window(db: Any, hours: int, budget: float | None = None) -> dict[str, Any]:
 
 
 def cmd_dashboard(args: argparse.Namespace) -> None:
-    db = connect()
+    # Use the observability owner so additive schema migrations run before the
+    # dashboard attempts to persist a deduplicated threshold crossing.
+    db = _io_log._get_db()
     data = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "last_hour": _window(db, 1, args.hourly_budget),
         "last_day": _window(db, 24, args.daily_budget),
     }
-    db.close()
+    now = datetime.now(timezone.utc)
+    for window, period_start in (
+        (data["last_hour"], now.replace(minute=0, second=0, microsecond=0).isoformat()),
+        (data["last_day"], now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()),
+    ):
+        if window.get("alert"):
+            db.execute(
+                """INSERT OR IGNORE INTO cost_alerts
+                   (period_start, window_hours, budget, observed_cost, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (period_start, window["hours"], window["budget"], window["cost"], now.isoformat()),
+            )
+    db.commit()
     if args.format == "json":
         print(json.dumps(data, indent=2))
         return

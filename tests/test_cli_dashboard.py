@@ -11,13 +11,15 @@ def test_dashboard_json_exposes_rate_and_accountability(capsys) -> None:
     db.execute.side_effect = [
         MagicMock(fetchone=lambda: (2, 1.0, 1)), MagicMock(fetchone=lambda: ("digimon", "gpt-5.6", 1.0)),
         MagicMock(fetchone=lambda: (4, 3.0, 2)), MagicMock(fetchone=lambda: ("greer", "gpt-5.6-terra", 2.0)),
+        MagicMock(), MagicMock(),
     ]
-    with patch("llm_client.cli.dashboard.connect", return_value=db):
+    with patch("llm_client.cli.dashboard._io_log._get_db", return_value=db):
         cmd_dashboard(argparse.Namespace(format="json", hourly_budget=1.0, daily_budget=3.0))
     output = capsys.readouterr().out
     assert '"rate_per_hour": 1.0' in output
     assert '"unpriced_calls": 2' in output
     assert '"project": "greer"' in output
     assert '"alert": true' in output
+    assert any("INSERT OR IGNORE INTO cost_alerts" in call.args[0] for call in db.execute.call_args_list)
     first_query = db.execute.call_args_list[0].args[0]
     assert "cost_source IS NOT NULL OR billing_mode IS NOT NULL" in first_query
