@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-24T17:27:29Z -->
+<!-- Generated: 2026-07-24T19:17:34Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -8884,11 +8884,11 @@ and easier to test without dragging the full client runtime with it.</pre>
 </details>
 
 <details class="symbol" id="module-llm_client-execution-call_contracts-check_budget">
-  <summary><code>check_budget</code> <span class="sig">(trace_id: str, max_budget: float) -&gt; None</span></summary>
+  <summary><code>check_budget</code> <span class="sig">(trace_id: str, max_budget: float, *, warning_sink: list[str] | None = None) -&gt; None</span></summary>
   <div class="symbol-body">
-    <p class="summary">Raise before dispatch if a trace has already spent its budget.</p>
+    <p class="summary">Warn at declared trace-budget thresholds and block exhausted traces.</p>
     <p class="meta">Source: <code>llm_client.execution.call_contracts</code> functions</p>
-    <pre class="doc">Raise before dispatch if a trace has already spent its budget.</pre>
+    <pre class="doc">Warn at declared trace-budget thresholds and block exhausted traces.</pre>
   </div>
 </details>
 

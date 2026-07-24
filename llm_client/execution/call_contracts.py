@@ -151,8 +151,13 @@ def require_tags(
     return resolved_task, resolved_trace_id, resolved_max_budget, auto_warnings
 
 
-def check_budget(trace_id: str, max_budget: float) -> None:
-    """Raise before dispatch if a trace has already spent its budget."""
+def check_budget(
+    trace_id: str,
+    max_budget: float,
+    *,
+    warning_sink: list[str] | None = None,
+) -> None:
+    """Warn at declared trace-budget thresholds and block exhausted traces."""
     if max_budget <= 0:
         return
     spent = _io_log.get_cost(trace_id=trace_id)
@@ -161,6 +166,19 @@ def check_budget(trace_id: str, max_budget: float) -> None:
             f"Budget exceeded for trace {trace_id}: "
             f"${spent:.4f} spent >= ${max_budget:.4f} limit"
         )
+    if warning_sink is None:
+        return
+    ratio = spent / max_budget
+    if ratio >= 0.8:
+        threshold = 80
+    elif ratio >= 0.5:
+        threshold = 50
+    else:
+        return
+    warning_sink.append(
+        f"BUDGET_WARNING: trace {trace_id} has spent ${spent:.4f} "
+        f"({ratio:.0%}) of its ${max_budget:.4f} budget; {threshold}% threshold reached"
+    )
 
 
 def agent_retry_safe_enabled(explicit: Any | None) -> bool:
