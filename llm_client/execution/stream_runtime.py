@@ -340,7 +340,7 @@ def stream_llm_impl(
         max_budget,
         caller="stream_llm",
     )
-    _client._check_budget(trace_id, max_budget)
+    _client._check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)
@@ -582,7 +582,7 @@ async def astream_llm_impl(
         max_budget,
         caller="astream_llm",
     )
-    _client._check_budget(trace_id, max_budget)
+    _client._check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)
