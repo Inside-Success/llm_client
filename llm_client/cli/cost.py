@@ -15,7 +15,7 @@ def cmd_cost(args: argparse.Namespace) -> None:
     db = connect()
 
     group_cols = [g.strip() for g in args.group_by.split(",")]
-    valid_cols = {"project", "model", "caller", "task", "trace_id"}
+    valid_cols = {"project", "model", "caller", "task", "trace_id", "cost_source", "billing_mode"}
     for g in group_cols:
         if g not in valid_cols:
             print(
@@ -182,7 +182,7 @@ def register_parser(subparsers: Any) -> None:
     parser.add_argument(
         "--group-by",
         default="project,model",
-        help="Comma-separated columns to group by (project, model, caller, task, trace_id)",
+        help="Comma-separated columns to group by (project, model, caller, task, trace_id, cost_source, billing_mode)",
     )
     parser.add_argument("--project", help="Filter to a specific project")
     parser.add_argument("--trace-id", help="Filter to a specific trace_id")
