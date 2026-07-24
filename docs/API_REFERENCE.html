@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-24T04:05:19Z -->
+<!-- Generated: 2026-07-24T17:27:29Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -3075,6 +3075,24 @@ The store root is environment-configurable so production callers can retain
 route evidence outside the package checkout.  This helper is deliberately
 post-call only: it never retries the model call, changes its model, or
 substitutes a provider when OpenRouter metadata is temporarily unavailable.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-route_certification_runtime-openrouter_native_provider_schema">
+  <summary><code>openrouter_native_provider_schema</code> <span class="sig">(response_model: type[pydantic.main.BaseModel]) -&gt; dict[str, typing.Any]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return the exact schema the structured runtime sends through OpenRouter.</p>
+    <p class="meta">Source: <code>llm_client.route_certification_runtime</code> functions</p>
+    <pre class="doc">Return the exact schema the structured runtime sends through OpenRouter.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-route_certification_runtime-route_schema_sha256">
+  <summary><code>route_schema_sha256</code> <span class="sig">(schema: dict[str, typing.Any]) -&gt; str</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Hash the exact provider-facing JSON Schema using runtime canonicalization.</p>
+    <p class="meta">Source: <code>llm_client.route_certification_runtime</code> functions</p>
+    <pre class="doc">Hash the exact provider-facing JSON Schema using runtime canonicalization.</pre>
   </div>
 </details>
 
