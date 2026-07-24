@@ -44,7 +44,7 @@ def _window(db: Any, hours: int, budget: float | None = None) -> dict[str, Any]:
 
 
 def cmd_dashboard(args: argparse.Namespace) -> None:
-    if args.serve:
+    if getattr(args, "serve", False):
         from llm_client.cli.dashboard_server import serve
         serve(host=args.host, port=args.port, hourly_budget=args.hourly_budget, daily_budget=args.daily_budget)
         return
