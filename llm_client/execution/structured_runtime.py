@@ -293,6 +293,10 @@ class _StructuredValidationRetry(Exception):
         )
 
 
+class _StructuredParseRetry(Exception):
+    """Retryable malformed JSON received from a structured provider route."""
+
+
 class _StructuredFinalizationFailure(Exception):
     """Carry a local post-validation failure across retry/fallback kernels.
 
@@ -583,6 +587,40 @@ def _record_provider_schema_validation_failure(
         ),),
     ))
     return True
+
+
+def _record_response_parse_failure(
+    *,
+    logical_call_id: str,
+    trace_id: str,
+    task: str,
+    attempt: int,
+    model: str,
+    schema_hash: str,
+    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
+) -> None:
+    """Classify malformed received JSON as validation, not provider execution."""
+
+    record_structured_attempt_event(
+        _attempt_event(
+            logical_call_id=logical_call_id,
+            trace_id=trace_id,
+            task=task,
+            attempt=attempt,
+            model=model,
+            schema_hash=schema_hash,
+            event_type="validation_failed",
+            execution_path=execution_path,
+            failure_class="schema_validation",
+            validation_issues=(
+                StructuredValidationIssue(
+                    location=(),
+                    code="json_invalid",
+                    message="Provider response could not be parsed as valid JSON.",
+                ),
+            ),
+        )
+    )
 
 
 def _base_model_name(model: str) -> str:
@@ -1092,6 +1130,20 @@ def _call_llm_structured_impl(
                             retry_exc
                         )
                         raise retry_exc from validation_error
+                    except Exception as parse_error:
+                        _record_response_parse_failure(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash,
+                            execution_path="responses_api",
+                        )
+                        responses_recovery_pending.add(logical_attempt)
+                        raise _StructuredParseRetry(
+                            "Provider response was not valid JSON."
+                        ) from parse_error
                     attempt_validated = True
                     record_structured_attempt_event(
                         _attempt_event(
@@ -1156,10 +1208,12 @@ def _call_llm_structured_impl(
                     if isinstance(exc, StructuredRawArtifactError):
                         raise _StructuredFinalizationFailure(exc) from exc
                     if attempt_received and not isinstance(
-                        exc, _StructuredValidationRetry
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
                     ):
                         raise _StructuredFinalizationFailure(exc) from exc
-                    if not isinstance(exc, _StructuredValidationRetry):
+                    if not isinstance(
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                    ):
                         _record_execution_failure(
                             error=exc,
                             logical_call_id=_logical_call_id,
@@ -1198,7 +1252,9 @@ def _call_llm_structured_impl(
                     exc, _StructuredFinalizationFailure
                 )
                 and (
-                    isinstance(exc, _StructuredValidationRetry)
+                    isinstance(
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                    )
                     or _check_retryable(exc, r)
                 ),
                 compute_delay=lambda attempt, exc: _compute_retry_delay(
@@ -1364,6 +1420,19 @@ def _call_llm_structured_impl(
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
+                    except Exception as parse_error:
+                        _record_response_parse_failure(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_schema_hash,
+                        )
+                        _recovery_pending.add(logical_attempt)
+                        raise _StructuredParseRetry(
+                            "Provider response was not valid JSON."
+                        ) from parse_error
                     attempt_validated = True
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
@@ -1435,7 +1504,9 @@ def _call_llm_structured_impl(
                         raise _StructuredFinalizationFailure(artifact_error) from artifact_error
                     if provider_validation:
                         _recovery_pending.add(logical_attempt)
-                    elif not isinstance(exc, _StructuredValidationRetry) and not attempt_validated:
+                    elif not isinstance(
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                    ) and not attempt_validated:
                         _record_execution_failure(
                             error=exc,
                             logical_call_id=_logical_call_id,
@@ -1474,7 +1545,9 @@ def _call_llm_structured_impl(
                     invoke=_invoke_native_schema_attempt,
                     should_retry=lambda exc: not isinstance(exc, _StructuredFinalizationFailure)
                     and (
-                        isinstance(exc, _StructuredValidationRetry)
+                        isinstance(
+                            exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                        )
                         or (not isinstance(exc, _NativeSchemaFallback) and _check_retryable(exc, r))
                     ),
                     compute_delay=lambda attempt, exc: _compute_retry_delay(
@@ -2091,6 +2164,20 @@ async def _acall_llm_structured_impl(
                             _build_validation_repair_message(retry_exc)
                         )
                         raise retry_exc from validation_error
+                    except Exception as parse_error:
+                        _record_response_parse_failure(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_responses_schema_hash_async,
+                            execution_path="responses_api",
+                        )
+                        responses_recovery_pending_async.add(logical_attempt)
+                        raise _StructuredParseRetry(
+                            "Provider response was not valid JSON."
+                        ) from parse_error
                     attempt_validated = True
                     record_structured_attempt_event(
                         _attempt_event(
@@ -2155,10 +2242,12 @@ async def _acall_llm_structured_impl(
                     if isinstance(exc, StructuredRawArtifactError):
                         raise _StructuredFinalizationFailure(exc) from exc
                     if attempt_received and not isinstance(
-                        exc, _StructuredValidationRetry
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
                     ):
                         raise _StructuredFinalizationFailure(exc) from exc
-                    if not isinstance(exc, _StructuredValidationRetry):
+                    if not isinstance(
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                    ):
                         _record_execution_failure(
                             error=exc,
                             logical_call_id=_logical_call_id,
@@ -2197,7 +2286,9 @@ async def _acall_llm_structured_impl(
                     exc, _StructuredFinalizationFailure
                 )
                 and (
-                    isinstance(exc, _StructuredValidationRetry)
+                    isinstance(
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                    )
                     or _check_retryable(exc, r)
                 ),
                 compute_delay=lambda attempt, exc: _compute_retry_delay(
@@ -2366,6 +2457,19 @@ async def _acall_llm_structured_impl(
                         retry_exc = _StructuredValidationRetry(raw_content, ve)
                         _pending_repair_message_async = _build_validation_repair_message(retry_exc)
                         raise retry_exc from ve
+                    except Exception as parse_error:
+                        _record_response_parse_failure(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_schema_hash_async,
+                        )
+                        _recovery_pending_async.add(logical_attempt)
+                        raise _StructuredParseRetry(
+                            "Provider response was not valid JSON."
+                        ) from parse_error
                     attempt_validated = True
                     record_structured_attempt_event(_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
@@ -2437,7 +2541,9 @@ async def _acall_llm_structured_impl(
                         raise _StructuredFinalizationFailure(artifact_error) from artifact_error
                     if provider_validation:
                         _recovery_pending_async.add(logical_attempt)
-                    elif not isinstance(exc, _StructuredValidationRetry) and not attempt_validated:
+                    elif not isinstance(
+                        exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                    ) and not attempt_validated:
                         _record_execution_failure(
                             error=exc,
                             logical_call_id=_logical_call_id,
@@ -2476,7 +2582,9 @@ async def _acall_llm_structured_impl(
                     invoke=_invoke_native_schema_attempt,
                     should_retry=lambda exc: not isinstance(exc, _StructuredFinalizationFailure)
                     and (
-                        isinstance(exc, _StructuredValidationRetry)
+                        isinstance(
+                            exc, (_StructuredValidationRetry, _StructuredParseRetry)
+                        )
                         or (not isinstance(exc, _NativeSchemaFallback) and _check_retryable(exc, r))
                     ),
                     compute_delay=lambda attempt, exc: _compute_retry_delay(

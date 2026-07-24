@@ -20,6 +20,9 @@ from llm_client import (
 )
 from llm_client.core.errors import LLMError
 from llm_client.core.errors import LLMCapabilityError
+from llm_client.observability.selected_attempts import (
+    get_runtime_selected_attempt_receipt,
+)
 from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
     get_structured_attempt_events,
@@ -521,6 +524,53 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
         .fetchone()
     )
     assert logged_cost == pytest.approx((0.003, 0.003))
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.completion")
+def test_malformed_received_json_has_certifiable_recovered_lifecycle(
+    mock_completion: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """A JSON decode retry is response validation, not pre-response execution."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.side_effect = [
+        _native_response('{"action":"answer","rationale":"unterminated'),
+        _native_response(
+            '{"action":"answer","rationale":"Enough evidence."}'
+        ),
+    ]
+    parsed, result = call_llm_structured(
+        "deepseek/deepseek-chat",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-malformed-json-retry",
+        max_budget=0,
+        num_retries=1,
+        base_delay=0,
+    )
+
+    assert parsed.rationale == "Enough evidence."
+    assert result.logical_call_id is not None
+    history = get_structured_attempt_events(result.logical_call_id)
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "started"),
+        (0, "received"),
+        (0, "validation_failed"),
+        (0, "recovery_decided"),
+        (1, "started"),
+        (1, "received"),
+        (1, "validated"),
+    ]
+    assert history[2].failure_class == "schema_validation"
+    assert history[2].validation_issues[0].code == "json_invalid"
+    receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
+    assert receipt.selected_attempt_ordinal == 1
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
