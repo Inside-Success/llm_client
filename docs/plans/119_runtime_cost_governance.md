@@ -60,6 +60,18 @@ control.
 - `python scripts/meta/check_plan_tests.py --plan 119`
 - `git diff --check`
 
+## Required Tests
+
+### Existing Tests
+
+| Test | What it verifies |
+|---|---|
+| `tests/test_call_contracts.py` | Budget threshold status remains truthful. |
+| `tests/test_result_finalization.py` | Completed-call cost and warnings are preserved. |
+| `tests/test_model_execution_policy.py` | Default-route enforcement remains fail-closed. |
+| `tests/test_cli_dashboard.py` | Dashboard CLI and browser entrypoint compatibility. |
+| `tests/test_cli_cost.py` | Accounting-state cost reporting. |
+
 ## Dashboard PoC
 
 - **Actor/job:** Brian checks whether current work is consuming money too
@@ -87,6 +99,13 @@ real shared-ledger dashboard returned within five seconds. It reported $0.4354
 across 25 accounted calls in the preceding hour and $119.1948 across 2,657
 calls in the preceding day. This is an operational snapshot, not provider
 invoice reconciliation.
+
+**Completion blocker (2026-07-24):** the targeted Plan #119 suite passes
+(31 tests), but `complete_plan.py` also runs the repository-wide unit suite.
+That suite cannot collect in this worktree because the optional `langgraph`
+package is absent (`tests/test_workflow_langgraph.py`). This is an inherited
+environment dependency gap, not a Plan #119 test failure; do not force the
+plan complete until the broad suite can collect.
 
 ## Sources consulted
 
