@@ -983,6 +983,8 @@ _INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_calls_timestamp ON llm_calls(timestamp);
 CREATE INDEX IF NOT EXISTS idx_lifecycle_logical_call ON call_lifecycle_events(logical_call_id, id);
 CREATE INDEX IF NOT EXISTS idx_lifecycle_trace ON call_lifecycle_events(trace_id, id);
+CREATE INDEX IF NOT EXISTS idx_calls_accounted_timestamp ON llm_calls(timestamp)
+    WHERE cost_source IS NOT NULL OR billing_mode IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_calls_model ON llm_calls(model);
 CREATE INDEX IF NOT EXISTS idx_calls_task ON llm_calls(task);
 CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);

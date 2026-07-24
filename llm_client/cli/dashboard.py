@@ -15,12 +15,16 @@ def _window(db: Any, hours: int) -> dict[str, Any]:
     row = db.execute(
         """SELECT COUNT(*), COALESCE(SUM(COALESCE(marginal_cost, cost)), 0),
                   SUM(CASE WHEN cost_source IS NULL OR cost_source IN ('unspecified', 'unavailable') THEN 1 ELSE 0 END)
-           FROM llm_calls WHERE timestamp >= ? AND error IS NULL""",
+           FROM llm_calls
+           WHERE timestamp >= ? AND error IS NULL
+             AND (cost_source IS NOT NULL OR billing_mode IS NOT NULL)""",
         (cutoff,),
     ).fetchone()
     top = db.execute(
         """SELECT project, model, COALESCE(SUM(COALESCE(marginal_cost, cost)), 0)
-           FROM llm_calls WHERE timestamp >= ? AND error IS NULL
+           FROM llm_calls
+           WHERE timestamp >= ? AND error IS NULL
+             AND (cost_source IS NOT NULL OR billing_mode IS NOT NULL)
            GROUP BY project, model ORDER BY 3 DESC LIMIT 1""",
         (cutoff,),
     ).fetchone()
