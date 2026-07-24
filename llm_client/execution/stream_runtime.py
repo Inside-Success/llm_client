@@ -307,6 +307,8 @@ def stream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,
         trace_id,
@@ -330,9 +332,12 @@ def stream_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
     )
     models = plan.models
     routing_policy = str(plan.routing_trace.get("routing_policy", _client._routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     _warnings = list(_entry_warnings)
     backoff_fn = r.backoff or _client.exponential_backoff
 
@@ -413,6 +418,7 @@ def stream_llm_impl(
                         requested_api_base=api_base,
                         effective_api_base=current_api_base,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ),
             )
@@ -536,6 +542,8 @@ async def astream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,
         trace_id,
@@ -559,9 +567,12 @@ async def astream_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
     )
     models = plan.models
     routing_policy = str(plan.routing_trace.get("routing_policy", _client._routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     _warnings = list(_entry_warnings)
     backoff_fn = r.backoff or _client.exponential_backoff
 
@@ -642,6 +653,7 @@ async def astream_llm_impl(
                         requested_api_base=api_base,
                         effective_api_base=current_api_base,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ),
             )

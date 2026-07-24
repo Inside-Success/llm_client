@@ -21,7 +21,7 @@ Usage::
         response = await litellm.acompletion(...)
 
     # Sync
-    with acquire("gpt-5-mini"):
+    with acquire("openrouter/deepseek/deepseek-v4-flash"):
         response = litellm.completion(...)
 """
 

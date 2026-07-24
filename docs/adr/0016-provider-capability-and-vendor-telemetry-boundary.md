@@ -4,6 +4,28 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-07-23 Amendment: Exact Model Execution Allowlist
+
+Plan #115 supersedes this ADR's ban-oriented model-selection policy while
+preserving its provider-capability and telemetry decisions.
+
+For callers using `model_policy="enforce_allowlist"`, `llm_client` evaluates the
+entire canonical primary/fallback chain against one exact shared allowlist
+before dispatch. DeepSeek V4 Flash is the sole no-justification default. Every
+other allowed route requires a non-empty `model_justification`, which is
+retained in the routing trace and replayable call snapshot. A justification
+cannot authorize an unlisted model.
+
+Existing callers temporarily remain in `compatibility` mode until individually
+audited and migrated; newly migrated production paths must use enforcement.
+This staged transition avoids silently breaking unrelated consumers while
+making the target invariant explicit. GPT-5 Mini and GPT-5.1 Mini are not
+allowlisted.
+
+The statement below that normalized public controls are forwarded “without a
+model-family allowlist” refers only to capability-specific branching after
+model authorization. It no longer means arbitrary models may execute.
+
 ## Context
 
 `llm_client` exists so applications can use provider capabilities without

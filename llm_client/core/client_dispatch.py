@@ -37,6 +37,7 @@ from llm_client.core.config import ClientConfig
 from llm_client.core.data_types import LLMCallResult
 from llm_client.core.model_detection import _resolve_api_base_for_model
 from llm_client.core.model_availability import filter_available_models
+from llm_client.core.model_execution_policy import evaluate_model_execution_policy
 from llm_client.utils.openrouter import _openrouter_routing_enabled
 from llm_client.result_finalization import finalize_result as _finalize_result_base
 from llm_client.result_metadata import (
@@ -75,9 +76,10 @@ def _build_routing_trace(
     sticky_fallback: bool | None = None,
     background_mode: bool | None = None,
     routing_policy: str | None = None,
+    model_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a minimal routing trace for week-1 contract characterization."""
-    return _build_routing_trace_base(
+    trace = _build_routing_trace_base(
         requested_model=requested_model,
         attempted_models=attempted_models,
         selected_model=selected_model,
@@ -87,6 +89,9 @@ def _build_routing_trace(
         background_mode=background_mode,
         routing_policy=routing_policy or _routing_policy_label(),
     )
+    if model_policy is not None:
+        trace["model_policy"] = dict(model_policy)
+    return trace
 
 
 def _resolve_call_plan(
@@ -95,12 +100,19 @@ def _resolve_call_plan(
     fallback_models: list[str] | None,
     api_base: str | None,
     config: ClientConfig | None = None,
+    model_policy: str = "compatibility",
+    model_justification: str | None = None,
 ) -> ResolvedCallPlan:
     """Resolve and log routing plan once per entrypoint."""
     cfg = config or ClientConfig.from_env()
     resolved_plan = resolve_call(
         CallRequest(model=model, fallback_models=fallback_models, api_base=api_base),
         cfg,
+    )
+    policy_decision = evaluate_model_execution_policy(
+        resolved_plan.models,
+        mode=model_policy,
+        justification=model_justification,
     )
     for resolved_model in resolved_plan.models:
         _check_model_deprecation(resolved_model)
@@ -116,6 +128,7 @@ def _resolve_call_plan(
         )
 
     routing_trace = dict(resolved_plan.routing_trace)
+    routing_trace["model_policy"] = policy_decision.model_dump(mode="json")
     if suppressed_models:
         routing_trace["suppressed_models"] = suppressed_models
         for item in suppressed_models:
@@ -237,6 +250,7 @@ def _build_structured_call_result(
     effective_api_base: str | None,
     background_mode: bool | None = None,
     routing_policy: str,
+    model_policy: dict[str, Any] | None = None,
 ) -> LLMCallResult:
     """Build and identity-annotate a structured-call result consistently."""
     llm_result = LLMCallResult(
@@ -261,6 +275,7 @@ def _build_structured_call_result(
             effective_api_base=effective_api_base,
             background_mode=background_mode,
             routing_policy=routing_policy,
+            model_policy=model_policy,
         ),
     )
 

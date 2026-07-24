@@ -56,13 +56,12 @@ pip install -e "~/projects/llm_client[structured]"  # + instructor for Pydantic 
 ## Quick start
 
 ```python
-from llm_client import call_llm, get_model
+from llm_client import DEFAULT_EXECUTION_MODEL, call_llm
 
-# Task-based model selection (preferred)
-model = get_model("extraction")
 result = call_llm(
-    model,
+    DEFAULT_EXECUTION_MODEL,
     [{"role": "user", "content": "Summarize this note"}],
+    model_policy="enforce_allowlist",
     task="extraction",
     trace_id="demo/basic",
     max_budget=1.00,
@@ -82,9 +81,10 @@ class Sentiment(BaseModel):
     score: float
 
 sentiment, meta = call_llm_structured(
-    "openrouter/openai/gpt-5-mini",
+    "openrouter/deepseek/deepseek-v4-flash",
     [{"role": "user", "content": "I love this product!"}],
     response_model=Sentiment,
+    model_policy="enforce_allowlist",
     task="sentiment",
     trace_id="demo/sentiment",
     max_budget=1.00,
@@ -109,11 +109,13 @@ a narrower projected schema.
 ```python
 from llm_client import acall_llm, acall_llm_structured, acall_llm_batch
 
-result = await acall_llm("openrouter/openai/gpt-5-mini", messages,
+result = await acall_llm("openrouter/deepseek/deepseek-v4-flash", messages,
+    model_policy="enforce_allowlist",
     task="async_demo", trace_id="demo/async", max_budget=1.00)
 
 # Concurrent batch
-results = await acall_llm_batch("openrouter/openai/gpt-5-mini", [msgs1, msgs2, msgs3],
+results = await acall_llm_batch("openrouter/deepseek/deepseek-v4-flash", [msgs1, msgs2, msgs3],
+    model_policy="enforce_allowlist",
     max_concurrent=5, task="batch_demo", trace_id="demo/batch", max_budget=2.00)
 ```
 

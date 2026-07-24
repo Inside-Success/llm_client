@@ -65,10 +65,9 @@ DEFAULT_TIERS: list[dict[str, Any]] = [
         "tier": 2,
         "description": "Moderate: entity extraction, classification, analysis",
         "models": [
-            "openrouter/deepseek/deepseek-chat",
+            "openrouter/deepseek/deepseek-v4-flash",
             "gemini/gemini-2.5-flash",
             "deepseek/deepseek-chat",
-            "gpt-5-mini",
             "gemini/gemini-3-flash",
         ],
     },

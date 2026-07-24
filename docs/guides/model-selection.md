@@ -1,11 +1,37 @@
 # Model Selection
 
-`llm_client` model selection has two separate decisions:
+`llm_client` model selection has three separate decisions:
 
-1. **Raw model tier** — task-shape, latency, and reasoning tradeoff for ordinary
+1. **Execution policy** — whether the caller is still in temporary compatibility
+   mode or opts into the exact shared allowlist.
+2. **Raw model tier** — task-shape, latency, and reasoning tradeoff for ordinary
    text or structured-output calls. Cost is observed, not a launch gate.
-2. **Execution mode** — whether the call needs a workspace-agent SDK lane with
+3. **Execution mode** — whether the call needs a workspace-agent SDK lane with
    side effects, tools, and repository context.
+
+New and migrated production callers use:
+
+```python
+result = call_llm(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    model_policy="enforce_allowlist",
+    task="bounded_decision",
+    trace_id=trace_id,
+    max_budget=0.05,
+)
+```
+
+DeepSeek V4 Flash is the only no-justification default. Any other allowed
+canonical route requires a non-empty `model_justification`; the decision is
+retained in both the routing trace and replayable call snapshot. A justification
+cannot authorize a route absent from the allowlist. GPT-5 Mini, GPT-5.1 Mini,
+GPT-5.4 Mini, and Codex Mini routes are intentionally absent and therefore fail
+before provider dispatch.
+
+`model_policy="compatibility"` is a temporary migration surface for existing
+callers. It is not the target state and must not be used by newly migrated
+production paths.
 
 Do not use agent SDK models merely because they are “smarter.” Use them when
 the workflow needs workspace side effects:
@@ -39,7 +65,9 @@ result = call_llm_structured(
 )
 ```
 
-`llm_client` forwards normalized controls without a model-family allowlist.
+Provider capability forwarding remains independent of the execution allowlist.
+For an allowed route, `llm_client` forwards normalized controls without
+model-family-specific branches.
 OpenRouter transport explicitly admits those documented controls through
 LiteLLM even when the installed LiteLLM capability table lags the provider.
 It also requires a provider route that supports the controls. Unsupported
@@ -85,7 +113,9 @@ pre-dispatch policy failures, retries/fallbacks, local schema validation, and
 budget enforcement. Use the shared trace ID to join the two views; do not build
 another provider-specific exporter inside `llm_client`.
 
-For ordinary model selection, prefer tier selectors:
+For ordinary model selection during migration, prefer tier selectors. Under
+`model_policy="enforce_allowlist"`, the selector's complete resolved chain must
+be allowed, and every non-default route requires `model_justification`:
 
 | Selector | Default model | Use for | Do not use for |
 |---|---|---|---|
@@ -181,11 +211,11 @@ probe, but it does not certify a local route. GPT-5.6 Sol and Terra now have
 bounded direct-route evidence; Luna remains a provider-declared capability,
 not a `llm_client` selection default or an observed result.
 
-Fable- and Opus-family models are banned. They must not appear in the registry,
-project config, direct `call_llm(...)` calls, fallback chains, provider model
-arrays, workspace-agent aliases, or override fields. Opaque account-side model
-selectors are rejected. Generic `model_override_acceptance` does not authorize
-either family.
+The enforced allowlist supersedes family-by-family bans for migrated callers.
+Fable, Opus, GPT Mini, Codex Mini, unknown models, and opaque account-side
+selectors are all unavailable because they are not exact allowlist entries.
+Neither `model_justification` nor generic `model_override_acceptance` can
+authorize an unlisted route.
 
 ## Should every project register through `llm_client`?
 
@@ -193,9 +223,11 @@ Yes for production/shared project LLM calls. The practical enforcement target
 is:
 
 - project code imports `llm_client` for LLM execution;
-- model choice uses a tier selector or a documented override;
+- project code sets `model_policy="enforce_allowlist"`;
+- DeepSeek V4 Flash is used by default;
+- another exact allowed route includes a durable `model_justification`;
 - direct raw model literals are audited;
-- banned models are blocked regardless of override metadata.
+- unlisted models are blocked regardless of override metadata.
 
 Do not force benchmark baselines, provider SDK demos, fixture strings, or
 workspace-agent SDK lanes through the same raw-model tier selector. Those still

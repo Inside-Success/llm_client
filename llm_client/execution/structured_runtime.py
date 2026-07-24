@@ -694,6 +694,8 @@ def _call_llm_structured_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="call_llm_structured",
     )
@@ -713,6 +715,10 @@ def _call_llm_structured_impl(
     )
     _check_budget(trace_id, max_budget)
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    snapshot_public_kwargs = dict(public_kwargs)
+    snapshot_public_kwargs["model_policy"] = model_policy
+    if model_justification is not None:
+        snapshot_public_kwargs["model_justification"] = model_justification
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
     r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     from llm_client.observability.replay import build_call_snapshot
@@ -732,7 +738,7 @@ def _call_llm_structured_impl(
         max_delay=max_delay,
         retry_on=retry_on,
         fallback_models=fallback_models,
-        public_kwargs=public_kwargs,
+        public_kwargs=snapshot_public_kwargs,
         retry_policy=r,
         cache_policy=cache,
         structured_output_mode=output_policy.mode,
@@ -743,9 +749,12 @@ def _call_llm_structured_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
     )
     models = plan.models
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
 
     if _is_agent_model(model):
         if require_native_json_schema:
@@ -784,6 +793,7 @@ def _call_llm_structured_impl(
                 requested_api_base=api_base,
                 effective_api_base=api_base,
                 routing_policy=routing_policy,
+                model_policy=model_policy_trace,
             ),
         )
         if hooks and hooks.after_call:
@@ -837,6 +847,7 @@ def _call_llm_structured_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 )
                 _log_call_event(
@@ -1055,6 +1066,7 @@ def _call_llm_structured_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     )
                     structured_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
@@ -1321,6 +1333,7 @@ def _call_llm_structured_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     )
                     structured_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
@@ -1494,6 +1507,7 @@ def _call_llm_structured_impl(
                     effective_api_base=current_api_base,
                     background_mode=background_mode,
                     routing_policy=routing_policy,
+                    model_policy=model_policy_trace,
                 )
 
                 if hooks and hooks.after_call:
@@ -1655,6 +1669,8 @@ async def _acall_llm_structured_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm_structured",
     )
@@ -1674,6 +1690,10 @@ async def _acall_llm_structured_impl(
     )
     _check_budget(trace_id, max_budget)
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    snapshot_public_kwargs = dict(public_kwargs)
+    snapshot_public_kwargs["model_policy"] = model_policy
+    if model_justification is not None:
+        snapshot_public_kwargs["model_justification"] = model_justification
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
     r = _effective_retry(retry, num_retries, base_delay, max_delay, retry_on, on_retry)
     from llm_client.observability.replay import build_call_snapshot
@@ -1693,7 +1713,7 @@ async def _acall_llm_structured_impl(
         max_delay=max_delay,
         retry_on=retry_on,
         fallback_models=fallback_models,
-        public_kwargs=public_kwargs,
+        public_kwargs=snapshot_public_kwargs,
         retry_policy=r,
         cache_policy=cache,
         structured_output_mode=output_policy.mode,
@@ -1704,9 +1724,12 @@ async def _acall_llm_structured_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
     )
     models = plan.models
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
 
     if _is_agent_model(model):
         if require_native_json_schema:
@@ -1745,6 +1768,7 @@ async def _acall_llm_structured_impl(
                 requested_api_base=api_base,
                 effective_api_base=api_base,
                 routing_policy=routing_policy,
+                model_policy=model_policy_trace,
             ),
         )
         if hooks and hooks.after_call:
@@ -1798,6 +1822,7 @@ async def _acall_llm_structured_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 )
                 _log_call_event(
@@ -2020,6 +2045,7 @@ async def _acall_llm_structured_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     )
                     structured_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
@@ -2289,6 +2315,7 @@ async def _acall_llm_structured_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     )
                     structured_attempt_costs.apply(llm_result)
                     if hooks and hooks.after_call:
@@ -2469,6 +2496,7 @@ async def _acall_llm_structured_impl(
                     effective_api_base=current_api_base,
                     background_mode=background_mode,
                     routing_policy=routing_policy,
+                    model_policy=model_policy_trace,
                 )
 
                 if hooks and hooks.after_call:

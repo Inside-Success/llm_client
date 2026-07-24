@@ -642,7 +642,7 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
     "o4-mini": (
         "o3-mini",
         "o4-mini was retired by OpenAI on Feb 16, 2026 and no longer accepts "
-        "requests. Use o3-mini for reasoning tasks or gpt-5-mini for general tasks.",
+        "requests. Use o3-mini for reasoning tasks or DeepSeek V4 Flash for general tasks.",
     ),
     "mistral-large": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",

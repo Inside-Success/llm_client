@@ -181,6 +181,8 @@ async def _acall_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_justification = kwargs.pop("model_justification", None)
     agent_retry_safe = kwargs.pop("agent_retry_safe", None)
     parent_trace_id: str | None = kwargs.pop("parent_trace_id", None)
     task, trace_id, max_budget, _entry_warnings = _require_tags(
@@ -196,6 +198,9 @@ async def _acall_llm_impl(
     _check_budget(trace_id, max_budget)
 
     snapshot_runtime_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    snapshot_runtime_kwargs["model_policy"] = model_policy
+    if model_justification is not None:
+        snapshot_runtime_kwargs["model_justification"] = model_justification
     # Inject task/trace_id into litellm metadata for callback propagation
     # (e.g. Langfuse). Harmless when no callbacks are configured.
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
@@ -244,10 +249,13 @@ async def _acall_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
     )
     models = plan.models
     fallback_chain = plan.fallback_models or None
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     if fallback_chain is not None:
         _inner_named["fallback_models"] = fallback_chain
     else:
@@ -389,6 +397,7 @@ async def _acall_llm_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ))
                 _s_hash, _rf_type = _extract_schema_observability(public_kwargs)
@@ -484,6 +493,7 @@ async def _acall_llm_impl(
                     sticky_fallback=any("STICKY_FALLBACK" in w for w in (result.warnings or [])),
                     background_mode=background_mode,
                     routing_policy=routing_policy,
+                    model_policy=model_policy_trace,
                 ),
             ))
             if hooks and hooks.after_call:
