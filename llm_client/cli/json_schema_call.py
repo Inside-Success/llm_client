@@ -57,6 +57,7 @@ class JsonSchemaCallRequest(BaseModel):
     temperature: float | None = None
     seed: int | None = None
     max_tokens: int | None = Field(default=None, gt=0)
+    model_justification: str | None = Field(default=None, min_length=1)
 
 
 def _read_request(path_value: str) -> str:
@@ -116,6 +117,8 @@ def execute_json_schema_call(request: JsonSchemaCallRequest) -> dict[str, Any]:
         value = getattr(request, name)
         if value is not None:
             provider_kwargs[name] = value
+    if request.model_justification is not None:
+        provider_kwargs["model_justification"] = request.model_justification
 
     payload, result = call_llm_json_schema(
         request.model,
