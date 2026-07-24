@@ -131,6 +131,15 @@ def test_public_schema_helpers_match_the_runtime_provider_contract() -> None:
     assert public_schema(Answer) == schema
     assert public_digest(schema) == route_schema_sha256(schema)
 
+    from llm_client.execution.structured_runtime import (  # noqa: PLC0415
+        _native_provider_schema,
+    )
+
+    assert schema == _native_provider_schema(
+        Answer,
+        model="openrouter/openai/gpt-5.6-terra",
+    )
+
 
 def test_schema_substitution_fails_join() -> None:
     """A different provider-facing schema cannot borrow a successful receipt."""

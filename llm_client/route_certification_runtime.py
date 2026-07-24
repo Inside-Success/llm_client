@@ -40,11 +40,11 @@ def openrouter_native_provider_schema(
     """Return the exact schema the structured runtime sends through OpenRouter."""
     from llm_client.core.client import (
         _openrouter_compatible_strict_json_schema,
-        _strict_json_schema,
+        _strict_openai_response_model_schema,
     )
 
     return _openrouter_compatible_strict_json_schema(
-        _strict_json_schema(response_model.model_json_schema())
+        _strict_openai_response_model_schema(response_model)
     )
 
 
