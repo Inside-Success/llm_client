@@ -19,27 +19,13 @@ from llm_client.execution.call_contracts import (
     _strip_llm_internal_kwargs,
 )
 from llm_client.utils.cost_utils import _compute_cost, _extract_tool_calls, _extract_usage, _parse_cost_result
-from llm_client.core.config import ClientConfig
 from llm_client.core.data_types import LLMCallResult
-from llm_client.core.model_detection import _is_responses_api_model, _is_thinking_model
+from llm_client.core.model_detection import _is_responses_api_model
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
 from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
 from llm_client.utils.openrouter import _enable_openrouter_inline_metadata
 
 logger = logging.getLogger(__name__)
-
-
-def _default_thinking_payload_for_model(model: str, config: ClientConfig) -> dict[str, Any] | None:
-    """Return shared default thinking kwargs for the given model, if any."""
-
-    if model.lower().startswith("openrouter/"):
-        return None
-    if not model.lower().startswith("gemini/"):
-        return None
-    budget = config.resolve_direct_gemini_thinking_budget()
-    if budget is None:
-        return None
-    return {"type": "enabled", "budget_tokens": budget}
 
 
 def _prepare_call_kwargs(
@@ -80,23 +66,6 @@ def _prepare_call_kwargs(
         call_kwargs["reasoning_effort"] = reasoning_effort
 
     _enable_openrouter_inline_metadata(model, call_kwargs)
-
-    if _is_thinking_model(model) and "thinking" not in provider_kwargs:
-        try:
-            from litellm import get_supported_openai_params
-
-            provider = model.split("/")[0] if "/" in model else ""
-            supported = get_supported_openai_params(
-                model=model,
-                custom_llm_provider=provider,
-            ) or []
-            if "thinking" in supported:
-                config = ClientConfig.from_env()
-                thinking_payload = _default_thinking_payload_for_model(model, config)
-                if thinking_payload is not None:
-                    call_kwargs["thinking"] = thinking_payload
-        except Exception:
-            logger.debug("Thinking probe failed for model=%s", model, exc_info=True)
 
     _coerce_model_incompatible_params(
         model=model,

@@ -141,6 +141,7 @@ def judge_output(
         resolved_model,
         messages,
         response_model=JudgeResponse,
+        reasoning_effort="low",
         task=resolved_task,
         trace_id=resolved_trace_id,
         max_budget=0.50,

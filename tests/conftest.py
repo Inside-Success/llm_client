@@ -43,6 +43,8 @@ def _isolate_non_policy_tests_from_the_execution_allowlist(
     from llm_client.core.model_execution_policy import (
         DEFAULT_EXECUTION_MODEL,
         ModelExecutionDecision,
+        REASONING_EFFORTS,
+        ReasoningPolicyDecision,
     )
 
     def test_policy_decision(
@@ -50,6 +52,7 @@ def _isolate_non_policy_tests_from_the_execution_allowlist(
         *,
         mode: str = "enforce_allowlist",
         justification: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> ModelExecutionDecision:
         selected = [str(model).strip() for model in models]
         normalized = str(justification).strip() if justification is not None else None
@@ -62,6 +65,16 @@ def _isolate_non_policy_tests_from_the_execution_allowlist(
             uses_only_default=uses_only_default,
             justification=normalized or (
                 None if uses_only_default else "Authorized synthetic model in non-policy test."
+            ),
+            reasoning_policy=ReasoningPolicyDecision(
+                required=False,
+                effort=(
+                    str(reasoning_effort).strip().lower()
+                    if reasoning_effort is not None
+                    and str(reasoning_effort).strip().lower() in REASONING_EFFORTS
+                    else None
+                ),
+                configurable_models=[],
             ),
         )
 

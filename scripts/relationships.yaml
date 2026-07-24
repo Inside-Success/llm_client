@@ -31,6 +31,7 @@ couplings:
   description: Provider-limit inventory, observation, authorization, and public-surface boundary.
 - sources:
   - llm_client/core/client.py
+  - llm_client/core/model_execution_policy.py
   - llm_client/execution/*_runtime.py
   - llm_client/execution/execution_kernel.py
   - llm_client/core/routing.py
@@ -43,6 +44,8 @@ couplings:
   - docs/adr/0009-long-thinking-background-polling.md
   - docs/adr/0010-cross-project-runtime-substrate.md
   - docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md
+  - docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md
+  - docs/plans/117_explicit_reasoning_policy.md
   type: validated
   description: Core call path identity, routing, warning, and execution contracts.
 - sources:
@@ -54,6 +57,7 @@ couplings:
   docs:
   - docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md
   - docs/plans/110_provider-capabilities-opus-ban.md
+  - docs/plans/117_explicit_reasoning_policy.md
   type: validated
   description: Generic provider controls, OpenRouter telemetry projection, and complete model-ban invariants.
 - sources:

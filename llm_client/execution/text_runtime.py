@@ -23,6 +23,7 @@ from llm_client.core.client import (
     RetryPolicy,
 )
 from llm_client.core.config import ClientConfig
+from llm_client.core.errors import LLMConfigurationError
 from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
 from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 
@@ -132,6 +133,11 @@ async def _acall_llm_impl(
     **kwargs: Any,
 ) -> LLMCallResult:
     """Run the asynchronous text-call runtime behind ``client.acall_llm``."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     time = _client.time
     logger = _client.logger
     litellm = _client.litellm
@@ -251,6 +257,7 @@ async def _acall_llm_impl(
         config=cfg,
         model_policy=model_policy,
         model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
     fallback_chain = plan.fallback_models or None
@@ -287,6 +294,16 @@ async def _acall_llm_impl(
             warning_sink=_warnings,
         )
         public_kwargs = _client._strip_llm_internal_kwargs(model_kwargs)
+        if current_model.startswith("codex"):
+            legacy_effort = public_kwargs.get("model_reasoning_effort")
+            if (
+                legacy_effort is not None
+                and str(legacy_effort).strip().lower() != reasoning_effort
+            ):
+                raise LLMConfigurationError(
+                    "reasoning_effort conflicts with model_reasoning_effort for Codex"
+                )
+            public_kwargs["model_reasoning_effort"] = reasoning_effort
 
         if not is_agent and ("mcp_servers" in public_kwargs or "mcp_sessions" in public_kwargs):
             from llm_client.agent.mcp_agent import MCP_LOOP_KWARGS, acall_with_mcp_runtime
@@ -381,7 +398,12 @@ async def _acall_llm_impl(
 
         key: str | None = None
         if cache is not None:
-            key = _cache_key(current_model, messages, **public_kwargs)
+            key = _cache_key(
+                current_model,
+                messages,
+                reasoning_effort=reasoning_effort,
+                **public_kwargs,
+            )
             cached = await _async_cache_get(cache, key)
             if cached is not None:
                 cached_result = cast(LLMCallResult, _finalize_result(

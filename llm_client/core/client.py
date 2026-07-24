@@ -26,7 +26,11 @@ Features:
 
 Supported providers (just change the model string):
     call_llm("gpt-4o", messages)                     # OpenAI
-    call_llm("openrouter/deepseek/deepseek-v4-flash", messages)
+    call_llm(
+        "openrouter/deepseek/deepseek-v4-flash",
+        messages,
+        reasoning_effort="none",
+    )
     call_llm("anthropic/claude-sonnet-4-5-20250929", messages)  # Anthropic
     call_llm("gemini/gemini-2.0-flash", messages)     # Google
     call_llm("mistral/mistral-large", messages)       # Mistral
@@ -492,8 +496,9 @@ def call_llm(
                   [{"role": "user", "content": "Hello"}]
         timeout: Request timeout in seconds
         num_retries: Number of retries on transient failure
-        reasoning_effort: Reasoning effort level — only used for Claude models,
-                         silently ignored for others
+        reasoning_effort: Explicit reasoning effort. Required for registered
+            configurable-reasoning routes; use ``"none"`` for off where
+            supported. Unsupported or omitted policies fail before dispatch.
         api_base: Optional API base URL (e.g., for OpenRouter:
                   "https://openrouter.ai/api/v1")
         fallback_models: Models to try if the primary model fails all retries
@@ -603,7 +608,8 @@ def call_llm_structured(
         timeout: Request timeout in seconds. When omitted, shared structured-call
             runtime policy supplies a finite default.
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -701,7 +707,8 @@ def call_llm_with_tools(
         tools: Tool definitions in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -784,7 +791,8 @@ async def acall_llm(
         messages: Chat messages in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on transient failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -887,7 +895,8 @@ async def acall_llm_structured(
         timeout: Request timeout in seconds. When omitted, shared structured-call
             runtime policy supplies a finite default.
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -985,7 +994,8 @@ async def acall_llm_with_tools(
         tools: Tool definitions in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -1322,7 +1332,8 @@ def stream_llm(
         messages: Chat messages in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on pre-stream failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL
         retry: Reusable RetryPolicy (overrides individual retry params)
         fallback_models: Models to try if the primary model fails all retries

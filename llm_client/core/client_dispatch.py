@@ -102,6 +102,7 @@ def _resolve_call_plan(
     config: ClientConfig | None = None,
     model_policy: str = "enforce_allowlist",
     model_justification: str | None = None,
+    reasoning_effort: str | None = None,
 ) -> ResolvedCallPlan:
     """Resolve and log routing plan once per entrypoint."""
     cfg = config or ClientConfig.from_env()
@@ -113,6 +114,7 @@ def _resolve_call_plan(
         resolved_plan.models,
         mode=model_policy,
         justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     for resolved_model in resolved_plan.models:
         _check_model_deprecation(resolved_model)
@@ -164,6 +166,7 @@ def _build_model_chain(
     model: str,
     fallback_models: list[str] | None,
     config: ClientConfig | None = None,
+    reasoning_effort: str | None = None,
 ) -> list[str]:
     """Build primary+fallback model chain with stable de-duplication."""
     plan = _resolve_call_plan(
@@ -171,6 +174,7 @@ def _build_model_chain(
         fallback_models=fallback_models,
         api_base=None,
         config=config,
+        reasoning_effort=reasoning_effort,
     )
     return plan.models
 
