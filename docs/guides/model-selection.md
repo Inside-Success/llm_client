@@ -31,7 +31,9 @@ before provider dispatch.
 
 `model_policy="compatibility"` is a temporary migration surface for existing
 callers. It is not the target state and must not be used by newly migrated
-production paths.
+production paths. GPT-5 Mini, GPT-5.1 Mini, and Codex Mini routes remain
+hard-blocked in compatibility mode; it is not an escape hatch for those
+prohibitions.
 
 Do not use agent SDK models merely because they are “smarter.” Use them when
 the workflow needs workspace side effects:

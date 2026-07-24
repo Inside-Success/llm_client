@@ -20,7 +20,8 @@ Existing callers temporarily remain in `compatibility` mode until individually
 audited and migrated; newly migrated production paths must use enforcement.
 This staged transition avoids silently breaking unrelated consumers while
 making the target invariant explicit. GPT-5 Mini and GPT-5.1 Mini are not
-allowlisted.
+allowlisted and are also hard-blocked for compatibility callers, together with
+Codex Mini routes.
 
 The statement below that normalized public controls are forwarded “without a
 model-family allowlist” refers only to capability-specific branching after

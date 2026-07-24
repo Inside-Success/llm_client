@@ -633,6 +633,21 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
         "Fable-family models are banned by ecosystem policy. Do not use them for "
         "new calls, even with ordinary model_override_acceptance metadata.",
     ),
+    "gpt-5.1-mini": (
+        "openrouter/deepseek/deepseek-v4-flash",
+        "GPT-5.1 Mini is prohibited by the shared model-execution policy, "
+        "including for callers still migrating from compatibility mode.",
+    ),
+    "gpt-5-mini": (
+        "openrouter/deepseek/deepseek-v4-flash",
+        "GPT-5 Mini is prohibited by the shared model-execution policy, "
+        "including for callers still migrating from compatibility mode.",
+    ),
+    "codex-mini": (
+        "codex/gpt-5.4",
+        "Codex Mini routes are prohibited by the shared model-execution policy, "
+        "including for callers still migrating from compatibility mode.",
+    ),
     "gpt-4o-mini": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",
         "GPT-4o-mini (intel 30, $0.15/$0.60) is outclassed by DeepSeek V3.2 "

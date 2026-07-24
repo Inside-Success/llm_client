@@ -71,8 +71,10 @@ authorization. These fields are internal controls and never reach a provider.
 `model_policy="compatibility"` preserves existing callers during inventory.
 `model_policy="enforce_allowlist"` activates the new contract. New and migrated
 production consumers use enforcement; compatibility is a temporary migration
-state, not an alternate authorization path. A later cross-project inventory
-and consumer migration is required before changing the shared default mode.
+state, not an alternate authorization path. GPT-5 Mini, GPT-5.1 Mini, and Codex
+Mini routes are hard-blocked even in compatibility mode. A later cross-project
+inventory and consumer migration is required before changing the shared default
+mode.
 
 ### Failure behavior
 
@@ -134,6 +136,8 @@ and consumer migration is required before changing the shared default mode.
 ## Verification
 
 - Shared focused policy/routing/runtime/replay gate: `108 passed`.
+- Global compatibility regression proves GPT-5 Mini, GPT-5.1 Mini, and Codex
+  Mini fail before dispatch even outside enforced mode.
 - Broader feasible shared suite: `1837 passed, 4 skipped`; three unrelated
   environment/baseline failures remained (missing extracted `prompt_eval` and
   one lifecycle test polluted by suite-level heartbeat state). The lifecycle
