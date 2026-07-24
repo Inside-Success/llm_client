@@ -211,6 +211,17 @@ def _emit_llm_call_lifecycle_event(
 ) -> None:
     """Emit a Foundation-backed lifecycle event for one public LLM call."""
 
+    lifecycle_event = {
+        "event_id": _new_foundation_event_id(), "timestamp": _foundation_now_iso(),
+        "logical_call_id": call_id, "trace_id": trace_id, "task": task, "phase": phase,
+        "requested_model": requested_model, "resolved_model": resolved_model,
+        "call_kind": call_kind, "provider_timeout_s": provider_timeout_s if provider_timeout_s > 0 else None,
+        "timeout_policy": _timeout_policy_label(), "process_id": _PROCESS_ID if _PROCESS_ID > 0 else None,
+        "host_name": _PROCESS_HOST_NAME, "process_start_token": _PROCESS_START_TOKEN,
+        "error_type": _llm_lifecycle_error_type(error) if error is not None else None,
+    }
+    _io_log.record_call_lifecycle_event(lifecycle_event)
+
     params: dict[str, Any] = {
         "task": task,
         "trace_id": trace_id,
@@ -223,7 +234,7 @@ def _emit_llm_call_lifecycle_event(
 
     _io_log.log_foundation_event(
         event={
-            "event_id": _new_foundation_event_id(),
+            "event_id": lifecycle_event["event_id"],
             "event_type": "LLMCallLifecycle",
             "timestamp": _foundation_now_iso(),
             "run_id": _coerce_foundation_run_id(None, trace_id),

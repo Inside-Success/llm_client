@@ -764,3 +764,22 @@ def get_background_mode_adoption(
         )
 
     return summary
+
+
+def get_call_lifecycle(*, logical_call_id: str | None = None, trace_id: str | None = None) -> list[dict[str, Any]]:
+    """Read typed lifecycle evidence and classify a missing terminal event honestly."""
+    if (logical_call_id is None) == (trace_id is None):
+        raise ValueError("provide exactly one of logical_call_id or trace_id")
+    column, value = ("logical_call_id", logical_call_id) if logical_call_id is not None else ("trace_id", trace_id)
+    rows = _io_log._get_db().execute(
+        f"SELECT logical_call_id, trace_id, task, phase, timestamp, requested_model, resolved_model, error_type FROM call_lifecycle_events WHERE {column} = ? ORDER BY id",  # noqa: S608
+        (value,),
+    ).fetchall()
+    calls: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        call = calls.setdefault(row[0], {"logical_call_id": row[0], "trace_id": row[1], "task": row[2], "events": []})
+        call["events"].append({"phase": row[3], "timestamp": row[4], "requested_model": row[5], "resolved_model": row[6], "error_type": row[7]})
+    for call in calls.values():
+        latest = call["events"][-1]["phase"]
+        call["state"] = latest if latest in {"completed", "failed", "cancelled"} else "interrupted_or_abandoned"
+    return list(calls.values())

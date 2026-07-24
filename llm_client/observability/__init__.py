@@ -40,6 +40,7 @@ from llm_client.observability.experiments import (
 )
 from llm_client.observability.query import (
     get_active_llm_calls,
+    get_call_lifecycle,
     get_background_mode_adoption,
     get_completed_traces,
     get_cost,
