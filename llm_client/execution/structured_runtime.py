@@ -783,7 +783,7 @@ def _call_llm_structured_impl(
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="call_llm_structured",
     )
-    _logical_call_id = uuid4().hex
+    _logical_call_id = str(kwargs.pop("_lifecycle_logical_call_id", "")).strip() or uuid4().hex
     def _log_call_event(**event: Any) -> None:
         """Bind the returned result and terminal row to one attempt history."""
         result = event.get("result")
@@ -1814,7 +1814,7 @@ async def _acall_llm_structured_impl(
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm_structured",
     )
-    _logical_call_id = uuid4().hex
+    _logical_call_id = str(kwargs.pop("_lifecycle_logical_call_id", "")).strip() or uuid4().hex
     def _log_call_event(**event: Any) -> None:
         """Bind the returned result and terminal row to one attempt history."""
         result = event.get("result")

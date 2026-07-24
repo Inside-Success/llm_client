@@ -136,6 +136,7 @@ def _run_sync_public_call(
     )
     runtime_kwargs = dict(envelope.runtime_kwargs)
     runtime_kwargs["_lifecycle_monitor"] = monitor
+    runtime_kwargs["_lifecycle_logical_call_id"] = call_id
     monitor.start()
     try:
         result = invoke(runtime_kwargs)
@@ -238,6 +239,7 @@ async def _run_async_public_call(
     )
     runtime_kwargs = dict(envelope.runtime_kwargs)
     runtime_kwargs["_lifecycle_monitor"] = monitor
+    runtime_kwargs["_lifecycle_logical_call_id"] = call_id
     monitor.start()
     try:
         result = await invoke(runtime_kwargs)
