@@ -25,6 +25,7 @@ from llm_client.execution.call_lifecycle import (
     _emit_llm_call_lifecycle_event,
     _new_llm_call_lifecycle_id,
     _provider_timeout_for_lifecycle,
+    _requested_timeout_for_lifecycle,
     _resolve_lifecycle_monitoring_settings,
 )
 
@@ -40,6 +41,7 @@ class PreparedPublicCallEnvelope:
     resolved_trace_id: str
     resolved_max_budget: float
     effective_provider_timeout: int
+    requested_timeout_s: int | None
     heartbeat_interval_s: float
     stall_after_s: float
     runtime_kwargs: dict[str, Any]
@@ -79,6 +81,7 @@ def _prepare_public_call_envelope(
         resolved_trace_id=resolved_trace_id,
         resolved_max_budget=resolved_max_budget,
         effective_provider_timeout=effective_provider_timeout,
+        requested_timeout_s=_requested_timeout_for_lifecycle(timeout),
         heartbeat_interval_s=heartbeat_interval_s,
         stall_after_s=stall_after_s,
         runtime_kwargs=runtime_kwargs,
@@ -122,6 +125,8 @@ def _run_sync_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         heartbeat_interval_s=envelope.heartbeat_interval_s,
         stall_after_s=envelope.stall_after_s,
@@ -146,6 +151,8 @@ def _run_sync_public_call(
             trace_id=envelope.resolved_trace_id,
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
+            requested_timeout_s=envelope.requested_timeout_s,
+            transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
             error=exc,
@@ -168,6 +175,8 @@ def _run_sync_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         resolved_model=resolve_model(result),
         elapsed_s=elapsed_s,
@@ -218,6 +227,8 @@ async def _run_async_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         heartbeat_interval_s=envelope.heartbeat_interval_s,
         stall_after_s=envelope.stall_after_s,
@@ -242,6 +253,8 @@ async def _run_async_public_call(
             trace_id=envelope.resolved_trace_id,
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
+            requested_timeout_s=envelope.requested_timeout_s,
+            transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
             heartbeat_interval_s=envelope.heartbeat_interval_s,
@@ -263,6 +276,8 @@ async def _run_async_public_call(
             trace_id=envelope.resolved_trace_id,
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
+            requested_timeout_s=envelope.requested_timeout_s,
+            transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
             error=exc,
@@ -285,6 +300,8 @@ async def _run_async_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         resolved_model=resolve_model(result),
         elapsed_s=elapsed_s,

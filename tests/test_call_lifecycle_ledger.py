@@ -94,6 +94,7 @@ async def test_async_cancellation_leaves_a_terminal_lifecycle_event() -> None:
         resolved_trace_id=trace_id,
         resolved_max_budget=0.0,
         effective_provider_timeout=30,
+        requested_timeout_s=30,
         heartbeat_interval_s=0.0,
         stall_after_s=0.0,
         runtime_kwargs={},
@@ -116,3 +117,5 @@ async def test_async_cancellation_leaves_a_terminal_lifecycle_event() -> None:
     result = get_call_lifecycle(trace_id=trace_id)
     assert result[0]["state"] == "cancelled"
     assert [event["phase"] for event in result[0]["events"]] == ["started", "cancelled"]
+    assert result[0]["latest_event"]["requested_timeout_s"] == 30
+    assert result[0]["latest_event"]["transport_timeout_status"] == "forwarded_to_runtime"

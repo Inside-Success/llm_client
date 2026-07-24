@@ -539,11 +539,13 @@ class LLMCallLifecyclePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     call_id: str = Field(pattern=r"^llmcall_[A-Za-z0-9._:-]+$")
-    phase: Literal["started", "heartbeat", "progress", "stalled", "completed", "failed"]
+    phase: Literal["started", "heartbeat", "progress", "stalled", "completed", "failed", "cancelled"]
     call_kind: Literal["text", "structured"]
     requested_model_id: str = Field(min_length=1)
     resolved_model_id: str | None = None
     provider_timeout_s: int | None = Field(default=None, ge=0)
+    requested_timeout_s: int | None = Field(default=None, ge=0)
+    transport_timeout_status: Literal["forwarded_to_runtime", "not_observed"] = "not_observed"
     timeout_policy: Literal["allow", "ban"]
     prompt_ref: str | None = None
     host_name: str | None = None

@@ -780,7 +780,8 @@ def get_call_lifecycle(*, logical_call_id: str | None = None, trace_id: str | No
         f"""SELECT logical_call_id, trace_id, task, phase, timestamp,
                    requested_model, resolved_model, error_type, process_id,
                    host_name, process_start_token, provider_timeout_s,
-                   timeout_policy, payload
+                   requested_timeout_s, transport_timeout_status, timeout_policy,
+                   payload
             FROM call_lifecycle_events WHERE {column} = ? ORDER BY id""",  # noqa: S608
         (value,),
     ).fetchall()
@@ -792,7 +793,7 @@ def get_call_lifecycle(*, logical_call_id: str | None = None, trace_id: str | No
         )
         payload: dict[str, Any] = {}
         try:
-            decoded = json.loads(row[13])
+            decoded = json.loads(row[15])
             if isinstance(decoded, dict):
                 payload = decoded
         except (TypeError, json.JSONDecodeError):
@@ -805,7 +806,9 @@ def get_call_lifecycle(*, logical_call_id: str | None = None, trace_id: str | No
                 "resolved_model": row[6],
                 "error_type": row[7],
                 "provider_timeout_s": row[11],
-                "timeout_policy": row[12],
+                "requested_timeout_s": row[12],
+                "transport_timeout_status": row[13],
+                "timeout_policy": row[14],
                 "schema_hash": payload.get("schema_hash"),
                 "attempt_ordinal": payload.get("attempt_ordinal"),
             }

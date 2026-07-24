@@ -145,6 +145,16 @@ def _provider_timeout_for_lifecycle(timeout: Any) -> int:
     return effective
 
 
+def _requested_timeout_for_lifecycle(timeout: Any) -> int | None:
+    """Return the caller timeout without conflating it with policy enforcement."""
+
+    try:
+        requested = int(timeout)
+    except (TypeError, ValueError):
+        return None
+    return max(requested, 0)
+
+
 def _normalize_lifecycle_seconds(value: Any, *, default: float) -> float:
     """Normalize lifecycle heartbeat/stall thresholds from caller or env values."""
 
@@ -199,6 +209,8 @@ def _emit_llm_call_lifecycle_event(
     requested_model: str,
     provider_timeout_s: int,
     prompt_ref: str | None,
+    requested_timeout_s: int | None = None,
+    transport_timeout_status: str = "not_observed",
     resolved_model: str | None = None,
     latency_s: float | None = None,
     elapsed_s: float | None = None,
@@ -216,6 +228,8 @@ def _emit_llm_call_lifecycle_event(
         "logical_call_id": call_id, "trace_id": trace_id, "task": task, "phase": phase,
         "requested_model": requested_model, "resolved_model": resolved_model,
         "call_kind": call_kind, "provider_timeout_s": provider_timeout_s if provider_timeout_s > 0 else None,
+        "requested_timeout_s": requested_timeout_s,
+        "transport_timeout_status": transport_timeout_status,
         "timeout_policy": _timeout_policy_label(), "process_id": _PROCESS_ID if _PROCESS_ID > 0 else None,
         "host_name": _PROCESS_HOST_NAME, "process_start_token": _PROCESS_START_TOKEN,
         "error_type": _llm_lifecycle_error_type(error) if error is not None else None,
@@ -257,6 +271,8 @@ def _emit_llm_call_lifecycle_event(
                 "requested_model_id": requested_model,
                 "resolved_model_id": resolved_model,
                 "provider_timeout_s": provider_timeout_s if provider_timeout_s > 0 else None,
+                "requested_timeout_s": requested_timeout_s,
+                "transport_timeout_status": transport_timeout_status,
                 "timeout_policy": _timeout_policy_label(),
                 "prompt_ref": prompt_ref,
                 "host_name": _PROCESS_HOST_NAME,
