@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 import json
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -36,15 +36,20 @@ def _page(data: dict[str, Any]) -> str:
 
 
 def serve(*, host: str, port: int, hourly_budget: float | None, daily_budget: float | None) -> None:
+    # Initialize the shared SQLite connection before entering the request loop.
+    # Its migrations are serialized; doing them lazily in a request handler can
+    # make the first browser request appear to hang while another client writes.
+    _data(hourly_budget, daily_budget)
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            query = self.path.split("?", 1)[-1]
+            path, _, query = self.path.partition("?")
             granularity = "day" if "granularity=day" in query else "hour"
             data = _data(hourly_budget, daily_budget, granularity)
-            if self.path == "/api/dashboard":
+            if path == "/api/dashboard":
                 body = json.dumps(data, indent=2).encode()
                 content_type = "application/json"
-            elif self.path == "/":
+            elif path == "/":
                 body = _page(data).encode()
                 content_type = "text/html; charset=utf-8"
             else:
@@ -52,6 +57,6 @@ def serve(*, host: str, port: int, hourly_budget: float | None, daily_budget: fl
                 return
             self.send_response(200); self.send_header("Content-Type", content_type); self.end_headers(); self.wfile.write(body)
         def log_message(self, _format: str, *_args: Any) -> None: return
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = HTTPServer((host, port), Handler)
     print(f"LLM cost dashboard: http://{host}:{port}", flush=True)
     server.serve_forever()
