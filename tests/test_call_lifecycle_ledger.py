@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import sys
+import time
 from uuid import uuid4
 
 import pytest
@@ -20,6 +24,40 @@ def test_dispatch_without_terminal_is_discoverable_as_abandoned() -> None:
     result = get_call_lifecycle(logical_call_id="logical-1")
     assert result[0]["state"] == "interrupted_or_abandoned"
     assert result[0]["events"][0]["phase"] == "dispatched"
+
+
+def test_terminated_process_dispatch_is_recovered_as_abandoned(tmp_path) -> None:
+    """A process killed after durable dispatch leaves discoverable evidence."""
+
+    trace_id = f"interrupted-trace-{uuid4().hex}"
+    logical_call_id = f"interrupted-call-{uuid4().hex}"
+    db_path = tmp_path / "interrupted.db"
+    script = f'''\
+from datetime import datetime, timezone
+import os
+from llm_client import io_log
+io_log.record_call_lifecycle_event({{
+    "event_id": "evt_{uuid4().hex}", "timestamp": datetime.now(timezone.utc).isoformat(),
+    "logical_call_id": "{logical_call_id}", "trace_id": "{trace_id}", "task": "test",
+    "phase": "started", "requested_model": "test-model", "call_kind": "text",
+    "process_id": os.getpid(), "host_name": "test-child",
+}})
+os.kill(os.getpid(), 9)
+'''
+    env = dict(os.environ, LLM_CLIENT_DB_PATH=str(db_path), LLM_CLIENT_PROJECT="test")
+    completed = subprocess.run([sys.executable, "-c", script], env=env, check=False)
+    assert completed.returncode != 0
+
+    previous_path, previous_conn = io_log._db_path, io_log._db_conn
+    try:
+        io_log._db_path = db_path
+        io_log._db_conn = None
+        result = get_call_lifecycle(logical_call_id=logical_call_id)
+    finally:
+        if io_log._db_conn is not None:
+            io_log._db_conn.close()
+        io_log._db_path, io_log._db_conn = previous_path, previous_conn
+    assert result[0]["state"] == "interrupted_or_abandoned"
 
 
 def test_terminal_lifecycle_remains_terminal() -> None:
