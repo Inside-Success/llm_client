@@ -10,6 +10,7 @@ caller-facing signatures.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from importlib import import_module
 import queue
 import threading
@@ -40,6 +41,7 @@ import os as _os
 import threading as _threading
 
 import litellm
+import llm_client.io_log as _io_log
 
 from llm_client.core.models import supports_structured_output as _registry_supports_structured_output
 from llm_client.execution.timeout_policy import _await_with_safety_ceiling
@@ -788,6 +790,7 @@ def _call_llm_structured_impl(
         if isinstance(result, LLMCallResult):
             result.logical_call_id = _logical_call_id
         _base_log_call_event(**event, logical_call_id=_logical_call_id)
+        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="call_llm_structured",
@@ -1818,6 +1821,7 @@ async def _acall_llm_structured_impl(
         if isinstance(result, LLMCallResult):
             result.logical_call_id = _logical_call_id
         _base_log_call_event(**event, logical_call_id=_logical_call_id)
+        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="acall_llm_structured",
