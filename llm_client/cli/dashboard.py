@@ -47,6 +47,24 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
     # Use the observability owner so additive schema migrations run before the
     # dashboard attempts to persist a deduplicated threshold crossing.
     db = _io_log._get_db()
+    if getattr(args, "alerts", False):
+        rows = db.execute(
+            """SELECT period_start, window_hours, budget, observed_cost, created_at
+               FROM cost_alerts ORDER BY created_at DESC LIMIT ?""",
+            (getattr(args, "alert_limit", 20),),
+        ).fetchall()
+        data = [
+            {"period_start": row[0], "window_hours": row[1], "budget": row[2], "observed_cost": row[3], "created_at": row[4]}
+            for row in rows
+        ]
+        if args.format == "json":
+            print(json.dumps({"alerts": data}, indent=2))
+        else:
+            print("No dashboard alerts." if not data else "\n".join(
+                f"{item['created_at']} | {item['window_hours']}h | {format_cost(item['observed_cost'])}/{format_cost(item['budget'])}"
+                for item in data
+            ))
+        return
     data = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "last_hour": _window(db, 1, args.hourly_budget),
@@ -81,4 +99,6 @@ def register_parser(subparsers: Any) -> None:
     parser.add_argument("--format", choices=["table", "json"], default="table")
     parser.add_argument("--hourly-budget", type=float, help="Warn at 80% of this last-hour USD budget")
     parser.add_argument("--daily-budget", type=float, help="Warn at 80% of this last-24-hours USD budget")
+    parser.add_argument("--alerts", action="store_true", help="Show persisted threshold crossings")
+    parser.add_argument("--alert-limit", type=int, default=20, help="Maximum persisted alerts to show")
     parser.set_defaults(handler=cmd_dashboard)
