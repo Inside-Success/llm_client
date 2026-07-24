@@ -82,6 +82,12 @@ unpriced LLM calls without treating instrumentation volume as LLM traffic. An
 additive partial timestamp index accelerates this exact predicate and does not
 index the boundary-event flood.
 
+**Live verification (2026-07-24T19:25Z):** after the index was created, the
+real shared-ledger dashboard returned within five seconds. It reported $0.4354
+across 25 accounted calls in the preceding hour and $119.1948 across 2,657
+calls in the preceding day. This is an operational snapshot, not provider
+invoice reconciliation.
+
 ## Sources consulted
 
 - `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md`
