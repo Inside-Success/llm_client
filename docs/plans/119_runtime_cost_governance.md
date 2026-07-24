@@ -60,6 +60,18 @@ control.
 - `python scripts/meta/check_plan_tests.py --plan 119`
 - `git diff --check`
 
+## Required Tests
+
+### Existing Tests
+
+| Test | What it verifies |
+|---|---|
+| `tests/test_call_contracts.py` | Budget threshold status remains truthful. |
+| `tests/test_result_finalization.py` | Completed-call cost and warnings are preserved. |
+| `tests/test_model_execution_policy.py` | Default-route enforcement remains fail-closed. |
+| `tests/test_cli_dashboard.py` | Dashboard CLI and browser entrypoint compatibility. |
+| `tests/test_cli_cost.py` | Accounting-state cost reporting. |
+
 ## Dashboard PoC
 
 - **Actor/job:** Brian checks whether current work is consuming money too
