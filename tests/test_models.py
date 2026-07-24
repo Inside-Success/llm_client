@@ -45,10 +45,10 @@ class TestGetModel:
 
         for model in (
             "openrouter/openai/gpt-5.6-terra",
-            "openrouter/openai/gpt-5.6-luna",
         ):
             assert supports_structured_output(model) is True
             assert supports_tool_calling(model) is True
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
 
     def test_extraction_returns_highest_intelligence_structured(self):
         # available_only=False so we don't need env vars set
