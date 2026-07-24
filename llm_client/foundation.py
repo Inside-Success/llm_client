@@ -546,6 +546,7 @@ class LLMCallLifecyclePayload(BaseModel):
     provider_timeout_s: int | None = Field(default=None, ge=0)
     requested_timeout_s: int | None = Field(default=None, ge=0)
     transport_timeout_status: Literal["forwarded_to_runtime", "not_observed"] = "not_observed"
+    prompt_sha256: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     timeout_policy: Literal["allow", "ban"]
     prompt_ref: str | None = None
     host_name: str | None = None

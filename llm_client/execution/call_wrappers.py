@@ -10,6 +10,8 @@ wrapper mechanics that were previously copied across four entrypoints.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Literal, TypeVar
@@ -37,6 +39,7 @@ class PreparedPublicCallEnvelope:
     """Resolved public-call envelope before runtime dispatch begins."""
 
     normalized_prompt_ref: str | None
+    prompt_sha256: str
     resolved_task: str
     resolved_trace_id: str
     resolved_max_budget: float
@@ -52,6 +55,7 @@ def _prepare_public_call_envelope(
     caller: str,
     timeout: int,
     kwargs: dict[str, Any],
+    messages: list[dict[str, Any]],
 ) -> PreparedPublicCallEnvelope:
     """Resolve call tags, lifecycle settings, and provider-safe runtime kwargs."""
 
@@ -64,6 +68,9 @@ def _prepare_public_call_envelope(
     )
     _check_budget(resolved_trace_id, resolved_max_budget)
     effective_provider_timeout = _provider_timeout_for_lifecycle(timeout)
+    prompt_sha256 = "sha256:" + hashlib.sha256(
+        json.dumps(messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
 
     runtime_kwargs = dict(kwargs)
     heartbeat_interval_s, stall_after_s = _resolve_lifecycle_monitoring_settings(
@@ -77,6 +84,7 @@ def _prepare_public_call_envelope(
 
     return PreparedPublicCallEnvelope(
         normalized_prompt_ref=normalized_prompt_ref,
+        prompt_sha256=prompt_sha256,
         resolved_task=resolved_task,
         resolved_trace_id=resolved_trace_id,
         resolved_max_budget=resolved_max_budget,
@@ -127,6 +135,7 @@ def _run_sync_public_call(
         provider_timeout_s=envelope.effective_provider_timeout,
         requested_timeout_s=envelope.requested_timeout_s,
         transport_timeout_status="forwarded_to_runtime",
+        prompt_sha256=envelope.prompt_sha256,
         prompt_ref=envelope.normalized_prompt_ref,
         heartbeat_interval_s=envelope.heartbeat_interval_s,
         stall_after_s=envelope.stall_after_s,
@@ -230,6 +239,7 @@ async def _run_async_public_call(
         provider_timeout_s=envelope.effective_provider_timeout,
         requested_timeout_s=envelope.requested_timeout_s,
         transport_timeout_status="forwarded_to_runtime",
+        prompt_sha256=envelope.prompt_sha256,
         prompt_ref=envelope.normalized_prompt_ref,
         heartbeat_interval_s=envelope.heartbeat_interval_s,
         stall_after_s=envelope.stall_after_s,

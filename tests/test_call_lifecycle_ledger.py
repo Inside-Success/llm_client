@@ -128,6 +128,7 @@ async def test_async_cancellation_leaves_a_terminal_lifecycle_event() -> None:
     trace_id = f"cancel-trace-{uuid4().hex}"
     envelope = PreparedPublicCallEnvelope(
         normalized_prompt_ref=None,
+        prompt_sha256="sha256:" + "0" * 64,
         resolved_task="test",
         resolved_trace_id=trace_id,
         resolved_max_budget=0.0,
