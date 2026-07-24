@@ -9,6 +9,7 @@ wrapper mechanics that were previously copied across four entrypoints.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Literal, TypeVar
@@ -229,6 +230,27 @@ async def _run_async_public_call(
     monitor.start()
     try:
         result = await invoke(runtime_kwargs)
+    except asyncio.CancelledError:
+        await monitor.stop()
+        snapshot = monitor.snapshot()
+        _emit_llm_call_lifecycle_event(
+            call_id=call_id,
+            phase="cancelled",
+            call_kind=call_kind,
+            caller=caller,
+            task=envelope.resolved_task,
+            trace_id=envelope.resolved_trace_id,
+            requested_model=model,
+            provider_timeout_s=envelope.effective_provider_timeout,
+            prompt_ref=envelope.normalized_prompt_ref,
+            latency_s=time.monotonic() - started_at,
+            heartbeat_interval_s=envelope.heartbeat_interval_s,
+            stall_after_s=envelope.stall_after_s,
+            progress_observable=snapshot.progress_observable,
+            progress_source=snapshot.progress_source,
+            progress_event_count=snapshot.progress_event_count,
+        )
+        raise
     except Exception as exc:
         await monitor.stop()
         snapshot = monitor.snapshot()

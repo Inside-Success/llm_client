@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from uuid import uuid4
 
+import pytest
+
 from llm_client import io_log
+from llm_client.execution.call_wrappers import PreparedPublicCallEnvelope, _run_async_public_call
 from llm_client.observability.query import get_call_lifecycle
 from llm_client.observability.structured_attempts import StructuredAttemptEvent, record_structured_attempt_event
 
@@ -34,3 +38,38 @@ def test_structured_timeout_is_not_misclassified_as_provider_error() -> None:
     ))
     result = get_call_lifecycle(logical_call_id="timeout-logical")
     assert result[0]["events"][0]["phase"] == "timeout_observed"
+
+
+@pytest.mark.asyncio
+async def test_async_cancellation_leaves_a_terminal_lifecycle_event() -> None:
+    """Caller cancellation is durable and distinct from a provider failure."""
+
+    trace_id = f"cancel-trace-{uuid4().hex}"
+    envelope = PreparedPublicCallEnvelope(
+        normalized_prompt_ref=None,
+        resolved_task="test",
+        resolved_trace_id=trace_id,
+        resolved_max_budget=0.0,
+        effective_provider_timeout=30,
+        heartbeat_interval_s=0.0,
+        stall_after_s=0.0,
+        runtime_kwargs={},
+    )
+
+    async def _cancelled_invoke(_: dict[str, object]) -> str:
+        raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await _run_async_public_call(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            call_kind="text",
+            caller="test.cancelled",
+            timeout=30,
+            envelope=envelope,
+            invoke=_cancelled_invoke,
+            resolve_model=lambda result: result,
+        )
+
+    result = get_call_lifecycle(trace_id=trace_id)
+    assert result[0]["state"] == "cancelled"
+    assert [event["phase"] for event in result[0]["events"]] == ["started", "cancelled"]

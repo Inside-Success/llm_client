@@ -191,7 +191,7 @@ def _resolve_lifecycle_monitoring_settings(
 def _emit_llm_call_lifecycle_event(
     *,
     call_id: str,
-    phase: Literal["started", "heartbeat", "progress", "stalled", "completed", "failed"],
+    phase: Literal["started", "heartbeat", "progress", "stalled", "completed", "failed", "cancelled"],
     call_kind: Literal["text", "structured"],
     caller: str,
     task: str,
