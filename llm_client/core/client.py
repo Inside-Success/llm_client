@@ -534,6 +534,7 @@ def call_llm(
         caller="call_llm",
         timeout=timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return _run_sync_public_call(
         model=model,
@@ -637,6 +638,7 @@ def call_llm_structured(
         caller="call_llm_structured",
         timeout=resolved_timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return _run_sync_public_call(
         model=model,
@@ -821,6 +823,7 @@ async def acall_llm(
         caller="acall_llm",
         timeout=timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return await _run_async_public_call(
         model=model,
@@ -924,6 +927,7 @@ async def acall_llm_structured(
         caller="acall_llm_structured",
         timeout=resolved_timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return await _run_async_public_call(
         model=model,
