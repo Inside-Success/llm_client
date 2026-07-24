@@ -60,6 +60,15 @@ class _PlannerEnvelope(BaseModel):
     ]
 
 
+class _StopDecision(BaseModel):
+    action: Literal["control.stop_retrieval"]
+    reason: str
+
+
+class _StopEnvelope(BaseModel):
+    decision: _StopDecision = Field(description="Concrete next planner decision.")
+
+
 def test_openai_responses_schema_inlines_ref_siblings() -> None:
     """SDK normalization retains field semantics without illegal ref siblings."""
     class Hypothesis(BaseModel):
@@ -154,6 +163,69 @@ def test_openrouter_structured_call_sends_provider_compatible_schema(
     assert parsed.count == 1
     assert "minimum" not in sent_schema["properties"]["count"]
     assert sent_schema["additionalProperties"] is False
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_native_schema_inlines_nested_ref_siblings(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The sync OpenRouter request must not send a ref with sibling description."""
+    mock_comp.return_value = _mock_structured_response(
+        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
+    )
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "Stop."}],
+        _StopEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.ref_sibling.sync",
+        max_budget=0,
+    )
+
+    decision_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "control.stop_retrieval"
+    assert "$ref" not in decision_schema
+    assert decision_schema["description"] == "Concrete next planner decision."
+    assert decision_schema["type"] == "object"
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_openrouter_async_native_schema_inlines_nested_ref_siblings(
+    mock_acompletion: AsyncMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The async OpenRouter request uses the same ref-safe provider schema."""
+    mock_acompletion.return_value = _mock_structured_response(
+        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
+    )
+
+    parsed, _meta = await _acall_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "Stop."}],
+        _StopEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.ref_sibling.async",
+        max_budget=0,
+    )
+
+    decision_schema = mock_acompletion.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "control.stop_retrieval"
+    assert "$ref" not in decision_schema
+    assert decision_schema["description"] == "Concrete next planner decision."
+    assert decision_schema["type"] == "object"
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
