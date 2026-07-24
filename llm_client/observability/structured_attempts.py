@@ -144,7 +144,7 @@ def record_structured_attempt_event(event: StructuredAttemptEvent) -> None:
         "received": "provider_response",
         "validation_failed": "parse_or_validation_failed",
         "validated": "parse_or_validation_succeeded",
-        "execution_failed": "provider_error",
+        "execution_failed": "timeout_observed" if event.failure_class == "timeout" else "provider_error",
         "recovery_decided": f"retry_{event.recovery_decision}",
     }[event.event_type]
     _io_log.record_call_lifecycle_event(
