@@ -621,9 +621,9 @@ def record_call_lifecycle_event(event: dict[str, Any]) -> None:
         raise ValueError(f"call lifecycle event missing required fields: {', '.join(missing)}")
     def _write(db: sqlite3.Connection) -> None:
         db.execute("""INSERT INTO call_lifecycle_events
-            (event_id,timestamp,project,logical_call_id,trace_id,task,phase,requested_model,resolved_model,call_kind,prompt_sha256,requested_timeout_s,provider_timeout_s,transport_timeout_status,timeout_policy,process_id,host_name,process_start_token,error_type,payload)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
-            event["event_id"], event["timestamp"], _get_project(), event["logical_call_id"], event["trace_id"], event["task"], event["phase"], event["requested_model"], event.get("resolved_model"), event["call_kind"], event.get("prompt_sha256"), event.get("requested_timeout_s"), event.get("provider_timeout_s"), event.get("transport_timeout_status"), event.get("timeout_policy"), event.get("process_id"), event.get("host_name"), event.get("process_start_token"), event.get("error_type"), json.dumps(event, default=str),
+            (event_id,timestamp,project,logical_call_id,trace_id,task,phase,requested_model,resolved_model,call_kind,prompt_sha256,schema_hash,causal_parent_id,requested_timeout_s,provider_timeout_s,transport_timeout_status,timeout_policy,process_id,host_name,process_start_token,error_type,payload)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+            event["event_id"], event["timestamp"], _get_project(), event["logical_call_id"], event["trace_id"], event["task"], event["phase"], event["requested_model"], event.get("resolved_model"), event["call_kind"], event.get("prompt_sha256"), event.get("schema_hash"), event.get("causal_parent_id"), event.get("requested_timeout_s"), event.get("provider_timeout_s"), event.get("transport_timeout_status"), event.get("timeout_policy"), event.get("process_id"), event.get("host_name"), event.get("process_start_token"), event.get("error_type"), json.dumps(event, default=str),
         ))
     _run_db_write(_write)
 
@@ -919,6 +919,8 @@ CREATE TABLE IF NOT EXISTS call_lifecycle_events (
     resolved_model TEXT,
     call_kind TEXT NOT NULL,
     prompt_sha256 TEXT,
+    schema_hash TEXT,
+    causal_parent_id TEXT,
     requested_timeout_s INTEGER,
     provider_timeout_s INTEGER,
     transport_timeout_status TEXT,
@@ -1110,6 +1112,10 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
         )
     if "prompt_sha256" not in lifecycle_cols:
         conn.execute("ALTER TABLE call_lifecycle_events ADD COLUMN prompt_sha256 TEXT")
+    if "schema_hash" not in lifecycle_cols:
+        conn.execute("ALTER TABLE call_lifecycle_events ADD COLUMN schema_hash TEXT")
+    if "causal_parent_id" not in lifecycle_cols:
+        conn.execute("ALTER TABLE call_lifecycle_events ADD COLUMN causal_parent_id TEXT")
     if "transport_timeout_status" not in lifecycle_cols:
         conn.execute(
             "ALTER TABLE call_lifecycle_events ADD COLUMN transport_timeout_status TEXT"
