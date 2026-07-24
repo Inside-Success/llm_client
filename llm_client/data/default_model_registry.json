@@ -101,14 +101,14 @@
       "name": "gpt-5.6-luna-openrouter",
       "provider": "openrouter",
       "speed": 192,
-      "structured_output": true,
+      "structured_output": false,
       "tags": [
         "1m-context",
         "manual-selection",
         "openrouter",
         "planner-candidate",
         "reasoning",
-        "structured-route-certified"
+        "native-schema-route-unverified"
       ]
     },
     {

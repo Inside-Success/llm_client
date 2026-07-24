@@ -70,6 +70,7 @@ class TestSupportsStructuredOutput:
         """The packaged registry declares the model litellm's map lags on."""
         assert supports_structured_output("openrouter/deepseek/deepseek-v4-flash") is True
         assert supports_structured_output("openrouter/minimax/minimax-m3") is True
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
 
     def test_observed_direct_gpt_routes_advertise_native_schema_support(self):
         """Responses API evidence overrides the failed OpenRouter proxy probe."""
