@@ -100,6 +100,13 @@ across 25 accounted calls in the preceding hour and $119.1948 across 2,657
 calls in the preceding day. This is an operational snapshot, not provider
 invoice reconciliation.
 
+**Completion blocker (2026-07-24):** the targeted Plan #119 suite passes
+(31 tests), but `complete_plan.py` also runs the repository-wide unit suite.
+That suite cannot collect in this worktree because the optional `langgraph`
+package is absent (`tests/test_workflow_langgraph.py`). This is an inherited
+environment dependency gap, not a Plan #119 test failure; do not force the
+plan complete until the broad suite can collect.
+
 ## Sources consulted
 
 - `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md`
