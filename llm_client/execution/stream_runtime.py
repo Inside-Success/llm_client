@@ -307,7 +307,7 @@ def stream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
-    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,
@@ -542,7 +542,7 @@ async def astream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
-    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,

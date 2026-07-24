@@ -34,8 +34,8 @@ def _result(content: str = '{"count":1}') -> LLMCallResult:
         content=content,
         usage={"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
         cost=0.001,
-        model="openrouter/openai/gpt-5-mini",
-        resolved_model="openrouter/openai/gpt-5-mini",
+        model="openrouter/openai/gpt-5",
+        resolved_model="openrouter/openai/gpt-5",
         finish_reason="stop",
     )
 
@@ -97,7 +97,7 @@ def test_call_llm_json_schema_uses_strict_structured_runtime(
 
     monkeypatch.setattr("llm_client.json_schema.call_llm_structured", fake_call)
     payload, result = call_llm_json_schema(
-        "openrouter/openai/gpt-5-mini",
+        "openrouter/openai/gpt-5",
         [{"role": "user", "content": "Return one."}],
         COUNT_SCHEMA,
         schema_name="count_response",
@@ -132,7 +132,7 @@ async def test_acall_llm_json_schema_has_async_parity(
     monkeypatch.setattr("llm_client.json_schema.acall_llm_structured", async_call)
 
     payload, _result_meta = await acall_llm_json_schema(
-        "openrouter/openai/gpt-5-mini",
+        "openrouter/openai/gpt-5",
         [{"role": "user", "content": "Return two."}],
         COUNT_SCHEMA,
         schema_name="count_response",
@@ -163,7 +163,7 @@ def test_call_llm_json_schema_preserves_explicit_output_policy(
     monkeypatch.setattr("llm_client.json_schema.call_llm_structured", fake_call)
     explicit = StructuredOutputPolicy(mode="auto")
     call_llm_json_schema(
-        "openrouter/openai/gpt-5-mini",
+        "openrouter/openai/gpt-5",
         [{"role": "user", "content": "Return one."}],
         COUNT_SCHEMA,
         structured_output_policy=explicit,
@@ -192,7 +192,7 @@ def test_json_schema_call_reuses_provider_projection_and_local_repair_retry(
     ]
 
     payload, _meta = call_llm_json_schema(
-        "openrouter/openai/gpt-5-mini",
+        "openrouter/openai/gpt-5",
         [{"role": "user", "content": "Return a positive count."}],
         COUNT_SCHEMA,
         schema_name="count_response",

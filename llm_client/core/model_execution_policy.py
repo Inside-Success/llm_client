@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.core.errors import LLMConfigurationError
 
-ModelPolicyMode = Literal["compatibility", "enforce_allowlist"]
+ModelPolicyMode = Literal["enforce_allowlist"]
 
 DEFAULT_EXECUTION_MODEL = "openrouter/deepseek/deepseek-v4-flash"
 
@@ -65,14 +65,14 @@ class ModelExecutionDecision(BaseModel):
 def evaluate_model_execution_policy(
     models: list[str],
     *,
-    mode: str = "compatibility",
+    mode: str = "enforce_allowlist",
     justification: str | None = None,
 ) -> ModelExecutionDecision:
     """Validate a canonical model chain and return its durable policy decision."""
 
-    if mode not in {"compatibility", "enforce_allowlist"}:
+    if mode != "enforce_allowlist":
         raise LLMConfigurationError(
-            "model_policy must be 'compatibility' or 'enforce_allowlist'"
+            "model_policy must be 'enforce_allowlist'; compatibility mode was removed"
         )
     normalized_justification = (
         str(justification).strip() if justification is not None else None
@@ -86,21 +86,20 @@ def evaluate_model_execution_policy(
         raise LLMConfigurationError("model execution policy requires a model")
 
     uses_only_default = all(model == DEFAULT_EXECUTION_MODEL for model in selected)
-    if mode == "enforce_allowlist":
-        disallowed = [model for model in selected if model not in ALLOWED_EXECUTION_MODELS]
-        if disallowed:
-            raise LLMConfigurationError(
-                "model is not in the llm_client execution allowlist: "
-                + ", ".join(disallowed)
-            )
-        if not uses_only_default and normalized_justification is None:
-            raise LLMConfigurationError(
-                "allowed non-default models require model_justification"
-            )
+    disallowed = [model for model in selected if model not in ALLOWED_EXECUTION_MODELS]
+    if disallowed:
+        raise LLMConfigurationError(
+            "model is not in the llm_client execution allowlist: "
+            + ", ".join(disallowed)
+        )
+    if not uses_only_default and normalized_justification is None:
+        raise LLMConfigurationError(
+            "allowed non-default models require model_justification"
+        )
 
     return ModelExecutionDecision(
         mode=mode,
-        enforced=mode == "enforce_allowlist",
+        enforced=True,
         default_model=DEFAULT_EXECUTION_MODEL,
         selected_models=selected,
         uses_only_default=uses_only_default,

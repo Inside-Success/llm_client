@@ -181,7 +181,7 @@ async def _acall_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
-    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
     agent_retry_safe = kwargs.pop("agent_retry_safe", None)
     parent_trace_id: str | None = kwargs.pop("parent_trace_id", None)

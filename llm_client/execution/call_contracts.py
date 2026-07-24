@@ -635,18 +635,15 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
     ),
     "gpt-5.1-mini": (
         "openrouter/deepseek/deepseek-v4-flash",
-        "GPT-5.1 Mini is prohibited by the shared model-execution policy, "
-        "including for callers still migrating from compatibility mode.",
+        "GPT-5.1 Mini is prohibited by the shared model-execution policy.",
     ),
     "gpt-5-mini": (
         "openrouter/deepseek/deepseek-v4-flash",
-        "GPT-5 Mini is prohibited by the shared model-execution policy, "
-        "including for callers still migrating from compatibility mode.",
+        "GPT-5 Mini is prohibited by the shared model-execution policy.",
     ),
     "codex-mini": (
         "codex/gpt-5.4",
-        "Codex Mini routes are prohibited by the shared model-execution policy, "
-        "including for callers still migrating from compatibility mode.",
+        "Codex Mini routes are prohibited by the shared model-execution policy.",
     ),
     "gpt-4o-mini": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",

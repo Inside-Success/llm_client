@@ -417,7 +417,7 @@ def test_structured_runtime_sync_raises_capability_error_for_gpt5_schema_rejecti
 
     with pytest.raises(LLMCapabilityError, match="provider rejected structured JSON-schema output"):
         _call_llm_structured_impl(
-            "openai/gpt-5-mini",
+            "openai/gpt-5",
             messages,
             _City,
             task="test",
@@ -443,7 +443,7 @@ async def test_structured_runtime_async_raises_capability_error_for_gpt5_schema_
 
     with pytest.raises(LLMCapabilityError, match="provider rejected structured JSON-schema output"):
         await _acall_llm_structured_impl(
-            "gpt-5-mini",
+            "gpt-5",
             messages,
             _City,
             task="test",

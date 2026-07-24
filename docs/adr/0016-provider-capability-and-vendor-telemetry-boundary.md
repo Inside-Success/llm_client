@@ -9,19 +9,15 @@ Applies to: Plan #110
 Plan #115 supersedes this ADR's ban-oriented model-selection policy while
 preserving its provider-capability and telemetry decisions.
 
-For callers using `model_policy="enforce_allowlist"`, `llm_client` evaluates the
-entire canonical primary/fallback chain against one exact shared allowlist
-before dispatch. DeepSeek V4 Flash is the sole no-justification default. Every
-other allowed route requires a non-empty `model_justification`, which is
-retained in the routing trace and replayable call snapshot. A justification
-cannot authorize an unlisted model.
+`llm_client` evaluates every canonical primary/fallback chain against one exact
+shared allowlist before dispatch. DeepSeek V4 Flash is the sole
+no-justification default. Every other allowed route requires a non-empty
+`model_justification`, which is retained in the routing trace and replayable
+call snapshot. A justification cannot authorize an unlisted model. The former
+`compatibility` mode was removed by Plan #116 and is now rejected.
 
-Existing callers temporarily remain in `compatibility` mode until individually
-audited and migrated; newly migrated production paths must use enforcement.
-This staged transition avoids silently breaking unrelated consumers while
-making the target invariant explicit. GPT-5 Mini and GPT-5.1 Mini are not
-allowlisted and are also hard-blocked for compatibility callers, together with
-Codex Mini routes.
+GPT-5 Mini and GPT-5.1 Mini are not allowlisted and are also hard-blocked,
+together with Codex Mini routes.
 
 The statement below that normalized public controls are forwarded “without a
 model-family allowlist” refers only to capability-specific branching after

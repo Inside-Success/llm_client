@@ -380,7 +380,7 @@ class TestModelIdentityContract:
         assert any(w.startswith("FALLBACK:") for w in (result.warnings or []))
 
     @patch("llm_client.core.client.litellm.stream_chunk_builder", return_value=None)
-    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    @patch("llm_client.core.client.litellm.completion")
     def test_stream_identity_fields_with_explicit_routing_off(
         self,
         mock_completion: MagicMock,

@@ -2,8 +2,8 @@
 
 `llm_client` model selection has three separate decisions:
 
-1. **Execution policy** — whether the caller is still in temporary compatibility
-   mode or opts into the exact shared allowlist.
+1. **Execution policy** — every call is checked against the exact shared
+   allowlist before dispatch.
 2. **Raw model tier** — task-shape, latency, and reasoning tradeoff for ordinary
    text or structured-output calls. Cost is observed, not a launch gate.
 3. **Execution mode** — whether the call needs a workspace-agent SDK lane with
@@ -15,7 +15,6 @@ New and migrated production callers use:
 result = call_llm(
     "openrouter/deepseek/deepseek-v4-flash",
     messages,
-    model_policy="enforce_allowlist",
     task="bounded_decision",
     trace_id=trace_id,
     max_budget=0.05,
@@ -29,11 +28,9 @@ cannot authorize a route absent from the allowlist. GPT-5 Mini, GPT-5.1 Mini,
 GPT-5.4 Mini, and Codex Mini routes are intentionally absent and therefore fail
 before provider dispatch.
 
-`model_policy="compatibility"` is a temporary migration surface for existing
-callers. It is not the target state and must not be used by newly migrated
-production paths. GPT-5 Mini, GPT-5.1 Mini, and Codex Mini routes remain
-hard-blocked in compatibility mode; it is not an escape hatch for those
-prohibitions.
+Enforcement is unconditional. `model_policy="enforce_allowlist"` remains an
+accepted explicit value for replay clarity, but omitting it has the same
+fail-closed behavior. The former `compatibility` value is rejected.
 
 Do not use agent SDK models merely because they are “smarter.” Use them when
 the workflow needs workspace side effects:
@@ -213,7 +210,7 @@ probe, but it does not certify a local route. GPT-5.6 Sol and Terra now have
 bounded direct-route evidence; Luna remains a provider-declared capability,
 not a `llm_client` selection default or an observed result.
 
-The enforced allowlist supersedes family-by-family bans for migrated callers.
+The enforced allowlist supersedes family-by-family bans for all callers.
 Fable, Opus, GPT Mini, Codex Mini, unknown models, and opaque account-side
 selectors are all unavailable because they are not exact allowlist entries.
 Neither `model_justification` nor generic `model_override_acceptance` can
@@ -225,7 +222,7 @@ Yes for production/shared project LLM calls. The practical enforcement target
 is:
 
 - project code imports `llm_client` for LLM execution;
-- project code sets `model_policy="enforce_allowlist"`;
+- every call is governed even when `model_policy` is omitted;
 - DeepSeek V4 Flash is used by default;
 - another exact allowed route includes a durable `model_justification`;
 - direct raw model literals are audited;

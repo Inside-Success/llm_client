@@ -136,7 +136,7 @@ class TestCallLLM:
         mock_comp.return_value = _mock_response()
 
         call_llm(
-            "openrouter/openai/gpt-5-mini",
+            "openrouter/openai/gpt-5",
             [{"role": "user", "content": "Hi"}],
             task="test",
             trace_id="test_no_default_max_tokens",
@@ -1148,7 +1148,7 @@ class TestOpenRouterKeyRotation:
         class OpenRouterKeyLimitError(Exception):
             status_code = 403
             llm_provider = "openrouter"
-            model = "openrouter/openai/gpt-5-mini"
+            model = "openrouter/openai/gpt-5"
 
         seen_keys: list[str | None] = []
 
@@ -1161,7 +1161,7 @@ class TestOpenRouterKeyRotation:
         mock_comp.side_effect = _side_effect
 
         result = call_llm(
-            "openrouter/openai/gpt-5-mini",
+            "openrouter/openai/gpt-5",
             [{"role": "user", "content": "Hi"}],
             num_retries=2,
             task="test",
@@ -1232,7 +1232,7 @@ class TestOpenRouterKeyRotation:
         class OpenRouterKeyLimitError(Exception):
             status_code = 403
             llm_provider = "openrouter"
-            model = "openrouter/openai/gpt-5-mini"
+            model = "openrouter/openai/gpt-5"
 
         mock_comp.side_effect = OpenRouterKeyLimitError(
             "OpenRouter error: Key limit exceeded (total limit)",
@@ -1240,7 +1240,7 @@ class TestOpenRouterKeyRotation:
 
         with pytest.raises(Exception, match="Key limit exceeded"):
             call_llm(
-                "openrouter/openai/gpt-5-mini",
+                "openrouter/openai/gpt-5",
                 [{"role": "user", "content": "Hi"}],
                 num_retries=2,
                 task="test",
@@ -1263,7 +1263,7 @@ class TestOpenRouterKeyRotation:
         class OpenRouterKeyLimitError(Exception):
             status_code = 403
             llm_provider = "openrouter"
-            model = "openrouter/openai/gpt-5-mini"
+            model = "openrouter/openai/gpt-5"
 
         seen_api_keys: list[str | None] = []
 
@@ -1275,7 +1275,7 @@ class TestOpenRouterKeyRotation:
 
         with pytest.raises(Exception, match="Key limit exceeded"):
             call_llm(
-                "openrouter/openai/gpt-5-mini",
+                "openrouter/openai/gpt-5",
                 [{"role": "user", "content": "Hi"}],
                 api_key="manual-key-9999",
                 num_retries=2,
@@ -1471,7 +1471,7 @@ class TestGPT5TemperatureStripping:
         from llm_client import call_llm_structured
 
         call_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             temperature=0.5,
@@ -1648,7 +1648,7 @@ class TestResponsesAPIDetection:
 
     def test_gpt5_mini_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
-        assert _is_responses_api_model("gpt-5-mini") is True
+        assert _is_responses_api_model("gpt-5") is True
 
     def test_gpt5_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
@@ -1791,9 +1791,9 @@ class TestResponsesAPIRouting:
     def test_gpt5_routes_to_responses(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """GPT-5 models should use litellm.responses(), not completion()."""
         mock_resp.return_value = _mock_responses_api_response()
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_routes", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_routes", max_budget=0)
         assert result.content == "Hello from GPT-5!"
-        assert result.model == "gpt-5-mini"
+        assert result.model == "gpt-5"
         assert result.finish_reason == "stop"
         mock_resp.assert_called_once()
 
@@ -1802,7 +1802,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_passes_input_not_messages(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """Responses API receives 'input' string, not 'messages' list."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_gpt5_input", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_gpt5_input", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "input" in kwargs
         assert "User: Hello" in kwargs["input"]
@@ -1813,7 +1813,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_strips_max_tokens(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """max_tokens should be stripped for GPT-5 (reasoning tokens issue)."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_gpt5_strips_max", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_gpt5_strips_max", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "max_tokens" not in kwargs
         assert "max_output_tokens" not in kwargs
@@ -1831,7 +1831,7 @@ class TestResponsesAPIRouting:
                 "schema": {"type": "object"},
             },
         }
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], response_format=response_format, task="test", trace_id="test_gpt5_resp_format", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], response_format=response_format, task="test", trace_id="test_gpt5_resp_format", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "response_format" not in kwargs
         assert "text" in kwargs
@@ -1852,7 +1852,7 @@ class TestResponsesAPIRouting:
                 },
             }
         ]
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], tools=chat_completions_tools, task="test", trace_id="test_gpt5_flat_tools", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], tools=chat_completions_tools, task="test", trace_id="test_gpt5_flat_tools", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         tools = kwargs["tools"]
         assert len(tools) == 1
@@ -1948,7 +1948,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_strips_temperature(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """GPT-5 responses API does not support temperature — should be stripped."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], temperature=0.5, task="test", trace_id="test_gpt5_strips_temp", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], temperature=0.5, task="test", trace_id="test_gpt5_strips_temp", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "temperature" not in kwargs
 
@@ -1958,7 +1958,7 @@ class TestResponsesAPIRouting:
         """GPT-5 requests should not forward unsupported sampling extras."""
         mock_resp.return_value = _mock_responses_api_response()
         call_llm(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Hi"}],
             top_p=0.7,
             logprobs=True,
@@ -1979,7 +1979,7 @@ class TestResponsesAPIRouting:
         mock_resp.return_value = _mock_responses_api_response(
             input_tokens=100, output_tokens=50, total_tokens=150,
         )
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_usage", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_usage", max_budget=0)
         assert result.usage["prompt_tokens"] == 100
         assert result.usage["completion_tokens"] == 50
         assert result.usage["total_tokens"] == 150
@@ -1990,7 +1990,7 @@ class TestResponsesAPIRouting:
         """raw_response should contain the original responses API object."""
         resp = _mock_responses_api_response()
         mock_resp.return_value = resp
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_raw_resp", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_raw_resp", max_budget=0)
         assert result.raw_response is resp
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -2006,7 +2006,7 @@ class TestResponsesAPIRouting:
         mock_resp.return_value = _mock_responses_api_response(output_text="", output=[tool_item])
         tools = [{"type": "function", "function": {"name": "get_weather", "parameters": {}}}]
         result = call_llm_with_tools(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Weather?"}],
             tools,
             task="test",
@@ -2024,7 +2024,7 @@ class TestResponsesAPIRouting:
         """Empty response from GPT-5 should raise ValueError (retryable)."""
         mock_resp.return_value = _mock_responses_api_response(output_text="")
         with pytest.raises(LLMError, match="Empty content"):
-            call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_empty", max_budget=0)
+            call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_empty", max_budget=0)
 
     @patch("llm_client.core.client.litellm.responses")
     def test_gpt5_incomplete_status_raises(self, mock_resp: MagicMock) -> None:
@@ -2035,7 +2035,7 @@ class TestResponsesAPIRouting:
         resp.incomplete_details = details
         mock_resp.return_value = resp
         with pytest.raises(LLMError, match="truncated"):
-            call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_incomplete", max_budget=0)
+            call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_incomplete", max_budget=0)
 
     @patch("llm_client.core.client.time.sleep")
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -2046,7 +2046,7 @@ class TestResponsesAPIRouting:
             Exception("rate limit exceeded"),
             _mock_responses_api_response(),
         ]
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_gpt5_retry_transient", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_gpt5_retry_transient", max_budget=0)
         assert result.content == "Hello from GPT-5!"
         assert mock_resp.call_count == 2
 
@@ -2055,7 +2055,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_api_base_passed(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """api_base should be passed through for GPT-5 models."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], api_base="https://custom.api/v1", task="test", trace_id="test_gpt5_api_base", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], api_base="https://custom.api/v1", task="test", trace_id="test_gpt5_api_base", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert kwargs["api_base"] == "https://custom.api/v1"
 
@@ -2078,9 +2078,9 @@ class TestAsyncResponsesAPIRouting:
     async def test_async_gpt5_routes_to_aresponses(self, mock_aresp: MagicMock, mock_cost: MagicMock) -> None:
         """Async GPT-5 should use litellm.aresponses()."""
         mock_aresp.return_value = _mock_responses_api_response()
-        result = await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gpt5_routes", max_budget=0)
+        result = await acall_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gpt5_routes", max_budget=0)
         assert result.content == "Hello from GPT-5!"
-        assert result.model == "gpt-5-mini"
+        assert result.model == "gpt-5"
         mock_aresp.assert_called_once()
 
     @pytest.mark.asyncio
@@ -2089,7 +2089,7 @@ class TestAsyncResponsesAPIRouting:
     async def test_async_gpt5_passes_input(self, mock_aresp: MagicMock, mock_cost: MagicMock) -> None:
         """Async responses API should receive 'input', not 'messages'."""
         mock_aresp.return_value = _mock_responses_api_response()
-        await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_async_gpt5_input", max_budget=0)
+        await acall_llm("gpt-5", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_async_gpt5_input", max_budget=0)
         kwargs = mock_aresp.call_args.kwargs
         assert "input" in kwargs
         assert "User: Hello" in kwargs["input"]
@@ -2100,7 +2100,7 @@ class TestAsyncResponsesAPIRouting:
     async def test_async_gpt5_strips_max_tokens(self, mock_aresp: MagicMock, mock_cost: MagicMock) -> None:
         """Async: max_tokens should be stripped for GPT-5."""
         mock_aresp.return_value = _mock_responses_api_response()
-        await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_async_gpt5_strips_max", max_budget=0)
+        await acall_llm("gpt-5", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_async_gpt5_strips_max", max_budget=0)
         kwargs = mock_aresp.call_args.kwargs
         assert "max_tokens" not in kwargs
 
@@ -2114,7 +2114,7 @@ class TestAsyncResponsesAPIRouting:
             Exception("service unavailable"),
             _mock_responses_api_response(),
         ]
-        result = await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_async_gpt5_retries", max_budget=0)
+        result = await acall_llm("gpt-5", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_async_gpt5_retries", max_budget=0)
         assert result.content == "Hello from GPT-5!"
         assert mock_aresp.call_count == 2
 
@@ -2169,7 +2169,7 @@ class TestAsyncResponsesAPIRouting:
         )
         mock_aresp.return_value = _mock_responses_api_response(output_text="", output=[tool_item])
         result = await acall_llm_with_tools(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Lookup entity"}],
             [{"type": "function", "function": {"name": "lookup", "parameters": {}}}],
             task="test",
@@ -3196,17 +3196,17 @@ class TestResponsesAPIRouting:
 
     def test_excludes_openrouter(self) -> None:
         from llm_client.core.client import _is_responses_api_model
-        assert _is_responses_api_model("openrouter/openai/gpt-5-mini") is False
+        assert _is_responses_api_model("openrouter/openai/gpt-5") is False
 
     def test_excludes_any_provider_prefix(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("azure/gpt-5") is False
-        assert _is_responses_api_model("custom/gpt-5-mini") is False
+        assert _is_responses_api_model("custom/gpt-5") is False
 
     def test_matches_bare_gpt5(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-5") is True
-        assert _is_responses_api_model("gpt-5-mini") is True
+        assert _is_responses_api_model("gpt-5") is True
         assert _is_responses_api_model("gpt-5-nano") is True
 
     def test_no_substring_match(self) -> None:
@@ -3953,7 +3953,7 @@ class TestGPT5StructuredOutput:
         mock_resp.return_value = _mock_responses_api_response(output_text='{"name": "test"}')
 
         result, meta = call_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             task="test",
@@ -3974,7 +3974,7 @@ class TestGPT5StructuredOutput:
         mock_resp.return_value = _mock_responses_api_response(output_text='{"name": "test"}')
 
         call_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             task="test",
@@ -4008,7 +4008,7 @@ class TestGPT5StructuredOutput:
         ]
 
         result, _ = call_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             num_retries=1,
@@ -4035,7 +4035,7 @@ class TestGPT5StructuredOutput:
         mock_aresp.return_value = _mock_responses_api_response(output_text='{"name": "async_test"}')
 
         result, meta = await acall_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             task="test",
@@ -4063,7 +4063,7 @@ class TestGPT5StructuredOutput:
         ]
 
         result, _ = await acall_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             num_retries=1,

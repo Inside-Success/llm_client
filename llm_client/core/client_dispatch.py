@@ -100,7 +100,7 @@ def _resolve_call_plan(
     fallback_models: list[str] | None,
     api_base: str | None,
     config: ClientConfig | None = None,
-    model_policy: str = "compatibility",
+    model_policy: str = "enforce_allowlist",
     model_justification: str | None = None,
 ) -> ResolvedCallPlan:
     """Resolve and log routing plan once per entrypoint."""

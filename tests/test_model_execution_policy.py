@@ -8,7 +8,6 @@ from llm_client import call_llm
 from llm_client.core.client_dispatch import _resolve_call_plan
 from llm_client.core.config import ClientConfig
 from llm_client.core.errors import LLMConfigurationError
-from llm_client.core.errors import DeprecatedModelError
 from llm_client.core.model_execution_policy import (
     ALLOWED_EXECUTION_MODELS,
     DEFAULT_EXECUTION_MODEL,
@@ -122,7 +121,6 @@ def test_public_default_call_enforces_without_provider_policy_kwargs(
     result = call_llm(
         DEFAULT_EXECUTION_MODEL,
         [{"role": "user", "content": "hello"}],
-        model_policy="enforce_allowlist",
         task="test",
         trace_id="test-model-allowlist-default",
         max_budget=0,
@@ -156,26 +154,17 @@ def test_public_unlisted_call_fails_before_dispatch(
     completion.assert_not_awaited()
 
 
-@pytest.mark.parametrize(
-    "model",
-    [
-        "openrouter/openai/gpt-5-mini",
-        "openrouter/openai/gpt-5.1-mini",
-        "codex/gpt-5.1-codex-mini",
-    ],
-)
 @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-def test_prohibited_mini_routes_fail_even_in_compatibility_mode(
+def test_removed_compatibility_mode_fails_before_dispatch(
     completion: AsyncMock,
-    model: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "on")
     monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
 
-    with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL"):
+    with pytest.raises(LLMConfigurationError, match="compatibility mode was removed"):
         call_llm(
-            model,
+            DEFAULT_EXECUTION_MODEL,
             [{"role": "user", "content": "hello"}],
             model_policy="compatibility",
             task="test",

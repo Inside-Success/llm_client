@@ -694,7 +694,7 @@ def _call_llm_structured_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
-    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="call_llm_structured",
@@ -1669,7 +1669,7 @@ async def _acall_llm_structured_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
-    model_policy = str(kwargs.pop("model_policy", "compatibility"))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm_structured",
