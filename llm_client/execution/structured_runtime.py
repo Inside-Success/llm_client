@@ -63,6 +63,22 @@ _INSTRUCTOR_INIT_LOCK = _threading.Lock()
 _ROUTE_CERTIFICATION_OBSERVATION_ENV = (
     "LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION"
 )
+_PROVIDER_SCHEMA_NAME_MAX_LENGTH = 64
+
+
+def _provider_schema_name(response_model: type[BaseModel]) -> str:
+    """Return a stable provider-safe identifier for a structured response schema."""
+
+    raw_name = response_model.__name__
+    safe_name = "".join(
+        character if character.isalnum() or character in "_-" else "_"
+        for character in raw_name
+    )
+    if safe_name == raw_name and len(safe_name) <= _PROVIDER_SCHEMA_NAME_MAX_LENGTH:
+        return safe_name
+    digest = _hashlib.sha256(raw_name.encode("utf-8")).hexdigest()[:12]
+    prefix = safe_name[:51].rstrip("_-") or "response_schema"
+    return f"{prefix}_{digest}"
 
 
 def _instructor_from_litellm(create_fn: Any) -> Any:
@@ -912,7 +928,7 @@ def _call_llm_structured_impl(
             resp_kwargs["text"] = {
                 "format": {
                     "type": "json_schema",
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 }
@@ -1213,7 +1229,7 @@ def _call_llm_structured_impl(
             base_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 },
@@ -1885,7 +1901,7 @@ async def _acall_llm_structured_impl(
             resp_kwargs["text"] = {
                 "format": {
                     "type": "json_schema",
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 }
@@ -2190,7 +2206,7 @@ async def _acall_llm_structured_impl(
             base_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": response_model.__name__,
+                    "name": _provider_schema_name(response_model),
                     "schema": schema,
                     "strict": True,
                 },
