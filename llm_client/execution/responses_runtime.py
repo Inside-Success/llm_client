@@ -132,6 +132,7 @@ def _project_disjoint_one_of_unions(
             discriminator=node.get("discriminator"),
         ):
             node["anyOf"] = node.pop("oneOf")
+            node.pop("discriminator", None)
 
     for value in node.values():
         if isinstance(value, dict):

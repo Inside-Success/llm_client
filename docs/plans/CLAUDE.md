@@ -40,6 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 118 | [OpenRouter Discriminated-Union Projection](118_openrouter_schema_compaction.md) | High | ✅ Complete | DoDAF Plan 75 Army publication extraction |
 | 108 | [Agent-schema Responses compatibility](108_agent_schema_responses_compatibility.md) | High | ✅ Complete | Cybernetic simulator exact-schema route certification |
 | 107 | [Direct GPT-5.6 Route Registration](107_gpt56_direct_route_registration.md) | High | ✅ Complete | Direct GPT-5.6 Sol and Terra strict-schema routes explicitly selectable; no automatic tier-default change |
 | 106 | [Direct GPT-5.5 Structured Capability Truth](106_gpt55_structured_capability_truth.md) | High | ↩️ Superseded | Its alleged direct result was an OpenRouter-proxy route; corrected by Plan 107 |

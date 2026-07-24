@@ -108,6 +108,7 @@ def test_provider_projection_rewrites_only_disjoint_literal_union() -> None:
     assert "oneOf" in schema["properties"]["decision"]
     assert "oneOf" not in projected["properties"]["decision"]
     assert "anyOf" in projected["properties"]["decision"]
+    assert "discriminator" not in projected["properties"]["decision"]
     with pytest.raises(ValidationError, match="union_tag_invalid"):
         _PlannerEnvelope.model_validate(
             {"decision": {"action": "unknown", "query": "shipping"}}
