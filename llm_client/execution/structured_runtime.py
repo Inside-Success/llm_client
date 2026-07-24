@@ -798,7 +798,7 @@ def _call_llm_structured_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
-    _check_budget(trace_id, max_budget)
+    _check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy
@@ -1829,7 +1829,7 @@ async def _acall_llm_structured_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
-    _check_budget(trace_id, max_budget)
+    _check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy

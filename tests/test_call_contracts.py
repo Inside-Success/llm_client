@@ -49,3 +49,20 @@ def test_check_budget_raises_when_trace_is_spent() -> None:
     with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=5.0):
         with pytest.raises(LLMBudgetExceededError, match="Budget exceeded for trace trace/budget"):
             check_budget("trace/budget", 5.0)
+
+
+@pytest.mark.parametrize(("spent", "expected"), [(2.5, "50%"), (4.0, "80%")])
+def test_check_budget_emits_pre_dispatch_threshold_warning(
+    spent: float, expected: str,
+) -> None:
+    warnings: list[str] = []
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=spent):
+        check_budget("trace/budget", 5.0, warning_sink=warnings)
+    assert len(warnings) == 1
+    assert expected in warnings[0]
+
+
+def test_check_budget_does_not_warn_for_unlimited_budget() -> None:
+    warnings: list[str] = []
+    check_budget("trace/unlimited", 0.0, warning_sink=warnings)
+    assert warnings == []

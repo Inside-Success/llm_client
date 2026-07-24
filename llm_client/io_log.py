@@ -977,12 +977,24 @@ CREATE TABLE IF NOT EXISTS interventions (
     measured_impact TEXT,
     status TEXT DEFAULT 'proposed'
 );
+
+CREATE TABLE IF NOT EXISTS cost_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period_start TEXT NOT NULL,
+    window_hours INTEGER NOT NULL,
+    budget REAL NOT NULL,
+    observed_cost REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(period_start, window_hours, budget)
+);
 """
 
 _INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_calls_timestamp ON llm_calls(timestamp);
 CREATE INDEX IF NOT EXISTS idx_lifecycle_logical_call ON call_lifecycle_events(logical_call_id, id);
 CREATE INDEX IF NOT EXISTS idx_lifecycle_trace ON call_lifecycle_events(trace_id, id);
+CREATE INDEX IF NOT EXISTS idx_calls_accounted_timestamp ON llm_calls(timestamp)
+    WHERE cost_source IS NOT NULL OR billing_mode IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_calls_model ON llm_calls(model);
 CREATE INDEX IF NOT EXISTS idx_calls_task ON llm_calls(task);
 CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
@@ -1044,6 +1056,7 @@ CREATE INDEX IF NOT EXISTS idx_interv_dataset ON interventions(dataset);
 CREATE INDEX IF NOT EXISTS idx_interv_category ON interventions(category);
 CREATE INDEX IF NOT EXISTS idx_interv_status ON interventions(status);
 CREATE INDEX IF NOT EXISTS idx_interv_timestamp ON interventions(timestamp);
+CREATE INDEX IF NOT EXISTS idx_cost_alerts_created_at ON cost_alerts(created_at);
 """
 
 
