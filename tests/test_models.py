@@ -154,7 +154,7 @@ class TestGetModel:
             "default_intelligent": "openrouter/minimax/minimax-m3",
             "fast_intelligent": "openrouter/z-ai/glm-5.2",
             "very_intelligent": "openrouter/x-ai/grok-4.5",
-            "max_intelligence": "openrouter/anthropic/claude-opus-4.8",
+            "max_intelligence": "openrouter/openai/gpt-5.5",
         }
 
         for task, model_id in expected.items():
@@ -511,6 +511,11 @@ class TestConfigLoading:
         models = _DEFAULT_CONFIG["models"]
         assert all("fable" not in m["litellm_id"].lower() for m in models)
         assert all("fable" not in m["name"].lower() for m in models)
+
+    def test_packaged_registry_has_no_opus_models(self):
+        models = _DEFAULT_CONFIG["models"]
+        assert all("opus" not in m["litellm_id"].lower() for m in models)
+        assert all("opus" not in m["name"].lower() for m in models)
 
     def test_parse_packaged_default_config_rejects_invalid_json(self):
         with pytest.raises(RuntimeError, match="Invalid packaged model registry JSON"):

@@ -23,6 +23,7 @@ from llm_client.core.client import (
     RetryPolicy,
 )
 from llm_client.core.config import ClientConfig
+from llm_client.core.errors import LLMConfigurationError
 from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
 from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 
@@ -132,6 +133,11 @@ async def _acall_llm_impl(
     **kwargs: Any,
 ) -> LLMCallResult:
     """Run the asynchronous text-call runtime behind ``client.acall_llm``."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     time = _client.time
     logger = _client.logger
     litellm = _client.litellm
@@ -181,6 +187,8 @@ async def _acall_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
+    model_justification = kwargs.pop("model_justification", None)
     agent_retry_safe = kwargs.pop("agent_retry_safe", None)
     parent_trace_id: str | None = kwargs.pop("parent_trace_id", None)
     task, trace_id, max_budget, _entry_warnings = _require_tags(
@@ -196,6 +204,9 @@ async def _acall_llm_impl(
     _check_budget(trace_id, max_budget)
 
     snapshot_runtime_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    snapshot_runtime_kwargs["model_policy"] = model_policy
+    if model_justification is not None:
+        snapshot_runtime_kwargs["model_justification"] = model_justification
     # Inject task/trace_id into litellm metadata for callback propagation
     # (e.g. Langfuse). Harmless when no callbacks are configured.
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
@@ -244,10 +255,14 @@ async def _acall_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
     fallback_chain = plan.fallback_models or None
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     if fallback_chain is not None:
         _inner_named["fallback_models"] = fallback_chain
     else:
@@ -279,6 +294,16 @@ async def _acall_llm_impl(
             warning_sink=_warnings,
         )
         public_kwargs = _client._strip_llm_internal_kwargs(model_kwargs)
+        if current_model.startswith("codex"):
+            legacy_effort = public_kwargs.get("model_reasoning_effort")
+            if (
+                legacy_effort is not None
+                and str(legacy_effort).strip().lower() != reasoning_effort
+            ):
+                raise LLMConfigurationError(
+                    "reasoning_effort conflicts with model_reasoning_effort for Codex"
+                )
+            public_kwargs["model_reasoning_effort"] = reasoning_effort
 
         if not is_agent and ("mcp_servers" in public_kwargs or "mcp_sessions" in public_kwargs):
             from llm_client.agent.mcp_agent import MCP_LOOP_KWARGS, acall_with_mcp_runtime
@@ -373,7 +398,12 @@ async def _acall_llm_impl(
 
         key: str | None = None
         if cache is not None:
-            key = _cache_key(current_model, messages, **public_kwargs)
+            key = _cache_key(
+                current_model,
+                messages,
+                reasoning_effort=reasoning_effort,
+                **public_kwargs,
+            )
             cached = await _async_cache_get(cache, key)
             if cached is not None:
                 cached_result = cast(LLMCallResult, _finalize_result(
@@ -389,6 +419,7 @@ async def _acall_llm_impl(
                         effective_api_base=current_api_base,
                         background_mode=background_mode,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ))
                 _s_hash, _rf_type = _extract_schema_observability(public_kwargs)
@@ -484,6 +515,7 @@ async def _acall_llm_impl(
                     sticky_fallback=any("STICKY_FALLBACK" in w for w in (result.warnings or [])),
                     background_mode=background_mode,
                     routing_policy=routing_policy,
+                    model_policy=model_policy_trace,
                 ),
             ))
             if hooks and hooks.after_call:

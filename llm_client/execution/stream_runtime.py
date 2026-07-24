@@ -20,6 +20,26 @@ if TYPE_CHECKING:
     from llm_client.core.config import ClientConfig
 
 
+def _bind_codex_reasoning_effort(
+    model: str,
+    runtime_kwargs: dict[str, Any],
+    reasoning_effort: str | None,
+) -> None:
+    """Translate the public reasoning control to the Codex adapter contract."""
+
+    if not model.startswith("codex"):
+        return
+    legacy_effort = runtime_kwargs.get("model_reasoning_effort")
+    if (
+        legacy_effort is not None
+        and str(legacy_effort).strip().lower() != reasoning_effort
+    ):
+        raise ValueError(
+            "reasoning_effort conflicts with model_reasoning_effort for Codex"
+        )
+    runtime_kwargs["model_reasoning_effort"] = reasoning_effort
+
+
 def _stream_terminal_payload(
     stream: Any,
     resolved_model: str | None,
@@ -300,6 +320,11 @@ def stream_llm_impl(
     **kwargs: Any,
 ) -> LLMStream:
     """Implementation for stream_llm extracted out of client facade."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     _client._check_model_deprecation(model)
     cfg = config or _client.ClientConfig.from_env()
     timeout = _client._normalize_timeout(timeout, caller="stream_llm")
@@ -307,6 +332,8 @@ def stream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,
         trace_id,
@@ -330,9 +357,14 @@ def stream_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
+    _bind_codex_reasoning_effort(plan.primary_model, runtime_kwargs, reasoning_effort)
     routing_policy = str(plan.routing_trace.get("routing_policy", _client._routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     _warnings = list(_entry_warnings)
     backoff_fn = r.backoff or _client.exponential_backoff
 
@@ -413,6 +445,7 @@ def stream_llm_impl(
                         requested_api_base=api_base,
                         effective_api_base=current_api_base,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ),
             )
@@ -529,6 +562,11 @@ async def astream_llm_impl(
     **kwargs: Any,
 ) -> AsyncLLMStream:
     """Implementation for astream_llm extracted out of client facade."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     _client._check_model_deprecation(model)
     cfg = config or _client.ClientConfig.from_env()
     timeout = _client._normalize_timeout(timeout, caller="astream_llm")
@@ -536,6 +574,8 @@ async def astream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,
         trace_id,
@@ -559,9 +599,14 @@ async def astream_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
+    _bind_codex_reasoning_effort(plan.primary_model, runtime_kwargs, reasoning_effort)
     routing_policy = str(plan.routing_trace.get("routing_policy", _client._routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     _warnings = list(_entry_warnings)
     backoff_fn = r.backoff or _client.exponential_backoff
 
@@ -642,6 +687,7 @@ async def astream_llm_impl(
                         requested_api_base=api_base,
                         effective_api_base=current_api_base,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ),
             )

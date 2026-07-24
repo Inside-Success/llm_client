@@ -878,6 +878,51 @@ def test_public_runtime_snapshots_round_trip_timeout_disabled(
     }
 
 
+# mock-ok: provider transport is replaced; policy evaluation, persistence, and
+# replay reconstruction use the real public runtime.
+def test_model_policy_justification_is_persisted_and_replayed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    completion = AsyncMock(return_value=_provider_response("ok"))
+    monkeypatch.setattr("llm_client.core.client.litellm.acompletion", completion)
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion_cost",
+        lambda *_args, **_kwargs: 0.001,
+    )
+    monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "on")
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
+    trace_id = "trace.model-policy.justification"
+    justification = "Use the reviewed Terra planner route for this hard decision."
+
+    result = call_llm(
+        "openrouter/openai/gpt-5.6-terra",
+        [{"role": "user", "content": "hi"}],
+        model_policy="enforce_allowlist",
+        model_justification=justification,
+        task="test.model-policy.replay",
+        trace_id=trace_id,
+        max_budget=0,
+    )
+
+    assert result.routing_trace["model_policy"]["justification"] == justification
+    snapshot = _latest_snapshot(trace_id)
+    assert snapshot["request"]["kwargs"]["model_policy"] == "enforce_allowlist"
+    assert snapshot["request"]["kwargs"]["model_justification"] == justification
+    call_id = _latest_call_id(trace_id)
+
+    completion.reset_mock()
+    replay_module.replay_call_snapshot(
+        call_id,
+        trace_id="trace.model-policy.justification.replay",
+        max_budget=0,
+    )
+
+    completion.assert_awaited_once()
+    replay_snapshot = _latest_snapshot("trace.model-policy.justification.replay")
+    assert replay_snapshot["request"]["kwargs"]["model_policy"] == "enforce_allowlist"
+    assert replay_snapshot["request"]["kwargs"]["model_justification"] == justification
+
+
 @pytest.mark.parametrize(
     "public_api",
     ["call_llm", "acall_llm", "call_llm_structured", "acall_llm_structured"],

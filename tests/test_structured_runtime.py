@@ -60,6 +60,15 @@ class _PlannerEnvelope(BaseModel):
     ]
 
 
+class _StopDecision(BaseModel):
+    action: Literal["control.stop_retrieval"]
+    reason: str
+
+
+class _StopEnvelope(BaseModel):
+    decision: _StopDecision = Field(description="Concrete next planner decision.")
+
+
 def test_openai_responses_schema_inlines_ref_siblings() -> None:
     """SDK normalization retains field semantics without illegal ref siblings."""
     class Hypothesis(BaseModel):
@@ -143,7 +152,7 @@ def test_openrouter_structured_call_sends_provider_compatible_schema(
     mock_comp.return_value = _mock_structured_response('{"count":1}')
 
     parsed, _meta = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         task="test",
@@ -155,6 +164,69 @@ def test_openrouter_structured_call_sends_provider_compatible_schema(
     assert parsed.count == 1
     assert "minimum" not in sent_schema["properties"]["count"]
     assert sent_schema["additionalProperties"] is False
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_native_schema_inlines_nested_ref_siblings(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The sync OpenRouter request must not send a ref with sibling description."""
+    mock_comp.return_value = _mock_structured_response(
+        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
+    )
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "Stop."}],
+        _StopEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.ref_sibling.sync",
+        max_budget=0,
+    )
+
+    decision_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "control.stop_retrieval"
+    assert "$ref" not in decision_schema
+    assert decision_schema["description"] == "Concrete next planner decision."
+    assert decision_schema["type"] == "object"
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_openrouter_async_native_schema_inlines_nested_ref_siblings(
+    mock_acompletion: AsyncMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The async OpenRouter request uses the same ref-safe provider schema."""
+    mock_acompletion.return_value = _mock_structured_response(
+        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
+    )
+
+    parsed, _meta = await _acall_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "Stop."}],
+        _StopEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.ref_sibling.async",
+        max_budget=0,
+    )
+
+    decision_schema = mock_acompletion.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "control.stop_retrieval"
+    assert "$ref" not in decision_schema
+    assert decision_schema["description"] == "Concrete next planner decision."
+    assert decision_schema["type"] == "object"
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -197,15 +269,17 @@ def test_openrouter_native_success_records_route_observation(
     _mock_supports_schema: MagicMock,
     _mock_cost: MagicMock,
     observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A native OpenRouter success sends its exact provider schema to observation."""
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "enabled")
     response = _mock_structured_response('{"count":1}')
     response.id = "gen-route-observation"
     mock_comp.return_value = response
     observe.return_value = SimpleNamespace(observation_id="routeobs1_0123456789abcdef01234567")
 
     parsed, result = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         task="test",
@@ -226,7 +300,7 @@ def test_openrouter_native_success_records_route_observation(
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.completion")
-def test_openrouter_route_observation_can_be_disabled_without_changing_result(
+def test_openrouter_route_observation_is_disabled_by_default(
     mock_comp: MagicMock,
     _mock_supports_schema: MagicMock,
     _mock_cost: MagicMock,
@@ -239,11 +313,11 @@ def test_openrouter_route_observation_can_be_disabled_without_changing_result(
     response = _mock_structured_response('{"count":1}')
     response.id = "gen-route-observation-disabled"
     mock_comp.return_value = response
-    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "disabled")
+    monkeypatch.delenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", raising=False)
     caplog.set_level(logging.INFO, logger="llm_client.structured_runtime")
 
     parsed, result = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         task="test",
@@ -252,7 +326,7 @@ def test_openrouter_route_observation_can_be_disabled_without_changing_result(
     )
 
     assert parsed.count == 1
-    assert result.resolved_model == "openrouter/anthropic/claude-opus-4.8"
+    assert result.resolved_model == "openrouter/deepseek/deepseek-v4-flash"
     observe.assert_not_called()
     assert "ROUTE_CERTIFICATION_OBSERVATION_DISABLED" in caplog.text
 
@@ -266,15 +340,17 @@ def test_openrouter_route_observation_failure_is_visible_without_model_retry(
     _mock_supports_schema: MagicMock,
     _mock_cost: MagicMock,
     observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Metadata failure preserves the successful result and never reroutes the model."""
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "enabled")
     response = _mock_structured_response('{"count":1}')
     response.id = "gen-route-observation-failure"
     mock_comp.return_value = response
     observe.side_effect = RuntimeError("generation metadata unavailable")
 
     parsed, result = _call_llm_structured_impl(
-        "openrouter/anthropic/claude-opus-4.8",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Return one."}],
         _BoundedCount,
         num_retries=0,
@@ -414,7 +490,7 @@ def test_structured_runtime_sync_raises_capability_error_for_gpt5_schema_rejecti
 
     with pytest.raises(LLMCapabilityError, match="provider rejected structured JSON-schema output"):
         _call_llm_structured_impl(
-            "openai/gpt-5-mini",
+            "openai/gpt-5",
             messages,
             _City,
             task="test",
@@ -440,7 +516,7 @@ async def test_structured_runtime_async_raises_capability_error_for_gpt5_schema_
 
     with pytest.raises(LLMCapabilityError, match="provider rejected structured JSON-schema output"):
         await _acall_llm_structured_impl(
-            "gpt-5-mini",
+            "gpt-5",
             messages,
             _City,
             task="test",

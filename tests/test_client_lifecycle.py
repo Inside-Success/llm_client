@@ -210,7 +210,7 @@ def test_call_llm_structured_uses_shared_default_timeout_when_omitted(
         max_budget=0.1,
     )
 
-    assert seen["timeout"] == 180
+    assert seen["timeout"] == 60
 
 
 def test_call_llm_structured_preserves_explicit_timeout_override(

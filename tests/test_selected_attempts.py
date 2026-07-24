@@ -108,6 +108,7 @@ def _event(
     trace_id: str = "trace-1",
     task: str = "semantic-map",
     schema_hash: str = "schema-1",
+    execution_path: str = "native_schema",
     raw_sha256: str | None = None,
     recovery_decision: str | None = None,
     failure_class: str | None = None,
@@ -122,7 +123,7 @@ def _event(
             "task": task,
             "attempt_ordinal": ordinal,
             "model": model,
-            "execution_path": "native_schema",
+            "execution_path": execution_path,
             "schema_hash": schema_hash,
             "event_type": event_type,
             "raw_sha256": raw_sha256,
@@ -134,15 +135,38 @@ def _event(
 
 
 def _record_success_events(
-    *, ordinal: int = 0, model: str = "openrouter/requested"
+    *,
+    ordinal: int = 0,
+    model: str = "openrouter/requested",
+    execution_path: str = "native_schema",
 ) -> None:
     """Persist one complete selected attempt."""
 
-    record_structured_attempt_event(_event("started", ordinal=ordinal, model=model))
     record_structured_attempt_event(
-        _event("received", ordinal=ordinal, model=model, raw_sha256="a" * 64)
+        _event(
+            "started",
+            ordinal=ordinal,
+            model=model,
+            execution_path=execution_path,
+        )
     )
-    record_structured_attempt_event(_event("validated", ordinal=ordinal, model=model))
+    record_structured_attempt_event(
+        _event(
+            "received",
+            ordinal=ordinal,
+            model=model,
+            execution_path=execution_path,
+            raw_sha256="a" * 64,
+        )
+    )
+    record_structured_attempt_event(
+        _event(
+            "validated",
+            ordinal=ordinal,
+            model=model,
+            execution_path=execution_path,
+        )
+    )
 
 
 def _record_terminal(
@@ -203,6 +227,20 @@ def test_reads_exact_selected_attempt_and_complete_lineage() -> None:
     ]
     assert len(receipt.receipt_digest) == 64
     assert diagnose_runtime_selected_attempt_receipt_for_trace("trace-1") == receipt
+
+
+def test_reads_responses_attempt_when_terminal_path_agrees() -> None:
+    """Responses custody is eligible only under its matching terminal contract."""
+
+    _record_success_events(execution_path="responses_api")
+    _record_terminal(
+        execution_path="responses_api",
+        response_format_type="responses_api",
+    )
+
+    receipt = get_runtime_selected_attempt_receipt("logical-1")
+
+    assert all(event.execution_path == "responses_api" for event in receipt.lineage)
 
 
 # mock-ok: provider transport is controlled; the public runtime, lifecycle, and real SQLite join are under test.
@@ -469,6 +507,24 @@ def test_one_attempt_with_inconsistent_models_rejects() -> None:
         get_runtime_selected_attempt_receipt("logical-1")
 
 
+def test_one_attempt_with_inconsistent_execution_paths_rejects() -> None:
+    """One provider attempt cannot switch runtime paths between lifecycle events."""
+
+    record_structured_attempt_event(_event("started"))
+    record_structured_attempt_event(
+        _event(
+            "received",
+            execution_path="responses_api",
+            raw_sha256="b" * 64,
+        )
+    )
+    record_structured_attempt_event(_event("validated"))
+    _record_terminal()
+
+    with pytest.raises(SelectedAttemptReceiptError, match="execution paths"):
+        get_runtime_selected_attempt_receipt("logical-1")
+
+
 def test_public_events_without_terminal_row_have_no_receipt() -> None:
     """Caller-writable lifecycle events alone cannot become a selected receipt."""
 
@@ -543,14 +599,14 @@ def test_cross_record_identity_mismatch_rejects(
     ("terminal_updates", "message"),
     [
         ({"error": RuntimeError("failed")}, "successful"),
-        ({"execution_path": "instructor"}, "native_schema"),
-        ({"response_format_type": "instructor"}, "json_schema"),
+        ({"execution_path": "instructor"}, "execution_path"),
+        ({"response_format_type": "instructor"}, "response format"),
     ],
 )
 def test_noneligible_terminal_row_rejects(
     terminal_updates: dict[str, object], message: str
 ) -> None:
-    """Only successful native JSON-schema calls have lossless receipt evidence."""
+    """Only matching successful provider-native calls have receipt evidence."""
 
     _record_success_events()
     _record_terminal(**terminal_updates)  # type: ignore[arg-type]

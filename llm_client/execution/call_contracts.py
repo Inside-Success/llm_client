@@ -253,6 +253,8 @@ _GPT5_REASONING_GATED_SAMPLING = {
     "gpt-5.2-pro",
     "gpt-5.5",
     "gpt-5.5-pro",
+    "gpt-5.6",
+    "gpt-5.6-terra",
     "gpt-5.1-chat-latest",
     "gpt-5.2-chat-latest",
 }
@@ -453,7 +455,7 @@ def _is_codex_family_model(model: str) -> bool:
 def _is_agent_model(model: str) -> bool:
     """Check if model routes to an agent SDK instead of litellm.
 
-    Agent models like "claude-code" or "claude-code/opus" use the Claude
+    Agent models like "claude-code" or "claude-code/sonnet" use the Claude
     Agent SDK. "openai-agents/*" is reserved for future OpenAI Agents SDK.
     Codex-family models (e.g. "gpt-5.3-codex") are also recognized.
     """
@@ -610,10 +612,38 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "openrouter/auto": (
+        "an explicit, policy-approved model ID",
+        "OpenRouter Auto Router selects the final model account-side, so "
+        "llm_client cannot prove before dispatch that a banned model is excluded.",
+    ),
+    "@preset/": (
+        "an explicit, policy-approved model ID and provider routing kwargs",
+        "OpenRouter presets can replace the requested model or add fallbacks "
+        "account-side, so llm_client cannot enforce its model ban before dispatch.",
+    ),
+    "opus": (
+        "claude-code/sonnet for Claude workspace-agent review OR "
+        "the appropriate non-banned llm_client model tier for ordinary calls",
+        "Opus-family models are banned by ecosystem policy in every execution "
+        "lane, including raw provider routes and claude-code aliases.",
+    ),
     "fable": (
-        "openrouter/anthropic/claude-opus-4.8 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
+        "openrouter/openai/gpt-5.5 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
         "Fable-family models are banned by ecosystem policy. Do not use them for "
         "new calls, even with ordinary model_override_acceptance metadata.",
+    ),
+    "gpt-5.1-mini": (
+        "openrouter/deepseek/deepseek-v4-flash",
+        "GPT-5.1 Mini is prohibited by the shared model-execution policy.",
+    ),
+    "gpt-5-mini": (
+        "openrouter/deepseek/deepseek-v4-flash",
+        "GPT-5 Mini is prohibited by the shared model-execution policy.",
+    ),
+    "codex-mini": (
+        "codex/gpt-5.4",
+        "Codex Mini routes are prohibited by the shared model-execution policy.",
     ),
     "gpt-4o-mini": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",
@@ -624,7 +654,7 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
     "o4-mini": (
         "o3-mini",
         "o4-mini was retired by OpenAI on Feb 16, 2026 and no longer accepts "
-        "requests. Use o3-mini for reasoning tasks or gpt-5-mini for general tasks.",
+        "requests. Use o3-mini for reasoning tasks or DeepSeek V4 Flash for general tasks.",
     ),
     "mistral-large": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",
@@ -665,11 +695,6 @@ _DEPRECATED_MODELS: dict[str, tuple[str, str]] = {
         "anthropic/claude-sonnet-4-5-20250929 OR anthropic/claude-haiku-4-5-20251001",
         "Claude 3.5 models are superseded by 4.5 equivalents at the same price "
         "with better quality.",
-    ),
-    "claude-3-opus": (
-        "anthropic/claude-opus-4-6",
-        "Claude 3 Opus is superseded by Opus 4.5/4.6 at a lower price with "
-        "dramatically better quality.",
     ),
     "claude-3-sonnet": (
         "anthropic/claude-sonnet-4-5-20250929",

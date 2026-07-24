@@ -23,7 +23,7 @@ Usage::
         --artifact-file /tmp/slice-12.patch \\
         --artifact-label "slice 12: barrier topology" \\
         --context-text "Implementing Plan #35 barrier semantics; the agent_b prompt must not see agent_a freshest round-N output." \\
-        --reviewer claude-code/opus \\
+        --reviewer claude-code/sonnet \\
         --workspace /path/to/repo \\
         --out /tmp/review-slice-12.json &
 
@@ -193,8 +193,8 @@ def register_parser(subparsers: Any) -> None:
     )
     p.add_argument(
         "--reviewer",
-        default="claude-code/opus",
-        help="Reviewer model (default: claude-code/opus).",
+        default="claude-code/sonnet",
+        help="Reviewer model (default: claude-code/sonnet).",
     )
     p.add_argument(
         "--review-profile",

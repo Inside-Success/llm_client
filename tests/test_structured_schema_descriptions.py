@@ -309,6 +309,46 @@ class TestSchemaNameFromModel:
         response_format = call_kwargs.kwargs.get("response_format") or call_kwargs[1].get("response_format")
         assert response_format["json_schema"]["name"] == "PartialResult"
 
+    @patch("litellm.supports_response_schema", return_value=True)
+    @patch("litellm.completion")
+    @patch("litellm.completion_cost", return_value=0.001)
+    def test_schema_name_is_provider_safe_and_collision_resistant(
+        self,
+        mock_cost: MagicMock,
+        mock_completion: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Long dynamic model names are bounded without silently colliding."""
+        from pydantic import create_model
+
+        from llm_client.core.client import call_llm_structured
+
+        long_model = create_model(
+            "PlannerObligationCoverageEnvelope_" + "TemporalMember_" * 5,
+            value=(str, ...),
+        )
+        mock_completion.return_value = _make_raw_mock_response(
+            content=json.dumps({"value": "covered"})
+        )
+
+        call_llm_structured(
+            "gpt-4o",
+            [{"role": "user", "content": "Assess"}],
+            long_model,
+            task="test",
+            trace_id="schema-name-long",
+            max_budget=1.0,
+        )
+
+        call_kwargs = mock_completion.call_args
+        response_format = call_kwargs.kwargs.get("response_format") or call_kwargs[1].get(
+            "response_format"
+        )
+        schema_name = response_format["json_schema"]["name"]
+        assert len(schema_name) <= 64
+        assert schema_name.startswith("PlannerObligationCoverageEnvelope_")
+        assert schema_name != long_model.__name__
+
 
 # ---------------------------------------------------------------------------
 # Test: _strict_json_schema correctness

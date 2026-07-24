@@ -10,8 +10,10 @@ Usage:
 
     # Sync
     result = call_llm(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         task="demo",
         trace_id="init/sync",
         max_budget=1.0,
@@ -22,22 +24,28 @@ Usage:
     result = call_llm(
         "claude-code",
         [{"role": "user", "content": "Fix the bug"}],
+        model_policy="enforce_allowlist",
+        model_justification="This task requires workspace editing tools.",
         task="demo_agent",
         trace_id="init/agent",
         max_budget=0,
     )
     result = call_llm(
-        "claude-code/opus",
+        "claude-code/sonnet",
         [{"role": "user", "content": "Review code"}],
+        model_policy="enforce_allowlist",
+        model_justification="This task requires an independent workspace reviewer.",
         task="demo_agent",
-        trace_id="init/agent_opus",
+        trace_id="init/agent_sonnet",
         max_budget=0,
     )
 
     # Batch (concurrent)
     results = call_llm_batch(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [msgs1, msgs2, msgs3],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         max_concurrent=5,
         task="demo_batch",
         trace_id="init/batch",
@@ -46,8 +54,10 @@ Usage:
 
     # Streaming
     for chunk in stream_llm(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         task="demo_stream",
         trace_id="init/stream",
         max_budget=1.0,
@@ -58,8 +68,10 @@ Usage:
     from llm_client import acall_llm, astream_llm
 
     result = await acall_llm(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         task="demo_async",
         trace_id="init/async",
         max_budget=1.0,
@@ -200,6 +212,16 @@ from llm_client.core.model_selection import (
     resolve_model_selection,
     strict_model_policy,
 )
+from llm_client.core.model_execution_policy import (
+    ALLOWED_EXECUTION_MODELS,
+    DEFAULT_EXECUTION_MODEL,
+    ModelExecutionDecision,
+    evaluate_model_execution_policy,
+)
+from llm_client.route_certification_runtime import (
+    openrouter_native_provider_schema,
+    route_schema_sha256,
+)
 from llm_client.prompt_assets import (
     PromptAssetManifest,
     PromptAssetRef,
@@ -302,6 +324,13 @@ from llm_client.core.client import (
     strip_fences,
 )
 from llm_client.execution.call_contracts import StructuredOutputPolicy
+from llm_client.json_schema import (
+    JsonScalar,
+    JsonValue,
+    acall_llm_json_schema,
+    call_llm_json_schema,
+    json_schema_response_model,
+)
 from llm_client.core.data_types import TurnEvent
 from llm_client.parsing_utils import (
     TruncatedOutputError,

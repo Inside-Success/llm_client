@@ -1,11 +1,37 @@
 # Model Selection
 
-`llm_client` model selection has two separate decisions:
+`llm_client` model selection has three separate decisions:
 
-1. **Raw model tier** — task-shape, latency, and reasoning tradeoff for ordinary
+1. **Execution policy** — every call is checked against the exact shared
+   allowlist before dispatch.
+2. **Raw model tier** — task-shape, latency, and reasoning tradeoff for ordinary
    text or structured-output calls. Cost is observed, not a launch gate.
-2. **Execution mode** — whether the call needs a workspace-agent SDK lane with
+3. **Execution mode** — whether the call needs a workspace-agent SDK lane with
    side effects, tools, and repository context.
+
+New and migrated production callers use:
+
+```python
+result = call_llm(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    reasoning_effort="none",
+    task="bounded_decision",
+    trace_id=trace_id,
+    max_budget=0.05,
+)
+```
+
+DeepSeek V4 Flash is the only no-justification default. Any other allowed
+canonical route requires a non-empty `model_justification`; the decision is
+retained in both the routing trace and replayable call snapshot. A justification
+cannot authorize a route absent from the allowlist. GPT-5 Mini, GPT-5.1 Mini,
+GPT-5.4 Mini, and Codex Mini routes are intentionally absent and therefore fail
+before provider dispatch.
+
+Enforcement is unconditional. `model_policy="enforce_allowlist"` remains an
+accepted explicit value for replay clarity, but omitting it has the same
+fail-closed behavior. The former `compatibility` value is rejected.
 
 Do not use agent SDK models merely because they are “smarter.” Use them when
 the workflow needs workspace side effects:
@@ -15,13 +41,83 @@ result = call_llm(
     "codex/gpt-5.4",
     messages,
     execution_mode="workspace_agent",
+    reasoning_effort="medium",
     task="repo_edit",
     trace_id=trace_id,
     max_budget=5.00,
 )
 ```
 
-For ordinary model selection, prefer tier selectors:
+## Provider Capabilities
+
+Reasoning-configurable routes require a reviewed explicit effort. Omission is
+rejected before cache lookup or provider dispatch. For example, DeepSeek V4
+Flash xhigh reasoning through OpenRouter is the ordinary model plus an effort setting,
+not a second model ID:
+
+```python
+result = call_llm_structured(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    response_model=Decision,
+    reasoning_effort="xhigh",
+    task="bounded_decision",
+    trace_id=trace_id,
+    max_budget=0.05,
+)
+```
+
+Provider capability forwarding remains independent of the execution allowlist.
+For an allowed route, `llm_client` forwards normalized controls without
+model-family-specific branches.
+OpenRouter transport explicitly admits those documented controls through
+LiteLLM even when the installed LiteLLM capability table lags the provider.
+It also requires a provider route that supports the controls. Unsupported
+controls fail at the transport/provider boundary rather than being silently
+discarded.
+
+New provider options do not require a new `llm_client` feature merely to pass
+through. Public calls already accept broad provider kwargs. Promote an option
+to a named public control only when it has stable cross-provider meaning,
+requires shared validation, or must be bound into replay/policy.
+
+### OpenRouter routing settings
+
+Provider selection and model selection are different:
+
+- Provider sorting such as OpenRouter's balanced default may choose which
+  upstream serves a fixed explicit model. `llm_client` preserves these settings.
+- Auto Router, presets, and the auto-router plugin may choose a different final
+  model. They are rejected because `llm_client` cannot inspect the account-side
+  candidate set before enforcing its non-overridable model bans.
+- Provider `models` and `fallbacks` arrays are checked for banned or opaque
+  candidates before dispatch.
+- An OpenRouter Guardrail model allowlist is useful defense in depth. Do not use
+  `anthropic/*` when Opus must be excluded: the wildcard includes every
+  Anthropic model. Prefer explicit approved model IDs.
+
+An account-level default model does not replace an explicit model in a normal
+`llm_client` call. Keep explicit model selection in code/config and use
+OpenRouter provider routing only to choose a compatible endpoint.
+
+## Local and Vendor Observability
+
+OpenRouter can log inputs/outputs and [Broadcast traces to existing
+observability platforms](https://openrouter.ai/docs/guides/features/broadcast/overview).
+For OpenRouter calls, `llm_client` automatically projects its required
+`task`/`trace_id` into the provider's `trace` envelope while preserving any
+caller-supplied trace hierarchy. Destinations, sampling, and privacy remain
+OpenRouter workspace settings.
+
+This complements rather than replaces local JSONL/SQLite evidence. Local
+evidence also covers direct providers, workspace-agent SDKs, cache hits,
+pre-dispatch policy failures, retries/fallbacks, local schema validation, and
+budget enforcement. Use the shared trace ID to join the two views; do not build
+another provider-specific exporter inside `llm_client`.
+
+For ordinary model selection during migration, prefer tier selectors. Under
+`model_policy="enforce_allowlist"`, the selector's complete resolved chain must
+be allowed, and every non-default route requires `model_justification`:
 
 | Selector | Default model | Use for | Do not use for |
 |---|---|---|---|
@@ -32,7 +128,7 @@ For ordinary model selection, prefer tier selectors:
 | `default_intelligent` | MiniMax-M3 | normal project default | workspace side effects |
 | `fast_intelligent` | GLM 5.2 | stronger reasoning without huge latency | final “best possible” escalation |
 | `very_intelligent` | Grok 4.5 | difficult semantic judgment, coreference, ontology authoring, and deep review | automatic bulk pipelines |
-| `max_intelligence` | Claude Opus 4.8 | explicit max-quality escalation | default routing |
+| `max_intelligence` | GPT-5.5 through OpenRouter | explicit max-quality escalation | default routing |
 
 Compatibility selectors such as `extraction`, `judging`, `synthesis`, and
 `bulk_cheap` remain available so existing projects do not break. New code
@@ -73,6 +169,13 @@ or transport failure from a semantic-quality failure. Until then, selection is
 only a declared default and callers must fail loudly if the provider rejects
 the route.
 
+Ordinary OpenRouter inference requests inline router metadata and does not
+block on the eventually consistent generation-history endpoint. Exact
+endpoint-level certification is deliberately opt-in: set
+`LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION=enabled` only for a bounded
+certification run. A certification lookup enriches an already-successful call;
+it is not part of model execution and must not be used as a quality verdict.
+
 For small structured calls, the owning task profile must supply any required
 technical output ceiling centrally and expose it in the call snapshot. Callers
 must not invent one-off token caps; this is a provider-capacity setting, not a
@@ -110,9 +213,11 @@ probe, but it does not certify a local route. GPT-5.6 Sol and Terra now have
 bounded direct-route evidence; Luna remains a provider-declared capability,
 not a `llm_client` selection default or an observed result.
 
-Fable-family models are banned. They must not appear in the registry, project
-config, direct `call_llm(...)` calls, or override fields. Generic
-`model_override_acceptance` does not authorize Fable.
+The enforced allowlist supersedes family-by-family bans for all callers.
+Fable, Opus, GPT Mini, Codex Mini, unknown models, and opaque account-side
+selectors are all unavailable because they are not exact allowlist entries.
+Neither `model_justification` nor generic `model_override_acceptance` can
+authorize an unlisted route.
 
 ## Should every project register through `llm_client`?
 
@@ -120,9 +225,11 @@ Yes for production/shared project LLM calls. The practical enforcement target
 is:
 
 - project code imports `llm_client` for LLM execution;
-- model choice uses a tier selector or a documented override;
+- every call is governed even when `model_policy` is omitted;
+- DeepSeek V4 Flash is used by default;
+- another exact allowed route includes a durable `model_justification`;
 - direct raw model literals are audited;
-- banned models are blocked regardless of override metadata.
+- unlisted models are blocked regardless of override metadata.
 
 Do not force benchmark baselines, provider SDK demos, fixture strings, or
 workspace-agent SDK lanes through the same raw-model tier selector. Those still

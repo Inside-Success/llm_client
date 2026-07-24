@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
 from llm_client.core.data_types import LLMCallResult
 from llm_client.observability.selected_attempts import (
@@ -27,10 +28,24 @@ from llm_client.route_certification import (
 )
 
 
-def _schema_sha256(schema: dict[str, Any]) -> str:
+def route_schema_sha256(schema: dict[str, Any]) -> str:
     """Hash the exact provider-facing JSON Schema using runtime canonicalization."""
 
     return hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()
+
+
+def openrouter_native_provider_schema(
+    response_model: type[BaseModel],
+) -> dict[str, Any]:
+    """Return the exact schema the structured runtime sends through OpenRouter."""
+    from llm_client.core.client import (
+        _openrouter_compatible_strict_json_schema,
+        _strict_openai_response_model_schema,
+    )
+
+    return _openrouter_compatible_strict_json_schema(
+        _strict_openai_response_model_schema(response_model)
+    )
 
 
 def _generation_id(result: LLMCallResult) -> str:
@@ -65,7 +80,7 @@ def compile_openrouter_native_success(
         raise ValueError("result and selected-attempt model identity mismatch")
     if not receipt.resolved_model.startswith("openrouter/"):
         raise ValueError("selected attempt is not an OpenRouter route")
-    full_schema_digest = _schema_sha256(provider_schema)
+    full_schema_digest = route_schema_sha256(provider_schema)
     if not full_schema_digest.startswith(receipt.schema_hash):
         raise ValueError("provider schema does not match selected-attempt schema hash")
     return RouteCertificationObservation.build(
@@ -153,6 +168,8 @@ def observe_openrouter_native_success_from_runtime(
 
 __all__ = [
     "compile_openrouter_native_success",
+    "openrouter_native_provider_schema",
     "observe_openrouter_native_success",
     "observe_openrouter_native_success_from_runtime",
+    "route_schema_sha256",
 ]

@@ -15,6 +15,11 @@ All notable changes to `llm-client` are documented in this file.
 
 ### Added
 
+- Sync/async `call_llm_json_schema` APIs and a versioned
+  `python -m llm_client json-schema-call` bridge for non-Python consumers.
+  Caller schemas use the established provider projection, structured repair,
+  budget, cost, and observability runtime; the CLI contract contains no
+  credential or endpoint fields.
 - Shared execution-kernel primitives in `llm_client.execution_kernel`:
   - `run_sync_with_retry` / `run_async_with_retry`
   - `run_sync_with_fallback` / `run_async_with_fallback`
@@ -65,6 +70,14 @@ All notable changes to `llm-client` are documented in this file.
 
 ### Changed
 
+- Normalized reasoning controls now pass through generically. OpenRouter calls
+  declare lagging LiteLLM-compatible controls, require a provider that supports
+  them, and project local task/trace identity into the vendor Broadcast
+  envelope without replacing local execution evidence.
+- Opus-family models are hard-blocked across explicit routes, agent aliases,
+  fallback legs, provider model arrays, registries, and workflow defaults.
+  Opaque OpenRouter Auto Router and preset selection is rejected so an
+  account-side route cannot bypass the ban.
 - `call_llm` / `acall_llm` now use shared retry+fallback kernel paths instead
   of duplicated in-function retry/fallback loops.
 - Timeout/error observability hardening:

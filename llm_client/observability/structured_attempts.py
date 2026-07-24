@@ -68,7 +68,7 @@ class StructuredAttemptEvent(BaseModel):
         ge=0, description="Zero-based generation attempt ordinal."
     )
     model: str = Field(description="Model used for this attempt.")
-    execution_path: Literal["native_schema"] = Field(
+    execution_path: Literal["native_schema", "responses_api"] = Field(
         description="Structured runtime path."
     )
     schema_hash: str = Field(

@@ -22,6 +22,7 @@ CLI_CMDS = [
     ["deliberate-task", "--help"],
     ["provider-limit", "--help"],
     ["provider-limit", "openrouter", "--help"],
+    ["json-schema-call", "--help"],
 ]
 
 

@@ -41,6 +41,13 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
 | 118 | [OpenRouter Discriminated-Union Projection](118_openrouter_schema_compaction.md) | High | ✅ Complete | DoDAF Plan 75 Army publication extraction |
+| 117 | [Explicit Reasoning Policy](117_explicit_reasoning_policy.md) | Critical | ✅ Complete | Cost- and latency-controlled reasoning-model execution |
+| 116 | [Ecosystem Allowlist Cutover](116_ecosystem-allowlist-cutover.md) | Critical | ✅ Complete | Unconditional allowed-model enforcement |
+| 115 | [Allowed-Model Execution Policy](115_allowed-model-execution-policy.md) | Critical | ✅ Complete | Safe cross-project model-policy enforcement |
+| 114 | [JSON-Schema-Native Bridge](114_json-schema-native-bridge.md) | High | ✅ Complete | learning-environment migration away from direct provider transport |
+| 113 | [Responses Structured Custody Reconciliation](113_responses_structured_custody_reconciliation.md) | Critical | 🧪 Implemented; focused verified | onto-canon6 Plan 0145 reviewed preprocessing replay |
+| 112 | [Provider Usage-Detail Observability](112_provider_usage_detail_observability.md) | High | ✅ Complete | Exact hidden-reasoning attribution in downstream cost experiments |
+| 111 | [All-Attempt Structured Cost Coverage](111_all_attempt_cost_coverage.md) | Critical | ✅ Complete | Honest recovered structured calls in strict-budget consumers |
 | 108 | [Agent-schema Responses compatibility](108_agent_schema_responses_compatibility.md) | High | ✅ Complete | Cybernetic simulator exact-schema route certification |
 | 107 | [Direct GPT-5.6 Route Registration](107_gpt56_direct_route_registration.md) | High | ✅ Complete | Direct GPT-5.6 Sol and Terra strict-schema routes explicitly selectable; no automatic tier-default change |
 | 106 | [Direct GPT-5.5 Structured Capability Truth](106_gpt55_structured_capability_truth.md) | High | ↩️ Superseded | Its alleged direct result was an OpenRouter-proxy route; corrected by Plan 107 |
@@ -96,6 +103,8 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress (Slice 3 + post-validation terminal boundary verified; DIGIMON consumer trace pending) | DIGIMON Plan #111 bound-trace refresh |
 | 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | 🚧 In Progress | DIGIMON Plan #111 bound-trace refresh |
 | 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | 🚧 In Progress (exact repair accepted; downstream binding verification pending) | onto-canon6 Plan 0141 R2 runtime authorization |
+| 109 | [Structured-Call Hard Deadline](109_structured_call_hard_deadline.md) | High | ✅ Complete | Reliable long-running structured simulations |
+| 110 | [Provider Capabilities and Opus Ban](110_provider-capabilities-opus-ban.md) | High | ✅ Complete | Cybernetic simulator DeepSeek V4 Flash max-reasoning sample |
 
 
 ## Status Key
