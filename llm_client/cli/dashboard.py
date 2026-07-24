@@ -44,6 +44,10 @@ def _window(db: Any, hours: int, budget: float | None = None) -> dict[str, Any]:
 
 
 def cmd_dashboard(args: argparse.Namespace) -> None:
+    if args.serve:
+        from llm_client.cli.dashboard_server import serve
+        serve(host=args.host, port=args.port, hourly_budget=args.hourly_budget, daily_budget=args.daily_budget)
+        return
     # Use the observability owner so additive schema migrations run before the
     # dashboard attempts to persist a deduplicated threshold crossing.
     db = _io_log._get_db()
@@ -101,4 +105,7 @@ def register_parser(subparsers: Any) -> None:
     parser.add_argument("--daily-budget", type=float, help="Warn at 80% of this last-24-hours USD budget")
     parser.add_argument("--alerts", action="store_true", help="Show persisted threshold crossings")
     parser.add_argument("--alert-limit", type=int, default=20, help="Maximum persisted alerts to show")
+    parser.add_argument("--serve", action="store_true", help="Serve a loopback browser dashboard")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: loopback only)")
+    parser.add_argument("--port", type=int, default=8765, help="Browser dashboard port")
     parser.set_defaults(handler=cmd_dashboard)
