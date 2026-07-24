@@ -218,6 +218,10 @@ from llm_client.core.model_execution_policy import (
     ModelExecutionDecision,
     evaluate_model_execution_policy,
 )
+from llm_client.route_certification_runtime import (
+    openrouter_native_provider_schema,
+    route_schema_sha256,
+)
 from llm_client.prompt_assets import (
     PromptAssetManifest,
     PromptAssetRef,

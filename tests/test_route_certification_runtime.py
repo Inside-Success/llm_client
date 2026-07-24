@@ -3,12 +3,17 @@
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import BaseModel
 
 from llm_client.core.data_types import LLMCallResult
 from llm_client.observability.selected_attempts import RuntimeSelectedAttemptReceipt
 from llm_client.observability.structured_attempts import StructuredAttemptEvent
 from llm_client.openrouter_generation import OpenRouterGenerationEvidence
-from llm_client.route_certification_runtime import compile_openrouter_native_success
+from llm_client.route_certification_runtime import (
+    compile_openrouter_native_success,
+    openrouter_native_provider_schema,
+    route_schema_sha256,
+)
 
 
 SCHEMA = {
@@ -18,6 +23,10 @@ SCHEMA = {
     "additionalProperties": False,
 }
 SCHEMA_HASH = "21f544defb4c21a3b1235f43bea0efb08abacd178eb4f55d54aa80a49acf1537"
+
+
+class Answer(BaseModel):
+    answer: str
 
 
 def _receipt() -> RuntimeSelectedAttemptReceipt:
@@ -106,6 +115,21 @@ def test_compiles_exact_openrouter_route_from_three_bound_sources() -> None:
     assert observation.upstream_provider_endpoint == "endpoint-1"
     assert observation.schema_sha256 == SCHEMA_HASH
     assert observation.selected_attempt_receipt_digest == "c" * 64
+
+
+def test_public_schema_helpers_match_the_runtime_provider_contract() -> None:
+    schema = openrouter_native_provider_schema(Answer)
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["answer"]
+    assert len(route_schema_sha256(schema)) == 64
+
+    from llm_client import (  # noqa: PLC0415
+        openrouter_native_provider_schema as public_schema,
+        route_schema_sha256 as public_digest,
+    )
+
+    assert public_schema(Answer) == schema
+    assert public_digest(schema) == route_schema_sha256(schema)
 
 
 def test_schema_substitution_fails_join() -> None:
