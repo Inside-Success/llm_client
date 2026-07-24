@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-15
-Verification context: Plan 105 keeps provider-reported cost precedence, thread-safe public Instructor construction, and serialized shared-SQLite cost queries in the cross-project substrate. Focused client, structured, persistence, and observability controls pass.
+Last verified: 2026-07-24
+Verification context: Plan 106 keeps OpenRouter schema compatibility in the shared execution substrate rather than a DIGIMON-local adapter. Focused sync/async structured and client controls pass.
 
 ## Context
 

@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-15
-Verification context: Plan 105 changes only Instructor construction serialization and cost/query internals; `model`, requested/resolved model semantics, and routing traces remain unchanged. Focused sync/async structured controls pass.
+Last verified: 2026-07-24
+Verification context: Plan 106 changes only provider-facing OpenRouter schema preparation; `model`, requested/resolved model semantics, and routing traces remain unchanged. Focused sync/async structured controls pass.
 
 ## Context
 

@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-15
-Verification context: Plan 105 serializes Instructor client construction after the existing native-schema routing decision; call, environment, and default routing precedence remain unchanged. Structured runtime controls pass.
+Last verified: 2026-07-24
+Verification context: Plan 106 changes only the OpenRouter provider-schema projection; explicit routing and fallback precedence remain unchanged. Focused structured-runtime controls pass.
 
 ## Context
 
