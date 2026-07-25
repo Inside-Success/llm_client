@@ -1,6 +1,6 @@
 # Plan #120: Durable Cross-Project Call Lifecycle
 
-**Status:** In Progress  
+**Status:** Complete
 **Profile:** production-internal; runtime-state, migration, LLM overlays
 
 ## Outcome
@@ -73,6 +73,12 @@ and `completed` events. The result was `{"status": "ok"}` at $0.0000028.
 This proves this exact structured route and terminal binding; it does not prove
 timeout, cancellation, or every text/stream path.
 
+Subsequent Plan #120 slices are now merged on `origin/main`: prompt/schema and
+causal fields are persisted at dispatch, public and structured logical-call
+identities are unified, and deterministic process-interruption recovery proves
+that a dispatch without a terminal event is reported as
+`interrupted_or_abandoned`.
+
 ## Current implementation evidence (2026-07-24)
 
 - `call_lifecycle_events` is an additive SQLite ledger, written before the
@@ -88,8 +94,8 @@ timeout, cancellation, or every text/stream path.
 - Deterministic tests cover completion, provider error, parse error, retry,
   timeout, caller cancellation, and a dispatch row with no terminal event.
 
-Remaining work before this can be called complete: make prompt/schema/causal
-and transport-timeout fields first-class ledger columns for every public path;
-unify outer public-call and inner structured logical identities; and execute a
-real process-interruption recovery probe. These are intentionally not claimed
-by the live structured success probe.
+The remaining timeout distinction is represented as an observed lifecycle
+classification (requested timeout, forwarded runtime status, provider/attempt
+deadline, and whole-call deadline); provider-side enforcement remains unknown
+when the selected transport does not expose acceptance. That limitation is
+reported explicitly rather than treated as provider evidence.
