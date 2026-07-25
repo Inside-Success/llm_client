@@ -116,5 +116,7 @@ Reconciled 2026-07-25:
 - Renumbered from the conflicting historical Plan #119 to Plan #42.
 - `tests/test_agents.py` + `tests/test_observability_replay.py`: 205 passed.
 - Changed-file Ruff passed.
+- Full repository suite: 1,940 passed, 3 skipped, 12 deselected in 207.94
+  seconds.
 - The earlier live MCP probe remains the execution evidence; no new external
   call was required for reconciliation.
