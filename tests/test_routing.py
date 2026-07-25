@@ -125,6 +125,28 @@ def test_resolve_call_gpt54_canonicalizes_to_codex_under_openrouter_policy() -> 
     ]
 
 
+def test_resolve_call_gpt56_preserves_certified_direct_route_under_openrouter_policy() -> None:
+    """A route certified through Responses API must not be silently proxied."""
+
+    cfg = ClientConfig(routing_policy="openrouter")
+    plan = resolve_call(CallRequest(model="gpt-5.6"), cfg)
+
+    assert plan.primary_model == "gpt-5.6"
+    assert plan.models == ["gpt-5.6"]
+    assert plan.routing_trace["routing_policy"] == "openrouter_on"
+    assert "normalized_from" not in plan.routing_trace
+
+
+def test_resolve_call_gpt56_terra_preserves_certified_direct_route_under_openrouter_policy() -> None:
+    """Terra has the same direct native-schema routing requirement as Sol."""
+
+    cfg = ClientConfig(routing_policy="openrouter")
+    plan = resolve_call(CallRequest(model="gpt-5.6-terra"), cfg)
+
+    assert plan.primary_model == "gpt-5.6-terra"
+    assert plan.models == ["gpt-5.6-terra"]
+
+
 def test_resolve_call_gpt54_canonicalizes_to_codex_under_direct_policy() -> None:
     cfg = ClientConfig(routing_policy="direct")
     plan = resolve_call(CallRequest(model="gpt-5.4"), cfg)

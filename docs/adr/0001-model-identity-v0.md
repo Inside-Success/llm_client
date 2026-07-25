@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-24
-Verification context: Plan 106 projects OpenRouter-compatible structured schemas without changing requested, resolved, or executed model identity. Focused sync/async structured-runtime controls pass.
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes public Instructor construction and changes cost-source selection without changing requested, resolved, or executed model identity. Structured runtime, attempt, replay, and raw-artifact controls pass.
 
 ## Context
 

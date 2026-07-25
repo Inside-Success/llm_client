@@ -26,14 +26,18 @@ Features:
 
 Supported providers (just change the model string):
     call_llm("gpt-4o", messages)                     # OpenAI
-    call_llm("gpt-5-mini", messages)                 # OpenAI (Responses API)
+    call_llm(
+        "openrouter/deepseek/deepseek-v4-flash",
+        messages,
+        reasoning_effort="none",
+    )
     call_llm("anthropic/claude-sonnet-4-5-20250929", messages)  # Anthropic
     call_llm("gemini/gemini-2.0-flash", messages)     # Google
     call_llm("mistral/mistral-large", messages)       # Mistral
     call_llm("ollama/llama3", messages)               # Local Ollama
     call_llm("bedrock/anthropic.claude-v2", messages)  # AWS Bedrock
     call_llm("claude-code", messages)                 # Claude Agent SDK
-    call_llm("claude-code/opus", messages)            # Claude Agent SDK (specific model)
+    call_llm("claude-code/sonnet", messages)          # Claude Agent SDK (specific model)
     call_llm("codex", messages)                       # Codex SDK
     call_llm("codex/gpt-5", messages)                 # Codex SDK (specific model)
 
@@ -45,7 +49,7 @@ from __future__ import annotations
 import asyncio  # noqa: F401 — used by downstream mock targets
 import logging
 import time
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 
 import litellm
 from pydantic import BaseModel
@@ -68,16 +72,14 @@ except ImportError:
             return fn
         return _wrap
 
-# Enable post-generation JSON Schema validation. Providers only enforce
-# structural constraints (type, required, enum) at decode time. Value-level
-# constraints (minProperties, minLength, pattern, minimum) are NOT enforced.
-# This catches violations on the client side so the retry loop can self-correct.
-# False (2026-07-19): litellm's in-call strict validation PREEMPTED
-# llm_client's own richer ladder — it raises on fenced/near-JSON output and
-# discards the response (usage/cost lost, full paid retry), while
-# _robust_validate_json + the validation-repair-message retry handle the same
-# content with the response object in hand (cost accounted, model told what
-# to fix, json_repair last resort). Validation authority lives in llm_client.
+# TEMPORARY PROVIDER-COMPATIBILITY BOUNDARY (2026-07-16):
+# LiteLLM's pre-return validator rejects otherwise schema-valid responses when
+# some OpenRouter routes wrap their single JSON value in a Markdown fence. Keep
+# it disabled until upstream framing is reliable so llm_client can first retain
+# the exact raw response, remove transport-only framing in
+# ``_robust_validate_json``, and then enforce the same Pydantic response model
+# locally. Provider-native ``response_format=json_schema`` remains enabled; no
+# schema mismatch is accepted by this switch.
 litellm.enable_json_schema_validation = False
 
 from llm_client.core.config import ClientConfig
@@ -116,8 +118,11 @@ from llm_client.execution.call_contracts import (
     _strip_llm_internal_kwargs,
     _validate_execution_contract,
     agent_retry_safe_enabled as _agent_retry_safe_enabled,
+    acquire_budget_scope as _acquire_budget_scope,  # noqa: F401
     check_budget as _check_budget,
     normalize_prompt_ref as _normalize_prompt_ref,
+    release_budget_scope as _release_budget_scope,  # noqa: F401
+    settle_budget_scope as _settle_budget_scope,  # noqa: F401
     require_tags as _require_tags,
 )
 from llm_client.execution.timeout_policy import (
@@ -252,10 +257,10 @@ from llm_client.execution.responses_runtime import (  # noqa: F401
     _convert_tools_for_responses_api,
     _extract_responses_usage,
     _openrouter_compatible_strict_json_schema,
-    _prepare_responses_kwargs,
     _provider_compatible_discriminated_union_schema,
-    _strict_openai_response_model_schema,
+    _prepare_responses_kwargs,
     _strict_json_schema,
+    _strict_openai_response_model_schema,
 )
 from llm_client.execution.completion_runtime import (  # noqa: F401
     _build_result_from_response,
@@ -463,6 +468,9 @@ def call_llm(
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
     parent_trace_id: str | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> LLMCallResult:
     """Call any LLM. Routes by model string: litellm, Responses API, or Agent SDK.
@@ -486,16 +494,17 @@ def call_llm(
     one model the next model in the list is tried automatically.
 
     Args:
-        model: Model name (e.g., "gpt-4o", "gpt-5-mini",
+        model: Model name (e.g., "openrouter/deepseek/deepseek-v4-flash",
                "anthropic/claude-sonnet-4-5-20250929",
                "gemini/gemini-2.0-flash", "claude-code",
-               "claude-code/opus")
+               "claude-code/sonnet")
         messages: Chat messages in OpenAI format
                   [{"role": "user", "content": "Hello"}]
         timeout: Request timeout in seconds
         num_retries: Number of retries on transient failure
-        reasoning_effort: Reasoning effort level — only used for Claude models,
-                         silently ignored for others
+        reasoning_effort: Explicit reasoning effort. Required for registered
+            configurable-reasoning routes; use ``"none"`` for off where
+            supported. Unsupported or omitted policies fail before dispatch.
         api_base: Optional API base URL (e.g., for OpenRouter:
                   "https://openrouter.ai/api/v1")
         fallback_models: Models to try if the primary model fails all retries
@@ -504,6 +513,9 @@ def call_llm(
         execution_mode: Capability contract for this call:
             ``"text"`` (default), ``"structured"``, ``"workspace_agent"``,
             or ``"workspace_tools"``.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is a client
+            control field and is never forwarded to the provider.
         **kwargs: Additional params passed to litellm.completion
                   (e.g., temperature, max_tokens, stream).
                   ``prompt_ref`` is reserved for llm_client observability.
@@ -527,10 +539,15 @@ def call_llm(
 
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="call_llm",
         timeout=timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return _run_sync_public_call(
         model=model,
@@ -590,6 +607,9 @@ def call_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Call LLM and get back a validated Pydantic model.
@@ -603,15 +623,19 @@ def call_llm_structured(
         messages: Chat messages in OpenAI format
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
-            runtime policy supplies a longer finite default.
+            runtime policy supplies a finite default.
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is never
+            forwarded to the provider.
         **kwargs: Additional params passed to litellm.completion.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -629,10 +653,15 @@ def call_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="call_llm_structured")
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="call_llm_structured",
         timeout=resolved_timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return _run_sync_public_call(
         model=model,
@@ -703,7 +732,8 @@ def call_llm_with_tools(
         tools: Tool definitions in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -773,6 +803,9 @@ async def acall_llm(
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
     parent_trace_id: str | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> LLMCallResult:
     """Async version of call_llm. Same three-tier routing (Agent SDK / Responses API / Completions).
@@ -780,13 +813,14 @@ async def acall_llm(
     Accepts both sync ``CachePolicy`` and async ``AsyncCachePolicy`` caches.
 
     Args:
-        model: Model name (e.g., "gpt-4o", "gpt-5-mini",
+        model: Model name (e.g., "openrouter/deepseek/deepseek-v4-flash",
                "anthropic/claude-sonnet-4-5-20250929",
-               "claude-code", "claude-code/opus")
+               "claude-code", "claude-code/sonnet")
         messages: Chat messages in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on transient failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -794,6 +828,9 @@ async def acall_llm(
         execution_mode: Capability contract for this call:
             ``"text"`` (default), ``"structured"``, ``"workspace_agent"``,
             or ``"workspace_tools"``.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is a client
+            control field and is never forwarded to the provider.
         **kwargs: Additional params passed to litellm.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -811,10 +848,15 @@ async def acall_llm(
 
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="acall_llm",
         timeout=timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return await _run_async_public_call(
         model=model,
@@ -874,6 +916,9 @@ async def acall_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Async version of call_llm_structured.
@@ -887,15 +932,19 @@ async def acall_llm_structured(
         messages: Chat messages in OpenAI format
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
-            runtime policy supplies a longer finite default.
+            runtime policy supplies a finite default.
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is never
+            forwarded to the provider.
         **kwargs: Additional params passed to litellm.acompletion.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -913,10 +962,15 @@ async def acall_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="acall_llm_structured")
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="acall_llm_structured",
         timeout=resolved_timeout,
         kwargs=kwargs,
+        messages=messages,
     )
     return await _run_async_public_call(
         model=model,
@@ -987,7 +1041,8 @@ async def acall_llm_with_tools(
         tools: Tool definitions in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL (e.g., for OpenRouter)
         fallback_models: Models to try if the primary model fails all retries
         on_fallback: ``(failed_model, error, next_model)`` callback
@@ -1299,6 +1354,9 @@ def stream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> LLMStream:
     """Stream an LLM response, yielding text chunks as they arrive.
@@ -1324,7 +1382,8 @@ def stream_llm(
         messages: Chat messages in OpenAI format
         timeout: Request timeout in seconds
         num_retries: Number of retries on pre-stream failure
-        reasoning_effort: Reasoning effort level (Claude models only)
+        reasoning_effort: Explicit reasoning effort; required for registered
+            configurable-reasoning routes.
         api_base: Optional API base URL
         retry: Reusable RetryPolicy (overrides individual retry params)
         fallback_models: Models to try if the primary model fails all retries
@@ -1355,6 +1414,9 @@ def stream_llm(
         on_fallback=on_fallback,
         hooks=hooks,
         config=config,
+        budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
+        budget_reservation=budget_reservation,
         **kwargs,
     )
 
@@ -1376,6 +1438,9 @@ async def astream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> AsyncLLMStream:
     """Async version of :func:`stream_llm` with retry/fallback support.
@@ -1403,6 +1468,9 @@ async def astream_llm(
         on_fallback=on_fallback,
         hooks=hooks,
         config=config,
+        budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
+        budget_reservation=budget_reservation,
         **kwargs,
     )
 

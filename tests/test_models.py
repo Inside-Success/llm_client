@@ -21,6 +21,8 @@ from llm_client.core.models import (
     get_model,
     list_models,
     query_performance,
+    supports_structured_output,
+    supports_tool_calling,
 )
 
 
@@ -38,6 +40,16 @@ def _reset():
 
 
 class TestGetModel:
+    def test_openrouter_gpt56_planner_routes_are_registered(self):
+        """Current OpenRouter planner candidates expose their tested capabilities."""
+
+        for model in (
+            "openrouter/openai/gpt-5.6-terra",
+        ):
+            assert supports_structured_output(model) is True
+            assert supports_tool_calling(model) is True
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
+
     def test_extraction_returns_highest_intelligence_structured(self):
         # available_only=False so we don't need env vars set
         model = get_model("extraction", available_only=False, use_performance=False)
@@ -142,7 +154,7 @@ class TestGetModel:
             "default_intelligent": "openrouter/minimax/minimax-m3",
             "fast_intelligent": "openrouter/z-ai/glm-5.2",
             "very_intelligent": "openrouter/x-ai/grok-4.5",
-            "max_intelligence": "openrouter/anthropic/claude-opus-4.8",
+            "max_intelligence": "openrouter/openai/gpt-5.5",
         }
 
         for task, model_id in expected.items():
@@ -499,6 +511,11 @@ class TestConfigLoading:
         models = _DEFAULT_CONFIG["models"]
         assert all("fable" not in m["litellm_id"].lower() for m in models)
         assert all("fable" not in m["name"].lower() for m in models)
+
+    def test_packaged_registry_has_no_opus_models(self):
+        models = _DEFAULT_CONFIG["models"]
+        assert all("opus" not in m["litellm_id"].lower() for m in models)
+        assert all("opus" not in m["name"].lower() for m in models)
 
     def test_parse_packaged_default_config_rejects_invalid_json(self):
         with pytest.raises(RuntimeError, match="Invalid packaged model registry JSON"):

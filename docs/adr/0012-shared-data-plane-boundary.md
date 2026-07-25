@@ -1,8 +1,11 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-15
-Verification context: Plan 105 serializes existing cost queries and changes cost-source selection without adding persisted fields, raw payloads, datasets, artifacts, or lineage. Focused observability and raw-artifact controls pass.
+Last verified: 2026-07-16
+Verification context: Experiment-run start now makes SQLite's existing unique
+run_id row authoritative before appending JSONL metadata; no raw payload,
+dataset, artifact, or lineage field changed. Focused observability controls
+pass.
 Date: 2026-03-17
 
 ## Context
@@ -77,8 +80,10 @@ Negative:
 4. Strict tool-call tests must prove lifecycle metadata survives both sinks
    without introducing result-body persistence.
 5. Structured execution-failure events retain only bounded failure class and
-   exception type; exception messages and provider bodies remain outside the
-   shared metadata plane.
+   exception type. Plan 121's additive attempt-diagnostic child ledger may
+   retain a deterministically redacted, bounded operational summary plus typed
+   status/correlation metadata; raw exception messages, provider bodies,
+   prompts, credentials, and headers remain outside the shared metadata plane.
 
 Last verified: 2026-07-14 (Plan 97 Slice 3 additive event migration).
 

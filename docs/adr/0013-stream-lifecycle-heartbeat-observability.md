@@ -1,8 +1,11 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-07-15
-Verification context: Plan 105 affects non-streaming cost selection, Instructor construction, and cost-query locking only; stream start, progress, completion, failure, heartbeat, and stagnation semantics remain unchanged. Related client controls pass.
+Last verified: 2026-07-16
+Verification context: Non-streaming experiment-run start now rejects duplicate
+run_id evidence before JSONL append; stream start, progress, completion,
+failure, heartbeat, and stagnation semantics remain unchanged. Related client
+controls pass.
 Date: 2026-03-22
 
 ## Context

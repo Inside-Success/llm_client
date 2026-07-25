@@ -95,6 +95,18 @@ class LLMBudgetExceededError(LLMError):
     """Trace has exceeded its max_budget — no more calls allowed."""
 
 
+class LLMBudgetReservationOverrunError(LLMBudgetExceededError):
+    """A completed call cost more than its admitted durable reservation."""
+
+
+class LLMBudgetLeaseLostError(LLMError):
+    """A durable budget lease was lost before its terminal lifecycle boundary."""
+
+
+class LLMBudgetReservationStoreError(LLMError):
+    """Durable reservation storage is unavailable or cannot be updated."""
+
+
 class LLMCapabilityError(LLMError):
     """Requested execution mode/capabilities are incompatible with model/kwargs."""
 

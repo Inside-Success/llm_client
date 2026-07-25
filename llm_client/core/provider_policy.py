@@ -179,6 +179,22 @@ def get_provider_governance_policy() -> ProviderGovernancePolicy:
                 route_class="agent_sdk",
                 reason="Exact gpt-5.4 aliases must use the Codex SDK lane.",
             ),
+            "gpt-5.6": ExactAliasRule(
+                canonical_model="gpt-5.6",
+                route_class="direct_provider",
+                reason=(
+                    "GPT-5.6 Sol's certified strict-schema route is OpenAI Responses API, "
+                    "not the default OpenRouter proxy."
+                ),
+            ),
+            "gpt-5.6-terra": ExactAliasRule(
+                canonical_model="gpt-5.6-terra",
+                route_class="direct_provider",
+                reason=(
+                    "GPT-5.6 Terra's certified strict-schema route is OpenAI Responses API, "
+                    "not the default OpenRouter proxy."
+                ),
+            ),
             "minimax-m3": ExactAliasRule(
                 canonical_model="openrouter/minimax/minimax-m3",
                 route_class="openrouter",

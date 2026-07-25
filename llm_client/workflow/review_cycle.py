@@ -59,7 +59,7 @@ class ReviewCycleTask(BaseModel):
     artifact_paths: list[str] = Field(description="Files the implementer may edit by default.")
     workspace_path: str = Field(description="Repository/workspace root for agent calls and diffs.")
     review_profile: str = Field(default="generic", description="Registered review profile name.")
-    reviewer_model: str = Field(default="claude-code/opus", description="Model used for review calls.")
+    reviewer_model: str = Field(default="claude-code/sonnet", description="Model used for review calls.")
     implementer_model: str = Field(default="codex/gpt-5.4", description="Model used for apply calls.")
     max_cycles: int = Field(default=3, ge=1, description="Maximum review/apply iterations.")
     max_budget: float = Field(default=10.0, ge=0.0, description="Cumulative run budget in USD.")

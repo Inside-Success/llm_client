@@ -34,7 +34,7 @@ def test_require_tags_strict_raises(monkeypatch) -> None:
 
 def test_openrouter_default_routing_for_bare_gpt5(monkeypatch) -> None:
     monkeypatch.delenv("LLM_CLIENT_OPENROUTER_ROUTING", raising=False)
-    assert _build_model_chain("gpt-5-mini", None) == ["openrouter/openai/gpt-5-mini"]
+    assert _build_model_chain("gpt-5", None) == ["openrouter/openai/gpt-5"]
 
 
 def test_agent_retry_safe_switch(monkeypatch) -> None:

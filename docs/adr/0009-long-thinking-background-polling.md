@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-23
-Last verified: 2026-07-24
-Verification context: Plan 106 projects native structured schemas for OpenRouter without changing Responses background enablement, retrieval, polling, endpoint validation, or timeout controls. Focused client tests pass.
+Last verified: 2026-07-15
+Verification context: Plan 105 aligns Responses cost-source precedence with Completions after a response is available; background enablement, retrieval, polling, endpoint validation, and timeout controls remain unchanged. Focused client tests pass.
 
 ## Context
 

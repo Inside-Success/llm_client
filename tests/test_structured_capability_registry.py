@@ -70,9 +70,25 @@ class TestSupportsStructuredOutput:
         """The packaged registry declares the model litellm's map lags on."""
         assert supports_structured_output("openrouter/deepseek/deepseek-v4-flash") is True
         assert supports_structured_output("openrouter/minimax/minimax-m3") is True
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
+
+    def test_observed_direct_gpt_routes_advertise_native_schema_support(self):
+        """Responses API evidence overrides the failed OpenRouter proxy probe."""
+        assert supports_structured_output("gpt-5.5") is True
+        assert supports_structured_output("openrouter/openai/gpt-5.5") is True
+        assert supports_structured_output("gpt-5.6") is True
+        assert supports_structured_output("gpt-5.6-terra") is True
 
 
 class TestModelSupportsNativeSchema:
+    def test_observed_direct_gpt_routes_use_registry_capability(self):
+        """Known direct routes do not depend on LiteLLM's fallback capability map."""
+        with patch("litellm.supports_response_schema") as litellm_map:
+            assert _model_supports_native_schema("gpt-5.5") is True
+            assert _model_supports_native_schema("gpt-5.6") is True
+            assert _model_supports_native_schema("gpt-5.6-terra") is True
+            litellm_map.assert_not_called()
+
     def test_registry_overrides_stale_litellm_false(self, tmp_path):
         """A curated schema-capable model wins over litellm's stale 'False'."""
         cfg = _write_config(

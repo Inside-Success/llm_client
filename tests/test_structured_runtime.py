@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+import logging
+from types import SimpleNamespace
 from typing import Annotated, Literal
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import litellm
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
@@ -19,7 +22,13 @@ from llm_client.execution.responses_runtime import (
     _strict_openai_response_model_schema,
     _strict_json_schema,
 )
-from llm_client.execution.structured_runtime import _acall_llm_structured_impl, _call_llm_structured_impl
+from llm_client.execution.structured_runtime import (
+    _StructuredValidationRetry,
+    _acall_llm_structured_impl,
+    _build_validation_repair_message,
+    _call_llm_structured_impl,
+    _robust_validate_json,
+)
 
 
 class _City(BaseModel):
@@ -60,22 +69,28 @@ class _StopEnvelope(BaseModel):
     decision: _StopDecision = Field(description="Concrete next planner decision.")
 
 
-def _mock_structured_response(content: str = '{"name":"Tokyo"}') -> MagicMock:
-    """Build a minimal structured completion response."""
-    mock = MagicMock()
-    mock.choices = [MagicMock()]
-    mock.choices[0].message.content = content
-    mock.choices[0].finish_reason = "stop"
-    mock.usage.prompt_tokens = 10
-    mock.usage.completion_tokens = 5
-    mock.usage.total_tokens = 15
-    return mock
+def test_openai_responses_schema_inlines_ref_siblings() -> None:
+    """SDK normalization retains field semantics without illegal ref siblings."""
+    class Hypothesis(BaseModel):
+        read: str
+
+    class Step(BaseModel):
+        hypothesis: Hypothesis = Field(description="The actor's current reading.")
+
+    schema = _strict_openai_response_model_schema(Step)
+    hypothesis = schema["properties"]["hypothesis"]
+
+    assert "$ref" not in hypothesis
+    assert hypothesis["description"] == "The actor's current reading."
+    assert hypothesis["type"] == "object"
+    assert hypothesis["additionalProperties"] is False
+    assert hypothesis["required"] == ["read"]
 
 
 def test_openrouter_schema_projection_preserves_structural_contract_and_local_validation() -> None:
     """OpenRouter receives structural JSON Schema while Pydantic keeps value checks."""
-
     schema = _strict_json_schema(_BoundedCount.model_json_schema())
+
     projected = _openrouter_compatible_strict_json_schema(schema)
 
     assert schema["properties"]["count"]["minimum"] == 1
@@ -87,6 +102,12 @@ def test_openrouter_schema_projection_preserves_structural_contract_and_local_va
         _BoundedCount.model_validate({"count": 0})
 
 
+def test_openrouter_schema_projection_rejects_unconstrained_schema() -> None:
+    """An open JSON-value schema must not be silently narrowed to a scalar."""
+    with pytest.raises(ValueError, match="cannot represent an unconstrained"):
+        _openrouter_compatible_strict_json_schema({})
+
+
 def test_provider_projection_rewrites_only_disjoint_literal_union() -> None:
     """Provider projection preserves the local contract and proves disjointness."""
 
@@ -96,6 +117,7 @@ def test_provider_projection_rewrites_only_disjoint_literal_union() -> None:
     assert "oneOf" in schema["properties"]["decision"]
     assert "oneOf" not in projected["properties"]["decision"]
     assert "anyOf" in projected["properties"]["decision"]
+    assert "discriminator" not in projected["properties"]["decision"]
     with pytest.raises(ValidationError, match="union_tag_invalid"):
         _PlannerEnvelope.model_validate(
             {"decision": {"action": "unknown", "query": "shipping"}}
@@ -103,7 +125,7 @@ def test_provider_projection_rewrites_only_disjoint_literal_union() -> None:
 
 
 def test_provider_projection_preserves_overlapping_one_of() -> None:
-    """An arbitrary oneOf is not weakened without a disjointness proof."""
+    """An arbitrary oneOf is not weakened into anyOf without a proof."""
 
     schema = {
         "oneOf": [
@@ -111,10 +133,248 @@ def test_provider_projection_preserves_overlapping_one_of() -> None:
             {"type": "object", "properties": {"value": {"type": "string"}}},
         ]
     }
+
     projected = _provider_compatible_discriminated_union_schema(schema)
 
     assert "oneOf" in projected
     assert "anyOf" not in projected
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_structured_call_sends_provider_compatible_schema(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The OpenRouter native path applies the projection to the actual request."""
+    mock_comp.return_value = _mock_structured_response('{"count":1}')
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.schema_projection",
+        max_budget=0,
+    )
+
+    sent_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"]["schema"]
+    assert parsed.count == 1
+    assert "minimum" not in sent_schema["properties"]["count"]
+    assert sent_schema["additionalProperties"] is False
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_native_schema_inlines_nested_ref_siblings(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The sync OpenRouter request must not send a ref with sibling description."""
+    mock_comp.return_value = _mock_structured_response(
+        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
+    )
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "Stop."}],
+        _StopEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.ref_sibling.sync",
+        max_budget=0,
+    )
+
+    decision_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "control.stop_retrieval"
+    assert "$ref" not in decision_schema
+    assert decision_schema["description"] == "Concrete next planner decision."
+    assert decision_schema["type"] == "object"
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_openrouter_async_native_schema_inlines_nested_ref_siblings(
+    mock_acompletion: AsyncMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The async OpenRouter request uses the same ref-safe provider schema."""
+    mock_acompletion.return_value = _mock_structured_response(
+        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
+    )
+
+    parsed, _meta = await _acall_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "Stop."}],
+        _StopEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.ref_sibling.async",
+        max_budget=0,
+    )
+
+    decision_schema = mock_acompletion.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "control.stop_retrieval"
+    assert "$ref" not in decision_schema
+    assert decision_schema["description"] == "Concrete next planner decision."
+    assert decision_schema["type"] == "object"
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_planner_call_sends_disjoint_union_as_any_of(
+    mock_comp: MagicMock,
+    _mock_cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The actual OpenRouter native request receives the compatible planner schema."""
+
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "disabled")
+    mock_comp.return_value = _mock_structured_response(
+        '{"decision":{"action":"search","query":"shipping roster"}}'
+    )
+
+    parsed, _meta = _call_llm_structured_impl(
+        "openrouter/openai/gpt-5.6-terra",
+        [{"role": "user", "content": "Find the shipping roster."}],
+        _PlannerEnvelope,
+        task="test",
+        trace_id="structured.runtime.openrouter.discriminated_union",
+        max_budget=0,
+    )
+
+    decision_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]["properties"]["decision"]
+    assert parsed.decision.action == "search"
+    assert "anyOf" in decision_schema
+    assert "oneOf" not in decision_schema
+
+
+@patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_native_success_records_route_observation(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A native OpenRouter success sends its exact provider schema to observation."""
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "enabled")
+    response = _mock_structured_response('{"count":1}')
+    response.id = "gen-route-observation"
+    mock_comp.return_value = response
+    observe.return_value = SimpleNamespace(observation_id="routeobs1_0123456789abcdef01234567")
+
+    parsed, result = _call_llm_structured_impl(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.route_observation",
+        max_budget=0,
+    )
+
+    assert parsed.count == 1
+    observe.assert_called_once()
+    observed_kwargs = observe.call_args.kwargs
+    assert observed_kwargs["result"] is result
+    assert observed_kwargs["provider_schema"] == mock_comp.call_args.kwargs["response_format"]["json_schema"]["schema"]
+    assert observed_kwargs["schema_class"] == "_BoundedCount"
+    assert result.warning_records[-1]["code"] == "ROUTE_CERTIFICATION_OBSERVED"
+
+
+@patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_route_observation_is_disabled_by_default(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Ordinary PoC inference can skip optional provider-metadata certification."""
+
+    response = _mock_structured_response('{"count":1}')
+    response.id = "gen-route-observation-disabled"
+    mock_comp.return_value = response
+    monkeypatch.delenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", raising=False)
+    caplog.set_level(logging.INFO, logger="llm_client.structured_runtime")
+
+    parsed, result = _call_llm_structured_impl(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        task="test",
+        trace_id="structured.runtime.openrouter.route_observation_disabled",
+        max_budget=0,
+    )
+
+    assert parsed.count == 1
+    assert result.resolved_model == "openrouter/deepseek/deepseek-v4-flash"
+    observe.assert_not_called()
+    assert "ROUTE_CERTIFICATION_OBSERVATION_DISABLED" in caplog.text
+
+
+@patch("llm_client.route_certification_runtime.observe_openrouter_native_success_from_runtime")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_openrouter_route_observation_failure_is_visible_without_model_retry(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    observe: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Metadata failure preserves the successful result and never reroutes the model."""
+    monkeypatch.setenv("LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION", "enabled")
+    response = _mock_structured_response('{"count":1}')
+    response.id = "gen-route-observation-failure"
+    mock_comp.return_value = response
+    observe.side_effect = RuntimeError("generation metadata unavailable")
+
+    parsed, result = _call_llm_structured_impl(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.openrouter.route_observation_failure",
+        max_budget=0,
+    )
+
+    assert parsed.count == 1
+    assert mock_comp.call_count == 1
+    assert result.warning_records[-1]["code"] == "ROUTE_CERTIFICATION_OBSERVATION_FAILED"
+    assert "generation metadata unavailable" in result.warnings[-1]
+
+
+def _mock_structured_response(content: str = '{"name":"Tokyo"}') -> MagicMock:
+    """Build a minimal structured completion response."""
+    mock = MagicMock()
+    mock.choices = [MagicMock()]
+    mock.choices[0].message.content = content
+    mock.choices[0].finish_reason = "stop"
+    mock.usage.prompt_tokens = 10
+    mock.usage.completion_tokens = 5
+    mock.usage.total_tokens = 15
+    return mock
 
 
 @pytest.fixture(autouse=True)
@@ -168,67 +428,6 @@ def test_structured_runtime_sync_preserves_cache_and_identity_contracts(
     assert meta2.routing_trace["attempted_models"] == ["gpt-4"]
 
 
-@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
-@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
-@patch("llm_client.core.client.litellm.completion")
-def test_openrouter_native_schema_inlines_nested_ref_siblings(
-    mock_comp: MagicMock,
-    _mock_supports_schema: MagicMock,
-    _mock_cost: MagicMock,
-) -> None:
-    """The sync OpenRouter request must not send a ref with sibling description."""
-
-    mock_comp.return_value = _mock_structured_response(
-        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
-    )
-    parsed, _meta = _call_llm_structured_impl(
-        "openrouter/openai/gpt-5.6-luna",
-        [{"role": "user", "content": "Stop."}],
-        _StopEnvelope,
-        task="test",
-        trace_id="structured.runtime.openrouter.ref_sibling.sync",
-        max_budget=0,
-    )
-
-    decision_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"][
-        "schema"
-    ]["properties"]["decision"]
-    assert parsed.decision.action == "control.stop_retrieval"
-    assert "$ref" not in decision_schema
-    assert decision_schema["description"] == "Concrete next planner decision."
-    assert decision_schema["type"] == "object"
-
-
-@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
-@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
-@patch("llm_client.core.client.litellm.completion")
-def test_openrouter_planner_call_sends_disjoint_union_as_any_of(
-    mock_comp: MagicMock,
-    _mock_supports_schema: MagicMock,
-    _mock_cost: MagicMock,
-) -> None:
-    """The actual OpenRouter request receives the compatible planner schema."""
-
-    mock_comp.return_value = _mock_structured_response(
-        '{"decision":{"action":"search","query":"shipping roster"}}'
-    )
-    parsed, _meta = _call_llm_structured_impl(
-        "openrouter/openai/gpt-5.6-luna",
-        [{"role": "user", "content": "Find the shipping roster."}],
-        _PlannerEnvelope,
-        task="test",
-        trace_id="structured.runtime.openrouter.discriminated_union",
-        max_budget=0,
-    )
-
-    decision_schema = mock_comp.call_args.kwargs["response_format"]["json_schema"][
-        "schema"
-    ]["properties"]["decision"]
-    assert parsed.decision.action == "search"
-    assert "anyOf" in decision_schema
-    assert "oneOf" not in decision_schema
-
-
 @pytest.mark.asyncio
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
@@ -274,38 +473,6 @@ async def test_structured_runtime_async_preserves_cache_and_identity_contracts(
     assert meta2.routing_trace["attempted_models"] == ["gpt-4"]
 
 
-@pytest.mark.asyncio
-@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
-@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
-@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-async def test_openrouter_async_native_schema_inlines_nested_ref_siblings(
-    mock_acompletion: AsyncMock,
-    _mock_supports_schema: MagicMock,
-    _mock_cost: MagicMock,
-) -> None:
-    """The async OpenRouter request uses the same ref-safe provider schema."""
-
-    mock_acompletion.return_value = _mock_structured_response(
-        '{"decision":{"action":"control.stop_retrieval","reason":"Enough evidence."}}'
-    )
-    parsed, _meta = await _acall_llm_structured_impl(
-        "openrouter/openai/gpt-5.6-luna",
-        [{"role": "user", "content": "Stop."}],
-        _StopEnvelope,
-        task="test",
-        trace_id="structured.runtime.openrouter.ref_sibling.async",
-        max_budget=0,
-    )
-
-    decision_schema = mock_acompletion.call_args.kwargs["response_format"]["json_schema"][
-        "schema"
-    ]["properties"]["decision"]
-    assert parsed.decision.action == "control.stop_retrieval"
-    assert "$ref" not in decision_schema
-    assert decision_schema["description"] == "Concrete next planner decision."
-    assert decision_schema["type"] == "object"
-
-
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch(
     "llm_client.core.client.litellm.completion",
@@ -323,7 +490,7 @@ def test_structured_runtime_sync_raises_capability_error_for_gpt5_schema_rejecti
 
     with pytest.raises(LLMCapabilityError, match="provider rejected structured JSON-schema output"):
         _call_llm_structured_impl(
-            "openai/gpt-5-mini",
+            "openai/gpt-5",
             messages,
             _City,
             task="test",
@@ -349,10 +516,60 @@ async def test_structured_runtime_async_raises_capability_error_for_gpt5_schema_
 
     with pytest.raises(LLMCapabilityError, match="provider rejected structured JSON-schema output"):
         await _acall_llm_structured_impl(
-            "gpt-5-mini",
+            "gpt-5",
             messages,
             _City,
             task="test",
             trace_id="structured.runtime.async.gpt5_schema",
             max_budget=0,
         )
+
+
+def test_local_structured_validation_accepts_transport_only_json_fence() -> None:
+    """A single fenced JSON value still must satisfy the exact response model."""
+
+    class Decision(BaseModel):
+        action: Literal["answer"]
+        rationale: str
+
+    parsed = _robust_validate_json(
+        Decision,
+        '```json\n{"action":"answer","rationale":"Enough evidence."}\n```',
+    )
+
+    assert parsed == Decision(action="answer", rationale="Enough evidence.")
+    with pytest.raises(ValidationError, match="literal_error"):
+        _robust_validate_json(
+            Decision,
+            '{"action":"search","rationale":"Wrong action."}',
+        )
+
+
+def test_litellm_prevalidation_is_disabled_for_local_raw_first_validation() -> None:
+    """Raw-first local validation is the temporary provider-framing boundary."""
+
+    assert litellm.enable_json_schema_validation is False
+
+
+def test_validation_repair_allows_switching_an_invalid_union_variant() -> None:
+    """Repair guidance must not trap the model in its first invalid action choice."""
+
+    class StopDecision(BaseModel):
+        action: Literal["control.stop_retrieval"]
+        covered_obligations: list[str]
+
+    with pytest.raises(ValidationError) as captured:
+        StopDecision.model_validate(
+            {
+                "action": "control.stop_retrieval",
+            }
+        )
+
+    message = _build_validation_repair_message(
+        _StructuredValidationRetry(
+            '{"action":"control.stop_retrieval"}',
+            captured.value,
+        )
+    )
+
+    assert "choose another allowed variant" in message["content"]

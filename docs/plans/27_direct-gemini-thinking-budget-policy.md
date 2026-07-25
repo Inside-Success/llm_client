@@ -116,6 +116,10 @@ PYTHONPATH=/home/brian/projects/_worktrees/llm_client-gemini-schema-study python
 
 - direct `gemini/gemini-2.5-pro` now succeeds on `5/5` Tyler-like schema cases via `native_schema` without the study-only override
 - the shared default is now configurable via `LLM_CLIENT_DIRECT_GEMINI_THINKING_BUDGET`
+
+> Superseded 2026-07-23 by Plan 117. Governed direct-Gemini routes now require
+> explicit normalized `reasoning_effort`; the automatic thinking-budget
+> configuration and environment variable were removed.
 - explicit caller `thinking` payloads still override the shared default
 
 ### Important Note

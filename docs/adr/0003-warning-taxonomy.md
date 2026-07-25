@@ -2,8 +2,14 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-24
-Verification context: Plan 106 preserves provider schema rejection as an execution failure while projecting supported OpenRouter schemas before dispatch. Warning categories are unchanged; focused structured-runtime controls pass.
+Last verified: 2026-07-16
+Verification context: Experiment-run start now rejects a duplicate run_id before
+emitting a second JSONL start record; SQLite integrity failure remains an error,
+not an advisory. Focused observability controls pass.
+
+Plan 94's OpenRouter generation enrichment emits a bounded warning for each
+eventual-consistency 404 retry; exhaustion remains an error and never becomes a
+silent model retry or provider fallback.
 
 ## Context
 

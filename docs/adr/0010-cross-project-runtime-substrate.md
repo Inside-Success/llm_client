@@ -2,8 +2,15 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-24
-Verification context: Plan 106 keeps OpenRouter schema compatibility in the shared execution substrate rather than a DIGIMON-local adapter. Focused sync/async structured and client controls pass.
+Last verified: 2026-07-16
+Verification context: The shared experiment substrate now serializes canonical
+run-start insertion before emitting JSONL evidence, preventing duplicate
+run_id starts from appearing as two attempts. Focused persistence and
+observability controls pass.
+
+Plan 94 adds shared authenticated OpenRouter generation evidence, an immutable
+exact route-certification registry, and a provider-free query CLI. Semantic
+acceptance and project-specific promotion remain above this substrate.
 
 ## Context
 

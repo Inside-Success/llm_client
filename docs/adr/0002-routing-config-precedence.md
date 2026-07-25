@@ -2,8 +2,10 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-24
-Verification context: Plan 106 changes only the OpenRouter provider-schema projection; explicit routing and fallback precedence remain unchanged. Focused structured-runtime controls pass.
+Last verified: 2026-07-16
+Verification context: Plan 94 registers a provider-free route-certification
+query command; it does not change call, environment, or default routing
+precedence. Focused CLI and route-contract controls pass.
 
 ## Context
 

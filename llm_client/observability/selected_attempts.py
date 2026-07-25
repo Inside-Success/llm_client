@@ -1,4 +1,4 @@
-"""Strict typed reads of selected native structured-output attempts.
+"""Strict typed reads of selected provider-native structured-output attempts.
 
 The reader joins the runtime's terminal call row to its complete attempt
 lifecycle. It is provider-free and fails rather than guessing when persistence
@@ -31,7 +31,7 @@ class SelectedAttemptReceiptError(ValueError):
 
 
 class RuntimeSelectedAttemptReceipt(BaseModel):
-    """One trusted-process receipt for a runtime-selected native-schema attempt.
+    """One trusted-process receipt for a runtime-selected provider-native attempt.
 
     The digest is an integrity fingerprint over persisted runtime evidence, not
     independent provider attestation, source authentication, a signature, or a
@@ -188,6 +188,12 @@ def _validate_history(
                 logical_call_id,
                 f"attempt {ordinal} contains inconsistent model identity.",
             )
+        attempt_paths = {event.execution_path for event in attempt}
+        if len(attempt_paths) != 1:
+            raise _fail(
+                logical_call_id,
+                f"attempt {ordinal} contains inconsistent execution paths.",
+            )
         next_attempt = [
             event for event in events if event.attempt_ordinal == ordinal + 1
         ]
@@ -206,6 +212,9 @@ def _validate_history(
     selected_models = {event.model for event in selected_events}
     if len(selected_models) != 1:
         raise _fail(logical_call_id, "selected attempt contains inconsistent model identity.")
+    selected_paths = {event.execution_path for event in selected_events}
+    if len(selected_paths) != 1:
+        raise _fail(logical_call_id, "selected attempt contains inconsistent execution paths.")
     return received, selected
 
 
@@ -243,11 +252,6 @@ def get_runtime_selected_attempt_receipt(
         raise _fail(logical_call_id, "terminal call row is not successful.")
     if row.get("caller") not in {"call_llm_structured", "acall_llm_structured"}:
         raise _fail(logical_call_id, "terminal row is not a structured public call.")
-    if row.get("execution_path") != "native_schema":
-        raise _fail(logical_call_id, "terminal execution_path is not native_schema.")
-    if row.get("response_format_type") != "json_schema":
-        raise _fail(logical_call_id, "terminal response format is not json_schema.")
-
     trace_id = _require_text(row, "trace_id", logical_call_id)
     task = _require_text(row, "task", logical_call_id)
     resolved_model = _require_text(row, "model", logical_call_id)
@@ -274,6 +278,19 @@ def get_runtime_selected_attempt_receipt(
 
     events = get_structured_attempt_events(logical_call_id)
     received, selected = _validate_history(logical_call_id, events)
+    if row.get("execution_path") != selected.execution_path:
+        raise _fail(
+            logical_call_id,
+            "terminal execution_path does not match the selected provider-native attempt.",
+        )
+    expected_response_format = (
+        "json_schema" if selected.execution_path == "native_schema" else "responses_api"
+    )
+    if row.get("response_format_type") != expected_response_format:
+        raise _fail(
+            logical_call_id,
+            "terminal response format does not match the selected provider-native path.",
+        )
     for event in events:
         if event.logical_call_id != logical_call_id:
             raise _fail(logical_call_id, "event logical-call identity mismatch.")
@@ -310,7 +327,7 @@ def get_runtime_selected_attempt_receipt(
 def get_runtime_selected_raw_content(
     logical_call_id: str,
 ) -> RuntimeSelectedRawContent:
-    """Return exact retained bytes for the strict selected native-schema attempt."""
+    """Return exact retained bytes for the strict selected provider-native attempt."""
 
     receipt = get_runtime_selected_attempt_receipt(logical_call_id)
     if receipt.raw_artifact_ref is None:

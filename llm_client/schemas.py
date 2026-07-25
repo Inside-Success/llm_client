@@ -83,6 +83,13 @@ class LLMCallResultSchema(BaseModel):
         default=None,
         description="Incremental cost attributed to this call; defaults to cost when omitted",
     )
+    cost_covers_all_attempts: bool | None = Field(
+        default=None,
+        description=(
+            "Whether cost covers every provider attempt behind this logical call; "
+            "None when the execution path cannot establish coverage"
+        ),
+    )
     cache_hit: bool = Field(
         default=False,
         description="Whether this result came from cache instead of a model call",

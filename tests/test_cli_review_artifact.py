@@ -206,7 +206,7 @@ def test_cmd_review_artifact_threads_quality_profile(
         task_id="test-review",
         review_profile="quality_optimal_whitepaper",
         review_schema_version="auto",
-        reviewer="claude-code/opus",
+        reviewer="claude-code/sonnet",
         max_budget=1.0,
         timeout=30,
     )
@@ -235,7 +235,7 @@ def test_cmd_review_artifact_rejects_unknown_profile(tmp_path: Path) -> None:
         task_id="test-review",
         review_profile="missing",
         review_schema_version="auto",
-        reviewer="claude-code/opus",
+        reviewer="claude-code/sonnet",
         max_budget=1.0,
         timeout=30,
     )

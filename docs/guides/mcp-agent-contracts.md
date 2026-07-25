@@ -35,7 +35,8 @@ result = await acall_llm(
     # Reliability controls:
     forced_final_max_attempts=3,
     forced_final_circuit_breaker_threshold=2,
-    finalization_fallback_models=["openrouter/openai/gpt-5-mini"],
+    finalization_fallback_models=["openrouter/deepseek/deepseek-v4-flash"],
+    reasoning_effort="none",
     retrieval_stagnation_turns=4,
 )
 

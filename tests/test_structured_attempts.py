@@ -20,6 +20,9 @@ from llm_client import (
 )
 from llm_client.core.errors import LLMError
 from llm_client.core.errors import LLMCapabilityError
+from llm_client.observability.selected_attempts import (
+    get_runtime_selected_attempt_receipt,
+)
 from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
     get_structured_attempt_events,
@@ -75,10 +78,13 @@ def _event(
     return StructuredAttemptEvent.model_validate(payload)
 
 
-def _native_response(content: str) -> MagicMock:
+def _native_response(content: str, *, provider_cost: float | None = None) -> MagicMock:
     """Build one provider response while retaining the real runtime and ledger."""
 
     response = MagicMock()
+    response._hidden_params = (
+        {"response_cost": provider_cost} if provider_cost is not None else {}
+    )
     choice = MagicMock()
     choice.message.content = content
     choice.finish_reason = "stop"
@@ -306,9 +312,12 @@ def test_sync_timeout_attempt_is_visible_before_retry_success(
 
     mock_completion.side_effect = [
         TimeoutError("provider body must not be retained"),
-        _native_response('{"action":"answer","rationale":"Enough evidence."}'),
+        _native_response(
+            '{"action":"answer","rationale":"Enough evidence."}',
+            provider_cost=0.002,
+        ),
     ]
-    call_llm_structured(
+    _parsed, result = call_llm_structured(
         "deepseek/deepseek-chat",
         [{"role": "user", "content": "Choose"}],
         response_model=Decision,
@@ -334,6 +343,9 @@ def test_sync_timeout_attempt_is_visible_before_retry_success(
     assert history[1].execution_error_type == "TimeoutError"
     assert history[1].raw_sha256 is None
     assert history[2].recovery_decision == "retry"
+    assert result.cost == pytest.approx(0.002)
+    assert result.marginal_cost == pytest.approx(0.002)
+    assert result.cost_covers_all_attempts is False
 
 
 # mock-ok: provider failures/responses are controlled; fallback policy and SQLite are real.
@@ -353,7 +365,7 @@ def test_model_fallback_keeps_global_attempt_ordinals(
         TypeError("non-retryable primary failure"),
         _native_response('{"action":"answer","rationale":"Fallback worked."}'),
     ]
-    call_llm_structured(
+    _parsed, result = call_llm_structured(
         "deepseek/deepseek-chat",
         [{"role": "user", "content": "Choose"}],
         response_model=Decision,
@@ -376,6 +388,7 @@ def test_model_fallback_keeps_global_attempt_ordinals(
     ]
     assert history[2].recovery_decision == "fallback"
     assert history[3].model == "openrouter/deepseek/deepseek-v4-flash"
+    assert result.cost_covers_all_attempts is False
 
 
 @pytest.mark.asyncio
@@ -394,9 +407,12 @@ async def test_async_timeout_attempt_is_visible_before_retry_success(
 
     mock_completion.side_effect = [
         TimeoutError("provider body must not be retained"),
-        _native_response('{"action":"answer","rationale":"Enough evidence."}'),
+        _native_response(
+            '{"action":"answer","rationale":"Enough evidence."}',
+            provider_cost=0.002,
+        ),
     ]
-    await acall_llm_structured(
+    _parsed, result = await acall_llm_structured(
         "deepseek/deepseek-chat",
         [{"role": "user", "content": "Choose"}],
         response_model=Decision,
@@ -420,6 +436,9 @@ async def test_async_timeout_attempt_is_visible_before_retry_success(
     ]
     assert history[1].failure_class == "timeout"
     assert history[2].recovery_decision == "retry"
+    assert result.cost == pytest.approx(0.002)
+    assert result.marginal_cost == pytest.approx(0.002)
+    assert result.cost_covers_all_attempts is False
 
 
 # mock-ok: provider responses are controlled; the real retry runtime and SQLite ledger are under test.
@@ -435,8 +454,9 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
         action: str
         rationale: str
 
-    def _response(content: str) -> MagicMock:
+    def _response(content: str, provider_cost: float) -> MagicMock:
         response = MagicMock()
+        response._hidden_params = {"response_cost": provider_cost}
         choice = MagicMock()
         choice.message.content = content
         choice.finish_reason = "stop"
@@ -447,10 +467,10 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
         return response
 
     mock_completion.side_effect = [
-        _response('{"action":"answer"}'),
-        _response('{"action":"answer","rationale":"Enough evidence."}'),
+        _response('{"action":"answer"}', 0.001),
+        _response('{"action":"answer","rationale":"Enough evidence."}', 0.002),
     ]
-    parsed, _result = call_llm_structured(
+    parsed, result = call_llm_structured(
         "deepseek/deepseek-chat",
         [{"role": "user", "content": "Choose"}],
         response_model=Decision,
@@ -462,6 +482,10 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
     )
 
     assert parsed.rationale == "Enough evidence."
+    assert result.cost == pytest.approx(0.003)
+    assert result.marginal_cost == pytest.approx(0.003)
+    assert result.cost_source == "attempt_aggregate"
+    assert result.cost_covers_all_attempts is True
     rows = (
         io_log._get_db()
         .execute(
@@ -491,6 +515,62 @@ def test_native_schema_runtime_persists_failed_attempt_before_retry_success(
         .fetchone()
     )
     assert final_call == (rows[0],)
+    logged_cost = (
+        io_log._get_db()
+        .execute(
+            "SELECT cost, marginal_cost FROM llm_calls WHERE trace_id=? ORDER BY id DESC LIMIT 1",
+            ("trace-runtime-retry",),
+        )
+        .fetchone()
+    )
+    assert logged_cost == pytest.approx((0.003, 0.003))
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.completion")
+def test_malformed_received_json_has_certifiable_recovered_lifecycle(
+    mock_completion: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """A JSON decode retry is response validation, not pre-response execution."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.side_effect = [
+        _native_response('{"action":"answer","rationale":"unterminated'),
+        _native_response(
+            '{"action":"answer","rationale":"Enough evidence."}'
+        ),
+    ]
+    parsed, result = call_llm_structured(
+        "deepseek/deepseek-chat",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-malformed-json-retry",
+        max_budget=0,
+        num_retries=1,
+        base_delay=0,
+    )
+
+    assert parsed.rationale == "Enough evidence."
+    assert result.logical_call_id is not None
+    history = get_structured_attempt_events(result.logical_call_id)
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "started"),
+        (0, "received"),
+        (0, "validation_failed"),
+        (0, "recovery_decided"),
+        (1, "started"),
+        (1, "received"),
+        (1, "validated"),
+    ]
+    assert history[2].failure_class == "schema_validation"
+    assert history[2].validation_issues[0].code == "json_invalid"
+    receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
+    assert receipt.selected_attempt_ordinal == 1
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -523,7 +603,7 @@ def test_native_schema_runtime_persists_litellm_pre_return_validation_failure(
         response,
     ]
 
-    call_llm_structured(
+    _parsed, result = call_llm_structured(
         "deepseek/deepseek-chat",
         [{"role": "user", "content": "Choose"}],
         response_model=Decision,
@@ -550,6 +630,8 @@ def test_native_schema_runtime_persists_litellm_pre_return_validation_failure(
     ]
     assert history[2].failure_class == "schema_validation"
     assert history[2].validation_issues[0].code == "provider_json_schema_validation"
+    assert result.cost == pytest.approx(0.001)
+    assert result.cost_covers_all_attempts is False
 
 
 # mock-ok: provider output is controlled; real retry runtime and SQLite ledger run.
@@ -676,8 +758,9 @@ async def test_async_native_schema_runtime_preserves_failed_attempt(
         action: str
         rationale: str
 
-    def _response(content: str) -> MagicMock:
+    def _response(content: str, provider_cost: float) -> MagicMock:
         response = MagicMock()
+        response._hidden_params = {"response_cost": provider_cost}
         choice = MagicMock()
         choice.message.content = content
         choice.finish_reason = "stop"
@@ -688,10 +771,10 @@ async def test_async_native_schema_runtime_preserves_failed_attempt(
         return response
 
     mock_completion.side_effect = [
-        _response('{"action":"answer"}'),
-        _response('{"action":"answer","rationale":"Enough evidence."}'),
+        _response('{"action":"answer"}', 0.001),
+        _response('{"action":"answer","rationale":"Enough evidence."}', 0.002),
     ]
-    parsed, _result = await acall_llm_structured(
+    parsed, result = await acall_llm_structured(
         "deepseek/deepseek-chat",
         [{"role": "user", "content": "Choose"}],
         response_model=Decision,
@@ -703,6 +786,10 @@ async def test_async_native_schema_runtime_preserves_failed_attempt(
     )
 
     assert parsed.rationale == "Enough evidence."
+    assert result.cost == pytest.approx(0.003)
+    assert result.marginal_cost == pytest.approx(0.003)
+    assert result.cost_source == "attempt_aggregate"
+    assert result.cost_covers_all_attempts is True
     logical_call_id = (
         io_log._get_db()
         .execute(
@@ -765,7 +852,7 @@ async def test_async_runtime_persists_litellm_pre_return_validation_failure(
         response,
     ]
 
-    await acall_llm_structured(
+    _parsed, result = await acall_llm_structured(
         "deepseek/deepseek-chat",
         [{"role": "user", "content": "Choose"}],
         response_model=Decision,
@@ -792,3 +879,5 @@ async def test_async_runtime_persists_litellm_pre_return_validation_failure(
         (1, "received"),
         (1, "validated"),
     ]
+    assert result.cost == pytest.approx(0.001)
+    assert result.cost_covers_all_attempts is False

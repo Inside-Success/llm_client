@@ -68,7 +68,7 @@ class StructuredAttemptEvent(BaseModel):
         ge=0, description="Zero-based generation attempt ordinal."
     )
     model: str = Field(description="Model used for this attempt.")
-    execution_path: Literal["native_schema"] = Field(
+    execution_path: Literal["native_schema", "responses_api"] = Field(
         description="Structured runtime path."
     )
     schema_hash: str = Field(
@@ -139,6 +139,31 @@ def record_structured_attempt_event(event: StructuredAttemptEvent) -> None:
     """Persist one event and propagate storage failures on this integrity seam."""
 
     _io_log.write_structured_attempt_event(event.model_dump(mode="json"))
+    phase = {
+        "started": "provider_dispatched",
+        "received": "provider_response",
+        "validation_failed": "parse_or_validation_failed",
+        "validated": "parse_or_validation_succeeded",
+        "execution_failed": "timeout_observed" if event.failure_class == "timeout" else "provider_error",
+        "recovery_decided": f"retry_{event.recovery_decision}",
+    }[event.event_type]
+    _io_log.record_call_lifecycle_event(
+        {
+            "event_id": f"structured-{event.event_id}",
+            "timestamp": event.timestamp,
+            "logical_call_id": event.logical_call_id,
+            "trace_id": event.trace_id,
+            "task": event.task,
+            "phase": phase,
+            "requested_model": event.model,
+            "call_kind": "structured",
+            "resolved_model": event.model,
+            "error_type": event.execution_error_type,
+            "schema_hash": event.schema_hash,
+            "attempt_ordinal": event.attempt_ordinal,
+            "failure_class": event.failure_class,
+        }
+    )
 
 
 def get_structured_attempt_events(logical_call_id: str) -> list[StructuredAttemptEvent]:
@@ -156,6 +181,9 @@ def get_structured_attempt_histories(
     """Return ordered attempt histories for every structured call in one trace."""
 
     return {
-        call_id: get_structured_attempt_events(call_id)
+        call_id: [
+            StructuredAttemptEvent.model_validate(row)
+            for row in _io_log.read_structured_attempt_events_for_trace(call_id, trace_id)
+        ]
         for call_id in _io_log.read_structured_attempt_call_ids(trace_id)
     }

@@ -259,8 +259,8 @@ def register_parser(subparsers: Any) -> None:
     )
     p.add_argument(
         "--reviewer-model",
-        default="claude-code/opus",
-        help="Reviewer model (default: claude-code/opus, resolves to current Opus full ID)",
+        default="claude-code/sonnet",
+        help="Reviewer model (default: claude-code/sonnet)",
     )
     p.add_argument(
         "--task-family",

@@ -613,6 +613,21 @@ def log_foundation_event(
         logger.debug("io_log.log_foundation_event failed", exc_info=True)
 
 
+def record_call_lifecycle_event(event: dict[str, Any]) -> None:
+    """Persist one typed call lifecycle event; evidence loss is an integrity error."""
+    required = ("event_id", "timestamp", "logical_call_id", "trace_id", "task", "phase", "requested_model", "call_kind")
+    missing = [key for key in required if not str(event.get(key) or "").strip()]
+    if missing:
+        raise ValueError(f"call lifecycle event missing required fields: {', '.join(missing)}")
+    def _write(db: sqlite3.Connection) -> None:
+        db.execute("""INSERT INTO call_lifecycle_events
+            (event_id,timestamp,project,logical_call_id,trace_id,task,phase,requested_model,resolved_model,call_kind,prompt_sha256,schema_hash,causal_parent_id,requested_timeout_s,provider_timeout_s,transport_timeout_status,timeout_policy,process_id,host_name,process_start_token,error_type,payload)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+            event["event_id"], event["timestamp"], _get_project(), event["logical_call_id"], event["trace_id"], event["task"], event["phase"], event["requested_model"], event.get("resolved_model"), event["call_kind"], event.get("prompt_sha256"), event.get("schema_hash"), event.get("causal_parent_id"), event.get("requested_timeout_s"), event.get("provider_timeout_s"), event.get("transport_timeout_status"), event.get("timeout_policy"), event.get("process_id"), event.get("host_name"), event.get("process_start_token"), event.get("error_type"), json.dumps(event, default=str),
+        ))
+    _run_db_write(_write)
+
+
 def log_tool_call_record(
     *,
     call_id: str,
@@ -737,6 +752,10 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     prompt_tokens INTEGER,
     completion_tokens INTEGER,
     total_tokens INTEGER,
+    reasoning_tokens INTEGER,
+    cached_tokens INTEGER,
+    cache_creation_tokens INTEGER,
+    usage_details TEXT,
     cost REAL,
     cost_source TEXT,
     billing_mode TEXT,
@@ -773,6 +792,34 @@ CREATE TABLE IF NOT EXISTS structured_attempt_events (
     execution_error_type TEXT,
     validation_issues TEXT NOT NULL,
     recovery_decision TEXT
+);
+
+CREATE TABLE IF NOT EXISTS attempt_diagnostics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    diagnostic_id TEXT NOT NULL UNIQUE,
+    timestamp TEXT NOT NULL,
+    project TEXT,
+    attempt_event_id TEXT NOT NULL,
+    logical_call_id TEXT NOT NULL,
+    trace_id TEXT NOT NULL,
+    task TEXT NOT NULL,
+    attempt_ordinal INTEGER NOT NULL,
+    phase TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    attribution TEXT NOT NULL,
+    exception_chain TEXT NOT NULL,
+    exception_fingerprint TEXT,
+    http_status INTEGER,
+    provider_error_code TEXT,
+    provider_request_id TEXT,
+    gateway_request_id TEXT,
+    retry_after_s REAL,
+    timeout_kind TEXT,
+    response_outcome TEXT,
+    sanitized_summary TEXT,
+    redaction_version TEXT NOT NULL,
+    artifact_ref TEXT,
+    artifact_sha256 TEXT
 );
 
 CREATE TABLE IF NOT EXISTS embeddings (
@@ -887,6 +934,32 @@ CREATE TABLE IF NOT EXISTS foundation_events (
     task TEXT
 );
 
+CREATE TABLE IF NOT EXISTS call_lifecycle_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    timestamp TEXT NOT NULL,
+    project TEXT,
+    logical_call_id TEXT NOT NULL,
+    trace_id TEXT NOT NULL,
+    task TEXT NOT NULL,
+    phase TEXT NOT NULL,
+    requested_model TEXT NOT NULL,
+    resolved_model TEXT,
+    call_kind TEXT NOT NULL,
+    prompt_sha256 TEXT,
+    schema_hash TEXT,
+    causal_parent_id TEXT,
+    requested_timeout_s INTEGER,
+    provider_timeout_s INTEGER,
+    transport_timeout_status TEXT,
+    timeout_policy TEXT,
+    process_id INTEGER,
+    host_name TEXT,
+    process_start_token TEXT,
+    error_type TEXT,
+    payload TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tool_calls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -932,20 +1005,71 @@ CREATE TABLE IF NOT EXISTS interventions (
     measured_impact TEXT,
     status TEXT DEFAULT 'proposed'
 );
+
+CREATE TABLE IF NOT EXISTS cost_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period_start TEXT NOT NULL,
+    window_hours INTEGER NOT NULL,
+    budget REAL NOT NULL,
+    observed_cost REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(period_start, window_hours, budget)
+);
+
+CREATE TABLE IF NOT EXISTS dashboard_spend_hourly (
+    bucket_start TEXT NOT NULL,
+    project TEXT NOT NULL,
+    model TEXT NOT NULL,
+    call_count INTEGER NOT NULL DEFAULT 0,
+    unpriced_call_count INTEGER NOT NULL DEFAULT 0,
+    total_cost REAL NOT NULL DEFAULT 0.0,
+    PRIMARY KEY (bucket_start, project, model)
+);
+
+CREATE TABLE IF NOT EXISTS budget_scopes (
+    scope_trace_id TEXT PRIMARY KEY,
+    max_budget_microusd INTEGER NOT NULL CHECK (max_budget_microusd > 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS budget_reservations (
+    reservation_id TEXT PRIMARY KEY,
+    scope_trace_id TEXT NOT NULL,
+    call_trace_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    reserved_microusd INTEGER NOT NULL CHECK (reserved_microusd > 0),
+    status TEXT NOT NULL CHECK (
+        status IN ('active', 'settled', 'released_error', 'expired')
+    ),
+    created_at TEXT NOT NULL,
+    heartbeat_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    completed_at TEXT,
+    settled_cost_microusd INTEGER,
+    FOREIGN KEY(scope_trace_id) REFERENCES budget_scopes(scope_trace_id)
+);
 """
 
 _INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_calls_timestamp ON llm_calls(timestamp);
+CREATE INDEX IF NOT EXISTS idx_lifecycle_logical_call ON call_lifecycle_events(logical_call_id, id);
+CREATE INDEX IF NOT EXISTS idx_lifecycle_trace ON call_lifecycle_events(trace_id, id);
+CREATE INDEX IF NOT EXISTS idx_calls_accounted_timestamp ON llm_calls(timestamp)
+    WHERE cost_source IS NOT NULL OR billing_mode IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_calls_model ON llm_calls(model);
 CREATE INDEX IF NOT EXISTS idx_calls_task ON llm_calls(task);
 CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
 CREATE INDEX IF NOT EXISTS idx_calls_trace_id ON llm_calls(trace_id);
 CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref);
 CREATE INDEX IF NOT EXISTS idx_calls_fingerprint ON llm_calls(call_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_dashboard_spend_hourly_bucket ON dashboard_spend_hourly(bucket_start);
 CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_call ON structured_attempt_events(logical_call_id, id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_trace ON structured_attempt_events(trace_id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_class ON structured_attempt_events(failure_class);
+CREATE INDEX IF NOT EXISTS idx_attempt_diagnostic_event ON attempt_diagnostics(attempt_event_id, id);
+CREATE INDEX IF NOT EXISTS idx_attempt_diagnostic_call ON attempt_diagnostics(logical_call_id, attempt_ordinal, id);
 CREATE INDEX IF NOT EXISTS idx_emb_timestamp ON embeddings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_emb_model ON embeddings(model);
 CREATE INDEX IF NOT EXISTS idx_emb_task ON embeddings(task);
@@ -997,6 +1121,11 @@ CREATE INDEX IF NOT EXISTS idx_interv_dataset ON interventions(dataset);
 CREATE INDEX IF NOT EXISTS idx_interv_category ON interventions(category);
 CREATE INDEX IF NOT EXISTS idx_interv_status ON interventions(status);
 CREATE INDEX IF NOT EXISTS idx_interv_timestamp ON interventions(timestamp);
+CREATE INDEX IF NOT EXISTS idx_cost_alerts_created_at ON cost_alerts(created_at);
+CREATE INDEX IF NOT EXISTS idx_budget_reservations_active_scope
+ON budget_reservations(scope_trace_id, status);
+CREATE INDEX IF NOT EXISTS idx_budget_reservations_expiry
+ON budget_reservations(status, expires_at);
 """
 
 
@@ -1047,12 +1176,42 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
     if "logical_call_id" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN logical_call_id TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_id)")
+    if "reasoning_tokens" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN reasoning_tokens INTEGER")
+    if "cached_tokens" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN cached_tokens INTEGER")
+    if "cache_creation_tokens" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN cache_creation_tokens INTEGER")
+    if "usage_details" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN usage_details TEXT")
+
+    lifecycle_cols = {
+        row[1] for row in conn.execute("PRAGMA table_info(call_lifecycle_events)")
+    }
+    if "requested_timeout_s" not in lifecycle_cols:
+        conn.execute(
+            "ALTER TABLE call_lifecycle_events ADD COLUMN requested_timeout_s INTEGER"
+        )
+    if "prompt_sha256" not in lifecycle_cols:
+        conn.execute("ALTER TABLE call_lifecycle_events ADD COLUMN prompt_sha256 TEXT")
+    if "schema_hash" not in lifecycle_cols:
+        conn.execute("ALTER TABLE call_lifecycle_events ADD COLUMN schema_hash TEXT")
+    if "causal_parent_id" not in lifecycle_cols:
+        conn.execute("ALTER TABLE call_lifecycle_events ADD COLUMN causal_parent_id TEXT")
+    if "transport_timeout_status" not in lifecycle_cols:
+        conn.execute(
+            "ALTER TABLE call_lifecycle_events ADD COLUMN transport_timeout_status TEXT"
+        )
 
     attempt_cols = {row[1] for row in conn.execute("PRAGMA table_info(structured_attempt_events)")}
     if "execution_error_type" not in attempt_cols:
         conn.execute(
             "ALTER TABLE structured_attempt_events ADD COLUMN execution_error_type TEXT"
         )
+
+    diagnostic_cols = {row[1] for row in conn.execute("PRAGMA table_info(attempt_diagnostics)")}
+    if "response_outcome" not in diagnostic_cols:
+        conn.execute("ALTER TABLE attempt_diagnostics ADD COLUMN response_outcome TEXT")
 
     # task_scores: add git_commit if missing
     scores_cols = {r[1] for r in conn.execute("PRAGMA table_info(task_scores)").fetchall()}
@@ -1135,7 +1294,29 @@ def _get_db() -> sqlite3.Connection:
         _db_conn.execute("PRAGMA journal_mode = WAL")
         _db_conn.execute("PRAGMA synchronous = NORMAL")
         _db_conn.executescript(_TABLES_SQL)
-        _migrate_db(_db_conn)
+        # Two fresh processes can open the same SQLite file at once. One may
+        # add an old-schema column after the other's PRAGMA snapshot but before
+        # its ALTER TABLE. Retry the idempotent migration from a fresh schema
+        # view instead of converting that harmless race into a startup failure.
+        migration_attempt = 0
+        while True:
+            try:
+                _migrate_db(_db_conn)
+                break
+            except sqlite3.OperationalError as exc:
+                duplicate_column = "duplicate column name" in str(exc).lower()
+                if not (duplicate_column or _is_db_locked_error(exc)):
+                    raise
+                if migration_attempt >= _get_db_lock_retries():
+                    raise
+                try:
+                    _db_conn.rollback()
+                except sqlite3.Error:
+                    pass
+                time.sleep(
+                    (_get_db_lock_retry_delay_ms() * (migration_attempt + 1)) / 1000.0
+                )
+                migration_attempt += 1
         _db_conn.executescript(_INDEXES_SQL)
         return _db_conn
 
@@ -1233,6 +1414,131 @@ def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]
     return result
 
 
+def read_structured_attempt_events_for_trace(
+    logical_call_id: str,
+    trace_id: str,
+) -> list[dict[str, Any]]:
+    """Read one logical call only within its exact trace boundary."""
+
+    rows = _get_db().execute(
+        """SELECT event_id, timestamp, logical_call_id, trace_id, task,
+                  attempt_ordinal, model, execution_path, schema_hash, event_type,
+                  raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                  execution_error_type, recovery_decision
+           FROM structured_attempt_events
+           WHERE logical_call_id = ? AND trace_id = ? ORDER BY id""",
+        (logical_call_id, trace_id),
+    ).fetchall()
+    keys = (
+        "event_id", "timestamp", "logical_call_id", "trace_id", "task",
+        "attempt_ordinal", "model", "execution_path", "schema_hash", "event_type",
+        "raw_sha256", "raw_artifact_ref", "failure_class", "validation_issues",
+        "execution_error_type", "recovery_decision",
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(zip(keys, row, strict=True))
+        item["validation_issues"] = json.loads(item["validation_issues"] or "[]")
+        result.append(item)
+    return result
+
+
+def read_structured_attempt_event(event_id: str) -> dict[str, Any] | None:
+    """Read one structured attempt event by its immutable event identity."""
+
+    row = _get_db().execute(
+        """SELECT event_id, timestamp, logical_call_id, trace_id, task,
+                  attempt_ordinal, model, execution_path, schema_hash, event_type,
+                  raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                  execution_error_type, recovery_decision
+           FROM structured_attempt_events WHERE event_id = ?""",
+        (event_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    keys = (
+        "event_id", "timestamp", "logical_call_id", "trace_id", "task",
+        "attempt_ordinal", "model", "execution_path", "schema_hash", "event_type",
+        "raw_sha256", "raw_artifact_ref", "failure_class", "validation_issues",
+        "execution_error_type", "recovery_decision",
+    )
+    result = dict(zip(keys, row, strict=True))
+    result["validation_issues"] = json.loads(result["validation_issues"] or "[]")
+    return result
+
+
+def write_attempt_diagnostic(diagnostic: dict[str, Any]) -> None:
+    """Persist one diagnostic only when it binds the exact attempt identity."""
+
+    if not _logging_enabled():
+        raise RuntimeError("attempt diagnostic persistence requires logging to be enabled")
+
+    def _write(db: sqlite3.Connection) -> None:
+        attempt = db.execute(
+            """SELECT logical_call_id, trace_id, task, attempt_ordinal
+               FROM structured_attempt_events WHERE event_id = ?""",
+            (diagnostic["attempt_event_id"],),
+        ).fetchone()
+        if attempt is None:
+            raise ValueError("attempt diagnostic must bind an existing structured attempt event")
+        expected = tuple(
+            diagnostic[key]
+            for key in ("logical_call_id", "trace_id", "task", "attempt_ordinal")
+        )
+        if tuple(attempt) != expected:
+            raise ValueError("attempt diagnostic identity does not match structured attempt event")
+        db.execute(
+            """INSERT INTO attempt_diagnostics
+               (diagnostic_id, timestamp, project, attempt_event_id, logical_call_id,
+                trace_id, task, attempt_ordinal, phase, origin, attribution,
+                exception_chain, exception_fingerprint, http_status, provider_error_code,
+                provider_request_id, gateway_request_id, retry_after_s, timeout_kind, response_outcome,
+                sanitized_summary, redaction_version, artifact_ref, artifact_sha256)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                diagnostic["diagnostic_id"], diagnostic["timestamp"], _get_project(),
+                diagnostic["attempt_event_id"], diagnostic["logical_call_id"],
+                diagnostic["trace_id"], diagnostic["task"], diagnostic["attempt_ordinal"],
+                diagnostic["phase"], diagnostic["origin"], diagnostic["attribution"],
+                json.dumps(diagnostic["exception_chain"]), diagnostic.get("exception_fingerprint"),
+                diagnostic.get("http_status"), diagnostic.get("provider_error_code"),
+                diagnostic.get("provider_request_id"), diagnostic.get("gateway_request_id"),
+                diagnostic.get("retry_after_s"), diagnostic.get("timeout_kind"), diagnostic.get("response_outcome"),
+                diagnostic.get("sanitized_summary"), diagnostic["redaction_version"],
+                diagnostic.get("artifact_ref"), diagnostic.get("artifact_sha256"),
+            ),
+        )
+
+    _run_db_write(_write)
+
+
+def read_attempt_diagnostics(attempt_event_id: str) -> list[dict[str, Any]]:
+    """Read ordered diagnostics bound to one structured attempt event."""
+
+    rows = _get_db().execute(
+        """SELECT diagnostic_id, timestamp, attempt_event_id, logical_call_id, trace_id,
+                  task, attempt_ordinal, phase, origin, attribution, exception_chain,
+                  exception_fingerprint, http_status, provider_error_code,
+                  provider_request_id, gateway_request_id, retry_after_s, timeout_kind, response_outcome,
+                  sanitized_summary, redaction_version, artifact_ref, artifact_sha256
+           FROM attempt_diagnostics WHERE attempt_event_id = ? ORDER BY id""",
+        (attempt_event_id,),
+    ).fetchall()
+    keys = (
+        "diagnostic_id", "timestamp", "attempt_event_id", "logical_call_id", "trace_id",
+        "task", "attempt_ordinal", "phase", "origin", "attribution", "exception_chain",
+        "exception_fingerprint", "http_status", "provider_error_code",
+        "provider_request_id", "gateway_request_id", "retry_after_s", "timeout_kind", "response_outcome",
+        "sanitized_summary", "redaction_version", "artifact_ref", "artifact_sha256",
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(zip(keys, row, strict=True))
+        item["exception_chain"] = tuple(json.loads(item["exception_chain"] or "[]"))
+        result.append(item)
+    return result
+
+
 def read_structured_attempt_call_ids(trace_id: str) -> list[str]:
     """Return structured logical-call ids for a trace in first-event order."""
 
@@ -1290,6 +1596,53 @@ def read_structured_terminal_calls(logical_call_id: str) -> list[dict[str, Any]]
     return result
 
 
+def _valid_token_count(value: Any) -> int | None:
+    """Return a provider token count only when it is a non-negative integer."""
+
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def _bounded_usage_details(usage: dict[str, Any] | None) -> str | None:
+    """Serialize allowlisted numeric token details without provider content."""
+
+    allowed = {
+        "prompt_tokens_details": (
+            "audio_tokens",
+            "cache_write_tokens",
+            "cached_tokens",
+            "cache_creation_tokens",
+            "cache_read_input_tokens",
+            "image_tokens",
+            "text_tokens",
+            "video_tokens",
+        ),
+        "completion_tokens_details": (
+            "reasoning_tokens",
+            "audio_tokens",
+            "image_tokens",
+            "text_tokens",
+            "video_tokens",
+            "accepted_prediction_tokens",
+            "rejected_prediction_tokens",
+        ),
+    }
+    result: dict[str, dict[str, int]] = {}
+    for group, fields in allowed.items():
+        raw = (usage or {}).get(group)
+        if not isinstance(raw, dict):
+            continue
+        bounded = {
+            field: count
+            for field in fields
+            if (count := _valid_token_count(raw.get(field))) is not None
+        }
+        if bounded:
+            result[group] = bounded
+    return json.dumps(result) if result else None
+
+
 def _write_call_to_db(
     *,
     timestamp: str,
@@ -1322,26 +1675,45 @@ def _write_call_to_db(
 ) -> None:
     """Insert a call record into SQLite. Never raises."""
     try:
-        prompt_tokens = (usage or {}).get("prompt_tokens")
-        completion_tokens = (usage or {}).get("completion_tokens")
-        total_tokens = (usage or {}).get("total_tokens")
+        prompt_tokens = _valid_token_count((usage or {}).get("prompt_tokens"))
+        completion_tokens = _valid_token_count((usage or {}).get("completion_tokens"))
+        total_tokens = _valid_token_count((usage or {}).get("total_tokens"))
+        reasoning_tokens = _valid_token_count((usage or {}).get("reasoning_tokens"))
+        cached_tokens = _valid_token_count((usage or {}).get("cached_tokens"))
+        cache_creation_tokens = _valid_token_count(
+            (usage or {}).get("cache_creation_tokens")
+        )
+        usage_details = _bounded_usage_details(usage)
+
+        project = _get_project() or "unknown"
+        bucket_start = datetime.fromisoformat(timestamp).replace(
+            minute=0, second=0, microsecond=0
+        ).isoformat()
+        accounted = cost_source is not None or billing_mode is not None
+        unpriced = cost_source is None or cost_source in {"unspecified", "unavailable"}
+        recorded_cost = marginal_cost if marginal_cost is not None else (cost or 0.0)
+
         def _write(db: sqlite3.Connection) -> None:
             db.execute(
                 """INSERT INTO llm_calls
                    (timestamp, project, model, messages, response,
                     prompt_tokens, completion_tokens, total_tokens,
+                    reasoning_tokens, cached_tokens, cache_creation_tokens,
+                    usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
                     causal_parent_id, logical_call_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    timestamp, _get_project(), model,
+                    timestamp, project, model,
                     json.dumps(messages, default=str) if messages else None,
                     response,
                     prompt_tokens, completion_tokens, total_tokens,
+                    reasoning_tokens, cached_tokens, cache_creation_tokens,
+                    usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint,
@@ -1351,10 +1723,44 @@ def _write_call_to_db(
                     causal_parent_id, logical_call_id,
                 ),
             )
+            if error is None and accounted:
+                db.execute(
+                    """INSERT INTO dashboard_spend_hourly
+                       (bucket_start, project, model, call_count, unpriced_call_count, total_cost)
+                       VALUES (?, ?, ?, 1, ?, ?)
+                       ON CONFLICT(bucket_start, project, model) DO UPDATE SET
+                           call_count = call_count + 1,
+                           unpriced_call_count = unpriced_call_count + excluded.unpriced_call_count,
+                           total_cost = total_cost + excluded.total_cost""",
+                    (bucket_start, project, model, 1 if unpriced else 0, recorded_cost),
+                )
 
         _run_db_write(_write)
     except Exception:
         logger.debug("io_log._write_call_to_db failed", exc_info=True)
+
+
+def rebuild_dashboard_spend_hourly() -> int:
+    """Rebuild the derived hourly cost view from the immutable call ledger."""
+
+    with _db_write_lock:
+        db = _get_db()
+        db.execute("DELETE FROM dashboard_spend_hourly")
+        db.execute(
+            """INSERT INTO dashboard_spend_hourly
+               (bucket_start, project, model, call_count, unpriced_call_count, total_cost)
+               SELECT
+                 strftime('%Y-%m-%dT%H:00:00+00:00', timestamp),
+                 COALESCE(project, 'unknown'), model, COUNT(*),
+                 SUM(CASE WHEN cost_source IS NULL OR cost_source IN ('unspecified', 'unavailable') THEN 1 ELSE 0 END),
+                 COALESCE(SUM(COALESCE(marginal_cost, cost)), 0)
+               FROM llm_calls
+               WHERE error IS NULL AND (cost_source IS NOT NULL OR billing_mode IS NOT NULL)
+               GROUP BY 1, 2, 3"""
+        )
+        count = db.execute("SELECT COUNT(*) FROM dashboard_spend_hourly").fetchone()[0]
+        db.commit()
+        return int(count)
 
 
 def _write_embedding_to_db(
@@ -1542,16 +1948,22 @@ def import_jsonl(jsonl_path: str | Path, table: str = "llm_calls") -> int:
                 """INSERT INTO llm_calls
                    (timestamp, project, model, messages, response,
                     prompt_tokens, completion_tokens, total_tokens,
+                    reasoning_tokens, cached_tokens, cache_creation_tokens,
+                    usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint, call_snapshot)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     r.get("timestamp"), project, r.get("model"),
                     json.dumps(r.get("messages"), default=str) if r.get("messages") else None,
                     r.get("response"),
                     usage.get("prompt_tokens"), usage.get("completion_tokens"),
                     usage.get("total_tokens"),
+                    _valid_token_count(usage.get("reasoning_tokens")),
+                    _valid_token_count(usage.get("cached_tokens")),
+                    _valid_token_count(usage.get("cache_creation_tokens")),
+                    _bounded_usage_details(usage),
                     r.get("cost"),
                     r.get("cost_source"),
                     r.get("billing_mode"),

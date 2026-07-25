@@ -145,6 +145,16 @@ def _provider_timeout_for_lifecycle(timeout: Any) -> int:
     return effective
 
 
+def _requested_timeout_for_lifecycle(timeout: Any) -> int | None:
+    """Return the caller timeout without conflating it with policy enforcement."""
+
+    try:
+        requested = int(timeout)
+    except (TypeError, ValueError):
+        return None
+    return max(requested, 0)
+
+
 def _normalize_lifecycle_seconds(value: Any, *, default: float) -> float:
     """Normalize lifecycle heartbeat/stall thresholds from caller or env values."""
 
@@ -191,7 +201,7 @@ def _resolve_lifecycle_monitoring_settings(
 def _emit_llm_call_lifecycle_event(
     *,
     call_id: str,
-    phase: Literal["started", "heartbeat", "progress", "stalled", "completed", "failed"],
+    phase: Literal["started", "heartbeat", "progress", "stalled", "completed", "failed", "cancelled"],
     call_kind: Literal["text", "structured"],
     caller: str,
     task: str,
@@ -199,6 +209,9 @@ def _emit_llm_call_lifecycle_event(
     requested_model: str,
     provider_timeout_s: int,
     prompt_ref: str | None,
+    prompt_sha256: str | None = None,
+    requested_timeout_s: int | None = None,
+    transport_timeout_status: str = "not_observed",
     resolved_model: str | None = None,
     latency_s: float | None = None,
     elapsed_s: float | None = None,
@@ -210,6 +223,20 @@ def _emit_llm_call_lifecycle_event(
     error: Exception | None = None,
 ) -> None:
     """Emit a Foundation-backed lifecycle event for one public LLM call."""
+
+    lifecycle_event = {
+        "event_id": _new_foundation_event_id(), "timestamp": _foundation_now_iso(),
+        "logical_call_id": call_id, "trace_id": trace_id, "task": task, "phase": phase,
+        "requested_model": requested_model, "resolved_model": resolved_model,
+        "call_kind": call_kind, "provider_timeout_s": provider_timeout_s if provider_timeout_s > 0 else None,
+        "requested_timeout_s": requested_timeout_s,
+        "transport_timeout_status": transport_timeout_status,
+        "prompt_sha256": prompt_sha256,
+        "timeout_policy": _timeout_policy_label(), "process_id": _PROCESS_ID if _PROCESS_ID > 0 else None,
+        "host_name": _PROCESS_HOST_NAME, "process_start_token": _PROCESS_START_TOKEN,
+        "error_type": _llm_lifecycle_error_type(error) if error is not None else None,
+    }
+    _io_log.record_call_lifecycle_event(lifecycle_event)
 
     params: dict[str, Any] = {
         "task": task,
@@ -223,7 +250,7 @@ def _emit_llm_call_lifecycle_event(
 
     _io_log.log_foundation_event(
         event={
-            "event_id": _new_foundation_event_id(),
+            "event_id": lifecycle_event["event_id"],
             "event_type": "LLMCallLifecycle",
             "timestamp": _foundation_now_iso(),
             "run_id": _coerce_foundation_run_id(None, trace_id),
@@ -246,8 +273,11 @@ def _emit_llm_call_lifecycle_event(
                 "requested_model_id": requested_model,
                 "resolved_model_id": resolved_model,
                 "provider_timeout_s": provider_timeout_s if provider_timeout_s > 0 else None,
+                "requested_timeout_s": requested_timeout_s,
+                "transport_timeout_status": transport_timeout_status,
                 "timeout_policy": _timeout_policy_label(),
                 "prompt_ref": prompt_ref,
+                "prompt_sha256": prompt_sha256,
                 "host_name": _PROCESS_HOST_NAME,
                 "process_id": _PROCESS_ID if _PROCESS_ID > 0 else None,
                 "process_start_token": _PROCESS_START_TOKEN,

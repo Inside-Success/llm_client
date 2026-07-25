@@ -12,7 +12,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json as _json
 import logging
-from typing import Any, cast
+from typing import Any
 
 import litellm
 from pydantic import BaseModel
@@ -27,11 +27,13 @@ from llm_client.execution.call_contracts import (
 )
 from llm_client.utils.cost_utils import (
     FALLBACK_COST_FLOOR_USD_PER_TOKEN,
+    _add_token_details,
     _parse_cost_result,
     _provider_reported_cost,
 )
 from llm_client.core.data_types import LLMCallResult
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
+from llm_client.utils.openrouter import _enable_openrouter_inline_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +87,22 @@ def _strict_openai_response_model_schema(
     """
     from openai.lib._pydantic import to_strict_json_schema
 
-    return cast(dict[str, Any], to_strict_json_schema(response_model))
+    return to_strict_json_schema(response_model)
 
 
 def _provider_compatible_discriminated_union_schema(
     schema: dict[str, Any],
 ) -> dict[str, Any]:
-    """Project provably disjoint ``oneOf`` unions onto provider-safe ``anyOf``."""
+    """Project provably disjoint ``oneOf`` unions onto provider-safe ``anyOf``.
+
+    Some OpenAI-compatible structured-output routes reject ``oneOf`` even when
+    Pydantic emits it for a discriminated union.  ``anyOf`` has identical
+    acceptance semantics when every branch requires the same property with a
+    distinct literal value.  Rewrite only that provable case; leave arbitrary
+    or overlapping ``oneOf`` schemas unchanged so unsupported contracts still
+    fail visibly at the provider boundary.  Callers continue to validate the
+    response with the original Pydantic model.
+    """
 
     projected = deepcopy(schema)
     _project_disjoint_one_of_unions(projected, root=projected, visited=set())
@@ -123,6 +134,7 @@ def _project_disjoint_one_of_unions(
             discriminator=node.get("discriminator"),
         ):
             node["anyOf"] = node.pop("oneOf")
+            node.pop("discriminator", None)
 
     for value in node.values():
         if isinstance(value, dict):
@@ -199,7 +211,16 @@ def _branches_have_disjoint_literals(
 
 
 def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Project a strict schema onto OpenRouter's structural subset."""
+    """Project a strict schema onto OpenRouter's structural subset.
+
+    OpenRouter's provider routes reject value-level JSON Schema constraints such
+    as ``minimum`` for some native-schema backends.  Those constraints are not
+    reliably decode-enforced by providers in any case; callers still validate
+    the returned JSON with the original Pydantic response model.  Keep the
+    structural contract (objects, properties, required fields, enums, and
+    additional-properties policy) in the provider request while retaining the
+    full local validation contract.
+    """
 
     projected = _provider_compatible_discriminated_union_schema(schema)
     _project_openrouter_compatible_schema(projected)
@@ -343,6 +364,7 @@ def _prepare_responses_kwargs(
         provider_kwargs["tools"] = _convert_tools_for_responses_api(provider_kwargs["tools"])
 
     resp_kwargs.update(provider_kwargs)
+    _enable_openrouter_inline_metadata(model, resp_kwargs)
     return resp_kwargs
 
 
@@ -356,9 +378,11 @@ def _extract_responses_usage(response: Any) -> dict[str, Any]:
             "completion_tokens": getattr(usage, "output_tokens", 0) or 0,
             "total_tokens": getattr(usage, "total_tokens", 0) or 0,
         }
-        itd = getattr(usage, "input_tokens_details", None)
-        if itd is not None:
-            result["cached_tokens"] = getattr(itd, "cached_tokens", None) or 0
+        _add_token_details(
+            result,
+            prompt_details=getattr(usage, "input_tokens_details", None),
+            completion_details=getattr(usage, "output_tokens_details", None),
+        )
         return result
     return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 

@@ -237,6 +237,54 @@ class TestLogCall:
         assert row[4] == 15
         db.close()
 
+    def test_writes_provider_usage_details_to_sqlite(self, tmp_path):
+        result = _mock_result(
+            usage={
+                "prompt_tokens": 10,
+                "completion_tokens": 8,
+                "total_tokens": 18,
+                "cached_tokens": 4,
+                "cache_creation_tokens": 2,
+                "reasoning_tokens": 3,
+                "prompt_tokens_details": {
+                    "cached_tokens": 4,
+                    "cache_creation_tokens": 2,
+                },
+                "completion_tokens_details": {"reasoning_tokens": 3},
+            },
+            cost=0.002,
+        )
+        io_log.log_call(
+            model="openrouter/test",
+            result=result,
+            latency_s=2.0,
+            task="usage_details",
+            trace_id="usage-details-trace",
+        )
+
+        db = sqlite3.connect(str(tmp_path / "test.db"))
+        row = db.execute(
+            """SELECT reasoning_tokens, cached_tokens, cache_creation_tokens,
+                      usage_details
+               FROM llm_calls"""
+        ).fetchone()
+        assert row is not None
+        assert row[:3] == (3, 4, 2)
+        assert json.loads(row[3]) == {
+            "prompt_tokens_details": {
+                "cached_tokens": 4,
+                "cache_creation_tokens": 2,
+            },
+            "completion_tokens_details": {"reasoning_tokens": 3},
+        }
+        looked_up = io_log.lookup_result("usage-details-trace")
+        assert looked_up is not None
+        assert looked_up["reasoning_tokens"] == 3
+        assert looked_up["cached_tokens"] == 4
+        assert looked_up["cache_creation_tokens"] == 2
+        assert looked_up["usage_details"] == json.loads(row[3])
+        db.close()
+
     def test_disabled_skips_logging(self, tmp_path):
         io_log._enabled = False
         io_log.log_call(model="gpt-5", latency_s=1.0)
@@ -824,6 +872,10 @@ class TestSQLiteDB:
         assert "call_fingerprint" in llm_cols
         assert "call_snapshot" in llm_cols
         assert "logical_call_id" in llm_cols
+        assert "reasoning_tokens" in llm_cols
+        assert "cached_tokens" in llm_cols
+        assert "cache_creation_tokens" in llm_cols
+        assert "usage_details" in llm_cols
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         assert "structured_attempt_events" in tables
 
@@ -853,6 +905,47 @@ class TestImportJsonl:
         assert len(rows) == 2
         # Project inferred from path
         assert rows[0][1] == "myproj"
+
+    def test_import_calls_preserves_usage_details(self, tmp_path):
+        data_dir = tmp_path / "myproj" / "myproj_llm_client_data"
+        data_dir.mkdir(parents=True)
+        jsonl_file = data_dir / "calls.jsonl"
+        usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 8,
+            "total_tokens": 18,
+            "reasoning_tokens": 3,
+            "cached_tokens": 4,
+            "cache_creation_tokens": 2,
+            "prompt_tokens_details": {
+                "cached_tokens": 4,
+                "cache_creation_tokens": 2,
+            },
+            "completion_tokens_details": {"reasoning_tokens": 3},
+        }
+        jsonl_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-07-23T12:00:00+00:00",
+                    "model": "openrouter/test",
+                    "usage": usage,
+                }
+            )
+            + "\n"
+        )
+
+        assert io_log.import_jsonl(jsonl_file, table="llm_calls") == 1
+        row = io_log._get_db().execute(
+            """SELECT reasoning_tokens, cached_tokens, cache_creation_tokens,
+                      usage_details
+               FROM llm_calls"""
+        ).fetchone()
+        assert row is not None
+        assert row[:3] == (3, 4, 2)
+        assert json.loads(row[3]) == {
+            "prompt_tokens_details": usage["prompt_tokens_details"],
+            "completion_tokens_details": usage["completion_tokens_details"],
+        }
 
     def test_import_embeddings(self, tmp_path):
         data_dir = tmp_path / "proj" / "proj_llm_client_data"
