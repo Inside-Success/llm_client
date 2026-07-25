@@ -225,6 +225,33 @@ def test_runtime_timeout_without_response_does_not_blame_provider() -> None:
     assert diagnostic.timeout_kind == "client_attempt_safety"
 
 
+def test_runtime_client_attempt_deadline_is_classified() -> None:
+    trace_id = f"runtime-client-deadline-trace-{uuid4().hex}"
+    _record_execution_failure(
+        error=TimeoutError("structured provider attempt exceeded 300s client deadline"),
+        logical_call_id="runtime-client-deadline-call", trace_id=trace_id,
+        task="test.runtime_client_deadline", attempt=0,
+        model="openrouter/deepseek/deepseek-v4-flash", schema_hash="e" * 64,
+    )
+    event = next(iter(get_structured_attempt_histories(trace_id).values()))[0]
+    diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
+    assert diagnostic.attribution == "client_observed_only"
+    assert diagnostic.timeout_kind == "client_attempt_deadline"
+
+
+def test_runtime_unknown_timeout_remains_unknown() -> None:
+    trace_id = f"runtime-unknown-timeout-trace-{uuid4().hex}"
+    _record_execution_failure(
+        error=TimeoutError("upstream deadline elapsed"),
+        logical_call_id="runtime-unknown-timeout-call", trace_id=trace_id,
+        task="test.runtime_unknown_timeout", attempt=0,
+        model="openrouter/deepseek/deepseek-v4-flash", schema_hash="f" * 64,
+    )
+    event = next(iter(get_structured_attempt_histories(trace_id).values()))[0]
+    diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
+    assert diagnostic.timeout_kind == "unknown"
+
+
 def test_trace_query_returns_all_attempt_statuses() -> None:
     event = _attempt()
     record_attempt_diagnostic(_diagnostic(event))

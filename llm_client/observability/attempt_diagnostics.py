@@ -42,6 +42,7 @@ Attribution = Literal[
 ]
 TimeoutKind = Literal[
     "provider_request",
+    "client_attempt_deadline",
     "client_attempt_safety",
     "whole_call",
     "background_polling",
