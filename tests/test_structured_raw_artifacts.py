@@ -90,8 +90,7 @@ def _isolated_observability(
     )
     monkeypatch.delenv("LLM_CLIENT_STRUCTURED_RAW_RETENTION_DAYS", raising=False)
     yield
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     (
         io_log._enabled,
         io_log._data_root,
@@ -229,7 +228,7 @@ def test_responses_api_fallback_keeps_one_logical_attempt_history(
         trace_id="trace-raw-responses-fallback",
         max_budget=0,
         num_retries=0,
-        fallback_models=["gpt-5.6-luna"],
+        fallback_models=["deepseek/deepseek-chat"],
     )
 
     assert result.logical_call_id is not None

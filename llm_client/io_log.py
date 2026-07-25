@@ -303,11 +303,23 @@ def configure(
     if project is not None:
         _project = project
     if db_path is not None:
+        close()
         with _db_lock:
-            if _db_conn is not None:
-                _db_conn.close()
-                _db_conn = None
             _db_path = Path(db_path)
+
+
+def close() -> None:
+    """Close the shared SQLite connection after in-flight writes finish."""
+
+    global _db_conn
+    # Match the _run_db_write -> _get_db lock order so shutdown cannot close
+    # the singleton connection while a lifecycle writer is using it.
+    with _db_write_lock:
+        with _db_lock:
+            connection = _db_conn
+            _db_conn = None
+            if connection is not None:
+                connection.close()
 
 
 def _start_run_timer(run_id: str) -> None:

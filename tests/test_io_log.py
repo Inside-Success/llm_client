@@ -157,8 +157,7 @@ def _isolate_io_log(tmp_path):
     io_log._data_root = old_root
     io_log._project = old_project
     io_log._db_path = old_db_path
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     io_log._db_conn = old_db_conn
     io_log._last_cleanup_date = old_last_cleanup
 
@@ -1539,6 +1538,67 @@ class TestConfigure:
 
         new_db = tmp_path / "new.db"
         io_log.configure(db_path=new_db)
+        assert io_log._db_conn is None
+
+    def test_close_waits_for_in_flight_write(self):
+        """Shutdown cannot close the singleton connection under an active writer."""
+
+        writer_entered = threading.Event()
+        release_writer = threading.Event()
+        close_finished = threading.Event()
+        errors: list[BaseException] = []
+
+        def write_row(connection: sqlite3.Connection) -> None:
+            writer_entered.set()
+            if not release_writer.wait(timeout=2):
+                raise TimeoutError("test did not release writer")
+            connection.execute(
+                "INSERT INTO call_lifecycle_events "
+                "(event_id, timestamp, logical_call_id, trace_id, task, phase, "
+                "requested_model, call_kind, payload) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "event-close-race",
+                    "2026-07-25T00:00:00+00:00",
+                    "call-close-race",
+                    "trace-close-race",
+                    "close-race",
+                    "heartbeat",
+                    "test-model",
+                    "structured",
+                    "{}",
+                ),
+            )
+
+        def run_writer() -> None:
+            try:
+                io_log._run_db_write(write_row)
+            except BaseException as exc:
+                errors.append(exc)
+
+        def run_close() -> None:
+            try:
+                io_log.close()
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                close_finished.set()
+
+        writer = threading.Thread(target=run_writer)
+        writer.start()
+        assert writer_entered.wait(timeout=2)
+
+        closer = threading.Thread(target=run_close)
+        closer.start()
+        assert close_finished.wait(timeout=0.05) is False
+
+        release_writer.set()
+        writer.join(timeout=2)
+        closer.join(timeout=2)
+
+        assert writer.is_alive() is False
+        assert closer.is_alive() is False
+        assert errors == []
         assert io_log._db_conn is None
 
 
