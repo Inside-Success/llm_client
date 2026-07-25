@@ -48,8 +48,7 @@ def _isolate_io_log(tmp_path: Path):
     io_log._data_root = old_root
     io_log._project = old_project
     io_log._db_path = old_db_path
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     io_log._db_conn = old_db_conn
     io_log._last_cleanup_date = old_last_cleanup
 

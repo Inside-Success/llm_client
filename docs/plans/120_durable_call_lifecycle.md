@@ -99,3 +99,19 @@ classification (requested timeout, forwarded runtime status, provider/attempt
 deadline, and whole-call deadline); provider-side enforcement remains unknown
 when the selected transport does not expose acceptance. That limitation is
 reported explicitly rather than treated as provider evidence.
+
+## Post-merge integrity repair (2026-07-25)
+
+A full current-main run exposed a teardown race: a heartbeat thread could hold
+the observability write lock while a test or maintenance command directly
+closed the shared SQLite connection. The writer then attempted to use the
+closed connection. `io_log.close()` now serializes shutdown behind in-flight
+writes using the same lock order as normal persistence, and repository callers
+use that boundary instead of closing the singleton directly.
+
+The same run found two test-contract drifts rather than runtime regressions:
+the public export count had gained one intentional symbol, and a Responses
+fallback fixture selected Luna despite Luna being explicitly uncertified for
+native JSON Schema. The fixture now uses the certified DeepSeek Chat fallback.
+A deterministic write-versus-close control proves the connection remains open
+until the active write commits.

@@ -62,8 +62,7 @@ def _isolated_observability(tmp_path: Path) -> Generator[None, None, None]:
     io_log._db_path = tmp_path / "attempts.db"
     io_log._db_conn = None
     yield
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     (
         io_log._enabled,
         io_log._data_root,

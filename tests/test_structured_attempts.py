@@ -48,8 +48,7 @@ def _isolated_observability(tmp_path: Path):
     io_log._db_path = tmp_path / "attempts.db"
     io_log._db_conn = None
     yield
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     (
         io_log._enabled,
         io_log._data_root,
@@ -244,8 +243,7 @@ def test_old_attempt_table_migrates_additive_execution_error_column(
 ) -> None:
     """A Slice-1 database remains readable after the v2 lifecycle migration."""
 
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     old_db = tmp_path / "old-attempts.db"
     with sqlite3.connect(old_db) as db:
         db.execute(
