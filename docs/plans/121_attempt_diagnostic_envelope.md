@@ -1,6 +1,6 @@
 # Plan #121: Privacy-Bounded Attempt Diagnostic Envelope
 
-**Status:** Planned  
+**Status:** In Progress
 **Type:** implementation  
 **Priority:** Critical  
 **Blocked By:** Plan #120 lifecycle identity and dispatch lineage landing  
@@ -324,3 +324,23 @@ Land Plan 120's remaining identity/interruption work first. Then execute Slices
 complete the live success probe, and use the Process Tracing V3 probe as the
 first downstream decision test. Promote any provider-health statement only when
 the returned diagnostic envelope satisfies L121-2 through L121-5.
+
+## Slice 1 Evidence (2026-07-25)
+
+Implemented the typed envelope, deterministic redaction boundary, additive
+`attempt_diagnostics` SQLite ledger, exact attempt-identity binding, public
+read model, and legacy `unavailable_legacy` status. Focused contract evidence:
+
+- `tests/test_attempt_diagnostics.py`, `tests/test_structured_attempts.py`, and
+  `tests/test_call_lifecycle_ledger.py`: 31 passed.
+- Ruff and mypy passed for the new diagnostic module and focused tests.
+- Real governed DeepSeek V4 Flash structured probe:
+  `llm_client.plan121.slice1.live.b636d250456e44f6ab512a1d19bb36d8`;
+  logical call `llmcall_a9faddf493374a989f4ef50ac855705d`; lifecycle
+  `started -> received -> validated`; returned `status=ok`; observed cost
+  `$0.0000112`. A manually recorded `insufficient_observation` diagnosis bound
+  to the selected validated attempt and read back as `available`.
+
+This proves storage/query binding on one real successful attempt. It does not
+prove automatic adapter capture or provider/gateway attribution; those remain
+Slice 2 work.

@@ -794,6 +794,33 @@ CREATE TABLE IF NOT EXISTS structured_attempt_events (
     recovery_decision TEXT
 );
 
+CREATE TABLE IF NOT EXISTS attempt_diagnostics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    diagnostic_id TEXT NOT NULL UNIQUE,
+    timestamp TEXT NOT NULL,
+    project TEXT,
+    attempt_event_id TEXT NOT NULL,
+    logical_call_id TEXT NOT NULL,
+    trace_id TEXT NOT NULL,
+    task TEXT NOT NULL,
+    attempt_ordinal INTEGER NOT NULL,
+    phase TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    attribution TEXT NOT NULL,
+    exception_chain TEXT NOT NULL,
+    exception_fingerprint TEXT,
+    http_status INTEGER,
+    provider_error_code TEXT,
+    provider_request_id TEXT,
+    gateway_request_id TEXT,
+    retry_after_s REAL,
+    timeout_kind TEXT,
+    sanitized_summary TEXT,
+    redaction_version TEXT NOT NULL,
+    artifact_ref TEXT,
+    artifact_sha256 TEXT
+);
+
 CREATE TABLE IF NOT EXISTS embeddings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -1016,6 +1043,8 @@ CREATE INDEX IF NOT EXISTS idx_calls_logical_call_id ON llm_calls(logical_call_i
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_call ON structured_attempt_events(logical_call_id, id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_trace ON structured_attempt_events(trace_id);
 CREATE INDEX IF NOT EXISTS idx_structured_attempt_class ON structured_attempt_events(failure_class);
+CREATE INDEX IF NOT EXISTS idx_attempt_diagnostic_event ON attempt_diagnostics(attempt_event_id, id);
+CREATE INDEX IF NOT EXISTS idx_attempt_diagnostic_call ON attempt_diagnostics(logical_call_id, attempt_ordinal, id);
 CREATE INDEX IF NOT EXISTS idx_emb_timestamp ON embeddings(timestamp);
 CREATE INDEX IF NOT EXISTS idx_emb_model ON embeddings(model);
 CREATE INDEX IF NOT EXISTS idx_emb_task ON embeddings(task);
@@ -1326,6 +1355,102 @@ def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]
     for row in rows:
         item = dict(zip(keys, row, strict=True))
         item["validation_issues"] = json.loads(item["validation_issues"] or "[]")
+        result.append(item)
+    return result
+
+
+def read_structured_attempt_event(event_id: str) -> dict[str, Any] | None:
+    """Read one structured attempt event by its immutable event identity."""
+
+    row = _get_db().execute(
+        """SELECT event_id, timestamp, logical_call_id, trace_id, task,
+                  attempt_ordinal, model, execution_path, schema_hash, event_type,
+                  raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                  execution_error_type, recovery_decision
+           FROM structured_attempt_events WHERE event_id = ?""",
+        (event_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    keys = (
+        "event_id", "timestamp", "logical_call_id", "trace_id", "task",
+        "attempt_ordinal", "model", "execution_path", "schema_hash", "event_type",
+        "raw_sha256", "raw_artifact_ref", "failure_class", "validation_issues",
+        "execution_error_type", "recovery_decision",
+    )
+    result = dict(zip(keys, row, strict=True))
+    result["validation_issues"] = json.loads(result["validation_issues"] or "[]")
+    return result
+
+
+def write_attempt_diagnostic(diagnostic: dict[str, Any]) -> None:
+    """Persist one diagnostic only when it binds the exact attempt identity."""
+
+    if not _logging_enabled():
+        raise RuntimeError("attempt diagnostic persistence requires logging to be enabled")
+
+    def _write(db: sqlite3.Connection) -> None:
+        attempt = db.execute(
+            """SELECT logical_call_id, trace_id, task, attempt_ordinal
+               FROM structured_attempt_events WHERE event_id = ?""",
+            (diagnostic["attempt_event_id"],),
+        ).fetchone()
+        if attempt is None:
+            raise ValueError("attempt diagnostic must bind an existing structured attempt event")
+        expected = tuple(
+            diagnostic[key]
+            for key in ("logical_call_id", "trace_id", "task", "attempt_ordinal")
+        )
+        if tuple(attempt) != expected:
+            raise ValueError("attempt diagnostic identity does not match structured attempt event")
+        db.execute(
+            """INSERT INTO attempt_diagnostics
+               (diagnostic_id, timestamp, project, attempt_event_id, logical_call_id,
+                trace_id, task, attempt_ordinal, phase, origin, attribution,
+                exception_chain, exception_fingerprint, http_status, provider_error_code,
+                provider_request_id, gateway_request_id, retry_after_s, timeout_kind,
+                sanitized_summary, redaction_version, artifact_ref, artifact_sha256)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                diagnostic["diagnostic_id"], diagnostic["timestamp"], _get_project(),
+                diagnostic["attempt_event_id"], diagnostic["logical_call_id"],
+                diagnostic["trace_id"], diagnostic["task"], diagnostic["attempt_ordinal"],
+                diagnostic["phase"], diagnostic["origin"], diagnostic["attribution"],
+                json.dumps(diagnostic["exception_chain"]), diagnostic.get("exception_fingerprint"),
+                diagnostic.get("http_status"), diagnostic.get("provider_error_code"),
+                diagnostic.get("provider_request_id"), diagnostic.get("gateway_request_id"),
+                diagnostic.get("retry_after_s"), diagnostic.get("timeout_kind"),
+                diagnostic.get("sanitized_summary"), diagnostic["redaction_version"],
+                diagnostic.get("artifact_ref"), diagnostic.get("artifact_sha256"),
+            ),
+        )
+
+    _run_db_write(_write)
+
+
+def read_attempt_diagnostics(attempt_event_id: str) -> list[dict[str, Any]]:
+    """Read ordered diagnostics bound to one structured attempt event."""
+
+    rows = _get_db().execute(
+        """SELECT diagnostic_id, timestamp, attempt_event_id, logical_call_id, trace_id,
+                  task, attempt_ordinal, phase, origin, attribution, exception_chain,
+                  exception_fingerprint, http_status, provider_error_code,
+                  provider_request_id, gateway_request_id, retry_after_s, timeout_kind,
+                  sanitized_summary, redaction_version, artifact_ref, artifact_sha256
+           FROM attempt_diagnostics WHERE attempt_event_id = ? ORDER BY id""",
+        (attempt_event_id,),
+    ).fetchall()
+    keys = (
+        "diagnostic_id", "timestamp", "attempt_event_id", "logical_call_id", "trace_id",
+        "task", "attempt_ordinal", "phase", "origin", "attribution", "exception_chain",
+        "exception_fingerprint", "http_status", "provider_error_code",
+        "provider_request_id", "gateway_request_id", "retry_after_s", "timeout_kind",
+        "sanitized_summary", "redaction_version", "artifact_ref", "artifact_sha256",
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(zip(keys, row, strict=True))
+        item["exception_chain"] = tuple(json.loads(item["exception_chain"] or "[]"))
         result.append(item)
     return result
 
