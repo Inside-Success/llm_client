@@ -51,12 +51,22 @@ from llm_client.observability.query import (
     import_jsonl,
     lookup_result,
 )
+from llm_client.observability.attempt_diagnostics import (
+    AttemptDiagnosis,
+    AttemptDiagnosticEnvelope,
+    TraceAttemptDiagnosis,
+    get_attempt_diagnosis,
+    get_attempt_diagnostics,
+    get_trace_attempt_diagnosis,
+    record_attempt_diagnostic,
+)
 from llm_client.observability.replay import (
     compare_call_snapshots,
     format_call_diff,
     get_call_snapshot,
     replay_call_snapshot,
 )
+
 from llm_client.observability.selected_attempts import (
     RuntimeSelectedAttemptReceipt,
     RuntimeSelectedRawContent,
@@ -84,6 +94,9 @@ from llm_client.observability.structured_attempts import (
 
 __all__ = [
     "AgentToolUsageEvent",
+    "AttemptDiagnosis",
+    "AttemptDiagnosticEnvelope",
+    "TraceAttemptDiagnosis",
     "ActiveFeatureProfile",
     "ActiveExperimentRun",
     "RuntimeSelectedAttemptReceipt",
@@ -107,10 +120,14 @@ __all__ = [
     "get_active_experiment_run_id",
     "get_active_feature_profile",
     "get_active_llm_calls",
+    "get_attempt_diagnosis",
+    "get_attempt_diagnostics",
+    "get_trace_attempt_diagnosis",
     "get_runtime_selected_attempt_receipt",
     "get_runtime_selected_raw_content",
     "diagnose_runtime_selected_attempt_receipt_for_trace",
     "get_background_mode_adoption",
+    "get_call_lifecycle",
     "get_call_snapshot",
     "get_completed_traces",
     "get_cost",
@@ -145,4 +162,5 @@ __all__ = [
     "get_structured_attempt_events",
     "get_structured_attempt_histories",
     "record_structured_attempt_event",
+    "record_attempt_diagnostic",
 ]

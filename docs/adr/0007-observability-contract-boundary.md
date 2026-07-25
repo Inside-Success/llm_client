@@ -61,5 +61,16 @@ Negative:
 
 Last verified: 2026-07-14 (Plan 97 Slice 3 transport-attempt lifecycle).
 
+## 2026-07-25 Amendment: Privacy-Bounded Attempt Diagnostics
+
+Plan 121 adds an additive `attempt_diagnostics` child ledger. It may retain
+typed status/error identifiers, request-correlation identifiers, timeout kind,
+exception class names/fingerprint, and a bounded `sanitized_summary` only after
+deterministic redaction rejects credential, authorization, prompt, and raw-body
+patterns. Raw exception messages, provider bodies, prompts, and headers remain
+outside SQLite and require a separately authorized artifact reference. A
+diagnostic records client-observed origin and attribution limits; it cannot
+claim provider fault without typed provider/gateway response evidence.
+
 Plan 101 adds trusted-process runtime receipts; it does not claim provider
 attestation, source authentication, signatures, or hostile-process security.

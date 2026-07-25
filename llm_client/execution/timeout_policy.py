@@ -114,9 +114,15 @@ def normalize_timeout(
     if log_policy_once_enabled:
         log_timeout_policy_once(caller=caller, logger=active_logger)
     try:
-        parsed = int(timeout)
+        numeric_timeout = float(timeout)
     except (TypeError, ValueError):
         parsed = 0
+    else:
+        if numeric_timeout > 0 and not numeric_timeout.is_integer():
+            raise ValueError(
+                f"timeout must be a whole number of seconds, got {timeout!r}"
+            )
+        parsed = int(numeric_timeout)
     if parsed < 0:
         parsed = 0
     if parsed > 0 and timeouts_disabled():
