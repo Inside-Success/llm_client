@@ -110,6 +110,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 110 | [Provider Capabilities and Opus Ban](110_provider-capabilities-opus-ban.md) | High | ✅ Complete | Cybernetic simulator DeepSeek V4 Flash max-reasoning sample |
 | 333 | [root budget scope across child traces](333_root-budget-scope-across-child-traces.md) | High | 🚧 In Progress | DIGIMON Plan #36 cumulative query-budget enforcement |
 | 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | 🚧 In Progress | Plan #121 merged diagnostics contract |
+| 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | 🚧 In Progress | Plan #122 client deadline classification |
 
 
 ## Status Key
