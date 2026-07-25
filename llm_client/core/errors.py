@@ -48,6 +48,10 @@ class LLMTransientError(LLMError):
     """Server error (500/502/503), timeout, connection — retry."""
 
 
+class LLMLogicalDeadlineError(LLMTransientError, TimeoutError):
+    """The caller-visible retry/fallback chain exhausted its total deadline."""
+
+
 class LLMEmptyResponseError(LLMError):
     """Model returned no text/tool output; retryability depends on classification."""
 

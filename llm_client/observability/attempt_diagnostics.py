@@ -44,6 +44,7 @@ TimeoutKind = Literal[
     "provider_request",
     "client_attempt_deadline",
     "client_attempt_safety",
+    "client_logical_deadline",
     "whole_call",
     "background_polling",
     "unknown",

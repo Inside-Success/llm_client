@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from types import SimpleNamespace
 from typing import Annotated, Literal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,7 +17,7 @@ import pytest
 from pydantic import BaseModel, Field, ValidationError
 
 from llm_client import LRUCache
-from llm_client.core.errors import LLMCapabilityError
+from llm_client.core.errors import LLMCapabilityError, LLMLogicalDeadlineError
 from llm_client.execution.responses_runtime import (
     _openrouter_compatible_strict_json_schema,
     _provider_compatible_discriminated_union_schema,
@@ -164,6 +166,81 @@ def test_openrouter_structured_call_sends_provider_compatible_schema(
     assert parsed.count == 1
     assert "minimum" not in sent_schema["properties"]["count"]
     assert sent_schema["additionalProperties"] is False
+
+
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_sync_logical_timeout_caps_provider_attempt_and_stops_chain(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+) -> None:
+    """One hung sync attempt exhausts the total budget without retry/fallback."""
+
+    def _slow_completion(**_: object) -> object:
+        time.sleep(0.1)
+        return _mock_structured_response('{"count":1}')
+
+    mock_comp.side_effect = _slow_completion
+    started = time.monotonic()
+
+    with pytest.raises(
+        LLMLogicalDeadlineError,
+        match="structured logical call deadline elapsed",
+    ):
+        _call_llm_structured_impl(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "Return one."}],
+            _BoundedCount,
+            timeout=60,
+            logical_timeout=0.02,
+            num_retries=3,
+            fallback_models=["openrouter/deepseek/deepseek-v4-flash"],
+            task="test",
+            trace_id="structured.runtime.logical_deadline.sync",
+            max_budget=0,
+        )
+
+    assert time.monotonic() - started < 0.09
+    assert mock_comp.call_count == 1
+    assert 0 < mock_comp.call_args.kwargs["timeout"] <= 0.02
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_async_logical_timeout_caps_provider_attempt_and_stops_chain(
+    mock_acompletion: AsyncMock,
+    _mock_supports_schema: MagicMock,
+) -> None:
+    """The async provider path enforces the same total structured-call budget."""
+
+    async def _slow_completion(**_: object) -> object:
+        await asyncio.sleep(0.1)
+        return _mock_structured_response('{"count":1}')
+
+    mock_acompletion.side_effect = _slow_completion
+    started = time.monotonic()
+
+    with pytest.raises(
+        LLMLogicalDeadlineError,
+        match="structured logical call deadline elapsed",
+    ):
+        await _acall_llm_structured_impl(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "Return one."}],
+            _BoundedCount,
+            timeout=60,
+            logical_timeout=0.02,
+            num_retries=3,
+            fallback_models=["openrouter/deepseek/deepseek-v4-flash"],
+            task="test",
+            trace_id="structured.runtime.logical_deadline.async",
+            max_budget=0,
+        )
+
+    assert time.monotonic() - started < 0.09
+    assert mock_acompletion.await_count == 1
+    assert 0 < mock_acompletion.call_args.kwargs["timeout"] <= 0.02
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)

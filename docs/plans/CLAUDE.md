@@ -40,10 +40,9 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 - **Canonical main:** includes lifecycle-integrity repair `f870362` (verified
   2026-07-25; 1,930 tests passed).
-- **Next implementation candidate:** Plan #124 logical structured-call
-  deadline. Its dirty candidate worktree is intentionally not listed as a
-  canonical plan until that plan and implementation are committed.
-- **Merged, awaiting downstream acceptance:** Plans #121, #122, and #334.
+- **Merged, awaiting downstream acceptance:** Plans #121, #122, #124, and
+  #334. Plan #124's shared implementation is verified locally; its remaining
+  acceptance is one governed Process Tracing replay.
 - **Other open work:** Plan #91 controller churn and Plan #94's technical
   output ceiling. Neither silently blocks Plan #124.
 - **Blocked:** Plan #35 optional Phase 6 requires a fresh user decision.
@@ -52,6 +51,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 124 | [Logical Structured-Call Deadline](124_logical_structured_call_deadline.md) | Critical | 🧪 Implemented; downstream verification pending | Bounded retry-chain latency and Plan 021 terminal repair |
 | 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | 🧪 Implemented; downstream verification pending | Evidence-based failure localization and provider-attribution claims |
 | 120 | [Durable Cross-Project Call Lifecycle](120_durable_call_lifecycle.md) | Critical | ✅ Complete | Truthful localization of missing-terminal calls |
 | 119 | [Runtime Cost Governance](119_runtime_cost_governance.md) | Critical | ✅ Complete | Trustworthy real-time cost control and cross-provider spend analysis |
