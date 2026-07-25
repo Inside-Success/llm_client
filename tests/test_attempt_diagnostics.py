@@ -21,7 +21,10 @@ from llm_client.observability.structured_attempts import (
     get_structured_attempt_histories,
     record_structured_attempt_event,
 )
-from llm_client.execution.structured_runtime import _record_execution_failure
+from llm_client.execution.structured_runtime import (
+    _EmptyStructuredContentError,
+    _record_execution_failure,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -250,6 +253,28 @@ def test_runtime_unknown_timeout_remains_unknown() -> None:
     event = next(iter(get_structured_attempt_histories(trace_id).values()))[0]
     diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
     assert diagnostic.timeout_kind == "unknown"
+
+
+def test_empty_response_preserves_typed_outcome() -> None:
+    trace_id = f"runtime-empty-response-trace-{uuid4().hex}"
+    _record_execution_failure(
+        error=_EmptyStructuredContentError("Empty content from LLM"),
+        logical_call_id="runtime-empty-response-call", trace_id=trace_id,
+        task="test.runtime_empty_response", attempt=0,
+        model="openrouter/deepseek/deepseek-v4-flash", schema_hash="0" * 64,
+    )
+    event = next(iter(get_structured_attempt_histories(trace_id).values()))[0]
+    diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
+    assert diagnostic.response_outcome == "empty_content"
+    assert diagnostic.attribution == "client_observed_only"
+    assert diagnostic.artifact_ref is None
+    assert diagnostic.artifact_sha256 is None
+
+
+def test_response_outcome_rejects_raw_content() -> None:
+    event = _attempt()
+    with pytest.raises(ValidationError):
+        _diagnostic(event, response_outcome='{"role":"assistant","content":"raw"}')
 
 
 def test_trace_query_returns_all_attempt_statuses() -> None:

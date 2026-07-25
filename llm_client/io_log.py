@@ -815,6 +815,7 @@ CREATE TABLE IF NOT EXISTS attempt_diagnostics (
     gateway_request_id TEXT,
     retry_after_s REAL,
     timeout_kind TEXT,
+    response_outcome TEXT,
     sanitized_summary TEXT,
     redaction_version TEXT NOT NULL,
     artifact_ref TEXT,
@@ -1208,6 +1209,10 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
             "ALTER TABLE structured_attempt_events ADD COLUMN execution_error_type TEXT"
         )
 
+    diagnostic_cols = {row[1] for row in conn.execute("PRAGMA table_info(attempt_diagnostics)")}
+    if "response_outcome" not in diagnostic_cols:
+        conn.execute("ALTER TABLE attempt_diagnostics ADD COLUMN response_outcome TEXT")
+
     # task_scores: add git_commit if missing
     scores_cols = {r[1] for r in conn.execute("PRAGMA table_info(task_scores)").fetchall()}
     if scores_cols and "git_commit" not in scores_cols:
@@ -1487,9 +1492,9 @@ def write_attempt_diagnostic(diagnostic: dict[str, Any]) -> None:
                (diagnostic_id, timestamp, project, attempt_event_id, logical_call_id,
                 trace_id, task, attempt_ordinal, phase, origin, attribution,
                 exception_chain, exception_fingerprint, http_status, provider_error_code,
-                provider_request_id, gateway_request_id, retry_after_s, timeout_kind,
+                provider_request_id, gateway_request_id, retry_after_s, timeout_kind, response_outcome,
                 sanitized_summary, redaction_version, artifact_ref, artifact_sha256)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 diagnostic["diagnostic_id"], diagnostic["timestamp"], _get_project(),
                 diagnostic["attempt_event_id"], diagnostic["logical_call_id"],
@@ -1498,7 +1503,7 @@ def write_attempt_diagnostic(diagnostic: dict[str, Any]) -> None:
                 json.dumps(diagnostic["exception_chain"]), diagnostic.get("exception_fingerprint"),
                 diagnostic.get("http_status"), diagnostic.get("provider_error_code"),
                 diagnostic.get("provider_request_id"), diagnostic.get("gateway_request_id"),
-                diagnostic.get("retry_after_s"), diagnostic.get("timeout_kind"),
+                diagnostic.get("retry_after_s"), diagnostic.get("timeout_kind"), diagnostic.get("response_outcome"),
                 diagnostic.get("sanitized_summary"), diagnostic["redaction_version"],
                 diagnostic.get("artifact_ref"), diagnostic.get("artifact_sha256"),
             ),
@@ -1514,7 +1519,7 @@ def read_attempt_diagnostics(attempt_event_id: str) -> list[dict[str, Any]]:
         """SELECT diagnostic_id, timestamp, attempt_event_id, logical_call_id, trace_id,
                   task, attempt_ordinal, phase, origin, attribution, exception_chain,
                   exception_fingerprint, http_status, provider_error_code,
-                  provider_request_id, gateway_request_id, retry_after_s, timeout_kind,
+                  provider_request_id, gateway_request_id, retry_after_s, timeout_kind, response_outcome,
                   sanitized_summary, redaction_version, artifact_ref, artifact_sha256
            FROM attempt_diagnostics WHERE attempt_event_id = ? ORDER BY id""",
         (attempt_event_id,),
@@ -1523,7 +1528,7 @@ def read_attempt_diagnostics(attempt_event_id: str) -> list[dict[str, Any]]:
         "diagnostic_id", "timestamp", "attempt_event_id", "logical_call_id", "trace_id",
         "task", "attempt_ordinal", "phase", "origin", "attribution", "exception_chain",
         "exception_fingerprint", "http_status", "provider_error_code",
-        "provider_request_id", "gateway_request_id", "retry_after_s", "timeout_kind",
+        "provider_request_id", "gateway_request_id", "retry_after_s", "timeout_kind", "response_outcome",
         "sanitized_summary", "redaction_version", "artifact_ref", "artifact_sha256",
     )
     result: list[dict[str, Any]] = []

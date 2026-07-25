@@ -111,6 +111,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 333 | [root budget scope across child traces](333_root-budget-scope-across-child-traces.md) | High | ✅ Complete | Plan #334 concurrent root-budget reservations |
 | 334 | [Concurrent Root-Budget Reservations](334_concurrent-root-budget-reservations.md) | Critical | 📋 Planned | DIGIMON Plan #182 |
 | 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | 🚧 In Progress | Plan #121 merged diagnostics contract |
+| 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | 🚧 In Progress | Plan #122 client deadline classification |
 
 
 ## Status Key
