@@ -51,8 +51,10 @@ class PreparedPublicCallEnvelope:
     requested_timeout_s: int | None
     heartbeat_interval_s: float
     stall_after_s: float
-    budget_scope_lease: str | BudgetReservationLease | None
     runtime_kwargs: dict[str, Any]
+    # Optional for callers constructing a test/compatibility envelope directly;
+    # production preparation always supplies the acquired lease.
+    budget_scope_lease: str | BudgetReservationLease | None = None
 
 
 def _prepare_public_call_envelope(
