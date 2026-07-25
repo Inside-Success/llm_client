@@ -76,6 +76,7 @@ _REPLAY_PUBLIC_API_CALL_KINDS = {
     "acall_llm_structured": "structured",
 }
 _UNSUPPORTED_VALUE_MARKER = "__llm_client_replay_unsupported__"
+_MCP_SECRET_REDACTION_MARKER = "__llm_client_secret_redacted__"
 _LEGACY_DIAGNOSTIC_KEYS = frozenset({"__type__", "__repr__"})
 
 
@@ -364,6 +365,37 @@ def _normalize_public_kwargs(public_kwargs: Mapping[str, Any]) -> tuple[JSONObje
         if key in _OBSERVABILITY_ONLY_KWARGS:
             continue
         value = public_kwargs[key]
+        if key == "mcp_servers":
+            redacted_servers: dict[str, Any] = {}
+            if isinstance(value, Mapping):
+                for server_name, server_config in value.items():
+                    if not isinstance(server_config, Mapping):
+                        redacted_servers[str(server_name)] = _UNSUPPORTED_VALUE_MARKER
+                        continue
+                    redacted_config = dict(server_config)
+                    if "env" in redacted_config:
+                        env = redacted_config["env"]
+                        redacted_config["env"] = (
+                            {
+                                str(env_name): _MCP_SECRET_REDACTION_MARKER
+                                for env_name in env
+                            }
+                            if isinstance(env, Mapping)
+                            else _MCP_SECRET_REDACTION_MARKER
+                        )
+                    redacted_servers[str(server_name)] = redacted_config
+                normalized_value, _ = _normalize_json_value(redacted_servers)
+            else:
+                normalized_value = {
+                    _UNSUPPORTED_VALUE_MARKER: {
+                        "type": f"{value.__class__.__module__}.{value.__class__.__qualname__}",
+                        "reason": "mcp_servers must be a mapping",
+                        "repr": "<redacted>",
+                    }
+                }
+            normalized_kwargs[key] = normalized_value
+            unsupported_keys.append(key)
+            continue
         normalized_value, supported = _normalize_json_value(value)
         normalized_kwargs[key] = normalized_value
         if not supported:
