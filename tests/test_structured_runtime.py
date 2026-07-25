@@ -180,7 +180,7 @@ def test_openrouter_native_schema_inlines_nested_ref_siblings(
     )
 
     parsed, _meta = _call_llm_structured_impl(
-        "openrouter/openai/gpt-5.6-luna",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Stop."}],
         _StopEnvelope,
         task="test",
@@ -212,7 +212,7 @@ async def test_openrouter_async_native_schema_inlines_nested_ref_siblings(
     )
 
     parsed, _meta = await _acall_llm_structured_impl(
-        "openrouter/openai/gpt-5.6-luna",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Stop."}],
         _StopEnvelope,
         task="test",
@@ -370,6 +370,7 @@ def _mock_structured_response(content: str = '{"name":"Tokyo"}') -> MagicMock:
     mock = MagicMock()
     mock.choices = [MagicMock()]
     mock.choices[0].message.content = content
+    mock.choices[0].message.refusal = None
     mock.choices[0].finish_reason = "stop"
     mock.usage.prompt_tokens = 10
     mock.usage.completion_tokens = 5
