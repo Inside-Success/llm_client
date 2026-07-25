@@ -1612,6 +1612,7 @@ def embed(
     api_key: str | None = None,
     task: str | None = None,
     trace_id: str | None = None,
+    max_budget: float | None = None,
     **kwargs: Any,
 ) -> EmbeddingResult:
     """Generate embeddings for text input(s).
@@ -1630,6 +1631,8 @@ def embed(
         api_base: Optional API base URL
         api_key: Optional API key override
         task: Optional task tag for io_log tracking
+        trace_id: Optional trace identifier for observability and budget checks
+        max_budget: Maximum cumulative trace cost in USD; 0 means unlimited
         **kwargs: Additional params passed to litellm.embedding
 
     Returns:
@@ -1646,6 +1649,7 @@ def embed(
         api_key=api_key,
         task=task,
         trace_id=trace_id,
+        max_budget=max_budget,
         **kwargs,
     )
 
@@ -1660,6 +1664,7 @@ async def aembed(
     api_key: str | None = None,
     task: str | None = None,
     trace_id: str | None = None,
+    max_budget: float | None = None,
     **kwargs: Any,
 ) -> EmbeddingResult:
     """Async version of embed(). See embed() for full docs."""
@@ -1674,6 +1679,7 @@ async def aembed(
         api_key=api_key,
         task=task,
         trace_id=trace_id,
+        max_budget=max_budget,
         **kwargs,
     )
 
