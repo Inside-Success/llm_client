@@ -5,12 +5,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable, Literal, TypeVar
+from typing import Any, Awaitable, Callable, Literal, NoReturn, TypeVar
 
+from llm_client.core.errors import LLMLogicalDeadlineError
 from llm_client.core.model_availability import record_model_unavailability
 
 T = TypeVar("T")
 RetryDisposition = Literal["retry", "exhausted"]
+_LOGICAL_DEADLINE_MESSAGE = "structured logical call deadline elapsed"
+
+
+def _raise_logical_deadline() -> NoReturn:
+    raise LLMLogicalDeadlineError(_LOGICAL_DEADLINE_MESSAGE)
 
 
 def _error_text(exc: Exception) -> str:
@@ -83,10 +89,15 @@ def run_sync_with_retry(
     """Execute sync attempts with shared retry behavior and optional total deadline."""
     for attempt in range(max_retries + 1):
         if deadline_at is not None and clock() >= deadline_at:
-            raise TimeoutError("logical call deadline elapsed before provider attempt")
+            _raise_logical_deadline()
         try:
-            return invoke(attempt)
+            result = invoke(attempt)
+            if deadline_at is not None and clock() >= deadline_at:
+                _raise_logical_deadline()
+            return result
         except Exception as exc:
+            if isinstance(exc, LLMLogicalDeadlineError):
+                raise
             if on_error is not None:
                 on_error(exc, attempt)
             registered_cooldown = _maybe_register_provider_cooldown(
@@ -96,6 +107,10 @@ def run_sync_with_retry(
                 logger=logger,
             )
             if maybe_retry_hook is not None and maybe_retry_hook(exc, attempt, max_retries):
+                if deadline_at is not None and clock() >= deadline_at:
+                    if on_decision is not None:
+                        on_decision(attempt, exc, "exhausted")
+                    _raise_logical_deadline()
                 if on_decision is not None:
                     on_decision(attempt, exc, "retry")
                 continue
@@ -109,7 +124,7 @@ def run_sync_with_retry(
             if deadline_at is not None and clock() + effective_delay >= deadline_at:
                 if on_decision is not None:
                     on_decision(attempt, exc, "exhausted")
-                raise TimeoutError("logical call deadline elapsed before retry") from exc
+                raise LLMLogicalDeadlineError(_LOGICAL_DEADLINE_MESSAGE, original=exc) from exc
             sleep_delay = max(0.0, effective_delay - registered_cooldown)
             if on_decision is not None:
                 on_decision(attempt, exc, "retry")
@@ -155,10 +170,15 @@ async def run_async_with_retry(
     """Execute async attempts with shared retry behavior and optional total deadline."""
     for attempt in range(max_retries + 1):
         if deadline_at is not None and clock() >= deadline_at:
-            raise TimeoutError("logical call deadline elapsed before provider attempt")
+            _raise_logical_deadline()
         try:
-            return await invoke(attempt)
+            result = await invoke(attempt)
+            if deadline_at is not None and clock() >= deadline_at:
+                _raise_logical_deadline()
+            return result
         except Exception as exc:
+            if isinstance(exc, LLMLogicalDeadlineError):
+                raise
             if on_error is not None:
                 on_error(exc, attempt)
             registered_cooldown = _maybe_register_provider_cooldown(
@@ -168,6 +188,10 @@ async def run_async_with_retry(
                 logger=logger,
             )
             if maybe_retry_hook is not None and maybe_retry_hook(exc, attempt, max_retries):
+                if deadline_at is not None and clock() >= deadline_at:
+                    if on_decision is not None:
+                        on_decision(attempt, exc, "exhausted")
+                    _raise_logical_deadline()
                 if on_decision is not None:
                     on_decision(attempt, exc, "retry")
                 continue
@@ -181,7 +205,7 @@ async def run_async_with_retry(
             if deadline_at is not None and clock() + effective_delay >= deadline_at:
                 if on_decision is not None:
                     on_decision(attempt, exc, "exhausted")
-                raise TimeoutError("logical call deadline elapsed before retry") from exc
+                raise LLMLogicalDeadlineError(_LOGICAL_DEADLINE_MESSAGE, original=exc) from exc
             sleep_delay = max(0.0, effective_delay - registered_cooldown)
             if on_decision is not None:
                 on_decision(attempt, exc, "retry")
@@ -215,13 +239,19 @@ def run_sync_with_fallback(
     on_fallback: Callable[[str, Exception, str], Any] | None = None,
     warning_sink: list[str] | None = None,
     logger: logging.Logger | None = None,
+    deadline_at: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> T:
     """Execute a sync model chain while preserving caller-defined terminals."""
     last_error: Exception | None = None
     for model_idx, current_model in enumerate(models):
+        if deadline_at is not None and clock() >= deadline_at:
+            _raise_logical_deadline()
         try:
             return execute_model(model_idx, current_model)
         except Exception as exc:
+            if isinstance(exc, LLMLogicalDeadlineError):
+                raise
             last_error = exc
             if should_fallback is not None and not should_fallback(exc):
                 raise
@@ -233,6 +263,11 @@ def run_sync_with_fallback(
                     f"({exhaustion_record['reason']}, cooldown_s={exhaustion_record['cooldown_s']})"
                 )
             if model_idx < len(models) - 1:
+                if deadline_at is not None and clock() >= deadline_at:
+                    raise LLMLogicalDeadlineError(
+                        _LOGICAL_DEADLINE_MESSAGE,
+                        original=exc,
+                    ) from exc
                 next_model = models[model_idx + 1]
                 if on_fallback is not None:
                     on_fallback(current_model, exc, next_model)
@@ -263,13 +298,19 @@ async def run_async_with_fallback(
     on_fallback: Callable[[str, Exception, str], Any] | None = None,
     warning_sink: list[str] | None = None,
     logger: logging.Logger | None = None,
+    deadline_at: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> T:
     """Execute an async model chain while preserving caller-defined terminals."""
     last_error: Exception | None = None
     for model_idx, current_model in enumerate(models):
+        if deadline_at is not None and clock() >= deadline_at:
+            _raise_logical_deadline()
         try:
             return await execute_model(model_idx, current_model)
         except Exception as exc:
+            if isinstance(exc, LLMLogicalDeadlineError):
+                raise
             last_error = exc
             if should_fallback is not None and not should_fallback(exc):
                 raise
@@ -281,6 +322,11 @@ async def run_async_with_fallback(
                     f"({exhaustion_record['reason']}, cooldown_s={exhaustion_record['cooldown_s']})"
                 )
             if model_idx < len(models) - 1:
+                if deadline_at is not None and clock() >= deadline_at:
+                    raise LLMLogicalDeadlineError(
+                        _LOGICAL_DEADLINE_MESSAGE,
+                        original=exc,
+                    ) from exc
                 next_model = models[model_idx + 1]
                 if on_fallback is not None:
                     on_fallback(current_model, exc, next_model)

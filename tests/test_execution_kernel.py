@@ -108,7 +108,7 @@ def test_sync_retry_does_not_start_after_logical_deadline() -> None:
         now[0] = 11.0
         raise ValueError("transient")
 
-    with pytest.raises(TimeoutError, match="logical call deadline elapsed before retry"):
+    with pytest.raises(TimeoutError, match="structured logical call deadline elapsed"):
         run_sync_with_retry(
             caller="test",
             model="m",
@@ -137,7 +137,7 @@ async def test_async_retry_does_not_start_after_logical_deadline() -> None:
         now[0] = 11.0
         raise ValueError("transient")
 
-    with pytest.raises(TimeoutError, match="logical call deadline elapsed before retry"):
+    with pytest.raises(TimeoutError, match="structured logical call deadline elapsed"):
         await run_async_with_retry(
             caller="test",
             model="m",

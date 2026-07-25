@@ -235,6 +235,7 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
         task="test.lifecycle",
         trace_id="trace.lifecycle.sync",
         max_budget=0.1,
+        logical_timeout=12,
         lifecycle_heartbeat_interval_s=0,
         lifecycle_stall_after_s=0,
     )
@@ -249,6 +250,8 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
         "completed",
     ]
     completed = rows[-1][1]["llm_call_lifecycle"]
+    assert rows[0][1]["llm_call_lifecycle"]["logical_timeout_s"] == 12
+    assert completed["logical_timeout_s"] == 12
     assert completed["progress_observable"] is True
     assert completed["progress_source"] == "unit_test"
     assert completed["progress_event_count"] == 1

@@ -106,3 +106,20 @@ contention with model behavior.
 Completion establishes only caller-visible bounded structured retry chains and
 their metadata-only diagnosis. It does not establish provider health, historical
 truth, or cancellation of already-blocked daemon transport threads.
+
+## Implementation Progress
+
+2026-07-25:
+
+- Added the opt-in `logical_timeout` contract to sync, async, and batch
+  structured entrypoints while preserving omitted-value compatibility.
+- The shared retry and fallback kernel now rejects attempts, key-rotation
+  retries, backoff sleeps, and fallback transitions after the monotonic
+  deadline.
+- Provider and Agent SDK attempts receive the smaller of the configured
+  per-attempt timeout and remaining logical budget.
+- `LLMLogicalDeadlineError` is a distinct transient timeout subtype; structured
+  attempt diagnostics classify it as `client_logical_deadline`, and public
+  lifecycle payloads retain `logical_timeout_s`.
+- Focused deterministic verification: 69 tests passed across retry kernel,
+  structured runtime, lifecycle, Foundation contracts, and public exports.

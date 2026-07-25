@@ -593,6 +593,7 @@ def call_llm_structured(
     response_model: type[T],
     *,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -624,6 +625,8 @@ def call_llm_structured(
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
             runtime policy supplies a finite default.
+        logical_timeout: Optional total seconds for the complete structured
+            retry/fallback chain. Omission preserves per-attempt-only behavior.
         num_retries: Number of retries on failure
         reasoning_effort: Explicit reasoning effort; required for registered
             configurable-reasoning routes.
@@ -662,6 +665,7 @@ def call_llm_structured(
         timeout=resolved_timeout,
         kwargs=kwargs,
         messages=messages,
+        logical_timeout=logical_timeout,
     )
     return _run_sync_public_call(
         model=model,
@@ -674,6 +678,7 @@ def call_llm_structured(
             messages,
             response_model,
             timeout=resolved_timeout,
+            logical_timeout=logical_timeout,
             num_retries=num_retries,
             reasoning_effort=reasoning_effort,
             api_base=api_base,
@@ -902,6 +907,7 @@ async def acall_llm_structured(
     response_model: type[T],
     *,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -933,6 +939,8 @@ async def acall_llm_structured(
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
             runtime policy supplies a finite default.
+        logical_timeout: Optional total seconds for the complete structured
+            retry/fallback chain. Omission preserves per-attempt-only behavior.
         num_retries: Number of retries on failure
         reasoning_effort: Explicit reasoning effort; required for registered
             configurable-reasoning routes.
@@ -971,6 +979,7 @@ async def acall_llm_structured(
         timeout=resolved_timeout,
         kwargs=kwargs,
         messages=messages,
+        logical_timeout=logical_timeout,
     )
     return await _run_async_public_call(
         model=model,
@@ -983,6 +992,7 @@ async def acall_llm_structured(
             messages,
             response_model,
             timeout=resolved_timeout,
+            logical_timeout=logical_timeout,
             num_retries=num_retries,
             reasoning_effort=reasoning_effort,
             api_base=api_base,
@@ -1223,6 +1233,7 @@ async def acall_llm_structured_batch(
     on_item_complete: Callable[[int, tuple[T, LLMCallResult]], None] | None = None,
     on_item_error: Callable[[int, Exception], None] | None = None,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -1258,6 +1269,7 @@ async def acall_llm_structured_batch(
         on_item_complete=on_item_complete,
         on_item_error=on_item_error,
         timeout=timeout,
+        logical_timeout=logical_timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,
         api_base=api_base,
@@ -1285,6 +1297,7 @@ def call_llm_structured_batch(
     on_item_complete: Callable[[int, tuple[T, LLMCallResult]], None] | None = None,
     on_item_error: Callable[[int, Exception], None] | None = None,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -1315,6 +1328,7 @@ def call_llm_structured_batch(
         on_item_complete=on_item_complete,
         on_item_error=on_item_error,
         timeout=timeout,
+        logical_timeout=logical_timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,
         api_base=api_base,
