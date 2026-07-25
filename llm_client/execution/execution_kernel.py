@@ -77,9 +77,13 @@ def run_sync_with_retry(
     on_retry: Callable[[int, Exception, float], None] | None = None,
     on_decision: Callable[[int, Exception, RetryDisposition], None] | None = None,
     maybe_retry_hook: Callable[[Exception, int, int], bool] | None = None,
+    deadline_at: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> T:
-    """Execute sync attempts with shared retry behavior."""
+    """Execute sync attempts with shared retry behavior and optional total deadline."""
     for attempt in range(max_retries + 1):
+        if deadline_at is not None and clock() >= deadline_at:
+            raise TimeoutError("logical call deadline elapsed before provider attempt")
         try:
             return invoke(attempt)
         except Exception as exc:
@@ -102,6 +106,10 @@ def run_sync_with_retry(
 
             delay, retry_delay_source = compute_delay(attempt, exc)
             effective_delay = max(delay, registered_cooldown)
+            if deadline_at is not None and clock() + effective_delay >= deadline_at:
+                if on_decision is not None:
+                    on_decision(attempt, exc, "exhausted")
+                raise TimeoutError("logical call deadline elapsed before retry") from exc
             sleep_delay = max(0.0, effective_delay - registered_cooldown)
             if on_decision is not None:
                 on_decision(attempt, exc, "retry")
@@ -141,9 +149,13 @@ async def run_async_with_retry(
     on_retry: Callable[[int, Exception, float], None] | None = None,
     on_decision: Callable[[int, Exception, RetryDisposition], None] | None = None,
     maybe_retry_hook: Callable[[Exception, int, int], bool] | None = None,
+    deadline_at: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> T:
-    """Execute async attempts with shared retry behavior."""
+    """Execute async attempts with shared retry behavior and optional total deadline."""
     for attempt in range(max_retries + 1):
+        if deadline_at is not None and clock() >= deadline_at:
+            raise TimeoutError("logical call deadline elapsed before provider attempt")
         try:
             return await invoke(attempt)
         except Exception as exc:
@@ -166,6 +178,10 @@ async def run_async_with_retry(
 
             delay, retry_delay_source = compute_delay(attempt, exc)
             effective_delay = max(delay, registered_cooldown)
+            if deadline_at is not None and clock() + effective_delay >= deadline_at:
+                if on_decision is not None:
+                    on_decision(attempt, exc, "exhausted")
+                raise TimeoutError("logical call deadline elapsed before retry") from exc
             sleep_delay = max(0.0, effective_delay - registered_cooldown)
             if on_decision is not None:
                 on_decision(attempt, exc, "retry")
