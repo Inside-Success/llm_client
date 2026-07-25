@@ -344,3 +344,12 @@ read model, and legacy `unavailable_legacy` status. Focused contract evidence:
 This proves storage/query binding on one real successful attempt. It does not
 prove automatic adapter capture or provider/gateway attribution; those remain
 Slice 2 work.
+
+## Slice 2 Progress (2026-07-25)
+
+Native structured pre-response failures now write a diagnostic bound to the
+same `execution_failed` attempt event. Typed SDK response metadata can retain a
+status and request ID, yielding `gateway_or_provider_confirmed`; a timeout with
+no response remains `client_observed_only`. The focused diagnostics and
+structured-attempt suite passes 25 tests. This is native-schema-only and does
+not yet capture Responses API or prove a live provider-error envelope.

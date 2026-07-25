@@ -59,6 +59,11 @@ from llm_client.observability.structured_attempts import (
     StructuredValidationIssue,
     record_structured_attempt_event,
 )
+from llm_client.observability.attempt_diagnostics import (
+    AttemptDiagnosticEnvelope,
+    exception_fingerprint,
+    record_attempt_diagnostic,
+)
 
 T = TypeVar("T", bound=BaseModel)
 R = TypeVar("R")
@@ -523,20 +528,49 @@ def _record_execution_failure(
 ) -> None:
     """Persist one bounded pre-response failure without message or body."""
 
-    record_structured_attempt_event(
-        _attempt_event(
-            logical_call_id=logical_call_id,
-            trace_id=trace_id,
-            task=task,
-            attempt=attempt,
-            model=model,
-            schema_hash=schema_hash,
-            event_type="execution_failed",
-            execution_path=execution_path,
-            failure_class=_execution_failure_class(error),
-            execution_error_type=type(error).__name__[:128],
-        )
+    event = _attempt_event(
+        logical_call_id=logical_call_id,
+        trace_id=trace_id,
+        task=task,
+        attempt=attempt,
+        model=model,
+        schema_hash=schema_hash,
+        event_type="execution_failed",
+        execution_path=execution_path,
+        failure_class=_execution_failure_class(error),
+        execution_error_type=type(error).__name__[:128],
     )
+    record_structured_attempt_event(event)
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    status = getattr(response, "status_code", None)
+    if not isinstance(status, int):
+        status = getattr(error, "status_code", None)
+    request_id = None
+    if headers is not None and hasattr(headers, "get"):
+        request_id = headers.get("x-request-id") or headers.get("request-id")
+    chain = tuple(
+        item.__class__.__name__[:128]
+        for item in (error, error.__cause__)
+        if item is not None
+    )
+    confirmed = isinstance(status, int) or isinstance(request_id, str)
+    timeout_kind = "client_attempt_safety" if (
+        isinstance(error, TimeoutError) and "safety deadline" in str(error).lower()
+    ) else ("unknown" if isinstance(error, TimeoutError) else None)
+    if not _io_log._logging_enabled():
+        return
+    record_attempt_diagnostic(AttemptDiagnosticEnvelope(
+        attempt_event_id=event.event_id, logical_call_id=logical_call_id,
+        trace_id=trace_id, task=task, attempt_ordinal=attempt,
+        phase="awaiting_response", origin=("gateway_or_provider_response" if confirmed else "transport"),
+        attribution=("gateway_or_provider_confirmed" if confirmed else "client_observed_only"),
+        exception_chain=chain, exception_fingerprint=exception_fingerprint(chain),
+        http_status=status if isinstance(status, int) else None,
+        gateway_request_id=request_id if isinstance(request_id, str) else None,
+        timeout_kind=timeout_kind,
+        sanitized_summary=("typed gateway/provider response failure" if confirmed else "client observed pre-response execution failure"),
+    ))
 
 
 def _provider_schema_validation_raw(error: Exception) -> str | None:

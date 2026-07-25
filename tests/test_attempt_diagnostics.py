@@ -17,8 +17,10 @@ from llm_client.observability.attempt_diagnostics import (
 )
 from llm_client.observability.structured_attempts import (
     StructuredAttemptEvent,
+    get_structured_attempt_histories,
     record_structured_attempt_event,
 )
+from llm_client.execution.structured_runtime import _record_execution_failure
 
 
 @pytest.fixture(autouse=True)
@@ -157,3 +159,36 @@ def test_old_database_migrates_additive_diagnostic_table(tmp_path) -> None:
         io_log._db_path, io_log._db_conn = previous_path, previous_conn
 
     assert {"diagnostic_id", "attempt_event_id", "sanitized_summary"} <= columns
+
+
+def test_runtime_records_confirmed_gateway_response_diagnostic() -> None:
+    class GatewayError(Exception):
+        status_code = 429
+
+        class response:
+            status_code = 429
+            headers = {"x-request-id": "gw-request-123"}
+
+    _record_execution_failure(
+        error=GatewayError(), logical_call_id="runtime-gateway-call",
+        trace_id="runtime-gateway-trace", task="test.runtime_gateway",
+        attempt=0, model="openrouter/deepseek/deepseek-v4-flash", schema_hash="b" * 64,
+    )
+    event = next(iter(get_structured_attempt_histories("runtime-gateway-trace").values()))[0]
+    diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
+    assert diagnostic.attribution == "gateway_or_provider_confirmed"
+    assert diagnostic.http_status == 429
+    assert diagnostic.gateway_request_id == "gw-request-123"
+
+
+def test_runtime_timeout_without_response_does_not_blame_provider() -> None:
+    _record_execution_failure(
+        error=TimeoutError("client attempt safety deadline elapsed"),
+        logical_call_id="runtime-timeout-call", trace_id="runtime-timeout-trace",
+        task="test.runtime_timeout", attempt=0,
+        model="openrouter/deepseek/deepseek-v4-flash", schema_hash="c" * 64,
+    )
+    event = next(iter(get_structured_attempt_histories("runtime-timeout-trace").values()))[0]
+    diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
+    assert diagnostic.attribution == "client_observed_only"
+    assert diagnostic.timeout_kind == "client_attempt_safety"
