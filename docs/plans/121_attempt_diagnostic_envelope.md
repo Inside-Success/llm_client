@@ -1,9 +1,9 @@
 # Plan #121: Privacy-Bounded Attempt Diagnostic Envelope
 
 **Status:** In Progress
-**Type:** implementation  
-**Priority:** Critical  
-**Blocked By:** Plan #120 lifecycle identity and dispatch lineage landing  
+**Type:** implementation
+**Priority:** Critical
+**Blocked By:** Plan #120 lifecycle identity and dispatch lineage landing
 **Blocks:** Provider-attribution claims and cross-project diagnosis of failed structured calls
 
 ## Outcome
