@@ -118,8 +118,10 @@ from llm_client.execution.call_contracts import (
     _strip_llm_internal_kwargs,
     _validate_execution_contract,
     agent_retry_safe_enabled as _agent_retry_safe_enabled,
+    acquire_budget_scope as _acquire_budget_scope,  # noqa: F401
     check_budget as _check_budget,
     normalize_prompt_ref as _normalize_prompt_ref,
+    release_budget_scope as _release_budget_scope,  # noqa: F401
     require_tags as _require_tags,
 )
 from llm_client.execution.timeout_policy import (
@@ -465,6 +467,7 @@ def call_llm(
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
     parent_trace_id: str | None = None,
+    budget_scope_trace_id: str | None = None,
     **kwargs: Any,
 ) -> LLMCallResult:
     """Call any LLM. Routes by model string: litellm, Responses API, or Agent SDK.
@@ -507,6 +510,9 @@ def call_llm(
         execution_mode: Capability contract for this call:
             ``"text"`` (default), ``"structured"``, ``"workspace_agent"``,
             or ``"workspace_tools"``.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is a client
+            control field and is never forwarded to the provider.
         **kwargs: Additional params passed to litellm.completion
                   (e.g., temperature, max_tokens, stream).
                   ``prompt_ref`` is reserved for llm_client observability.
@@ -530,6 +536,8 @@ def call_llm(
 
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     envelope = _prepare_public_call_envelope(
         caller="call_llm",
         timeout=timeout,
@@ -594,6 +602,7 @@ def call_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    budget_scope_trace_id: str | None = None,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Call LLM and get back a validated Pydantic model.
@@ -617,6 +626,9 @@ def call_llm_structured(
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is never
+            forwarded to the provider.
         **kwargs: Additional params passed to litellm.completion.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -634,6 +646,8 @@ def call_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="call_llm_structured")
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     envelope = _prepare_public_call_envelope(
         caller="call_llm_structured",
         timeout=resolved_timeout,
@@ -780,6 +794,7 @@ async def acall_llm(
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
     parent_trace_id: str | None = None,
+    budget_scope_trace_id: str | None = None,
     **kwargs: Any,
 ) -> LLMCallResult:
     """Async version of call_llm. Same three-tier routing (Agent SDK / Responses API / Completions).
@@ -802,6 +817,9 @@ async def acall_llm(
         execution_mode: Capability contract for this call:
             ``"text"`` (default), ``"structured"``, ``"workspace_agent"``,
             or ``"workspace_tools"``.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is a client
+            control field and is never forwarded to the provider.
         **kwargs: Additional params passed to litellm.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -819,6 +837,8 @@ async def acall_llm(
 
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     envelope = _prepare_public_call_envelope(
         caller="acall_llm",
         timeout=timeout,
@@ -883,6 +903,7 @@ async def acall_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    budget_scope_trace_id: str | None = None,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Async version of call_llm_structured.
@@ -906,6 +927,9 @@ async def acall_llm_structured(
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        budget_scope_trace_id: Optional root trace whose settled cost is shared
+            by this call and its slash-delimited descendants. It is never
+            forwarded to the provider.
         **kwargs: Additional params passed to litellm.acompletion.
                   ``prompt_ref`` is reserved for llm_client observability.
                   ``lifecycle_heartbeat_interval_s`` and
@@ -923,6 +947,8 @@ async def acall_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="acall_llm_structured")
+    if budget_scope_trace_id is not None:
+        kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     envelope = _prepare_public_call_envelope(
         caller="acall_llm_structured",
         timeout=resolved_timeout,

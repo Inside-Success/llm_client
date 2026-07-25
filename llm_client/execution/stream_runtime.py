@@ -159,6 +159,7 @@ class _SyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
+        budget_scope_lease: str | None = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -174,6 +175,7 @@ class _SyncStreamLifecycleAdapter:
         self._stall_after_s = stall_after_s
         self._started_at = started_at
         self._finalized = False
+        self._budget_scope_lease = budget_scope_lease
 
     def __iter__(self) -> "_SyncStreamLifecycleAdapter":
         return self
@@ -213,6 +215,7 @@ class _SyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
+        _client._release_budget_scope(self._budget_scope_lease)
 
     @property
     def result(self) -> Any:
@@ -239,6 +242,7 @@ class _AsyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
+        budget_scope_lease: str | None = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -254,6 +258,7 @@ class _AsyncStreamLifecycleAdapter:
         self._stall_after_s = stall_after_s
         self._started_at = started_at
         self._finalized = False
+        self._budget_scope_lease = budget_scope_lease
 
     def __aiter__(self) -> "_AsyncStreamLifecycleAdapter":
         return self
@@ -293,6 +298,7 @@ class _AsyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
+        _client._release_budget_scope(self._budget_scope_lease)
 
     @property
     def result(self) -> Any:
@@ -332,6 +338,7 @@ def stream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
+    budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -341,7 +348,13 @@ def stream_llm_impl(
         max_budget,
         caller="stream_llm",
     )
-    _client._check_budget(trace_id, max_budget, reservation=budget_reservation, warning_sink=_entry_warnings)
+    budget_scope_lease = _client._acquire_budget_scope(
+        trace_id,
+        max_budget,
+        reservation=budget_reservation,
+        budget_scope_trace_id=budget_scope_trace_id,
+        warning_sink=_entry_warnings,
+    )
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)
@@ -522,8 +535,10 @@ def stream_llm_impl(
             heartbeat_interval_s=heartbeat_interval_s,
             stall_after_s=stall_after_s,
             started_at=started_at,
+            budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
+        _client._release_budget_scope(budget_scope_lease)
         _emit_stream_terminal_event(
             stream=None,
             error=exc,
@@ -575,6 +590,7 @@ async def astream_llm_impl(
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
     budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
+    budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -584,7 +600,13 @@ async def astream_llm_impl(
         max_budget,
         caller="astream_llm",
     )
-    _client._check_budget(trace_id, max_budget, reservation=budget_reservation, warning_sink=_entry_warnings)
+    budget_scope_lease = _client._acquire_budget_scope(
+        trace_id,
+        max_budget,
+        reservation=budget_reservation,
+        budget_scope_trace_id=budget_scope_trace_id,
+        warning_sink=_entry_warnings,
+    )
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)
@@ -767,8 +789,10 @@ async def astream_llm_impl(
             heartbeat_interval_s=heartbeat_interval_s,
             stall_after_s=stall_after_s,
             started_at=started_at,
+            budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
+        _client._release_budget_scope(budget_scope_lease)
         _emit_stream_terminal_event(
             stream=None,
             error=exc,

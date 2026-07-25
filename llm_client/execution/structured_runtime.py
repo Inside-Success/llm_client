@@ -861,6 +861,7 @@ def _call_llm_structured_impl(
     task = kwargs.pop("task", None)
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
+    budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -882,7 +883,12 @@ def _call_llm_structured_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
-    _check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
+    _check_budget(
+        trace_id,
+        max_budget,
+        budget_scope_trace_id=budget_scope_trace_id,
+        warning_sink=_entry_warnings,
+    )
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy
@@ -1892,6 +1898,7 @@ async def _acall_llm_structured_impl(
     task = kwargs.pop("task", None)
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
+    budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -1913,7 +1920,12 @@ async def _acall_llm_structured_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
-    _check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
+    _check_budget(
+        trace_id,
+        max_budget,
+        budget_scope_trace_id=budget_scope_trace_id,
+        warning_sink=_entry_warnings,
+    )
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy
