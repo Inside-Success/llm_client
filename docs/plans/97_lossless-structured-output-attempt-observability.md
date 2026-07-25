@@ -1,12 +1,22 @@
 # Plan #97: Lossless structured-output attempt observability
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
 **Blocks:** DIGIMON Plan #111 trace-bound recovery
 
 ---
+
+## Completion reconciliation — 2026-07-25
+
+The downstream consumer gate is complete. DIGIMON Plan 110 independently reads
+`structured_attempt_events` from SQLite, requires exact projection equality and
+ordinal continuity from attempt zero, and rejects both recomputed-hash event
+deletion and a ledger/trace pair that starts at ordinal two. Its governed live
+trace also retained real validation failures followed by recovery. That closes
+the consumer-verification condition recorded below; later experiments to reduce
+first-attempt failures are separate optimization work.
 
 ## Gap
 
