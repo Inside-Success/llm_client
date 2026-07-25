@@ -409,6 +409,19 @@ Done when the tests pass against a temporary real SQLite file, focused Ruff
 passes, `git diff --check` passes, and an adversarial pass verifies transaction
 rollback and no secret/content persistence.
 
+#### Slice 1 Completion Evidence (2026-07-25)
+
+- Implemented the metadata-only `budget_scopes` and `budget_reservations`
+  tables and the canonical `observability.budget_reservations` transaction
+  boundary.
+- `tests/test_budget_reservations.py`: 7 passed against a temporary real SQLite
+  file, including two spawned processes contending for one `$1.00` scope.
+- Focused Ruff passed for the new reservation module, its exports, typed errors,
+  and its tests; `git diff --check` passed.
+- The repository-wide `io_log.py` Ruff invocation still reports pre-existing
+  import-layout and duplicate-key findings outside this slice. The reservation
+  changes add no such finding.
+
 ### Slice 2 — Public runtime and stream integration
 
 Wire the explicit public parameters, one lease per logical public call,

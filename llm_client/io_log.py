@@ -1024,6 +1024,30 @@ CREATE TABLE IF NOT EXISTS dashboard_spend_hourly (
     total_cost REAL NOT NULL DEFAULT 0.0,
     PRIMARY KEY (bucket_start, project, model)
 );
+
+CREATE TABLE IF NOT EXISTS budget_scopes (
+    scope_trace_id TEXT PRIMARY KEY,
+    max_budget_microusd INTEGER NOT NULL CHECK (max_budget_microusd > 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS budget_reservations (
+    reservation_id TEXT PRIMARY KEY,
+    scope_trace_id TEXT NOT NULL,
+    call_trace_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    reserved_microusd INTEGER NOT NULL CHECK (reserved_microusd > 0),
+    status TEXT NOT NULL CHECK (
+        status IN ('active', 'settled', 'released_error', 'expired')
+    ),
+    created_at TEXT NOT NULL,
+    heartbeat_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    completed_at TEXT,
+    settled_cost_microusd INTEGER,
+    FOREIGN KEY(scope_trace_id) REFERENCES budget_scopes(scope_trace_id)
+);
 """
 
 _INDEXES_SQL = """
@@ -1097,6 +1121,10 @@ CREATE INDEX IF NOT EXISTS idx_interv_category ON interventions(category);
 CREATE INDEX IF NOT EXISTS idx_interv_status ON interventions(status);
 CREATE INDEX IF NOT EXISTS idx_interv_timestamp ON interventions(timestamp);
 CREATE INDEX IF NOT EXISTS idx_cost_alerts_created_at ON cost_alerts(created_at);
+CREATE INDEX IF NOT EXISTS idx_budget_reservations_active_scope
+ON budget_reservations(scope_trace_id, status);
+CREATE INDEX IF NOT EXISTS idx_budget_reservations_expiry
+ON budget_reservations(status, expires_at);
 """
 
 
