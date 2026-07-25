@@ -2333,12 +2333,34 @@ class TestCodexFallback:
 class TestCodexMcpServers:
     """Tests for codex_home and mcp_servers kwargs."""
 
-    def test_create_codex_home(self) -> None:
-        """_create_codex_home generates a valid config.toml."""
+    def test_create_codex_home(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """The isolated home preserves providers but drops ambient MCP tools."""
         from pathlib import Path
 
         from llm_client.sdk.agents import _cleanup_tmp, _create_codex_home
 
+        source_codex_home = tmp_path / "source-codex"
+        source_codex_home.mkdir()
+        (source_codex_home / "config.toml").write_text(
+            'model_provider = "openrouter"\n'
+            'model = "~openai/gpt-latest"\n'
+            "\n"
+            "[mcp_servers.ambient]\n"
+            'command = "ambient-tool"\n'
+            "\n"
+            "[mcp_servers.ambient.env]\n"
+            'SECRET = "must-not-copy"\n'
+            "\n"
+            "[model_providers.openrouter]\n"
+            'base_url = "https://openrouter.ai/api/v1"\n'
+            'env_key = "OPENROUTER_API_KEY"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CODEX_HOME", str(source_codex_home))
         servers = {
             "my-server": {
                 "command": "/usr/bin/python",
@@ -2363,6 +2385,11 @@ class TestCodexMcpServers:
             assert '"FOO" = "bar"' in content
             assert '[mcp_servers."simple"]' in content
             assert 'cwd = "/tmp/test"' in content
+            assert 'model_provider = "openrouter"' in content
+            assert "[model_providers.openrouter]" in content
+            assert "[mcp_servers.ambient]" not in content
+            assert "ambient-tool" not in content
+            assert "must-not-copy" not in content
         finally:
             _cleanup_tmp(tmp_dir)
 

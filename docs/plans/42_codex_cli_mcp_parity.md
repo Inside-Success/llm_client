@@ -93,7 +93,10 @@ transport parity and evidence, so it does not encode workflow-specific tool orde
 The isolated configuration uses `CODEX_HOME` rather than replacing the process
 `HOME`, preserving user-site dependencies for Python MCP servers. Supplied MCP
 servers are required by default so failed initialization cannot silently remove
-the caller's requested tools.
+the caller's requested tools. It preserves the configured model-provider tables
+from `CODEX_HOME` while stripping every ambient `mcp_servers` table before adding
+the caller's explicit tools; this lets a service use a scoped provider without
+silently inheriting unrelated tools.
 
 Verified 2026-07-24:
 

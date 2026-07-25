@@ -140,11 +140,34 @@ def _agent_hard_timeout(kwargs: dict[str, Any], default_timeout: int) -> int:
 
 
 
-def _create_codex_home(mcp_servers: dict[str, Any]) -> str:
-    """Create a temp directory with .codex/config.toml containing only specified MCP servers.
+def _config_without_mcp_servers(config_path: Path) -> list[str]:
+    """Retain Codex provider settings while dropping every ambient MCP table."""
 
-    Symlinks auth.json and other credential files from the real ~/.codex/ so
-    authentication continues to work.
+    if not config_path.is_file():
+        return []
+    retained: list[str] = []
+    skipping_mcp_table = False
+    for line in config_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            table_name = stripped.lstrip("[").rstrip("]").strip()
+            skipping_mcp_table = (
+                table_name == "mcp_servers"
+                or table_name.startswith("mcp_servers.")
+            )
+        if not skipping_mcp_table:
+            retained.append(line)
+    while retained and not retained[-1].strip():
+        retained.pop()
+    return retained
+
+
+def _create_codex_home(mcp_servers: dict[str, Any]) -> str:
+    """Create an isolated Codex home with only the specified MCP servers.
+
+    Provider/model configuration and credential files come from ``CODEX_HOME``
+    when set, otherwise ``~/.codex``. Ambient MCP tables are deliberately
+    removed before the requested servers are added.
 
     Args:
         mcp_servers: Dict of server_name -> {command, args?, cwd?, env?}.
@@ -156,16 +179,20 @@ def _create_codex_home(mcp_servers: dict[str, Any]) -> str:
     config_dir = Path(tmp_dir) / ".codex"
     config_dir.mkdir()
 
-    # Symlink auth and other essential files from real .codex dir
-    real_codex = Path.home() / ".codex"
+    # Symlink auth and other essential files from the configured Codex home.
+    real_codex = Path(
+        os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))
+    ).expanduser()
     if real_codex.is_dir():
         for fname in ("auth.json", "version.json", ".personality_migration"):
             src = real_codex / fname
             if src.exists():
                 (config_dir / fname).symlink_to(src)
 
-    # Write minimal config.toml with only specified MCP servers
-    lines: list[str] = []
+    # Preserve model-provider configuration without inheriting ambient tools.
+    lines = _config_without_mcp_servers(real_codex / "config.toml")
+    if lines:
+        lines.append("")
     for name, cfg in mcp_servers.items():
         lines.append(f"[mcp_servers.{_json.dumps(str(name), ensure_ascii=False)}]")
         lines.append(
