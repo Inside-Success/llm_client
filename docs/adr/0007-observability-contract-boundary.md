@@ -74,3 +74,13 @@ claim provider fault without typed provider/gateway response evidence.
 
 Plan 101 adds trusted-process runtime receipts; it does not claim provider
 attestation, source authentication, signatures, or hostile-process security.
+
+## 2026-07-25 Amendment: Durable Budget Reservations
+
+Plan 334 adds additive `budget_scopes` and `budget_reservations` metadata to
+the SQLite observability store. They retain trace identifiers, normalized
+micro-USD amounts, ownership IDs, and lifecycle timestamps only. They must not
+retain prompts, responses, provider payloads, credentials, or exception text.
+The canonical transaction logic lives in
+`llm_client/observability/budget_reservations.py`; `io_log.py` owns only schema
+creation and compatibility access to the shared SQLite connection.

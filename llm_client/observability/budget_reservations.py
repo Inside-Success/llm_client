@@ -7,7 +7,10 @@ provider payloads, and exception text never enter these tables.
 
 from __future__ import annotations
 
+import atexit
+import logging
 import sqlite3
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -18,6 +21,7 @@ from typing import Callable, Literal, TypeVar
 import llm_client.io_log as _io_log
 from llm_client.core.errors import (
     LLMBudgetExceededError,
+    LLMBudgetLeaseLostError,
     LLMBudgetReservationOverrunError,
     LLMBudgetReservationStoreError,
 )
@@ -26,6 +30,7 @@ MICRO_USD = 1_000_000
 DEFAULT_LEASE_TTL_SECONDS = 300
 _OWNER_ID = str(uuid.uuid4())
 _T = TypeVar("_T")
+logger = logging.getLogger(__name__)
 
 BudgetScopeMode = Literal["sequential", "reserved_concurrent"]
 
@@ -404,9 +409,115 @@ def renew_budget_reservation(
         cursor = db.execute(
             """UPDATE budget_reservations
                SET heartbeat_at = ?, expires_at = ?
-               WHERE reservation_id = ? AND owner_id = ? AND status = 'active'""",
-            (observed_iso, expires_iso, lease.reservation_id, lease.owner_id),
+               WHERE reservation_id = ? AND owner_id = ?
+                 AND status = 'active' AND expires_at > ?""",
+            (
+                observed_iso,
+                expires_iso,
+                lease.reservation_id,
+                lease.owner_id,
+                observed_iso,
+            ),
         )
         return cursor.rowcount == 1
 
     return _transaction(operation)
+
+
+class _BudgetLeaseKeeper:
+    """One daemon renewal loop for every durable lease owned by this process."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._leases: dict[str, BudgetReservationLease] = {}
+        self._lost: set[str] = set()
+        self._wake = threading.Event()
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def track(self, lease: BudgetReservationLease) -> None:
+        with self._lock:
+            self._leases[lease.reservation_id] = lease
+            self._lost.discard(lease.reservation_id)
+            if self._thread is None or not self._thread.is_alive():
+                self._stop.clear()
+                self._thread = threading.Thread(
+                    target=self._run,
+                    name="llm-client-budget-lease-keeper",
+                    daemon=True,
+                )
+                self._thread.start()
+        self._wake.set()
+
+    def untrack(self, lease: BudgetReservationLease) -> None:
+        with self._lock:
+            self._leases.pop(lease.reservation_id, None)
+            self._lost.discard(lease.reservation_id)
+        self._wake.set()
+
+    def lost(self, lease: BudgetReservationLease) -> bool:
+        with self._lock:
+            return lease.reservation_id in self._lost
+
+    def renew_once(self, *, now: datetime | None = None) -> None:
+        """Renew all local leases once; exposed for deterministic tests."""
+
+        with self._lock:
+            leases = tuple(self._leases.values())
+        for lease in leases:
+            try:
+                renewed = renew_budget_reservation(lease, now=now)
+            except Exception:
+                logger.exception("durable budget lease renewal failed: %s", lease.reservation_id)
+                renewed = False
+            if not renewed:
+                with self._lock:
+                    self._lost.add(lease.reservation_id)
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            self._wake.wait(timeout=30)
+            self._wake.clear()
+            if self._stop.is_set():
+                return
+            self.renew_once()
+
+    def shutdown(self) -> None:
+        self._stop.set()
+        self._wake.set()
+
+
+_lease_keeper = _BudgetLeaseKeeper()
+atexit.register(_lease_keeper.shutdown)
+
+
+def track_budget_reservation(lease: BudgetReservationLease) -> None:
+    """Begin process-wide heartbeat renewal for one admitted durable lease."""
+
+    _lease_keeper.track(lease)
+
+
+def release_tracked_budget_reservation(lease: BudgetReservationLease) -> None:
+    """Release a durable lease and remove it from process renewal."""
+
+    try:
+        release_budget_reservation(lease)
+    finally:
+        _lease_keeper.untrack(lease)
+
+
+def settle_tracked_budget_reservation(
+    lease: BudgetReservationLease,
+    *,
+    settled_cost: float,
+) -> None:
+    """Settle a tracked lease or expose lost custody at the terminal boundary."""
+
+    try:
+        if _lease_keeper.lost(lease):
+            raise LLMBudgetLeaseLostError(
+                "durable budget reservation lease was lost before call completion"
+            )
+        settle_budget_reservation(lease, settled_cost=settled_cost)
+    finally:
+        _lease_keeper.untrack(lease)

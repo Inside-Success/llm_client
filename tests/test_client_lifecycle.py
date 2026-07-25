@@ -21,7 +21,8 @@ from llm_client.core import client
 import llm_client.io_log as io_log
 import llm_client.execution.timeout_policy as timeout_policy
 from llm_client.core.data_types import LLMCallResult
-from llm_client.core.errors import LLMTransientError
+from llm_client.core.errors import LLMBudgetExceededError, LLMTransientError
+from llm_client.observability import get_budget_scope_snapshot
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +79,18 @@ def _lifecycle_rows() -> list[tuple[str, dict[str, Any]]]:
     return out
 
 
+def _insert_settled_cost(trace_id: str, cost: float) -> None:
+    """Write the normal call row that precedes durable reservation settlement."""
+
+    db = io_log._get_db()
+    db.execute(
+        """INSERT INTO llm_calls (timestamp, model, cost, marginal_cost, error, trace_id)
+           VALUES (?, ?, ?, ?, NULL, ?)""",
+        ("2026-07-25T00:00:00+00:00", "test-model", cost, cost, trace_id),
+    )
+    db.commit()
+
+
 def _mock_stream_chunk(text: str) -> Any:
     """Build one sync/async stream chunk compatible with LLMStream finalization."""
 
@@ -86,6 +99,81 @@ def _mock_stream_chunk(text: str) -> Any:
     chunk.choices[0].delta = MagicMock()
     chunk.choices[0].delta.content = text
     return chunk
+
+
+@pytest.mark.asyncio
+async def test_parallel_public_calls_share_one_root_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two public calls overlap under one durable root and a third is rejected."""
+
+    _insert_settled_cost("root/concurrent/prior", 0.04)
+    release = asyncio.Event()
+    both_started = asyncio.Event()
+    seen_provider_kwargs: list[dict[str, Any]] = []
+    started = 0
+
+    async def _held_runtime(model: str, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+        nonlocal started
+        seen_provider_kwargs.append(dict(kwargs))
+        started += 1
+        if started == 2:
+            both_started.set()
+        await release.wait()
+        cost = 0.06 if kwargs["trace_id"].endswith("graph") else 0.07
+        _insert_settled_cost(kwargs["trace_id"], cost)
+        return SimpleNamespace(cost=cost, model=model, resolved_model=model)
+
+    monkeypatch.setattr(
+        "llm_client.execution.text_runtime._acall_llm_impl", _held_runtime
+    )
+    root_kwargs = {
+        "task": "test.concurrent",
+        "max_budget": 0.20,
+        "budget_scope_trace_id": "root/concurrent",
+        "budget_scope_mode": "reserved_concurrent",
+        "budget_reservation": 0.08,
+    }
+    graph = asyncio.create_task(
+        client.acall_llm(
+            "gpt-4",
+            [{"role": "user", "content": "graph"}],
+            trace_id="root/concurrent/graph",
+            **root_kwargs,
+        )
+    )
+    wiki = asyncio.create_task(
+        client.acall_llm(
+            "gpt-4",
+            [{"role": "user", "content": "wiki"}],
+            trace_id="root/concurrent/wiki",
+            **root_kwargs,
+        )
+    )
+    await asyncio.wait_for(both_started.wait(), timeout=5)
+
+    with pytest.raises(LLMBudgetExceededError):
+        await client.acall_llm(
+            "gpt-4",
+            [{"role": "user", "content": "third"}],
+            trace_id="root/concurrent/third",
+            task="test.concurrent",
+            max_budget=0.20,
+            budget_scope_trace_id="root/concurrent",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.01,
+        )
+
+    release.set()
+    await asyncio.gather(graph, wiki)
+    snapshot = get_budget_scope_snapshot(scope_trace_id="root/concurrent", max_budget=0.20)
+    assert snapshot.settled_microusd == 170_000
+    assert snapshot.active_reserved_microusd == 0
+    assert snapshot.available_microusd == 30_000
+    for kwargs in seen_provider_kwargs:
+        assert "budget_scope_trace_id" not in kwargs
+        assert "budget_scope_mode" not in kwargs
+        assert "budget_reservation" not in kwargs
 
 
 class _MockAsyncStream:
@@ -284,6 +372,8 @@ def test_stream_llm_emits_started_progress_completed_lifecycle(
         task="test.lifecycle.stream",
         trace_id="trace.lifecycle.stream.sync",
         budget_scope_trace_id="trace.lifecycle.stream.sync",
+        budget_scope_mode="reserved_concurrent",
+        budget_reservation=0.01,
         max_budget=0.1,
         lifecycle_heartbeat_interval_s=0,
         lifecycle_stall_after_s=0,
@@ -301,6 +391,8 @@ def test_stream_llm_emits_started_progress_completed_lifecycle(
     assert completed["progress_observable"] is True
     assert completed.get("error_type") is None
     assert "budget_scope_trace_id" not in seen_provider_kwargs
+    assert "budget_scope_mode" not in seen_provider_kwargs
+    assert "budget_reservation" not in seen_provider_kwargs
 
 
 def test_stream_llm_emits_failed_lifecycle_on_iteration_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -345,6 +437,43 @@ def test_stream_llm_emits_failed_lifecycle_on_iteration_error(monkeypatch: pytes
     assert failed["error_type"] == "RuntimeError"
     assert failed["error_message"] == "boom"
     assert failed["progress_event_count"] == 1
+
+
+def test_stream_close_releases_durable_budget_lease(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Explicit close releases a concurrent stream lease exactly once."""
+
+    class _ClosableStream:
+        def __iter__(self) -> "_ClosableStream":
+            return self
+
+        def __next__(self) -> Any:
+            return _mock_stream_chunk("never consumed")
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.stream_chunk_builder", lambda chunks: None
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion", lambda **kwargs: _ClosableStream()
+    )
+    stream = client.stream_llm(
+        "gpt-4",
+        [{"role": "user", "content": "Hi"}],
+        task="test.lifecycle.stream.close",
+        trace_id="trace.lifecycle.stream.close",
+        max_budget=0.1,
+        budget_scope_trace_id="trace.lifecycle.stream.close",
+        budget_scope_mode="reserved_concurrent",
+        budget_reservation=0.05,
+    )
+    stream.close()
+    stream.close()
+    snapshot = get_budget_scope_snapshot(
+        scope_trace_id="trace.lifecycle.stream.close", max_budget=0.1
+    )
+    assert snapshot.active_reserved_microusd == 0
 
 
 @pytest.mark.asyncio
@@ -504,6 +633,8 @@ async def test_astream_llm_emits_started_progress_completed_lifecycle(
         task="test.lifecycle.istream",
         trace_id="trace.lifecycle.stream.async",
         budget_scope_trace_id="trace.lifecycle.stream.async",
+        budget_scope_mode="reserved_concurrent",
+        budget_reservation=0.01,
         max_budget=0.1,
         lifecycle_heartbeat_interval_s=0,
         lifecycle_stall_after_s=0,
@@ -523,6 +654,8 @@ async def test_astream_llm_emits_started_progress_completed_lifecycle(
     assert completed["progress_observable"] is True
     assert completed["progress_event_count"] == 1
     assert "budget_scope_trace_id" not in seen_provider_kwargs
+    assert "budget_scope_mode" not in seen_provider_kwargs
+    assert "budget_reservation" not in seen_provider_kwargs
 
 
 @pytest.mark.asyncio

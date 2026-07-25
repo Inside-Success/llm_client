@@ -447,6 +447,22 @@ Done when public API docs regenerate, the focused lifecycle/budget suite passes,
 and an isolated second pass finds no path that releases before terminal
 observability or forwards control fields.
 
+#### Slice 2 Completion Evidence (2026-07-25)
+
+- Public text, structured, sync, async, and streaming entrypoints now expose
+  `budget_scope_mode` and `budget_reservation`; `sequential` remains the
+  default.
+- One outer public-call lease covers internal retry/fallback work. Success
+  settles after normal result/lifecycle observability; failure, cancellation,
+  stream error, and explicit stream close release after terminal lifecycle
+  emission.
+- A process-wide daemon keeper renews only locally owned active durable leases;
+  lost custody fails at the terminal boundary rather than returning a success.
+- Focused zero-spend verification: 39 tests passed across reservation,
+  call-contract, lifecycle, and text-runtime suites. The integrated held-call
+  canary observed two concurrent children and rejected a third before runtime
+  dispatch. Focused Ruff and `git diff --check` passed.
+
 ### Slice 3 — Review, merge, and fork synchronization
 
 1. Freeze the exact personal branch head after Slices 1–2.
@@ -463,6 +479,17 @@ The fork gate is not satisfied by equivalent-looking source files, an editable
 checkout, or an unmerged branch.
 
 ## Verification Commands
+
+## Required Tests
+
+- `tests/test_budget_reservations.py` — durable SQLite admission, money
+  normalization, expiry, two-process contention, and terminal idempotence.
+- `tests/test_call_contracts.py` — sequential compatibility, concurrent-mode
+  validation, and budget-control stripping.
+- `tests/test_client_lifecycle.py` — concurrent public-call canary, terminal
+  settlement/release ordering, provider-safe controls, and stream close.
+- `tests/test_text_runtime.py` — direct runtime provider kwargs remain free of
+  budget controls.
 
 ```bash
 python scripts/meta/check_plan_tests.py --plan 334

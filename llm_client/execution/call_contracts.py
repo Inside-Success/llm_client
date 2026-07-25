@@ -38,6 +38,13 @@ from llm_client.core.errors import (
     LLMEmptyResponseError,
     LLMModelNotFoundError,
 )
+from llm_client.observability.budget_reservations import (
+    BudgetReservationLease,
+    acquire_budget_reservation,
+    release_tracked_budget_reservation,
+    settle_tracked_budget_reservation,
+    track_budget_reservation,
+)
 from llm_client.core.model_detection import (
     _base_model_name,
     _is_responses_api_model,
@@ -230,8 +237,9 @@ def acquire_budget_scope(
     *,
     reservation: float = 0.0,
     budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     warning_sink: list[str] | None = None,
-) -> str | None:
+) -> str | BudgetReservationLease | None:
     """Admit one bounded scoped call and return its lease token.
 
     A scoped budget is deliberately sequential within one process.  This
@@ -240,7 +248,22 @@ def acquire_budget_scope(
     token at every terminal boundary.
     """
 
+    if budget_scope_mode not in {"sequential", "reserved_concurrent"}:
+        raise ValueError(f"unknown budget_scope_mode: {budget_scope_mode!r}")
     scope = resolve_budget_scope(trace_id, budget_scope_trace_id)
+    if budget_scope_mode == "reserved_concurrent":
+        if scope is None:
+            raise ValueError("reserved_concurrent requires budget_scope_trace_id")
+        if max_budget <= 0:
+            raise ValueError("reserved_concurrent requires max_budget > 0")
+        lease = acquire_budget_reservation(
+            scope_trace_id=scope,
+            call_trace_id=trace_id,
+            max_budget=max_budget,
+            reservation=reservation,
+        )
+        track_budget_reservation(lease)
+        return lease
     if scope is None or max_budget <= 0:
         check_budget(
             trace_id,
@@ -267,13 +290,31 @@ def acquire_budget_scope(
     return scope
 
 
-def release_budget_scope(lease: str | None) -> None:
+def release_budget_scope(lease: str | BudgetReservationLease | None) -> None:
     """Release a lease returned by :func:`acquire_budget_scope`."""
 
     if lease is None:
         return
+    if isinstance(lease, BudgetReservationLease):
+        release_tracked_budget_reservation(lease)
+        return
     with _budget_scope_lock:
         _active_budget_scopes.discard(lease)
+
+
+def settle_budget_scope(
+    lease: str | BudgetReservationLease | None,
+    *,
+    settled_cost: float,
+) -> None:
+    """Settle a durable concurrent lease; sequential leases only release."""
+
+    if lease is None:
+        return
+    if isinstance(lease, BudgetReservationLease):
+        settle_tracked_budget_reservation(lease, settled_cost=settled_cost)
+        return
+    release_budget_scope(lease)
 
 
 def agent_retry_safe_enabled(explicit: Any | None) -> bool:
@@ -484,7 +525,12 @@ def _strip_llm_internal_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     provider contract and are intentionally excluded from cache keying and
     provider payloads.
     """
-    return {k: v for k, v in kwargs.items() if not k.startswith("_")}
+    internal = {
+        "budget_scope_trace_id",
+        "budget_scope_mode",
+        "budget_reservation",
+    }
+    return {k: v for k, v in kwargs.items() if not k.startswith("_") and k not in internal}
 
 
 def _apply_max_tokens(model: str, call_kwargs: dict[str, Any]) -> None:

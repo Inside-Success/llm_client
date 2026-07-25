@@ -1289,7 +1289,29 @@ def _get_db() -> sqlite3.Connection:
         _db_conn.execute("PRAGMA journal_mode = WAL")
         _db_conn.execute("PRAGMA synchronous = NORMAL")
         _db_conn.executescript(_TABLES_SQL)
-        _migrate_db(_db_conn)
+        # Two fresh processes can open the same SQLite file at once. One may
+        # add an old-schema column after the other's PRAGMA snapshot but before
+        # its ALTER TABLE. Retry the idempotent migration from a fresh schema
+        # view instead of converting that harmless race into a startup failure.
+        migration_attempt = 0
+        while True:
+            try:
+                _migrate_db(_db_conn)
+                break
+            except sqlite3.OperationalError as exc:
+                duplicate_column = "duplicate column name" in str(exc).lower()
+                if not (duplicate_column or _is_db_locked_error(exc)):
+                    raise
+                if migration_attempt >= _get_db_lock_retries():
+                    raise
+                try:
+                    _db_conn.rollback()
+                except sqlite3.Error:
+                    pass
+                time.sleep(
+                    (_get_db_lock_retry_delay_ms() * (migration_attempt + 1)) / 1000.0
+                )
+                migration_attempt += 1
         _db_conn.executescript(_INDEXES_SQL)
         return _db_conn
 

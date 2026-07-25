@@ -77,6 +77,41 @@ def test_public_envelope_reserves_budget_and_strips_internal_kwarg() -> None:
     assert "budget_reservation" not in envelope.runtime_kwargs
 
 
+def test_public_envelope_uses_durable_mode_and_strips_all_budget_controls() -> None:
+    """Concurrent reservations are admitted once and never reach a provider runtime."""
+
+    with patch("llm_client.execution.call_wrappers._acquire_budget_scope") as admit:
+        envelope = _prepare_public_call_envelope(
+            caller="acall_llm",
+            timeout=30,
+            messages=[{"role": "user", "content": "test"}],
+            kwargs={
+                "task": "test.task",
+                "trace_id": "root/child",
+                "max_budget": 1.0,
+                "budget_scope_trace_id": "root",
+                "budget_scope_mode": "reserved_concurrent",
+                "budget_reservation": 0.25,
+            },
+        )
+
+    assert admit.call_args.kwargs["budget_scope_mode"] == "reserved_concurrent"
+    assert admit.call_args.kwargs["reservation"] == 0.25
+    assert "budget_scope_trace_id" not in envelope.runtime_kwargs
+    assert "budget_scope_mode" not in envelope.runtime_kwargs
+    assert "budget_reservation" not in envelope.runtime_kwargs
+
+
+def test_reserved_concurrent_requires_a_scope() -> None:
+    with pytest.raises(ValueError, match="requires budget_scope_trace_id"):
+        acquire_budget_scope(
+            "trace/no-scope",
+            1.0,
+            reservation=0.25,
+            budget_scope_mode="reserved_concurrent",
+        )
+
+
 def test_check_budget_aggregates_root_scope_and_descendants() -> None:
     """A descendant charges the root scope's settled cost and reservation."""
     with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=4.8) as get_cost:

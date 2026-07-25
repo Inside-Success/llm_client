@@ -140,6 +140,14 @@ def _emit_stream_terminal_event(
     )
 
 
+def _stream_settled_cost(stream: Any) -> float:
+    """Read the completed stream's normal result cost after observability writes."""
+
+    result = stream.result
+    raw_cost = getattr(result, "cost", 0.0)
+    return 0.0 if raw_cost is None else float(raw_cost)
+
+
 class _SyncStreamLifecycleAdapter:
     """Wrap a sync stream and emit lifecycle terminal events when consumed."""
 
@@ -159,7 +167,7 @@ class _SyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
-        budget_scope_lease: str | None = None,
+        budget_scope_lease: Any = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -215,7 +223,23 @@ class _SyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
-        _client._release_budget_scope(self._budget_scope_lease)
+        if error is None:
+            _client._settle_budget_scope(
+                self._budget_scope_lease,
+                settled_cost=_stream_settled_cost(self._stream),
+            )
+        else:
+            _client._release_budget_scope(self._budget_scope_lease)
+
+    def close(self) -> None:
+        """Explicitly abandon a stream and idempotently release its lease."""
+
+        if self._finalized:
+            return
+        close = getattr(self._stream, "close", None)
+        if callable(close):
+            close()
+        self._finalize(error=RuntimeError("stream closed before completion"))
 
     @property
     def result(self) -> Any:
@@ -242,7 +266,7 @@ class _AsyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
-        budget_scope_lease: str | None = None,
+        budget_scope_lease: Any = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -298,7 +322,23 @@ class _AsyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
-        _client._release_budget_scope(self._budget_scope_lease)
+        if error is None:
+            _client._settle_budget_scope(
+                self._budget_scope_lease,
+                settled_cost=_stream_settled_cost(self._stream),
+            )
+        else:
+            _client._release_budget_scope(self._budget_scope_lease)
+
+    async def aclose(self) -> None:
+        """Explicitly abandon an async stream and idempotently release its lease."""
+
+        if self._finalized:
+            return
+        close = getattr(self._stream, "aclose", None)
+        if callable(close):
+            await close()
+        await self._finalize(error=RuntimeError("stream closed before completion"))
 
     @property
     def result(self) -> Any:
@@ -339,6 +379,7 @@ def stream_llm_impl(
     max_budget: float | None = kwargs.pop("max_budget", None)
     budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
     budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
+    budget_scope_mode = kwargs.pop("budget_scope_mode", "sequential")
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -353,6 +394,7 @@ def stream_llm_impl(
         max_budget,
         reservation=budget_reservation,
         budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
         warning_sink=_entry_warnings,
     )
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
@@ -538,7 +580,6 @@ def stream_llm_impl(
             budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
-        _client._release_budget_scope(budget_scope_lease)
         _emit_stream_terminal_event(
             stream=None,
             error=exc,
@@ -555,6 +596,7 @@ def stream_llm_impl(
             started_at=started_at,
             monitor=monitor,
         )
+        _client._release_budget_scope(budget_scope_lease)
         raise _client.wrap_error(exc) from exc
 
 
@@ -591,6 +633,7 @@ async def astream_llm_impl(
     max_budget: float | None = kwargs.pop("max_budget", None)
     budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
     budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
+    budget_scope_mode = kwargs.pop("budget_scope_mode", "sequential")
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -605,6 +648,7 @@ async def astream_llm_impl(
         max_budget,
         reservation=budget_reservation,
         budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
         warning_sink=_entry_warnings,
     )
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
@@ -792,7 +836,6 @@ async def astream_llm_impl(
             budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
-        _client._release_budget_scope(budget_scope_lease)
         _emit_stream_terminal_event(
             stream=None,
             error=exc,
@@ -809,4 +852,5 @@ async def astream_llm_impl(
             started_at=started_at,
             monitor=monitor,
         )
+        _client._release_budget_scope(budget_scope_lease)
         raise _client.wrap_error(exc) from exc

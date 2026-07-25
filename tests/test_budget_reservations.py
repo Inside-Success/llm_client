@@ -21,6 +21,7 @@ from llm_client.observability.budget_reservations import (
     normalize_reservation_microusd,
     normalize_settled_cost_microusd,
     release_budget_reservation,
+    renew_budget_reservation,
     settle_budget_reservation,
 )
 
@@ -42,7 +43,9 @@ def reservation_db(tmp_path: Path) -> Path:
     finally:
         if io_log._db_conn is not None:
             io_log._db_conn.close()
-        io_log._db_conn = original_connection
+        # The prior singleton was closed to isolate this real SQLite file; do
+        # not restore a closed connection for subsequent tests.
+        io_log._db_conn = None
         io_log._db_path = original_path
         io_log._enabled = original_enabled
 
@@ -193,3 +196,14 @@ def test_expired_crashed_lease_is_reclaimable(reservation_db: Path) -> None:
         now=started + timedelta(seconds=2), lease_ttl_seconds=1,
     )
     assert replacement.reservation_id != lease.reservation_id
+
+
+def test_expired_lease_cannot_be_renewed(reservation_db: Path) -> None:
+    started = datetime(2026, 7, 25, tzinfo=timezone.utc)
+    lease = acquire_budget_reservation(
+        scope_trace_id="root/renewal", call_trace_id="root/renewal/child",
+        max_budget=1.0, reservation=0.20, now=started, lease_ttl_seconds=1,
+    )
+    assert renew_budget_reservation(
+        lease, now=started + timedelta(seconds=2), lease_ttl_seconds=1
+    ) is False
