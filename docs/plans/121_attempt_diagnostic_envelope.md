@@ -230,6 +230,8 @@ flowchart TB
   at real exception/response boundaries)
 - `llm_client/execution/retry.py` (structured status and retry-after extraction
   through a shared typed seam)
+- `llm_client/execution/timeout_policy.py` (reject non-integral positive
+  deadlines instead of silently disabling a caller's deadline)
 - `llm_client/io_log.py` (additive migration, persistence, and reads)
 - `llm_client/observability/__init__.py` and generated API reference
 - `tests/test_attempt_diagnostics.py` (new), plus structured runtime, retry,
@@ -285,6 +287,7 @@ flowchart TB
 | --- | --- |
 | `tests/test_attempt_diagnostics.py` | Temporary-SQLite identity binding, success non-applicability, unavailable-diagnostic status, redaction rejection, confirmation limits, writer failure, migration, typed gateway response, and timeout attribution. |
 | `tests/test_structured_attempts.py` | Existing native structured-attempt lifecycle, retry, timeout, malformed-response, and strict-schema negative controls continue to pass. |
+| `tests/test_timeout_policy.py` | A positive fractional timeout fails loud instead of truncating to zero and disabling a deadline. |
 | governed live DeepSeek V4 Flash structured probe | Exact route produces a trace-bound diagnosis and lifecycle receipt; recorded in Slice 1 evidence. |
 | governed Process Tracing V3 atomic probe | Downstream can make only the causal statement warranted by the returned diagnostic evidence; blocked until the runtime revision is promoted and the downstream harness is in a clean governed worktree. |
 
@@ -349,7 +352,7 @@ Native structured pre-response failures now write a diagnostic bound to the
 same `execution_failed` attempt event. Typed SDK response metadata can retain a
 status and request ID, yielding `gateway_or_provider_confirmed`; a timeout with
 no response remains `client_observed_only`. The focused diagnostics and
-structured-attempt suite passes 25 tests. This is native-schema-only and does
+structured-attempt suite passes 26 tests. This is native-schema-only and does
 not yet capture Responses API or prove a live provider-error envelope.
 
 ## Slice 3 Progress (2026-07-25)
@@ -369,3 +372,11 @@ return `unavailable_no_diagnostic`, because the data plane cannot truthfully
 prove that such a row predates Plan 121 rather than reflects a present capture
 gap. The downstream V3 probe remains blocked on a promoted runtime revision
 and a clean governed downstream harness.
+
+The attempted 1-millisecond live client-deadline control initially completed
+because the shared integer-seconds normalizer silently truncated `0.001` to
+zero. That did not test a timeout and made no claim about model latency. Plan
+121 now rejects any positive fractional deadline before dispatch. A non-mocked
+public-API negative control confirmed that rejection with no provider request;
+the combined timeout, diagnostic, structured-attempt, and deadline suite is 43
+passing tests.

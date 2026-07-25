@@ -48,6 +48,15 @@ def test_normalize_timeout_negative_values_clamp_to_zero(monkeypatch) -> None:
     assert warnings == []
 
 
+def test_normalize_timeout_rejects_positive_fractional_seconds(monkeypatch) -> None:
+    """A sub-second value must not silently truncate to a disabled deadline."""
+
+    monkeypatch.delenv("LLM_CLIENT_TIMEOUT_POLICY", raising=False)
+
+    with pytest.raises(ValueError, match="whole number of seconds"):
+        normalize_timeout(0.001, caller="test_timeout_policy")
+
+
 def test_default_timeout_for_structured_calls_is_finite(monkeypatch) -> None:
     """Structured calls should inherit a longer finite shared default."""
 
