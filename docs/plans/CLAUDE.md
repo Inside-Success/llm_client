@@ -115,15 +115,16 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 41 | [Embedding Budget Contract](41_embedding_budget_contract.md) | High | ✅ Complete | onto-canon6 Plan 0162 live semantic candidate retrieval |
 | 42 | [Codex CLI MCP Parity](42_codex_cli_mcp_parity.md) | High | ✅ Complete | Inside Success Twitter prospecting agent |
 | 43 | [Version Adversarial Review Prompts as Assets](43_review_prompt_assets.md) | Medium | ✅ Complete | - |
+| 44 | [Reconcile Completed Cross-Project Plan Status](44_plan_status_reconciliation.md) | Medium | ✅ Complete | - |
 | 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | 🚧 In Progress | - |
 | 93 | [Agent tool-usage ledger](93_agent-tool-usage-ledger.md) | High | ✅ Complete | project-meta Plan #213 reporting and comparative selection evaluation |
 | 92 | [Worktree Lifecycle Governance and Cleanup](92_worktree-lifecycle-governance-and-cleanup.md) | Critical | ✅ Complete | Merge-or-disposition enforcement live; historical checkout cleanup reconciled |
 | 94 | [Model Tier Taxonomy and Fable Ban](94_model-tier-taxonomy-and-fable-ban.md) | High | 🚧 In Progress (tier selectors implemented; declared-vs-certified route follow-up open) | Cross-project model-selection cleanup |
 | 95 | [Require llm_client Registration Audit](95_require-llm-client-registration-audit.md) | High | ✅ Complete | Cross-project enforcement of shared LLM routing |
 | 96 | [Registration-Only Audit Fast Path](96_registration-only-audit-fastpath.md) | High | ✅ Complete | Cross-project llm_client registration classification |
-| 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress (Slice 3 + post-validation terminal boundary verified; DIGIMON consumer trace pending) | DIGIMON Plan #111 bound-trace refresh |
+| 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | ✅ Complete | DIGIMON Plan #110 ledger-bound trace verification |
 | 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | ✅ Complete | DIGIMON Plan #111 bound-trace refresh |
-| 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | 🚧 In Progress (exact repair accepted; downstream binding verification pending) | onto-canon6 Plan 0141 R2 runtime authorization |
+| 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | ✅ Complete | onto-canon6 Plan 0141 exact dependency binding |
 | 109 | [Structured-Call Hard Deadline](109_structured_call_hard_deadline.md) | High | ✅ Complete | Reliable long-running structured simulations |
 | 110 | [Provider Capabilities and Opus Ban](110_provider-capabilities-opus-ban.md) | High | ✅ Complete | Cybernetic simulator DeepSeek V4 Flash max-reasoning sample |
 | 333 | [root budget scope across child traces](333_root-budget-scope-across-child-traces.md) | High | ✅ Complete | Plan #335 concurrent root-budget reservations |
