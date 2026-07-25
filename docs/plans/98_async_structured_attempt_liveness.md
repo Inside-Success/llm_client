@@ -1,6 +1,6 @@
 # Plan #98: Async structured-attempt liveness
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -238,6 +238,16 @@ or exercises the Plan #98 structured-attempt changes. The branch is therefore
 ready for review and downstream use, but the plan remains formally In Progress
 until the shared completion baseline or its fixed timeout is repaired; no
 `--force` status override was used.
+
+### Completion reconciliation — 2026-07-25
+
+The optional dependency gap is resolved in the canonical repository
+environment. The Plan #98 gate passes 25 tests, the retained downstream
+DIGIMON traces satisfy L98-8, and current personal `main` passes its complete
+suite (`1,930 passed`, `3 skipped`, `12 deselected`). The old completion
+wrapper's fixed 300-second ceiling remains tooling debt—the observed full suite
+took 351.91 seconds—but no longer keeps the implemented and downstream-proven
+liveness capability falsely active.
 
 ## Failure handling
 

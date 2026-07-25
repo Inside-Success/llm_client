@@ -1,6 +1,6 @@
 # Plan 01: LLM Client Master Roadmap
 
-**Status:** Complete
+**Status:** Active authority
 **Type:** program
 **Priority:** Highest
 **Blocked By:** None
@@ -25,6 +25,26 @@ is already obvious from the existing plans.
 
 **Why:** the repo needs one control surface that answers "what next?" without
 re-planning from scratch after every passing slice.
+
+---
+
+## Research
+
+- `CLAUDE.md` and `docs/plans/CLAUDE.md` define repository workflow and the
+  current plan registry.
+- Current personal and Inside Success Git refs establish canonical versus
+  candidate implementation lineage.
+- Child-plan acceptance evidence and current deterministic tests establish
+  whether work is complete, merely merged, or still awaiting downstream use.
+
+## Acceptance Criteria
+
+- The roadmap names one current next implementation packet.
+- The plan index contains no duplicate active plan identities.
+- Merged-but-unaccepted work is not described as either absent or complete.
+- Superseded proposals name their replacements and do not advertise a next
+  action.
+- Plan-status, relationship, and link checks pass.
 
 ---
 
@@ -179,29 +199,24 @@ stable enough that package-boundary churn is low.
 
 ## Current Default Next Step
 
-Programs A–E are complete. The library is in **maintenance mode**.
+Programs A–E remain complete, but “maintenance mode” no longer describes the
+current workload. The library has since added strict model policy, exact
+structured-attempt custody, lifecycle diagnostics, runtime cost governance,
+and concurrent root-budget reservations.
 
-**Active work:**
-- Plan 25 (Provider Governance and Shared Coordination) — consolidate model identity, provider caps, cooldowns, and shared coordination into one explicit runtime policy layer
+**Canonical state, last reconciled 2026-07-25:**
 
-**Cancelled:**
-- Plan 15 (Centralize Defaults) — pure refactoring, no consumer value
-- Plan 17 (text_runtime Dedup) — pure refactoring, not worth the effort
+- personal `main` includes lifecycle-integrity repair `f870362`; its full deterministic suite passes
+  (`1,930 passed`, `3 skipped`, `12 deselected`);
+- Plan #119 cost governance and Plan #335 concurrent reservations are complete;
+- Plans #121, #122, and #334 are merged implementations whose downstream
+  Process Tracing verification remains open;
+- Plan #124 is active only as a dirty candidate worktree and is not yet
+  canonical. It owns the next implementation packet: one logical deadline
+  across a structured retry/fallback chain;
+- Plans #91 and #94 remain separate open product/policy work; they are not
+  implicit prerequisites for Plan #124.
 
-**Deferred:**
-- Plan 19 (Agent Planning & Working Memory) — well-designed but large scope, not blocking
-
-**Completed recently:**
-- Plan 21 (Runtime Durability Follow-Ups From Grounded Research) — evidence-driven durability and diagnostics follow-up from a real downstream benchmark program
-- Module reorganization (Plan 12) landed; 29 stubs remain for Plan 16
-- Prompt assets externalized to `~/projects/prompts/`
-- LiteLLM observer callback added for unmigrated projects
-- Repo decluttered: README 1002→169 lines, stale docs archived, guides created
-- Makefile rewritten as consumer observability interface
-- ADR-0008 superseded (task_graph/experiment_eval extracted)
-
-**Why Plan 20 exists despite maintenance mode:**
-
-- grounded-research needed app-local `LLM_CLIENT_DB_PATH` isolation and explicit
-  long-call timeout policy to finish its benchmark runs
-- those are substrate concerns with cross-project value, not one-off app quirks
+The former provider-governance proposal is retained as superseded Plan #40.
+Its intended boundaries landed incrementally through Plans #94, #104,
+#115–#122, and #333–#335; it is not the active next action.

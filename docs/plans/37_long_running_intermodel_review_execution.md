@@ -358,8 +358,8 @@ Tasks:
 1. Inspect `~/projects/utils/consensus_system/`.
 2. Inspect `~/projects/agent_ontology/agents/debate_agent.py`.
 3. Commit extraction notes in:
-   - `docs/plans/36_prior_art_consensus_system.md`
-   - `docs/plans/36_prior_art_agent_ontology_debate.md`
+   - `docs/plans/supporting/36_prior_art_consensus_system.md`
+   - `docs/plans/supporting/36_prior_art_agent_ontology_debate.md`
 4. Do not move or delete sibling-repo code autonomously. After extraction notes
    are committed, treat any sibling-repo tombstone as its own verified Phase 9
    checkpoint and either:

@@ -1,6 +1,6 @@
 # Plan #95: Require llm_client Registration Audit
 
-**Status:** In Progress (implemented; focused verified)
+**Status:** Complete
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -73,7 +73,7 @@ becomes a hard CI gate.
 
 | Test Pattern | Why |
 |--------------|-----|
-| `pytest -q tests/test_model_policy_audit.py` | Audit scanner behavior is the full blast radius. |
+| `tests/test_model_policy_audit.py` | Audit scanner behavior is the full blast radius. |
 
 ---
 
@@ -89,7 +89,7 @@ becomes a hard CI gate.
 
 ## Verification Evidence
 
-- `pytest -q tests/test_model_policy_audit.py` — passed, 11 tests.
+- `pytest -q tests/test_model_policy_audit.py` — passed, 14 tests on 2026-07-25.
 - `python -m py_compile llm_client/model_policy_audit.py` — passed.
 - `python -m llm_client.model_policy_audit --require-llm-client tests/test_model_policy_audit.py` — passed, `MODEL POLICY OK`.
 - `git diff --check` — passed.

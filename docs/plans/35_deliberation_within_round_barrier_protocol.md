@@ -1,6 +1,6 @@
 # Plan #35: Within-Round Barrier Protocol + Anonymization for Deliberation
 
-**Status:** Planned
+**Status:** Blocked (Phases 1-4 shipped; optional Phase 6 requires a new decision)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None

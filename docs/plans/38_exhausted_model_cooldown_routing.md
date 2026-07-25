@@ -1,4 +1,4 @@
-# Plan #26: exhausted-model cooldown routing
+# Plan #38: Exhausted-Model Cooldown Routing
 
 **Status:** Complete
 **Type:** implementation
@@ -34,7 +34,7 @@
 ## Files Affected
 
 - `docs/plans/CLAUDE.md` (modify)
-- `docs/plans/26_exhausted_model_cooldown_routing.md` (create)
+- `docs/plans/38_exhausted_model_cooldown_routing.md` (create)
 - `llm_client/core/client_dispatch.py` (modify)
 - `llm_client/core/model_availability.py` (create)
 - `llm_client/execution/execution_kernel.py` (modify)
