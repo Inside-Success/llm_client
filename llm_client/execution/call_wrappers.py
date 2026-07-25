@@ -24,6 +24,7 @@ from llm_client.execution.call_contracts import (
     require_tags as _require_tags,
     resolve_budget_scope as _resolve_budget_scope,
 )
+from llm_client.observability.budget_reservations import BudgetReservationLease
 from llm_client.execution.call_lifecycle import (
     _AsyncLLMCallHeartbeatMonitor,
     _SyncLLMCallHeartbeatMonitor,
@@ -50,7 +51,7 @@ class PreparedPublicCallEnvelope:
     requested_timeout_s: int | None
     heartbeat_interval_s: float
     stall_after_s: float
-    budget_scope_lease: str | None
+    budget_scope_lease: str | BudgetReservationLease | None
     runtime_kwargs: dict[str, Any]
 
 

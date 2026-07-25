@@ -236,10 +236,16 @@ class _SyncStreamLifecycleAdapter:
 
         if self._finalized:
             return
+        error: Exception = RuntimeError("stream closed before completion")
         close = getattr(self._stream, "close", None)
-        if callable(close):
-            close()
-        self._finalize(error=RuntimeError("stream closed before completion"))
+        try:
+            if callable(close):
+                close()
+        except Exception as exc:
+            error = exc
+            raise
+        finally:
+            self._finalize(error=error)
 
     @property
     def result(self) -> Any:
@@ -335,10 +341,16 @@ class _AsyncStreamLifecycleAdapter:
 
         if self._finalized:
             return
+        error: Exception = RuntimeError("stream closed before completion")
         close = getattr(self._stream, "aclose", None)
-        if callable(close):
-            await close()
-        await self._finalize(error=RuntimeError("stream closed before completion"))
+        try:
+            if callable(close):
+                await close()
+        except Exception as exc:
+            error = exc
+            raise
+        finally:
+            await self._finalize(error=error)
 
     @property
     def result(self) -> Any:

@@ -477,6 +477,47 @@ def test_stream_close_releases_durable_budget_lease(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
+async def test_astream_aclose_releases_durable_budget_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit async close releases a concurrent stream lease exactly once."""
+
+    class _ClosableAsyncStream:
+        def __aiter__(self) -> "_ClosableAsyncStream":
+            return self
+
+        async def __anext__(self) -> Any:
+            return _mock_stream_chunk("never consumed")
+
+        async def aclose(self) -> None:
+            return None
+
+    async def _stream(**_: Any) -> _ClosableAsyncStream:
+        return _ClosableAsyncStream()
+
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.stream_chunk_builder", lambda chunks: None
+    )
+    monkeypatch.setattr("llm_client.core.client.litellm.acompletion", _stream)
+    stream = await client.astream_llm(
+        "gpt-4",
+        [{"role": "user", "content": "Hi"}],
+        task="test.lifecycle.stream.aclose",
+        trace_id="trace.lifecycle.stream.aclose",
+        max_budget=0.1,
+        budget_scope_trace_id="trace.lifecycle.stream.aclose",
+        budget_scope_mode="reserved_concurrent",
+        budget_reservation=0.05,
+    )
+    await stream.aclose()
+    await stream.aclose()
+    snapshot = get_budget_scope_snapshot(
+        scope_trace_id="trace.lifecycle.stream.aclose", max_budget=0.1
+    )
+    assert snapshot.active_reserved_microusd == 0
+
+
+@pytest.mark.asyncio
 async def test_acall_llm_structured_emits_failed_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
     """Async structured wrapper should emit a terminal failed lifecycle row."""
 

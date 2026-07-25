@@ -79,6 +79,8 @@ def _process_admit(db_path: str, barrier: multiprocessing.synchronize.Barrier, q
         )
     except LLMBudgetExceededError:
         queue.put("rejected")
+    except Exception as exc:
+        queue.put(f"error:{type(exc).__name__}:{exc}")
     else:
         queue.put(f"admitted:{lease.reservation_id}")
 
@@ -138,6 +140,7 @@ def test_two_processes_cannot_overreserve_one_scope(reservation_db: Path) -> Non
     for worker in workers:
         worker.join(timeout=15)
         assert worker.exitcode == 0
+    assert not [result for result in results if result.startswith("error:")]
     assert sum(result.startswith("admitted:") for result in results) == 1
     assert results.count("rejected") == 1
 

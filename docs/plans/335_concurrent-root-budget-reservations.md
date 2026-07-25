@@ -1,6 +1,6 @@
-# Plan #334: Concurrent Root-Budget Reservations
+# Plan #335: Concurrent Root-Budget Reservations
 
-**Status:** Planned
+**Status:** In Progress
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** Plan #333
@@ -458,10 +458,12 @@ observability or forwards control fields.
   emission.
 - A process-wide daemon keeper renews only locally owned active durable leases;
   lost custody fails at the terminal boundary rather than returning a success.
-- Focused zero-spend verification: 40 tests passed across reservation,
+- Focused zero-spend verification: 41 tests passed across reservation,
   call-contract, lifecycle, and text-runtime suites. The integrated held-call
   canary observed two concurrent children and rejected a third before runtime
-  dispatch. Focused Ruff and `git diff --check` passed.
+  dispatch. Focused Ruff and `git diff --check` passed. Explicit `close()` and
+  `aclose()` finalize in `finally`, so a provider cleanup error cannot leak a
+  durable reservation.
 
 ### Slice 3 — Review, merge, and fork synchronization
 
@@ -478,6 +480,13 @@ observability or forwards control fields.
 The fork gate is not satisfied by equivalent-looking source files, an editable
 checkout, or an unmerged branch.
 
+#### Plan-number correction (2026-07-25)
+
+This work was initially allocated as Plan #334 before a concurrently merged,
+unrelated Plan #334 became visible on personal `main`. It was reallocated to
+Plan #335 before PR merge; the former path was renamed rather than retained as
+a duplicate authority. No implementation semantics changed.
+
 ## Verification Commands
 
 ## Required Tests
@@ -492,7 +501,7 @@ checkout, or an unmerged branch.
   budget controls.
 
 ```bash
-python scripts/meta/check_plan_tests.py --plan 334
+python scripts/meta/check_plan_tests.py --plan 335
 pytest -q tests/test_budget_reservations.py tests/test_call_contracts.py \
   tests/test_client_lifecycle.py tests/test_text_runtime.py
 ruff check <changed Python files>
@@ -523,7 +532,7 @@ Do not run paid provider calls. All implementation evidence is zero-spend.
 
 ## Rollback
 
-Revert the Plan #334 merge with new commits on both remotes. Existing callers
+Revert the Plan #335 merge with new commits on both remotes. Existing callers
 remain on default `sequential` behavior. Do not delete the new tables during
 rollback; they are additive metadata and older code ignores them. Plan #182
 must remain blocked or restore its prior pin/ledger before either fork reverts.
