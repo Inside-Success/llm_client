@@ -4,9 +4,12 @@ This subtree contains the prompt rendering engine for `llm_client`.
 
 ## Purpose
 
-Prompt rendering logic (`prompts.py`, `prompt_assets.py`) lives here. Prompt
-asset data files (YAML/Jinja2 templates) live externally at
+Prompt rendering logic (`prompts.py`, `prompt_assets.py`) lives here. Canonical
+prompt asset data files (YAML/Jinja2 templates) live externally at
 `~/projects/prompts/` — configurable via `LLM_CLIENT_PROMPT_ASSET_ROOT`.
+Package fallback copies for required built-ins live under
+`llm_client/prompt_assets/` and must stay synced with the external canonical
+asset when both exist.
 
 ## Local Rules
 

@@ -1,0 +1,13 @@
+id: shared.review.adversarial_artifact.generic
+version: 1
+kind: chat_prompt
+status: canonical
+description: Shared generic adversarial artifact review prompt for llm_client review-artifact.
+tags:
+  - review
+  - adversarial
+  - structured_output
+  - reusable
+template_path: template.yaml
+input_schema: llm_client.review_artifact_input.v1
+output_schema: llm_client.adversarial_review.v1
