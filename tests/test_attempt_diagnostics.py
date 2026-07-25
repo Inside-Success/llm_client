@@ -84,12 +84,32 @@ def test_diagnostic_readback_binds_exact_structured_attempt() -> None:
     assert result.diagnostics == (diagnostic,)
 
 
-def test_legacy_attempt_is_explicitly_unavailable() -> None:
+def test_failed_attempt_without_diagnostic_is_explicitly_unavailable() -> None:
     event = _attempt()
 
     result = get_attempt_diagnosis(event.event_id)
 
-    assert result.diagnostic_status == "unavailable_legacy"
+    assert result.diagnostic_status == "unavailable_no_diagnostic"
+    assert result.diagnostics == ()
+
+
+def test_successful_attempt_is_not_mislabeled_as_legacy() -> None:
+    suffix = uuid4().hex
+    event = StructuredAttemptEvent(
+        logical_call_id=f"success-{suffix}",
+        trace_id=f"success-trace-{suffix}",
+        task="test.attempt_diagnostics.success",
+        attempt_ordinal=0,
+        model="openrouter/deepseek/deepseek-v4-flash",
+        execution_path="native_schema",
+        schema_hash="s" * 64,
+        event_type="validated",
+    )
+    record_structured_attempt_event(event)
+
+    result = get_attempt_diagnosis(event.event_id)
+
+    assert result.diagnostic_status == "not_applicable_success"
     assert result.diagnostics == ()
 
 

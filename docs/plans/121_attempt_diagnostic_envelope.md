@@ -211,8 +211,12 @@ flowchart TB
 
 - Existing `llm_calls`, `structured_attempt_events`, `call_lifecycle_events`,
   and Foundation evidence remain readable and unchanged.
-- Old rows produce `diagnostic_status="unavailable_legacy"`, never fabricated
-  values.
+- New successful attempt events produce
+  `diagnostic_status="not_applicable_success"`; they do not manufacture a
+  failure diagnosis or masquerade as legacy. A failed event with no retained
+  envelope produces `diagnostic_status="unavailable_no_diagnostic"`: this
+  deliberately covers legacy rows and any current capture gap because the
+  ledger cannot honestly distinguish them.
 - The retention and redaction rules amend ADRs 0007 and 0012. They must be
   approved before diagnostic messages or response metadata are persisted.
 - The public query returns typed values and a bounded summary. Raw artifacts
@@ -249,8 +253,9 @@ flowchart TB
 1. Freeze the Pydantic schema and deterministic redactor before changing
    provider paths.
 2. Add an additive diagnostics table and strict typed readback.
-3. Prove migration, identity binding, redaction rejection, and legacy
-   `unavailable_legacy` behavior with real temporary SQLite.
+3. Prove migration, identity binding, redaction rejection, successful-attempt
+   non-applicability, and unavailable-diagnostic behavior with real temporary
+   SQLite.
 
 ### Slice 2: Native Structured Boundary
 
@@ -278,7 +283,7 @@ flowchart TB
 
 | Test | Evidence |
 | --- | --- |
-| `tests/test_attempt_diagnostics.py` | Temporary-SQLite identity binding, legacy status, redaction rejection, confirmation limits, writer failure, migration, typed gateway response, and timeout attribution. |
+| `tests/test_attempt_diagnostics.py` | Temporary-SQLite identity binding, success non-applicability, unavailable-diagnostic status, redaction rejection, confirmation limits, writer failure, migration, typed gateway response, and timeout attribution. |
 | `tests/test_structured_attempts.py` | Existing native structured-attempt lifecycle, retry, timeout, malformed-response, and strict-schema negative controls continue to pass. |
 | governed live DeepSeek V4 Flash structured probe | Exact route produces a trace-bound diagnosis and lifecycle receipt; recorded in Slice 1 evidence. |
 | governed Process Tracing V3 atomic probe | Downstream can make only the causal statement warranted by the returned diagnostic evidence; blocked until the runtime revision is promoted and the downstream harness is in a clean governed worktree. |
@@ -322,7 +327,7 @@ the returned diagnostic envelope satisfies L121-2 through L121-5.
 
 Implemented the typed envelope, deterministic redaction boundary, additive
 `attempt_diagnostics` SQLite ledger, exact attempt-identity binding, public
-read model, and legacy `unavailable_legacy` status. Focused contract evidence:
+read model, and truthful unavailable-diagnostic status. Focused contract evidence:
 
 - `tests/test_attempt_diagnostics.py`, `tests/test_structured_attempts.py`, and
   `tests/test_call_lifecycle_ledger.py`: 31 passed.
@@ -346,3 +351,21 @@ status and request ID, yielding `gateway_or_provider_confirmed`; a timeout with
 no response remains `client_observed_only`. The focused diagnostics and
 structured-attempt suite passes 25 tests. This is native-schema-only and does
 not yet capture Responses API or prove a live provider-error envelope.
+
+## Slice 3 Progress (2026-07-25)
+
+A fresh governed DeepSeek V4 Flash native structured success call from the
+final Plan 121 branch completed with `reasoning_effort="high"`, no retry, a
+300-second per-attempt deadline, and a `$0.02` maximum budget:
+`llm_client.plan121.slice3.live.20260725T161715Z.27863`. It returned `status=ok`
+on `openrouter/deepseek/deepseek-v4-flash` at observed cost `$0.000015846` and
+retained `started -> received -> validated` for logical call
+`llmcall_121fe96172db44f88b90f61ba8349f0a`.
+
+The first read incorrectly labeled those no-failure events
+`unavailable_legacy`; this run therefore found and closed a provenance defect.
+They now return `not_applicable_success`. Failed events without an envelope
+return `unavailable_no_diagnostic`, because the data plane cannot truthfully
+prove that such a row predates Plan 121 rather than reflects a present capture
+gap. The downstream V3 probe remains blocked on a promoted runtime revision
+and a clean governed downstream harness.

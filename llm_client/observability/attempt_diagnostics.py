@@ -117,7 +117,11 @@ class AttemptDiagnosis(BaseModel):
     attempt_event_id: str
     logical_call_id: str
     attempt_ordinal: int
-    diagnostic_status: Literal["available", "unavailable_legacy"]
+    diagnostic_status: Literal[
+        "available",
+        "not_applicable_success",
+        "unavailable_no_diagnostic",
+    ]
     diagnostics: tuple[AttemptDiagnosticEnvelope, ...]
 
 
@@ -151,10 +155,17 @@ def get_attempt_diagnosis(attempt_event_id: str) -> AttemptDiagnosis:
     if attempt is None:
         raise ValueError(f"unknown structured attempt event: {attempt_event_id}")
     diagnostics = tuple(get_attempt_diagnostics(attempt_event_id))
+    if diagnostics:
+        diagnostic_status = "available"
+    elif attempt["event_type"] in {"started", "received", "validated"}:
+        # Failure diagnostics are intentionally absent for a completed attempt.
+        diagnostic_status = "not_applicable_success"
+    else:
+        diagnostic_status = "unavailable_no_diagnostic"
     return AttemptDiagnosis(
         attempt_event_id=attempt_event_id,
         logical_call_id=str(attempt["logical_call_id"]),
         attempt_ordinal=int(attempt["attempt_ordinal"]),
-        diagnostic_status="available" if diagnostics else "unavailable_legacy",
+        diagnostic_status=diagnostic_status,
         diagnostics=diagnostics,
     )

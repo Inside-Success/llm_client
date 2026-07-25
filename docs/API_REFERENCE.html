@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-25T16:32:35Z -->
+<!-- Generated: 2026-07-25T16:32:56Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -2148,7 +2148,7 @@ reconstruct that state first and then hand this module a prepared call.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-AttemptDiagnosis">
-  <summary><code>AttemptDiagnosis</code> <span class="sig">(*, attempt_event_id: str, logical_call_id: str, attempt_ordinal: int, diagnostic_status: Literal[&#x27;available&#x27;, &#x27;unavailable_legacy&#x27;], diagnostics: tuple[llm_client.observability.attempt_diagnostics.AttemptDiagnosticEnvelope, ...]) -&gt; None</span></summary>
+  <summary><code>AttemptDiagnosis</code> <span class="sig">(*, attempt_event_id: str, logical_call_id: str, attempt_ordinal: int, diagnostic_status: Literal[&#x27;available&#x27;, &#x27;not_applicable_success&#x27;, &#x27;unavailable_no_diagnostic&#x27;], diagnostics: tuple[llm_client.observability.attempt_diagnostics.AttemptDiagnosticEnvelope, ...]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Read model joining one attempt event to its retained diagnostic evidence.</p>
     <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> class</p>
@@ -9853,7 +9853,7 @@ whole malformed files; exclusions are then reported as path hashes and
 <h4>Classes</h4>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-attempt_diagnostics-AttemptDiagnosis">
-  <summary><code>AttemptDiagnosis</code> <span class="sig">(*, attempt_event_id: str, logical_call_id: str, attempt_ordinal: int, diagnostic_status: Literal[&#x27;available&#x27;, &#x27;unavailable_legacy&#x27;], diagnostics: tuple[llm_client.observability.attempt_diagnostics.AttemptDiagnosticEnvelope, ...]) -&gt; None</span></summary>
+  <summary><code>AttemptDiagnosis</code> <span class="sig">(*, attempt_event_id: str, logical_call_id: str, attempt_ordinal: int, diagnostic_status: Literal[&#x27;available&#x27;, &#x27;not_applicable_success&#x27;, &#x27;unavailable_no_diagnostic&#x27;], diagnostics: tuple[llm_client.observability.attempt_diagnostics.AttemptDiagnosticEnvelope, ...]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Read model joining one attempt event to its retained diagnostic evidence.</p>
     <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> class</p>
