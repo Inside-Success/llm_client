@@ -1,6 +1,6 @@
 # Plan #124: Logical Structured-Call Deadline
 
-**Status:** In Progress
+**Status:** 🧪 Implemented; downstream verification pending
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -123,3 +123,8 @@ truth, or cancellation of already-blocked daemon transport threads.
   lifecycle payloads retain `logical_timeout_s`.
 - Focused deterministic verification: 69 tests passed across retry kernel,
   structured runtime, lifecycle, Foundation contracts, and public exports.
+- Full repository verification: 1,934 passed, 3 skipped, 12 deselected in
+  198.31 seconds.
+- Remaining acceptance is the explicitly governed Process Tracing replay. It
+  may incur provider cost and remains downstream rather than being silently run
+  as part of this shared-library change.
