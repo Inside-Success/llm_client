@@ -49,7 +49,7 @@ from __future__ import annotations
 import asyncio  # noqa: F401 — used by downstream mock targets
 import logging
 import time
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 
 import litellm
 from pydantic import BaseModel
@@ -122,6 +122,7 @@ from llm_client.execution.call_contracts import (
     check_budget as _check_budget,
     normalize_prompt_ref as _normalize_prompt_ref,
     release_budget_scope as _release_budget_scope,  # noqa: F401
+    settle_budget_scope as _settle_budget_scope,  # noqa: F401
     require_tags as _require_tags,
 )
 from llm_client.execution.timeout_policy import (
@@ -468,6 +469,8 @@ def call_llm(
     config: ClientConfig | None = None,
     parent_trace_id: str | None = None,
     budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> LLMCallResult:
     """Call any LLM. Routes by model string: litellm, Responses API, or Agent SDK.
@@ -538,6 +541,8 @@ def call_llm(
         kwargs["parent_trace_id"] = parent_trace_id
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="call_llm",
         timeout=timeout,
@@ -603,6 +608,8 @@ def call_llm_structured(
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
     budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Call LLM and get back a validated Pydantic model.
@@ -648,6 +655,8 @@ def call_llm_structured(
         resolved_timeout = _default_timeout_for_caller(caller="call_llm_structured")
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="call_llm_structured",
         timeout=resolved_timeout,
@@ -795,6 +804,8 @@ async def acall_llm(
     config: ClientConfig | None = None,
     parent_trace_id: str | None = None,
     budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> LLMCallResult:
     """Async version of call_llm. Same three-tier routing (Agent SDK / Responses API / Completions).
@@ -839,6 +850,8 @@ async def acall_llm(
         kwargs["parent_trace_id"] = parent_trace_id
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="acall_llm",
         timeout=timeout,
@@ -904,6 +917,8 @@ async def acall_llm_structured(
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
     budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> tuple[T, LLMCallResult]:
     """Async version of call_llm_structured.
@@ -949,6 +964,8 @@ async def acall_llm_structured(
         resolved_timeout = _default_timeout_for_caller(caller="acall_llm_structured")
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
+    kwargs["budget_scope_mode"] = budget_scope_mode
+    kwargs["budget_reservation"] = budget_reservation
     envelope = _prepare_public_call_envelope(
         caller="acall_llm_structured",
         timeout=resolved_timeout,
@@ -1337,6 +1354,9 @@ def stream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> LLMStream:
     """Stream an LLM response, yielding text chunks as they arrive.
@@ -1394,6 +1414,9 @@ def stream_llm(
         on_fallback=on_fallback,
         hooks=hooks,
         config=config,
+        budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
+        budget_reservation=budget_reservation,
         **kwargs,
     )
 
@@ -1415,6 +1438,9 @@ async def astream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    budget_reservation: float = 0.0,
     **kwargs: Any,
 ) -> AsyncLLMStream:
     """Async version of :func:`stream_llm` with retry/fallback support.
@@ -1442,6 +1468,9 @@ async def astream_llm(
         on_fallback=on_fallback,
         hooks=hooks,
         config=config,
+        budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
+        budget_reservation=budget_reservation,
         **kwargs,
     )
 

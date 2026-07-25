@@ -1025,6 +1025,30 @@ CREATE TABLE IF NOT EXISTS dashboard_spend_hourly (
     total_cost REAL NOT NULL DEFAULT 0.0,
     PRIMARY KEY (bucket_start, project, model)
 );
+
+CREATE TABLE IF NOT EXISTS budget_scopes (
+    scope_trace_id TEXT PRIMARY KEY,
+    max_budget_microusd INTEGER NOT NULL CHECK (max_budget_microusd > 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS budget_reservations (
+    reservation_id TEXT PRIMARY KEY,
+    scope_trace_id TEXT NOT NULL,
+    call_trace_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    reserved_microusd INTEGER NOT NULL CHECK (reserved_microusd > 0),
+    status TEXT NOT NULL CHECK (
+        status IN ('active', 'settled', 'released_error', 'expired')
+    ),
+    created_at TEXT NOT NULL,
+    heartbeat_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    completed_at TEXT,
+    settled_cost_microusd INTEGER,
+    FOREIGN KEY(scope_trace_id) REFERENCES budget_scopes(scope_trace_id)
+);
 """
 
 _INDEXES_SQL = """
@@ -1098,6 +1122,10 @@ CREATE INDEX IF NOT EXISTS idx_interv_category ON interventions(category);
 CREATE INDEX IF NOT EXISTS idx_interv_status ON interventions(status);
 CREATE INDEX IF NOT EXISTS idx_interv_timestamp ON interventions(timestamp);
 CREATE INDEX IF NOT EXISTS idx_cost_alerts_created_at ON cost_alerts(created_at);
+CREATE INDEX IF NOT EXISTS idx_budget_reservations_active_scope
+ON budget_reservations(scope_trace_id, status);
+CREATE INDEX IF NOT EXISTS idx_budget_reservations_expiry
+ON budget_reservations(status, expires_at);
 """
 
 
@@ -1266,7 +1294,29 @@ def _get_db() -> sqlite3.Connection:
         _db_conn.execute("PRAGMA journal_mode = WAL")
         _db_conn.execute("PRAGMA synchronous = NORMAL")
         _db_conn.executescript(_TABLES_SQL)
-        _migrate_db(_db_conn)
+        # Two fresh processes can open the same SQLite file at once. One may
+        # add an old-schema column after the other's PRAGMA snapshot but before
+        # its ALTER TABLE. Retry the idempotent migration from a fresh schema
+        # view instead of converting that harmless race into a startup failure.
+        migration_attempt = 0
+        while True:
+            try:
+                _migrate_db(_db_conn)
+                break
+            except sqlite3.OperationalError as exc:
+                duplicate_column = "duplicate column name" in str(exc).lower()
+                if not (duplicate_column or _is_db_locked_error(exc)):
+                    raise
+                if migration_attempt >= _get_db_lock_retries():
+                    raise
+                try:
+                    _db_conn.rollback()
+                except sqlite3.Error:
+                    pass
+                time.sleep(
+                    (_get_db_lock_retry_delay_ms() * (migration_attempt + 1)) / 1000.0
+                )
+                migration_attempt += 1
         _db_conn.executescript(_INDEXES_SQL)
         return _db_conn
 

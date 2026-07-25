@@ -1,10 +1,10 @@
 # Plan #333: root budget scope across child traces
 
-**Status:** In Progress
+**Status:** Complete (2026-07-25)
 **Type:** implementation  <!-- implementation | design -->
 **Priority:** High
 **Blocked By:** None
-**Blocks:** DIGIMON Plan #36 cumulative query-budget enforcement
+**Blocks:** Plan #334 concurrent root-budget reservations
 
 ---
 
@@ -105,3 +105,13 @@ cost query and Plan #332 reservation semantics; no new ledger or provider path.
 in-flight provider call's final cost; the scope guard is explicitly a
 process-local sequential admission control. It does not alter provider fallback
 policy or wire DIGIMON before shared-contract review.
+
+## Completion Evidence
+
+- Personal upstream PR #103 merged as `2b627ff`.
+- Plan gate: 33 tests passed.
+- Focused runtime tests: 27 passed.
+- Focused Ruff, generated API reference, and `git diff --check` passed.
+- Plan #334 is the explicit successor for concurrent and cross-process scope
+  admission. The earlier reference to “DIGIMON Plan #36” was incorrect:
+  DIGIMON Plan #36 owns assertion-node SQLite import, not budget enforcement.

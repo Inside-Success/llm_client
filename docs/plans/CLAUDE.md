@@ -108,9 +108,10 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | 🚧 In Progress (exact repair accepted; downstream binding verification pending) | onto-canon6 Plan 0141 R2 runtime authorization |
 | 109 | [Structured-Call Hard Deadline](109_structured_call_hard_deadline.md) | High | ✅ Complete | Reliable long-running structured simulations |
 | 110 | [Provider Capabilities and Opus Ban](110_provider-capabilities-opus-ban.md) | High | ✅ Complete | Cybernetic simulator DeepSeek V4 Flash max-reasoning sample |
-| 333 | [root budget scope across child traces](333_root-budget-scope-across-child-traces.md) | High | 🚧 In Progress | DIGIMON Plan #36 cumulative query-budget enforcement |
+| 333 | [root budget scope across child traces](333_root-budget-scope-across-child-traces.md) | High | ✅ Complete | Plan #335 concurrent root-budget reservations |
 | 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | 🚧 In Progress | Plan #121 merged diagnostics contract |
 | 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | 🚧 In Progress | Plan #122 client deadline classification |
+| 335 | [Concurrent Root-Budget Reservations](335_concurrent-root-budget-reservations.md) | Critical | 🚧 In Progress | DIGIMON Plan #182 |
 
 
 ## Status Key
