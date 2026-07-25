@@ -12,8 +12,10 @@ from unittest.mock import patch
 import pytest
 
 from llm_client.execution.call_contracts import (
+    acquire_budget_scope,
     check_budget,
     normalize_prompt_ref,
+    release_budget_scope,
     require_tags,
     resolve_budget_scope,
 )
@@ -64,14 +66,14 @@ def test_check_budget_blocks_before_dispatch_when_reservation_would_cross_limit(
 
 
 def test_public_envelope_reserves_budget_and_strips_internal_kwarg() -> None:
-    with patch("llm_client.execution.call_wrappers._check_budget") as check:
+    with patch("llm_client.execution.call_wrappers._acquire_budget_scope") as admit:
         envelope = _prepare_public_call_envelope(
             caller="call_llm", timeout=30,
             messages=[{"role": "user", "content": "test"}],
             kwargs={"task": "test.task", "trace_id": "test/trace", "max_budget": 1.0,
                     "budget_reservation": 0.25, "temperature": 0.1},
         )
-    assert check.call_args.kwargs["reservation"] == 0.25
+    assert admit.call_args.kwargs["reservation"] == 0.25
     assert "budget_reservation" not in envelope.runtime_kwargs
 
 
@@ -87,6 +89,29 @@ def test_check_budget_aggregates_root_scope_and_descendants() -> None:
             )
 
     get_cost.assert_called_once_with(trace_prefix="trace/root")
+
+
+def test_budget_scope_rejects_concurrent_child_dispatch_and_releases() -> None:
+    """One process cannot dispatch two unsettled children under one scope."""
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=0.0):
+        lease = acquire_budget_scope(
+            "trace/root/planner",
+            1.0,
+            budget_scope_trace_id="trace/root",
+        )
+        with pytest.raises(LLMBudgetExceededError, match="in-flight call"):
+            acquire_budget_scope(
+                "trace/root/operator",
+                1.0,
+                budget_scope_trace_id="trace/root",
+            )
+        release_budget_scope(lease)
+        replacement = acquire_budget_scope(
+            "trace/root/operator",
+            1.0,
+            budget_scope_trace_id="trace/root",
+        )
+        release_budget_scope(replacement)
 
 
 @pytest.mark.parametrize("scope", ["", "   ", "trace/other"])

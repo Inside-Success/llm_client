@@ -270,16 +270,20 @@ def test_stream_llm_emits_started_progress_completed_lifecycle(
         "llm_client.core.client.litellm.stream_chunk_builder",
         lambda chunks: None,
     )
-    monkeypatch.setattr(
-        "llm_client.core.client.litellm.completion",
-        lambda **kwargs: iter([_mock_stream_chunk("hello")]),
-    )
+    seen_provider_kwargs: dict[str, Any] = {}
+
+    def _completion(**kwargs: Any) -> Any:
+        seen_provider_kwargs.update(kwargs)
+        return iter([_mock_stream_chunk("hello")])
+
+    monkeypatch.setattr("llm_client.core.client.litellm.completion", _completion)
 
     stream = client.stream_llm(
         "gpt-4",
         [{"role": "user", "content": "Hi"}],
         task="test.lifecycle.stream",
         trace_id="trace.lifecycle.stream.sync",
+        budget_scope_trace_id="trace.lifecycle.stream.sync",
         max_budget=0.1,
         lifecycle_heartbeat_interval_s=0,
         lifecycle_stall_after_s=0,
@@ -296,6 +300,7 @@ def test_stream_llm_emits_started_progress_completed_lifecycle(
     assert completed["progress_event_count"] == 1
     assert completed["progress_observable"] is True
     assert completed.get("error_type") is None
+    assert "budget_scope_trace_id" not in seen_provider_kwargs
 
 
 def test_stream_llm_emits_failed_lifecycle_on_iteration_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -481,7 +486,10 @@ async def test_astream_llm_emits_started_progress_completed_lifecycle(
 ) -> None:
     """Async streaming emits lifecycle rows when stream reaches natural end."""
 
-    async def _stream(**_: Any) -> _MockAsyncStream:
+    seen_provider_kwargs: dict[str, Any] = {}
+
+    async def _stream(**kwargs: Any) -> _MockAsyncStream:
+        seen_provider_kwargs.update(kwargs)
         return _MockAsyncStream([_mock_stream_chunk("hello")])
 
     monkeypatch.setattr(
@@ -495,6 +503,7 @@ async def test_astream_llm_emits_started_progress_completed_lifecycle(
         [{"role": "user", "content": "Hi"}],
         task="test.lifecycle.istream",
         trace_id="trace.lifecycle.stream.async",
+        budget_scope_trace_id="trace.lifecycle.stream.async",
         max_budget=0.1,
         lifecycle_heartbeat_interval_s=0,
         lifecycle_stall_after_s=0,
@@ -513,6 +522,7 @@ async def test_astream_llm_emits_started_progress_completed_lifecycle(
     completed = rows[-1][1]["llm_call_lifecycle"]
     assert completed["progress_observable"] is True
     assert completed["progress_event_count"] == 1
+    assert "budget_scope_trace_id" not in seen_provider_kwargs
 
 
 @pytest.mark.asyncio

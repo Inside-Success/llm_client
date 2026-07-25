@@ -159,6 +159,7 @@ class _SyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
+        budget_scope_lease: str | None = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -174,6 +175,7 @@ class _SyncStreamLifecycleAdapter:
         self._stall_after_s = stall_after_s
         self._started_at = started_at
         self._finalized = False
+        self._budget_scope_lease = budget_scope_lease
 
     def __iter__(self) -> "_SyncStreamLifecycleAdapter":
         return self
@@ -213,6 +215,7 @@ class _SyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
+        _client._release_budget_scope(self._budget_scope_lease)
 
     @property
     def result(self) -> Any:
@@ -239,6 +242,7 @@ class _AsyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
+        budget_scope_lease: str | None = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -254,6 +258,7 @@ class _AsyncStreamLifecycleAdapter:
         self._stall_after_s = stall_after_s
         self._started_at = started_at
         self._finalized = False
+        self._budget_scope_lease = budget_scope_lease
 
     def __aiter__(self) -> "_AsyncStreamLifecycleAdapter":
         return self
@@ -293,6 +298,7 @@ class _AsyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
+        _client._release_budget_scope(self._budget_scope_lease)
 
     @property
     def result(self) -> Any:
@@ -342,7 +348,7 @@ def stream_llm_impl(
         max_budget,
         caller="stream_llm",
     )
-    _client._check_budget(
+    budget_scope_lease = _client._acquire_budget_scope(
         trace_id,
         max_budget,
         reservation=budget_reservation,
@@ -529,8 +535,10 @@ def stream_llm_impl(
             heartbeat_interval_s=heartbeat_interval_s,
             stall_after_s=stall_after_s,
             started_at=started_at,
+            budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
+        _client._release_budget_scope(budget_scope_lease)
         _emit_stream_terminal_event(
             stream=None,
             error=exc,
@@ -592,7 +600,7 @@ async def astream_llm_impl(
         max_budget,
         caller="astream_llm",
     )
-    _client._check_budget(
+    budget_scope_lease = _client._acquire_budget_scope(
         trace_id,
         max_budget,
         reservation=budget_reservation,
@@ -781,8 +789,10 @@ async def astream_llm_impl(
             heartbeat_interval_s=heartbeat_interval_s,
             stall_after_s=stall_after_s,
             started_at=started_at,
+            budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
+        _client._release_budget_scope(budget_scope_lease)
         _emit_stream_terminal_event(
             stream=None,
             error=exc,

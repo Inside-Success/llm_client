@@ -18,7 +18,9 @@ budgets.
 **Target:** Public calls may declare a `budget_scope_trace_id`. The client
 validates that it is the call trace or a slash-delimited ancestor, then applies
 existing settled-cost and reservation checks to that scope's trace-prefix
-aggregate. Omitting the field preserves exact-trace behavior.
+aggregate. Bounded scoped calls are sequential within one process: a second
+in-flight child fails loudly until the first reaches a terminal boundary.
+Omitting the field preserves exact-trace behavior.
 
 **Why:** One user-visible request can cap combined planner, operator, rerank,
 and synthesis cost without each project maintaining a parallel cost ledger.
@@ -61,8 +63,8 @@ cost query and Plan #332 reservation semantics; no new ledger or provider path.
    reservation and exact-trace defaults.
 2. Thread the resolved scope through public text/structured and streaming
    paths without forwarding it to model providers.
-3. Add root-plus-child, reservation, malformed-scope, and provider-stripping
-   checks. Regenerate the API reference.
+3. Add root-plus-child, reservation, malformed-scope, concurrent-child, and
+   provider-stripping checks. Regenerate the API reference.
 
 ---
 
@@ -74,6 +76,7 @@ cost query and Plan #332 reservation semantics; no new ledger or provider path.
 |-----------|---------------|------------------|
 | `tests/test_call_contracts.py` | `test_check_budget_aggregates_root_scope_and_descendants` | A child call is charged to the root scope |
 | `tests/test_call_contracts.py` | `test_budget_scope_must_be_a_nonempty_trace_ancestor` | Unrelated scopes fail before dispatch |
+| `tests/test_call_contracts.py` | `test_budget_scope_rejects_concurrent_child_dispatch_and_releases` | A second active child cannot race the shared settled-cost check |
 | `tests/test_text_runtime.py` | `test_text_runtime_keeps_budget_scope_out_of_provider_kwargs` | Scope remains client-only |
 
 ### Existing Tests (Must Pass)
@@ -89,6 +92,7 @@ cost query and Plan #332 reservation semantics; no new ledger or provider path.
 
 - [ ] A root and descendant aggregate settled spend plus the declared reservation.
 - [ ] Malformed or unrelated scopes fail loudly before dispatch.
+- [ ] A bounded scope cannot dispatch concurrent children in one process.
 - [ ] Omitted scope preserves exact-trace behavior; zero remains unlimited.
 - [ ] Scope metadata is not forwarded to a provider.
 - [ ] Focused tests and generated API reference pass.
@@ -97,6 +101,7 @@ cost query and Plan #332 reservation semantics; no new ledger or provider path.
 
 ## Notes
 
-**Non-goals:** This does not predict an in-flight provider call's final cost;
-Plan #332's reservation is the available admission control. It does not alter
-provider fallback policy or wire DIGIMON before shared-contract review.
+**Non-goals:** This does not coordinate budgets across processes or predict an
+in-flight provider call's final cost; the scope guard is explicitly a
+process-local sequential admission control. It does not alter provider fallback
+policy or wire DIGIMON before shared-contract review.

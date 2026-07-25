@@ -23,6 +23,7 @@ import json as _json
 import logging
 import os
 import re
+import threading
 import uuid
 from typing import Any, Literal, NoReturn
 
@@ -44,6 +45,14 @@ from llm_client.core.model_detection import (
 from llm_client.prompt_assets import parse_prompt_ref
 
 logger = logging.getLogger(__name__)
+
+# A scope is a request-level budget boundary.  Settled cost alone cannot make
+# concurrent child dispatch safe: both children could observe the same spend
+# before either has a terminal cost row.  Public calls therefore hold this
+# process-local lease for the duration of a scoped call.  Cross-process budget
+# coordination is intentionally not claimed by this lightweight client control.
+_active_budget_scopes: set[str] = set()
+_budget_scope_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Tag / budget / retry-safety contracts (original surface)
@@ -213,6 +222,58 @@ def resolve_budget_scope(
             f"scope={scope!r}, trace_id={trace_id!r}."
         )
     return scope
+
+
+def acquire_budget_scope(
+    trace_id: str,
+    max_budget: float,
+    *,
+    reservation: float = 0.0,
+    budget_scope_trace_id: str | None = None,
+    warning_sink: list[str] | None = None,
+) -> str | None:
+    """Admit one bounded scoped call and return its lease token.
+
+    A scoped budget is deliberately sequential within one process.  This
+    prevents sibling calls from independently passing a settled-cost check
+    before either one records its final cost.  Callers must release a returned
+    token at every terminal boundary.
+    """
+
+    scope = resolve_budget_scope(trace_id, budget_scope_trace_id)
+    if scope is None or max_budget <= 0:
+        check_budget(
+            trace_id,
+            max_budget,
+            reservation=reservation,
+            budget_scope_trace_id=scope,
+            warning_sink=warning_sink,
+        )
+        return None
+    with _budget_scope_lock:
+        if scope in _active_budget_scopes:
+            raise LLMBudgetExceededError(
+                f"Budget scope {scope} already has an in-flight call; "
+                "scoped calls must complete sequentially."
+            )
+        check_budget(
+            trace_id,
+            max_budget,
+            reservation=reservation,
+            budget_scope_trace_id=scope,
+            warning_sink=warning_sink,
+        )
+        _active_budget_scopes.add(scope)
+    return scope
+
+
+def release_budget_scope(lease: str | None) -> None:
+    """Release a lease returned by :func:`acquire_budget_scope`."""
+
+    if lease is None:
+        return
+    with _budget_scope_lock:
+        _active_budget_scopes.discard(lease)
 
 
 def agent_retry_safe_enabled(explicit: Any | None) -> bool:

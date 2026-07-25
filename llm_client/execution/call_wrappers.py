@@ -17,8 +17,9 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Literal, TypeVar
 
 from llm_client.execution.call_contracts import (
-    check_budget as _check_budget,
+    acquire_budget_scope as _acquire_budget_scope,
     normalize_prompt_ref as _normalize_prompt_ref,
+    release_budget_scope as _release_budget_scope,
     require_tags as _require_tags,
     resolve_budget_scope as _resolve_budget_scope,
 )
@@ -48,6 +49,7 @@ class PreparedPublicCallEnvelope:
     requested_timeout_s: int | None
     heartbeat_interval_s: float
     stall_after_s: float
+    budget_scope_lease: str | None
     runtime_kwargs: dict[str, Any]
 
 
@@ -72,7 +74,7 @@ def _prepare_public_call_envelope(
         resolved_trace_id,
         kwargs.get("budget_scope_trace_id"),
     )
-    _check_budget(
+    budget_scope_lease = _acquire_budget_scope(
         resolved_trace_id,
         resolved_max_budget,
         reservation=float(reservation),
@@ -105,6 +107,7 @@ def _prepare_public_call_envelope(
         requested_timeout_s=_requested_timeout_for_lifecycle(timeout),
         heartbeat_interval_s=heartbeat_interval_s,
         stall_after_s=stall_after_s,
+        budget_scope_lease=budget_scope_lease,
         runtime_kwargs=runtime_kwargs,
     )
 
@@ -186,6 +189,8 @@ def _run_sync_public_call(
             progress_event_count=snapshot.progress_event_count,
         )
         raise
+    finally:
+        _release_budget_scope(envelope.budget_scope_lease)
     monitor.stop()
     elapsed_s = time.monotonic() - started_at
     completed_snapshot = monitor.snapshot()
@@ -313,6 +318,8 @@ async def _run_async_public_call(
             progress_event_count=snapshot.progress_event_count,
         )
         raise
+    finally:
+        _release_budget_scope(envelope.budget_scope_lease)
     await monitor.stop()
     elapsed_s = time.monotonic() - started_at
     completed_snapshot = monitor.snapshot()

@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-25T17:44:24Z -->
+<!-- Generated: 2026-07-25T17:44:34Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -9094,6 +9094,20 @@ and easier to test without dragging the full client runtime with it.</pre>
 
 <h4>Functions</h4>
 
+<details class="symbol" id="module-llm_client-execution-call_contracts-acquire_budget_scope">
+  <summary><code>acquire_budget_scope</code> <span class="sig">(trace_id: str, max_budget: float, *, reservation: float = 0.0, budget_scope_trace_id: str | None = None, warning_sink: list[str] | None = None) -&gt; str | None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Admit one bounded scoped call and return its lease token.</p>
+    <p class="meta">Source: <code>llm_client.execution.call_contracts</code> functions</p>
+    <pre class="doc">Admit one bounded scoped call and return its lease token.
+
+A scoped budget is deliberately sequential within one process.  This
+prevents sibling calls from independently passing a settled-cost check
+before either one records its final cost.  Callers must release a returned
+token at every terminal boundary.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-execution-call_contracts-agent_retry_safe_enabled">
   <summary><code>agent_retry_safe_enabled</code> <span class="sig">(explicit: typing.Any | None) -&gt; bool</span></summary>
   <div class="symbol-body">
@@ -9118,6 +9132,15 @@ and easier to test without dragging the full client runtime with it.</pre>
     <p class="summary">Validate prompt asset identity before it enters observability.</p>
     <p class="meta">Source: <code>llm_client.execution.call_contracts</code> functions</p>
     <pre class="doc">Validate prompt asset identity before it enters observability.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-execution-call_contracts-release_budget_scope">
+  <summary><code>release_budget_scope</code> <span class="sig">(lease: str | None) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Release a lease returned by :func:`acquire_budget_scope`.</p>
+    <p class="meta">Source: <code>llm_client.execution.call_contracts</code> functions</p>
+    <pre class="doc">Release a lease returned by :func:`acquire_budget_scope`.</pre>
   </div>
 </details>
 
@@ -9225,7 +9248,7 @@ wrapper mechanics that were previously copied across four entrypoints.</pre>
 <h4>Classes</h4>
 
 <details class="symbol class-symbol" id="module-llm_client-execution-call_wrappers-PreparedPublicCallEnvelope">
-  <summary><code>PreparedPublicCallEnvelope</code> <span class="sig">(normalized_prompt_ref: str | None, prompt_sha256: str, resolved_task: str, resolved_trace_id: str, resolved_max_budget: float, effective_provider_timeout: int, requested_timeout_s: int | None, heartbeat_interval_s: float, stall_after_s: float, runtime_kwargs: dict[str, typing.Any]) -&gt; None</span></summary>
+  <summary><code>PreparedPublicCallEnvelope</code> <span class="sig">(normalized_prompt_ref: str | None, prompt_sha256: str, resolved_task: str, resolved_trace_id: str, resolved_max_budget: float, effective_provider_timeout: int, requested_timeout_s: int | None, heartbeat_interval_s: float, stall_after_s: float, budget_scope_lease: str | None, runtime_kwargs: dict[str, typing.Any]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Resolved public-call envelope before runtime dispatch begins.</p>
     <p class="meta">Source: <code>llm_client.execution.call_wrappers</code> class</p>

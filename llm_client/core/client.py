@@ -118,8 +118,10 @@ from llm_client.execution.call_contracts import (
     _strip_llm_internal_kwargs,
     _validate_execution_contract,
     agent_retry_safe_enabled as _agent_retry_safe_enabled,
+    acquire_budget_scope as _acquire_budget_scope,  # noqa: F401
     check_budget as _check_budget,
     normalize_prompt_ref as _normalize_prompt_ref,
+    release_budget_scope as _release_budget_scope,  # noqa: F401
     require_tags as _require_tags,
 )
 from llm_client.execution.timeout_policy import (
