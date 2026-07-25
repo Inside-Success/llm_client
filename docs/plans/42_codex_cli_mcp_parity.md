@@ -30,6 +30,11 @@ behavior or credential disclosure.
 - `llm_client/observability/replay.py` - normalized call-snapshot boundary
 - `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md` - safe replay persistence
 - `docs/adr/0007-observability-contract-boundary.md` - bounded observability payloads
+- `docs/adr/0003-warning-taxonomy.md` - stable warning and failure evidence
+- `docs/adr/0010-cross-project-runtime-substrate.md` - shared adapter ownership
+- `docs/adr/0012-shared-data-plane-boundary.md` - durable shared-data limits
+- `docs/adr/0013-stream-lifecycle-heartbeat-observability.md` - liveness versus
+  progress evidence
 - `CLAUDE.md` - project workflow and verification rules
 
 ---
@@ -41,7 +46,7 @@ behavior or credential disclosure.
 - `tests/test_agents.py` (modify)
 - `tests/test_observability_replay.py` (modify)
 - `docs/plans/CLAUDE.md` (modify)
-- `docs/plans/119_codex_cli_mcp_parity.md` (create)
+- `docs/plans/42_codex_cli_mcp_parity.md` (create)
 
 ---
 
@@ -105,3 +110,11 @@ Verified 2026-07-24:
   completed and returned 20 public posts.
 - Full repository lint/type gates remain red from pre-existing broad baseline
   debt; full pytest collection also lacks the optional `langgraph` dependency.
+
+Reconciled 2026-07-25:
+
+- Renumbered from the conflicting historical Plan #119 to Plan #42.
+- `tests/test_agents.py` + `tests/test_observability_replay.py`: 205 passed.
+- Changed-file Ruff passed.
+- The earlier live MCP probe remains the execution evidence; no new external
+  call was required for reconciliation.

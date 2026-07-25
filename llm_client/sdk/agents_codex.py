@@ -16,30 +16,27 @@ import logging
 import multiprocessing as _mp
 import os
 import queue
-import re
 import shutil
 import subprocess
 import tempfile
 import threading
 import time
-import traceback
 from pathlib import Path
 from typing import Any, Callable, cast
 
 from pydantic import BaseModel
 
 from llm_client.sdk.agents_codex_process import (
-    _collect_process_tree_snapshot,
-    _codex_exec_diagnostics,
+    _collect_process_tree_snapshot,  # noqa: F401 - re-exported by agents.py
+    _codex_exec_diagnostics,  # noqa: F401 - re-exported by agents.py
     _codex_timeout_message,
     _compact_json,
-    _process_exists,
+    _process_exists,  # noqa: F401 - re-exported by agents.py
     _safe_error_text,
     _safe_line_preview,
-    _terminate_pid_tree,
+    _terminate_pid_tree,  # noqa: F401 - re-exported by agents.py
 )
 from llm_client.core.client import Hooks, LLMCallResult
-from llm_client.core.data_types import TurnEvent
 from llm_client.execution.responses_runtime import _strict_json_schema
 from llm_client.execution.timeout_policy import normalize_timeout as _normalize_timeout
 
@@ -394,7 +391,7 @@ def _build_codex_options(
     """
     _, underlying_model = _agents_mod()._parse_agent_model(model)
     sdk = _import_codex_sdk()
-    Codex, CodexOptions, ThreadOptions, TurnOptions = sdk[0], sdk[1], sdk[2], sdk[3]
+    _, CodexOptions, ThreadOptions, TurnOptions = sdk[0], sdk[1], sdk[2], sdk[3]
 
     prompt, system_prompt = _agents_mod()._messages_to_agent_prompt(messages)
 
