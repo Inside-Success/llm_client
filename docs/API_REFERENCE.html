@@ -1,4 +1,4 @@
-<!-- Generated: 2026-07-25T16:33:14Z -->
+<!-- Generated: 2026-07-25T16:33:34Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1255,6 +1255,15 @@ data-loss detection.</pre>
   </div>
 </details>
 
+<details class="symbol" id="module-llm_client-io_log-read_structured_attempt_events_for_trace">
+  <summary><code>read_structured_attempt_events_for_trace</code> <span class="sig">(logical_call_id: str, trace_id: str) -&gt; list[dict[str, typing.Any]]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Read one logical call only within its exact trace boundary.</p>
+    <p class="meta">Source: <code>llm_client.io_log</code> functions</p>
+    <pre class="doc">Read one logical call only within its exact trace boundary.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-io_log-read_structured_terminal_calls">
   <summary><code>read_structured_terminal_calls</code> <span class="sig">(logical_call_id: str) -&gt; list[dict[str, typing.Any]]</span></summary>
   <div class="symbol-body">
@@ -1810,9 +1819,9 @@ identity proves the originating process is gone.</pre>
 <details class="symbol" id="module-llm_client-observability-get_attempt_diagnosis">
   <summary><code>get_attempt_diagnosis</code> <span class="sig">(attempt_event_id: str) -&gt; llm_client.observability.attempt_diagnostics.AttemptDiagnosis</span></summary>
   <div class="symbol-body">
-    <p class="summary">Return available diagnostics or an explicit legacy insufficiency result.</p>
+    <p class="summary">Return retained evidence or an explicit non-diagnostic status.</p>
     <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> functions</p>
-    <pre class="doc">Return available diagnostics or an explicit legacy insufficiency result.</pre>
+    <pre class="doc">Return retained evidence or an explicit non-diagnostic status.</pre>
   </div>
 </details>
 
@@ -1834,6 +1843,19 @@ identity proves the originating process is gone.</pre>
 
 The log format is the task-graph `ExperimentRecord` JSONL, where
 `dimensions.reasoning_effort` and `dimensions.background_mode` are recorded.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-observability-get_call_lifecycle">
+  <summary><code>get_call_lifecycle</code> <span class="sig">(*, logical_call_id: str | None = None, trace_id: str | None = None) -&gt; list[dict[str, typing.Any]]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Read typed lifecycle evidence and classify a missing terminal event honestly.</p>
+    <p class="meta">Source: <code>llm_client.observability.query</code> functions</p>
+    <pre class="doc">Read typed lifecycle evidence and classify a missing terminal event honestly.
+
+Non-terminal calls from a demonstrably live local process are reported as
+``active``. A missing terminal row with no live-process proof remains
+``interrupted_or_abandoned`` rather than silently disappearing.</pre>
   </div>
 </details>
 
@@ -1936,6 +1958,15 @@ and every incomplete or ambiguous join instead of choosing by row order.</pre>
     <p class="summary">Return ordered attempt histories for every structured call in one trace.</p>
     <p class="meta">Source: <code>llm_client.observability.structured_attempts</code> functions</p>
     <pre class="doc">Return ordered attempt histories for every structured call in one trace.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-observability-get_trace_attempt_diagnosis">
+  <summary><code>get_trace_attempt_diagnosis</code> <span class="sig">(trace_id: str) -&gt; llm_client.observability.attempt_diagnostics.TraceAttemptDiagnosis</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return every structured-attempt diagnosis for one trace in event order.</p>
+    <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> functions</p>
+    <pre class="doc">Return every structured-attempt diagnosis for one trace in event order.</pre>
   </div>
 </details>
 
@@ -2158,7 +2189,7 @@ reconstruct that state first and then hand this module a prepared call.</pre>
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-AttemptDiagnosticEnvelope">
-  <summary><code>AttemptDiagnosticEnvelope</code> <span class="sig">(*, diagnostic_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, attempt_event_id: Annotated[str, MinLen(min_length=1)], logical_call_id: Annotated[str, MinLen(min_length=1)], trace_id: Annotated[str, MinLen(min_length=1)], task: Annotated[str, MinLen(min_length=1)], attempt_ordinal: Annotated[int, Ge(ge=0)], phase: Literal[&#x27;pre_dispatch&#x27;, &#x27;dispatching&#x27;, &#x27;dispatched&#x27;, &#x27;awaiting_response&#x27;, &#x27;response_received&#x27;, &#x27;parsing&#x27;, &#x27;validated&#x27;, &#x27;finalizing&#x27;, &#x27;cancelled&#x27;, &#x27;interrupted_or_abandoned&#x27;], origin: Literal[&#x27;pre_dispatch&#x27;, &#x27;client_serialization&#x27;, &#x27;transport&#x27;, &#x27;gateway_or_provider_response&#x27;, &#x27;response_parse&#x27;, &#x27;client_finalization&#x27;, &#x27;unknown&#x27;], attribution: Literal[&#x27;client_confirmed&#x27;, &#x27;gateway_or_provider_confirmed&#x27;, &#x27;client_observed_only&#x27;, &#x27;insufficient_observation&#x27;], exception_chain: tuple[str, ...] = (), exception_fingerprint: str | None = None, http_status: Annotated[int | None, Ge(ge=100), Le(le=599)] = None, provider_error_code: Annotated[str | None, MaxLen(max_length=128)] = None, provider_request_id: Annotated[str | None, MaxLen(max_length=256)] = None, gateway_request_id: Annotated[str | None, MaxLen(max_length=256)] = None, retry_after_s: Annotated[float | None, Ge(ge=0)] = None, timeout_kind: Optional[Literal[&#x27;provider_request&#x27;, &#x27;client_attempt_safety&#x27;, &#x27;whole_call&#x27;, &#x27;background_polling&#x27;, &#x27;unknown&#x27;]] = None, sanitized_summary: Annotated[str | None, MaxLen(max_length=500)] = None, redaction_version: Literal[&#x27;v1&#x27;] = &#x27;v1&#x27;, artifact_ref: Annotated[str | None, MaxLen(max_length=1024)] = None, artifact_sha256: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[a-f0-9]{64}$&#x27;)] = None) -&gt; None</span></summary>
+  <summary><code>AttemptDiagnosticEnvelope</code> <span class="sig">(*, diagnostic_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, attempt_event_id: Annotated[str, MinLen(min_length=1)], logical_call_id: Annotated[str, MinLen(min_length=1)], trace_id: Annotated[str, MinLen(min_length=1)], task: Annotated[str, MinLen(min_length=1)], attempt_ordinal: Annotated[int, Ge(ge=0)], phase: Literal[&#x27;pre_dispatch&#x27;, &#x27;dispatching&#x27;, &#x27;dispatched&#x27;, &#x27;awaiting_response&#x27;, &#x27;response_received&#x27;, &#x27;parsing&#x27;, &#x27;validated&#x27;, &#x27;finalizing&#x27;, &#x27;cancelled&#x27;, &#x27;interrupted_or_abandoned&#x27;], origin: Literal[&#x27;pre_dispatch&#x27;, &#x27;client_serialization&#x27;, &#x27;transport&#x27;, &#x27;gateway_or_provider_response&#x27;, &#x27;response_parse&#x27;, &#x27;client_finalization&#x27;, &#x27;unknown&#x27;], attribution: Literal[&#x27;client_confirmed&#x27;, &#x27;gateway_or_provider_confirmed&#x27;, &#x27;client_observed_only&#x27;, &#x27;insufficient_observation&#x27;], exception_chain: tuple[str, ...] = (), exception_fingerprint: str | None = None, http_status: Annotated[int | None, Ge(ge=100), Le(le=599)] = None, provider_error_code: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[A-Za-z0-9._:-]{1,128}$&#x27;)] = None, provider_request_id: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[A-Za-z0-9._:-]{1,256}$&#x27;)] = None, gateway_request_id: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[A-Za-z0-9._:-]{1,256}$&#x27;)] = None, retry_after_s: Annotated[float | None, Ge(ge=0)] = None, timeout_kind: Optional[Literal[&#x27;provider_request&#x27;, &#x27;client_attempt_safety&#x27;, &#x27;whole_call&#x27;, &#x27;background_polling&#x27;, &#x27;unknown&#x27;]] = None, sanitized_summary: Annotated[str | None, MaxLen(max_length=500)] = None, redaction_version: Literal[&#x27;v1&#x27;] = &#x27;v1&#x27;, artifact_ref: Annotated[str | None, MaxLen(max_length=1024)] = None, artifact_sha256: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[a-f0-9]{64}$&#x27;)] = None) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Typed, sanitized evidence observed at one attempt boundary.</p>
     <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> class</p>
@@ -2331,6 +2362,16 @@ where post-processing silently drops content.</pre>
     <p class="summary">Read-only aggregate report over one logical tool surface.</p>
     <p class="meta">Source: <code>llm_client.observability.agent_tool_usage</code> class</p>
     <pre class="doc">Read-only aggregate report over one logical tool surface.</pre>
+
+  </div>
+</details>
+
+<details class="symbol class-symbol" id="module-llm_client-observability-TraceAttemptDiagnosis">
+  <summary><code>TraceAttemptDiagnosis</code> <span class="sig">(*, trace_id: str, diagnoses: tuple[llm_client.observability.attempt_diagnostics.AttemptDiagnosis, ...]) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">All structured-attempt diagnoses retained for one trace.</p>
+    <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> class</p>
+    <pre class="doc">All structured-attempt diagnoses retained for one trace.</pre>
 
   </div>
 </details>
@@ -9824,9 +9865,9 @@ whole malformed files; exclusions are then reported as path hashes and
 <details class="symbol" id="module-llm_client-observability-attempt_diagnostics-get_attempt_diagnosis">
   <summary><code>get_attempt_diagnosis</code> <span class="sig">(attempt_event_id: str) -&gt; llm_client.observability.attempt_diagnostics.AttemptDiagnosis</span></summary>
   <div class="symbol-body">
-    <p class="summary">Return available diagnostics or an explicit legacy insufficiency result.</p>
+    <p class="summary">Return retained evidence or an explicit non-diagnostic status.</p>
     <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> functions</p>
-    <pre class="doc">Return available diagnostics or an explicit legacy insufficiency result.</pre>
+    <pre class="doc">Return retained evidence or an explicit non-diagnostic status.</pre>
   </div>
 </details>
 
@@ -9836,6 +9877,15 @@ whole malformed files; exclusions are then reported as path hashes and
     <p class="summary">Return ordered diagnostic evidence for exactly one attempt event.</p>
     <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> functions</p>
     <pre class="doc">Return ordered diagnostic evidence for exactly one attempt event.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-observability-attempt_diagnostics-get_trace_attempt_diagnosis">
+  <summary><code>get_trace_attempt_diagnosis</code> <span class="sig">(trace_id: str) -&gt; llm_client.observability.attempt_diagnostics.TraceAttemptDiagnosis</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return every structured-attempt diagnosis for one trace in event order.</p>
+    <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> functions</p>
+    <pre class="doc">Return every structured-attempt diagnosis for one trace in event order.</pre>
   </div>
 </details>
 
@@ -9863,11 +9913,21 @@ whole malformed files; exclusions are then reported as path hashes and
 </details>
 
 <details class="symbol class-symbol" id="module-llm_client-observability-attempt_diagnostics-AttemptDiagnosticEnvelope">
-  <summary><code>AttemptDiagnosticEnvelope</code> <span class="sig">(*, diagnostic_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, attempt_event_id: Annotated[str, MinLen(min_length=1)], logical_call_id: Annotated[str, MinLen(min_length=1)], trace_id: Annotated[str, MinLen(min_length=1)], task: Annotated[str, MinLen(min_length=1)], attempt_ordinal: Annotated[int, Ge(ge=0)], phase: Literal[&#x27;pre_dispatch&#x27;, &#x27;dispatching&#x27;, &#x27;dispatched&#x27;, &#x27;awaiting_response&#x27;, &#x27;response_received&#x27;, &#x27;parsing&#x27;, &#x27;validated&#x27;, &#x27;finalizing&#x27;, &#x27;cancelled&#x27;, &#x27;interrupted_or_abandoned&#x27;], origin: Literal[&#x27;pre_dispatch&#x27;, &#x27;client_serialization&#x27;, &#x27;transport&#x27;, &#x27;gateway_or_provider_response&#x27;, &#x27;response_parse&#x27;, &#x27;client_finalization&#x27;, &#x27;unknown&#x27;], attribution: Literal[&#x27;client_confirmed&#x27;, &#x27;gateway_or_provider_confirmed&#x27;, &#x27;client_observed_only&#x27;, &#x27;insufficient_observation&#x27;], exception_chain: tuple[str, ...] = (), exception_fingerprint: str | None = None, http_status: Annotated[int | None, Ge(ge=100), Le(le=599)] = None, provider_error_code: Annotated[str | None, MaxLen(max_length=128)] = None, provider_request_id: Annotated[str | None, MaxLen(max_length=256)] = None, gateway_request_id: Annotated[str | None, MaxLen(max_length=256)] = None, retry_after_s: Annotated[float | None, Ge(ge=0)] = None, timeout_kind: Optional[Literal[&#x27;provider_request&#x27;, &#x27;client_attempt_safety&#x27;, &#x27;whole_call&#x27;, &#x27;background_polling&#x27;, &#x27;unknown&#x27;]] = None, sanitized_summary: Annotated[str | None, MaxLen(max_length=500)] = None, redaction_version: Literal[&#x27;v1&#x27;] = &#x27;v1&#x27;, artifact_ref: Annotated[str | None, MaxLen(max_length=1024)] = None, artifact_sha256: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[a-f0-9]{64}$&#x27;)] = None) -&gt; None</span></summary>
+  <summary><code>AttemptDiagnosticEnvelope</code> <span class="sig">(*, diagnostic_id: str = &lt;factory&gt;, timestamp: str = &lt;factory&gt;, attempt_event_id: Annotated[str, MinLen(min_length=1)], logical_call_id: Annotated[str, MinLen(min_length=1)], trace_id: Annotated[str, MinLen(min_length=1)], task: Annotated[str, MinLen(min_length=1)], attempt_ordinal: Annotated[int, Ge(ge=0)], phase: Literal[&#x27;pre_dispatch&#x27;, &#x27;dispatching&#x27;, &#x27;dispatched&#x27;, &#x27;awaiting_response&#x27;, &#x27;response_received&#x27;, &#x27;parsing&#x27;, &#x27;validated&#x27;, &#x27;finalizing&#x27;, &#x27;cancelled&#x27;, &#x27;interrupted_or_abandoned&#x27;], origin: Literal[&#x27;pre_dispatch&#x27;, &#x27;client_serialization&#x27;, &#x27;transport&#x27;, &#x27;gateway_or_provider_response&#x27;, &#x27;response_parse&#x27;, &#x27;client_finalization&#x27;, &#x27;unknown&#x27;], attribution: Literal[&#x27;client_confirmed&#x27;, &#x27;gateway_or_provider_confirmed&#x27;, &#x27;client_observed_only&#x27;, &#x27;insufficient_observation&#x27;], exception_chain: tuple[str, ...] = (), exception_fingerprint: str | None = None, http_status: Annotated[int | None, Ge(ge=100), Le(le=599)] = None, provider_error_code: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[A-Za-z0-9._:-]{1,128}$&#x27;)] = None, provider_request_id: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[A-Za-z0-9._:-]{1,256}$&#x27;)] = None, gateway_request_id: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[A-Za-z0-9._:-]{1,256}$&#x27;)] = None, retry_after_s: Annotated[float | None, Ge(ge=0)] = None, timeout_kind: Optional[Literal[&#x27;provider_request&#x27;, &#x27;client_attempt_safety&#x27;, &#x27;whole_call&#x27;, &#x27;background_polling&#x27;, &#x27;unknown&#x27;]] = None, sanitized_summary: Annotated[str | None, MaxLen(max_length=500)] = None, redaction_version: Literal[&#x27;v1&#x27;] = &#x27;v1&#x27;, artifact_ref: Annotated[str | None, MaxLen(max_length=1024)] = None, artifact_sha256: Annotated[str | None, _PydanticGeneralMetadata(pattern=&#x27;^[a-f0-9]{64}$&#x27;)] = None) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Typed, sanitized evidence observed at one attempt boundary.</p>
     <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> class</p>
     <pre class="doc">Typed, sanitized evidence observed at one attempt boundary.</pre>
+
+  </div>
+</details>
+
+<details class="symbol class-symbol" id="module-llm_client-observability-attempt_diagnostics-TraceAttemptDiagnosis">
+  <summary><code>TraceAttemptDiagnosis</code> <span class="sig">(*, trace_id: str, diagnoses: tuple[llm_client.observability.attempt_diagnostics.AttemptDiagnosis, ...]) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">All structured-attempt diagnoses retained for one trace.</p>
+    <p class="meta">Source: <code>llm_client.observability.attempt_diagnostics</code> class</p>
+    <pre class="doc">All structured-attempt diagnoses retained for one trace.</pre>
 
   </div>
 </details>

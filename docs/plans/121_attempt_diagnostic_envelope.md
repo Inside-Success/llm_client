@@ -244,7 +244,8 @@ flowchart TB
    changing execution paths.
 2. Persist and query additive per-attempt diagnostics bound to Plan 120
    lifecycle identities.
-3. Capture only typed adapter/transport facts at the native structured boundary.
+3. Capture only typed adapter/transport facts at native-schema and Responses API
+   structured boundaries.
 4. Prove safe readback and attribution limits deterministically, then run the
    bounded governed live probes described below.
 
@@ -259,10 +260,10 @@ flowchart TB
    non-applicability, and unavailable-diagnostic behavior with real temporary
    SQLite.
 
-### Slice 2: Native Structured Boundary
+### Slice 2: Structured Runtime Boundaries
 
 1. Capture pre-dispatch, transport exception, SDK response, and client safety
-   timeout facts in the native JSON-schema runtime.
+   timeout facts in native JSON-schema and Responses API runtimes, sync and async.
 2. Normalize only adapter-exposed typed metadata; do not scrape exception text
    for provider identity.
 3. Join the new diagnostic record to the existing attempt/lifecycle sequence.
@@ -285,7 +286,7 @@ flowchart TB
 
 | Test | Evidence |
 | --- | --- |
-| `tests/test_attempt_diagnostics.py` | Temporary-SQLite identity binding, success non-applicability, unavailable-diagnostic status, redaction rejection, confirmation limits, writer failure, migration, typed gateway response, and timeout attribution. |
+| `tests/test_attempt_diagnostics.py` | Temporary-SQLite identity binding, success non-applicability, unavailable-diagnostic status, redaction rejection, confirmation limits, writer failure, migration, typed status/error/ID/retry metadata, trace isolation, and timeout attribution. |
 | `tests/test_structured_attempts.py` | Existing native structured-attempt lifecycle, retry, timeout, malformed-response, and strict-schema negative controls continue to pass. |
 | `tests/test_timeout_policy.py` | A positive fractional timeout fails loud instead of truncating to zero and disabling a deadline. |
 | governed live DeepSeek V4 Flash structured probe | Exact route produces a trace-bound diagnosis and lifecycle receipt; recorded in Slice 1 evidence. |
@@ -348,12 +349,14 @@ Slice 2 work.
 
 ## Slice 2 Progress (2026-07-25)
 
-Native structured pre-response failures now write a diagnostic bound to the
-same `execution_failed` attempt event. Typed SDK response metadata can retain a
-status and request ID, yielding `gateway_or_provider_confirmed`; a timeout with
-no response remains `client_observed_only`. The focused diagnostics and
-structured-attempt suite passes 26 tests. This is native-schema-only and does
-not yet capture Responses API or prove a live provider-error envelope.
+Native-schema and Responses API pre-response failures now write a diagnostic
+bound to the same `execution_failed` attempt event for both sync and async
+execution. Typed adapter metadata retains validated status, error code,
+provider/gateway request IDs, and numeric retry-after values, yielding
+`gateway_or_provider_confirmed`; a timeout with no response remains
+`client_observed_only`. Trace-level query is isolated by both trace and logical
+call identity, so a caller-supplied logical-call collision cannot leak another
+trace's evidence. This does not yet prove a live provider-error envelope.
 
 ## Slice 3 Progress (2026-07-25)
 
@@ -380,3 +383,10 @@ zero. That did not test a timeout and made no claim about model latency. Plan
 public-API negative control confirmed that rejection with no provider request;
 the combined timeout, diagnostic, structured-attempt, and deadline suite is 43
 passing tests.
+
+The trace-level projection was then exercised on a fresh governed DeepSeek V4
+Flash success call, `llm_client.plan121.trace_query.live.20260725T162958Z.5299`.
+It returned `status=ok` at observed cost `$0.00001428`; the projection retained
+the exact `started -> received -> validated` attempt history and classified all
+three no-failure events as `not_applicable_success`. This is live evidence for
+the query boundary, not provider-error evidence.

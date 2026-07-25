@@ -38,6 +38,7 @@ import hashlib as _hashlib
 import json as _json
 import logging as _logging
 import os as _os
+import re as _re
 import threading as _threading
 
 import litellm
@@ -541,20 +542,22 @@ def _record_execution_failure(
         execution_error_type=type(error).__name__[:128],
     )
     record_structured_attempt_event(event)
-    response = getattr(error, "response", None)
-    headers = getattr(response, "headers", None)
-    status = getattr(response, "status_code", None)
-    if not isinstance(status, int):
-        status = getattr(error, "status_code", None)
-    request_id = None
-    if headers is not None and hasattr(headers, "get"):
-        request_id = headers.get("x-request-id") or headers.get("request-id")
+    (
+        status,
+        provider_error_code,
+        provider_request_id,
+        gateway_request_id,
+        retry_after_s,
+    ) = _typed_failure_metadata(error)
     chain = tuple(
         item.__class__.__name__[:128]
         for item in (error, error.__cause__)
         if item is not None
     )
-    confirmed = isinstance(status, int) or isinstance(request_id, str)
+    confirmed = any(
+        value is not None
+        for value in (status, provider_error_code, provider_request_id, gateway_request_id)
+    )
     timeout_kind = "client_attempt_safety" if (
         isinstance(error, TimeoutError) and "safety deadline" in str(error).lower()
     ) else ("unknown" if isinstance(error, TimeoutError) else None)
@@ -567,10 +570,57 @@ def _record_execution_failure(
         attribution=("gateway_or_provider_confirmed" if confirmed else "client_observed_only"),
         exception_chain=chain, exception_fingerprint=exception_fingerprint(chain),
         http_status=status if isinstance(status, int) else None,
-        gateway_request_id=request_id if isinstance(request_id, str) else None,
+        provider_error_code=provider_error_code,
+        provider_request_id=provider_request_id,
+        gateway_request_id=gateway_request_id,
+        retry_after_s=retry_after_s,
         timeout_kind=timeout_kind,
         sanitized_summary=("typed gateway/provider response failure" if confirmed else "client observed pre-response execution failure"),
     ))
+
+
+def _typed_failure_metadata(
+    error: Exception,
+) -> tuple[int | None, str | None, str | None, str | None, float | None]:
+    """Extract bounded adapter metadata without parsing arbitrary error prose."""
+
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        headers = getattr(error, "headers", None)
+
+    def _header(name: str) -> str | None:
+        if headers is None or not hasattr(headers, "get"):
+            return None
+        value = headers.get(name)
+        if not isinstance(value, str):
+            return None
+        return value if _re.fullmatch(r"[A-Za-z0-9._:-]{1,256}", value) else None
+
+    status = getattr(response, "status_code", None)
+    if not isinstance(status, int):
+        status = getattr(error, "status_code", None)
+    if not isinstance(status, int) or not 100 <= status <= 599:
+        status = None
+
+    code = getattr(error, "code", None)
+    provider_error_code = (
+        code
+        if isinstance(code, str) and _re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", code)
+        else None
+    )
+    provider_request_id = _header("x-provider-request-id") or _header("provider-request-id")
+    gateway_request_id = _header("x-request-id") or _header("request-id")
+    retry_after_s: float | None = None
+    for value in (getattr(error, "retry_after", None), _header("retry-after")):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            retry_after_s = parsed
+            break
+    return status, provider_error_code, provider_request_id, gateway_request_id, retry_after_s
 
 
 def _provider_schema_validation_raw(error: Exception) -> str | None:

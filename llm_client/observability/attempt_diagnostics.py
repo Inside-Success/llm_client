@@ -11,6 +11,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import llm_client.io_log as _io_log
+from llm_client.observability.structured_attempts import get_structured_attempt_histories
 
 DiagnosticPhase = Literal[
     "pre_dispatch",
@@ -71,9 +72,15 @@ class AttemptDiagnosticEnvelope(BaseModel):
     exception_chain: tuple[str, ...] = ()
     exception_fingerprint: str | None = None
     http_status: int | None = Field(default=None, ge=100, le=599)
-    provider_error_code: str | None = Field(default=None, max_length=128)
-    provider_request_id: str | None = Field(default=None, max_length=256)
-    gateway_request_id: str | None = Field(default=None, max_length=256)
+    provider_error_code: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9._:-]{1,128}$"
+    )
+    provider_request_id: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9._:-]{1,256}$"
+    )
+    gateway_request_id: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9._:-]{1,256}$"
+    )
     retry_after_s: float | None = Field(default=None, ge=0)
     timeout_kind: TimeoutKind | None = None
     sanitized_summary: str | None = Field(default=None, max_length=500)
@@ -125,6 +132,15 @@ class AttemptDiagnosis(BaseModel):
     diagnostics: tuple[AttemptDiagnosticEnvelope, ...]
 
 
+class TraceAttemptDiagnosis(BaseModel):
+    """All structured-attempt diagnoses retained for one trace."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    trace_id: str
+    diagnoses: tuple[AttemptDiagnosis, ...]
+
+
 def exception_fingerprint(exception_chain: tuple[str, ...]) -> str | None:
     """Return an opaque stable fingerprint without retaining exception prose."""
 
@@ -149,12 +165,17 @@ def get_attempt_diagnostics(attempt_event_id: str) -> list[AttemptDiagnosticEnve
 
 
 def get_attempt_diagnosis(attempt_event_id: str) -> AttemptDiagnosis:
-    """Return available diagnostics or an explicit legacy insufficiency result."""
+    """Return retained evidence or an explicit non-diagnostic status."""
 
     attempt = _io_log.read_structured_attempt_event(attempt_event_id)
     if attempt is None:
         raise ValueError(f"unknown structured attempt event: {attempt_event_id}")
     diagnostics = tuple(get_attempt_diagnostics(attempt_event_id))
+    diagnostic_status: Literal[
+        "available",
+        "not_applicable_success",
+        "unavailable_no_diagnostic",
+    ]
     if diagnostics:
         diagnostic_status = "available"
     elif attempt["event_type"] in {"started", "received", "validated"}:
@@ -169,3 +190,16 @@ def get_attempt_diagnosis(attempt_event_id: str) -> AttemptDiagnosis:
         diagnostic_status=diagnostic_status,
         diagnostics=diagnostics,
     )
+
+
+def get_trace_attempt_diagnosis(trace_id: str) -> TraceAttemptDiagnosis:
+    """Return every structured-attempt diagnosis for one trace in event order."""
+
+    if not trace_id:
+        raise ValueError("trace_id must be non-empty")
+    diagnoses = tuple(
+        get_attempt_diagnosis(event.event_id)
+        for events in get_structured_attempt_histories(trace_id).values()
+        for event in events
+    )
+    return TraceAttemptDiagnosis(trace_id=trace_id, diagnoses=diagnoses)

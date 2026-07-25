@@ -13,6 +13,7 @@ from llm_client.observability.attempt_diagnostics import (
     AttemptDiagnosticEnvelope,
     exception_fingerprint,
     get_attempt_diagnosis,
+    get_trace_attempt_diagnosis,
     record_attempt_diagnostic,
 )
 from llm_client.observability.structured_attempts import (
@@ -184,31 +185,71 @@ def test_old_database_migrates_additive_diagnostic_table(tmp_path) -> None:
 def test_runtime_records_confirmed_gateway_response_diagnostic() -> None:
     class GatewayError(Exception):
         status_code = 429
+        code = "rate_limit"
+        retry_after = 4
 
         class response:
             status_code = 429
-            headers = {"x-request-id": "gw-request-123"}
+            headers = {
+                "x-request-id": "gw-request-123",
+                "x-provider-request-id": "provider-request-456",
+            }
 
+    trace_id = f"runtime-gateway-trace-{uuid4().hex}"
     _record_execution_failure(
         error=GatewayError(), logical_call_id="runtime-gateway-call",
-        trace_id="runtime-gateway-trace", task="test.runtime_gateway",
+        trace_id=trace_id, task="test.runtime_gateway",
         attempt=0, model="openrouter/deepseek/deepseek-v4-flash", schema_hash="b" * 64,
     )
-    event = next(iter(get_structured_attempt_histories("runtime-gateway-trace").values()))[0]
+    event = next(iter(get_structured_attempt_histories(trace_id).values()))[0]
     diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
     assert diagnostic.attribution == "gateway_or_provider_confirmed"
     assert diagnostic.http_status == 429
     assert diagnostic.gateway_request_id == "gw-request-123"
+    assert diagnostic.provider_request_id == "provider-request-456"
+    assert diagnostic.provider_error_code == "rate_limit"
+    assert diagnostic.retry_after_s == 4
 
 
 def test_runtime_timeout_without_response_does_not_blame_provider() -> None:
+    trace_id = f"runtime-timeout-trace-{uuid4().hex}"
     _record_execution_failure(
         error=TimeoutError("client attempt safety deadline elapsed"),
-        logical_call_id="runtime-timeout-call", trace_id="runtime-timeout-trace",
+        logical_call_id="runtime-timeout-call", trace_id=trace_id,
         task="test.runtime_timeout", attempt=0,
         model="openrouter/deepseek/deepseek-v4-flash", schema_hash="c" * 64,
     )
-    event = next(iter(get_structured_attempt_histories("runtime-timeout-trace").values()))[0]
+    event = next(iter(get_structured_attempt_histories(trace_id).values()))[0]
     diagnostic = get_attempt_diagnosis(event.event_id).diagnostics[0]
     assert diagnostic.attribution == "client_observed_only"
     assert diagnostic.timeout_kind == "client_attempt_safety"
+
+
+def test_trace_query_returns_all_attempt_statuses() -> None:
+    event = _attempt()
+    record_attempt_diagnostic(_diagnostic(event))
+
+    result = get_trace_attempt_diagnosis(event.trace_id)
+
+    assert result.trace_id == event.trace_id
+    assert [(diagnosis.attempt_event_id, diagnosis.diagnostic_status) for diagnosis in result.diagnoses] == [
+        (event.event_id, "available")
+    ]
+
+
+def test_trace_query_does_not_leak_reused_logical_call_id() -> None:
+    first_trace, second_trace = f"trace-a-{uuid4().hex}", f"trace-b-{uuid4().hex}"
+    first = StructuredAttemptEvent(
+        logical_call_id="reused-logical-call", trace_id=first_trace,
+        task="test.trace_isolation", attempt_ordinal=0,
+        model="openrouter/deepseek/deepseek-v4-flash", execution_path="native_schema",
+        schema_hash="d" * 64, event_type="execution_failed", failure_class="timeout",
+        execution_error_type="TimeoutError",
+    )
+    second = first.model_copy(update={"event_id": uuid4().hex, "trace_id": second_trace})
+    record_structured_attempt_event(first)
+    record_structured_attempt_event(second)
+
+    result = get_trace_attempt_diagnosis(second_trace)
+
+    assert [diagnosis.attempt_event_id for diagnosis in result.diagnoses] == [second.event_id]

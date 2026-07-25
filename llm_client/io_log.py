@@ -1359,6 +1359,35 @@ def read_structured_attempt_events(logical_call_id: str) -> list[dict[str, Any]]
     return result
 
 
+def read_structured_attempt_events_for_trace(
+    logical_call_id: str,
+    trace_id: str,
+) -> list[dict[str, Any]]:
+    """Read one logical call only within its exact trace boundary."""
+
+    rows = _get_db().execute(
+        """SELECT event_id, timestamp, logical_call_id, trace_id, task,
+                  attempt_ordinal, model, execution_path, schema_hash, event_type,
+                  raw_sha256, raw_artifact_ref, failure_class, validation_issues,
+                  execution_error_type, recovery_decision
+           FROM structured_attempt_events
+           WHERE logical_call_id = ? AND trace_id = ? ORDER BY id""",
+        (logical_call_id, trace_id),
+    ).fetchall()
+    keys = (
+        "event_id", "timestamp", "logical_call_id", "trace_id", "task",
+        "attempt_ordinal", "model", "execution_path", "schema_hash", "event_type",
+        "raw_sha256", "raw_artifact_ref", "failure_class", "validation_issues",
+        "execution_error_type", "recovery_decision",
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(zip(keys, row, strict=True))
+        item["validation_issues"] = json.loads(item["validation_issues"] or "[]")
+        result.append(item)
+    return result
+
+
 def read_structured_attempt_event(event_id: str) -> dict[str, Any] | None:
     """Read one structured attempt event by its immutable event identity."""
 
