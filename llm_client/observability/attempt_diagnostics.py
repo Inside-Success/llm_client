@@ -48,6 +48,7 @@ TimeoutKind = Literal[
     "background_polling",
     "unknown",
 ]
+ResponseOutcome = Literal["empty_content"]
 
 _UNSAFE_SUMMARY = re.compile(
     r"(?i)(bearer\s+[a-z0-9._-]+|api[_-]?key\s*[:=]|authorization\s*[:=]|"
@@ -84,6 +85,7 @@ class AttemptDiagnosticEnvelope(BaseModel):
     )
     retry_after_s: float | None = Field(default=None, ge=0)
     timeout_kind: TimeoutKind | None = None
+    response_outcome: ResponseOutcome | None = None
     sanitized_summary: str | None = Field(default=None, max_length=500)
     redaction_version: Literal["v1"] = "v1"
     artifact_ref: str | None = Field(default=None, max_length=1024)

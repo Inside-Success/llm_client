@@ -69,6 +69,10 @@ from llm_client.observability.attempt_diagnostics import (
 T = TypeVar("T", bound=BaseModel)
 R = TypeVar("R")
 
+
+class _EmptyStructuredContentError(ValueError):
+    """A response object arrived but contained no structured content."""
+
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
 _INSTRUCTOR_INIT_LOCK = _threading.Lock()
@@ -582,7 +586,8 @@ def _record_execution_failure(
         gateway_request_id=gateway_request_id,
         retry_after_s=retry_after_s,
         timeout_kind=timeout_kind,
-        sanitized_summary=("typed gateway/provider response failure" if confirmed else "client observed pre-response execution failure"),
+        response_outcome=("empty_content" if isinstance(error, _EmptyStructuredContentError) else None),
+        sanitized_summary=("empty structured content observed after response" if isinstance(error, _EmptyStructuredContentError) else ("typed gateway/provider response failure" if confirmed else "client observed pre-response execution failure")),
     ))
 
 
@@ -1180,7 +1185,7 @@ def _call_llm_structured_impl(
                     response = _run_sync_with_deadline(provider_call, timeout=timeout)
                     raw_content = getattr(response, "output_text", None) or ""
                     if not raw_content.strip():
-                        raise ValueError(
+                        raise _EmptyStructuredContentError(
                             "Empty content from LLM (responses API structured)"
                         )
                     record_structured_attempt_event(
@@ -1494,7 +1499,7 @@ def _call_llm_structured_impl(
                     )
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
-                        raise ValueError("Empty content from LLM (native JSON schema structured)")
+                        raise _EmptyStructuredContentError("Empty content from LLM (native JSON schema structured)")
                     record_structured_attempt_event(_received_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
@@ -2221,7 +2226,7 @@ async def _acall_llm_structured_impl(
                     response = await _run_async_with_deadline(provider_call, timeout=timeout)
                     raw_content = getattr(response, "output_text", None) or ""
                     if not raw_content.strip():
-                        raise ValueError(
+                        raise _EmptyStructuredContentError(
                             "Empty content from LLM (responses API structured)"
                         )
                     record_structured_attempt_event(
@@ -2538,7 +2543,7 @@ async def _acall_llm_structured_impl(
                     )
                     raw_content = first_choice.message.content or ""
                     if not raw_content.strip():
-                        raise ValueError("Empty content from LLM (native JSON schema structured)")
+                        raise _EmptyStructuredContentError("Empty content from LLM (native JSON schema structured)")
                     record_structured_attempt_event(_received_attempt_event(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
