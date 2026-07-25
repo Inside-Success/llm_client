@@ -1,6 +1,6 @@
 # Plan #334: Empty Structured Response Observability
 
-**Status:** In Progress
+**Status:** Implemented on main; governed downstream live trace pending
 **Type:** implementation
 **Priority:** High
 **Blocked By:** Plan #122 client deadline classification
@@ -89,9 +89,9 @@ without claiming provider fault.
 
 ## Acceptance Criteria
 
-- [ ] Empty response records `response_outcome=empty_content` with client-only attribution.
-- [ ] No body, header map, prompt, tool call, or reasoning content is retained.
-- [ ] Existing transport and timeout outcomes remain unchanged.
+- [x] Empty response records `response_outcome=empty_content` with client-only attribution.
+- [x] No body, header map, prompt, tool call, or reasoning content is retained.
+- [x] Existing transport and timeout outcomes remain unchanged.
 - [ ] Focused tests and a governed live trace are retained.
 
 ---

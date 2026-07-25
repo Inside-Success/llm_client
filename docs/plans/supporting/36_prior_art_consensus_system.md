@@ -1,4 +1,4 @@
-# Plan #36 Prior Art: `utils/consensus_system`
+# Supporting Prior Art for Plan #36: `utils/consensus_system`
 
 This note records the useful ideas extracted from the legacy
 `~/projects/utils/consensus_system/` repo before archive or tombstone work. It
@@ -45,4 +45,3 @@ surface. The concepts above are covered by current or planned `llm_client`,
 legacy infrastructure and should be tombstoned in place or moved to
 `~/projects/PROJECTS_DEFERRED/intermodel-dialogue-legacy/` only after the
 sibling repo's branch, remote, and visibility are verified.
-

@@ -1,12 +1,22 @@
-# Plan #25: Provider Governance and Shared Coordination
+# Plan #40: Provider Governance and Shared Coordination
 
-**Status:** Planned
+**Status:** Superseded
 **Type:** design
 **Priority:** Critical
-**Blocked By:** llm_client PR #24 merge for the latest Gemini coordination baseline
-**Blocks:** durable prevention of shared provider saturation and downstream provider-policy drift
+**Blocked By:** None
+**Superseded By:** Plans #94, #104, #115-#122, and #333-#335
 
 ---
+
+## Disposition
+
+This April proposal is retained as historical design context, not executable
+direction. Its original Plan #25 identifier conflicted with the already
+completed Gemini exhaustion plan, so the authority reconciliation on
+2026-07-25 reassigned it to Plan #40. Later focused plans implemented or
+replaced its model policy, provider-limit observation, lifecycle, diagnostics,
+cost, and coordination boundaries. Do not reopen this umbrella plan; create or
+resume the narrow owning plan for a reproduced gap.
 
 ## Gap
 
@@ -56,7 +66,7 @@ repo needs a durable prevention model, not a growing pile of tactical patches.
 
 - `docs/adr/0015-provider-governance-and-shared-coordination.md` (create)
 - `docs/adr/README.md` (modify)
-- `docs/plans/25_provider-governance-and-shared-coordination.md` (create)
+- `docs/plans/40_provider-governance-and-shared-coordination.md` (create)
 - `docs/plans/CLAUDE.md` (modify)
 - `docs/plans/01_master-roadmap.md` (modify)
 - `docs/ops/CAPABILITY_DECOMPOSITION.md` (modify)

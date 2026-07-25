@@ -1,6 +1,6 @@
 # Plan #33: Deliberation Workflow (Symmetric N-Agent Debate)
 
-**Status:** In Progress
+**Status:** Complete (core workflow shipped; obsolete Opus default superseded)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** Plan #31 (TaskFamily abstraction reused here)
@@ -117,12 +117,14 @@ Out of scope (deliberately):
 
 ## Acceptance Criteria
 
-- [ ] Full sweep `pytest tests/test_workflow_deliberate.py tests/test_workflow_duet.py tests/test_workflow_profiles.py tests/test_workflow_builder.py tests/test_workflow_context_config.py tests/test_agents.py::TestBuildAgentOptions tests/test_agents.py::TestWorkspaceKwargAliasing tests/test_cli_smoke.py tests/test_cli_duet.py tests/test_cli_deliberate.py -q` exits 0.
-- [ ] `python -m llm_client deliberate-task --help` exits 0 and prints `--agents`, `--max-rounds`, `--task-file`, `--task-family`, `--synthesis-model`.
-- [ ] Convergence detector is pure-Python (no LLM call) and deterministic for given inputs.
-- [ ] `PositionClaim` and `DisagreementAtom` both reject payloads missing `evidence_path` at Pydantic validation time.
-- [ ] Two-agent default uses `codex/gpt-5.4` and `claude-code/opus`.
-- [ ] Synthesis stage runs even on `productive_disagreement` — surfaces what wasn't resolved instead of suppressing it.
+- [x] Full sweep `pytest tests/test_workflow_deliberate.py tests/test_workflow_duet.py tests/test_workflow_profiles.py tests/test_workflow_builder.py tests/test_workflow_context_config.py tests/test_agents.py::TestBuildAgentOptions tests/test_agents.py::TestWorkspaceKwargAliasing tests/test_cli_smoke.py tests/test_cli_duet.py tests/test_cli_deliberate.py -q` exits 0.
+- [x] `python -m llm_client deliberate-task --help` exits 0 and prints `--agents`, `--max-rounds`, `--task-file`, `--task-family`, `--synthesis-model`.
+- [x] Convergence detector is pure-Python (no LLM call) and deterministic for given inputs.
+- [x] `PositionClaim` and `DisagreementAtom` both reject payloads missing `evidence_path` at Pydantic validation time.
+- [x] The two-agent default is explicit. The original `claude-code/opus`
+  criterion was superseded by the later Opus ban; the retained default uses
+  `codex/gpt-5.4` and `claude-code/sonnet`.
+- [x] Synthesis stage runs even on `productive_disagreement` — surfaces what wasn't resolved instead of suppressing it.
 
 ---
 

@@ -1,6 +1,6 @@
 # Plan #121: Privacy-Bounded Attempt Diagnostic Envelope
 
-**Status:** In Progress
+**Status:** Implemented on main; downstream Process Tracing verification pending
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** Plan #120 lifecycle identity and dispatch lineage landing

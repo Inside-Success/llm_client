@@ -1,10 +1,15 @@
-# Plan 27 — Long Retry-Hint Failover
+# Plan #39: Long Retry-Hint Failover
+
+**Status:** Complete
+**Type:** implementation
+**Priority:** High
+**Blocked By:** Plan #38
 
 ## Gap
 
 Gemini quota `429 RESOURCE_EXHAUSTED` responses can include `google.rpc.RetryInfo`
 windows measured in hours. Plan #25 stopped same-call retries for obvious spend-cap
-and daily-cap messages, and Plan #26 suppressed recently exhausted models across
+and daily-cap messages, and Plan #38 suppressed recently exhausted models across
 future calls. But quota-flavored `429`s with explicit retry hints still counted as
 retryable inside the current call, so long-running batch jobs could sleep on a
 single exhausted model for many minutes instead of failing over to the next model

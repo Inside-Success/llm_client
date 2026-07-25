@@ -36,13 +36,25 @@ Plan #37 is the long-running execution spine for Plan #36. Use it as the
 tracker when running continuously: it defines stop conditions, phase gates,
 adversarial-review checkpoints, test commands, and completion criteria.
 
+## Current Execution
+
+- **Canonical main:** includes lifecycle-integrity repair `f870362` (verified
+  2026-07-25; 1,930 tests passed).
+- **Next implementation candidate:** Plan #124 logical structured-call
+  deadline. Its dirty candidate worktree is intentionally not listed as a
+  canonical plan until that plan and implementation are committed.
+- **Merged, awaiting downstream acceptance:** Plans #121, #122, and #334.
+- **Other open work:** Plan #91 controller churn and Plan #94's technical
+  output ceiling. Neither silently blocks Plan #124.
+- **Blocked:** Plan #35 optional Phase 6 requires a fresh user decision.
+
 ## Gap Summary
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
-| 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | 🚧 In Progress (Slice 1 live-bound storage/query evidence) | Evidence-based failure localization and provider-attribution claims |
+| 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | 🧪 Implemented; downstream verification pending | Evidence-based failure localization and provider-attribution claims |
 | 120 | [Durable Cross-Project Call Lifecycle](120_durable_call_lifecycle.md) | Critical | ✅ Complete | Truthful localization of missing-terminal calls |
-| 119 | [Runtime Cost Governance](119_runtime_cost_governance.md) | Critical | 🚧 In Progress | Trustworthy real-time cost control and cross-provider spend analysis |
+| 119 | [Runtime Cost Governance](119_runtime_cost_governance.md) | Critical | ✅ Complete | Trustworthy real-time cost control and cross-provider spend analysis |
 | 118 | [OpenRouter Discriminated-Union Projection](118_openrouter_schema_compaction.md) | High | ✅ Complete | DoDAF Plan 75 Army publication extraction |
 | 117 | [Explicit Reasoning Policy](117_explicit_reasoning_policy.md) | Critical | ✅ Complete | Cost- and latency-controlled reasoning-model execution |
 | 116 | [Ecosystem Allowlist Cutover](116_ecosystem-allowlist-cutover.md) | Critical | ✅ Complete | Unconditional allowed-model enforcement |
@@ -60,7 +72,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 101 | [Runtime-selected structured attempt receipt](101_runtime_selected_attempt_receipt.md) | High | ✅ Complete | onto-canon6 Plan 0141 trusted-runner receipt pinning |
 | 103 | [Codex CLI Approval Compatibility](103_codex_cli_approval_compatibility.md) | High | ✅ Complete | ecosystem-ops direct Codex dispatch certification |
 | 104 | [OpenRouter Provider-Limit Observer](104_openrouter-provider-limit-observer.md) | Critical | ✅ Complete | onto-canon6 Plan 0141 and Greer governed-mapping stress test |
-| 1 | [LLM Client Master Roadmap](01_master-roadmap.md) | Highest | ✅ Complete | - |
+| 1 | [LLM Client Master Roadmap](01_master-roadmap.md) | Highest | 🧭 Active authority | - |
 | 2 | [Client Boundary Hardening Program](02_client-boundary-hardening.md) | High | ✅ Complete | - |
 | 3 | [Model Policy Modernization](03_model-policy-modernization.md) | High | ✅ Complete | - |
 | 4 | [Workflow Layer Boundary](04_workflow-layer-boundary.md) | Medium | ✅ Complete | - |
@@ -74,7 +86,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 12 | [Module Reorganization (Flat → Layered)](12_module-reorganization.md) | High | ✅ Complete | 11 |
 | 13 | [SDK Adapter Simplification](13_sdk-adapter-simplification.md) | Medium | ✅ Complete | 12 |
 | 14 | [Batch Progress & Stagnation Detection](14_batch-progress-and-stagnation.md) | High | ✅ Complete | - |
-| 15 | [Centralize Hardcoded Defaults into ClientConfig](15_centralize-defaults.md) | Low | ❓  | - |
+| 15 | [Centralize Hardcoded Defaults into ClientConfig](15_centralize-defaults.md) | Low | ⛔ Cancelled | - |
 | 16 | [Remove Compatibility Stubs](16_remove-compatibility-stubs.md) | Medium | ✅ Complete | 12 |
 | 17 | [text_runtime Sync/Async Deduplication](17_text-runtime-dedup.md) | High | ✅ Complete | - |
 | 18 | [Agent Loop Error Budget and Retry Policy](18_agent_loop_error_budget.md) | High | ✅ Complete | - |
@@ -83,8 +95,8 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 21 | [Runtime Durability Follow-Ups From Grounded Research](21_runtime_durability_followups_from_grounded_research.md) | High | ✅ Complete | - |
 | 22 | [Capability Ownership And Sanctioned Worktree Alignment](22_capability-ownership-and-sanctioned-worktree-alignment.md) | High | ✅ Complete | 21 |
 | 23 | [Authoritative coordination wave-1 rollout](23_authoritative-coordination-wave-1-rollout.md) | Critical | ✅ Complete | - |
-| 24 | [Workflow Kit Manifest, Validator, and Runtime Adapter Proving Slice](24_workflow-kit-manifest-validator-and-runtime-adapter-proving-slice.md) | — | ❓  | — |
-| 25 | [Provider Governance and Shared Coordination](25_provider-governance-and-shared-coordination.md) | Critical | 📋 Planned | llm_client PR #24 merge for the latest Gemini coordination baseline |
+| 24 | [Workflow Kit Manifest, Validator, and Runtime Adapter Proving Slice](24_workflow-kit-manifest-validator-and-runtime-adapter-proving-slice.md) | — | ⛔ Cancelled | — |
+| 25 | [Gemini Exhaustion Fallback Hardening](25_gemini_exhaustion_fallback_hardening.md) | High | ✅ Complete | - |
 | 26 | [Gemini Strict-Schema Behavior Study](26_gemini-strict-schema-behavior-study.md) | High | ✅ Complete | - |
 | 27 | [Direct Gemini Thinking Budget Policy](27_direct-gemini-thinking-budget-policy.md) | High | ✅ Complete | 26 |
 | 28 | [OpenRouter Gemini 3.1 Pro Registry And Tyler Validation](28_openrouter-gemini31-pro-registry-and-tyler-validation.md) | High | ✅ Complete | 26, 27 |
@@ -92,26 +104,29 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 30 | [Duet Autonomous Hardening](30_duet_autonomous_hardening.md) | High | ✅ Complete | 29 |
 | 31 | [TaskFamily Abstraction for the Duet Chassis](31_task_family_abstraction.md) | High | ✅ Complete | 30 |
 | 32 | [twin_update Profile](32_twin_update_profile.md) | High | ✅ Complete | 31 |
-| 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | 🚧 In Progress | 31 |
+| 33 | [Deliberation Workflow (Symmetric N-Agent Debate)](33_deliberation_workflow.md) | High | ✅ Complete | 31 |
 | 34 | [Deliberation Verifier / Adjudicator Stage](34_deliberation_verifier_adjudicator.md) | High | ✅ Complete | 33 |
-| 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | 📋 In Progress (Phases 1-4 shipped; Phase 5 skipped per plan; Phase 6 awaiting Brian decision) | 34 |
+| 35 | [Within-Round Barrier Protocol + Anonymization](35_deliberation_within_round_barrier_protocol.md) | High | ⏸️ Blocked (optional Phase 6 requires decision) | 34 |
 | 36 | [Intermodel Review Consolidation and Whitepaper Loop](36_intermodel_review_consolidation.md) | Critical | ✅ Complete (private-only accepted) | Existing repo stays private unless reopened for public release |
 | 37 | [Long-Running Execution Spine for Intermodel Review](37_long_running_intermodel_review_execution.md) | Critical | ✅ Complete (private-only accepted) | 36 |
+| 38 | [Exhausted-Model Cooldown Routing](38_exhausted_model_cooldown_routing.md) | High | ✅ Complete | - |
+| 39 | [Long Retry-Hint Failover](39_long_retry_hint_failover.md) | High | ✅ Complete | 38 |
+| 40 | [Provider Governance and Shared Coordination](40_provider-governance-and-shared-coordination.md) | Critical | ↩️ Superseded | 94, 104, 115-122, 333-335 |
 | 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | 🚧 In Progress | - |
 | 93 | [Agent tool-usage ledger](93_agent-tool-usage-ledger.md) | High | ✅ Complete | project-meta Plan #213 reporting and comparative selection evaluation |
 | 92 | [Worktree Lifecycle Governance and Cleanup](92_worktree-lifecycle-governance-and-cleanup.md) | Critical | ✅ Complete | Merge-or-disposition enforcement live; historical checkout cleanup reconciled |
 | 94 | [Model Tier Taxonomy and Fable Ban](94_model-tier-taxonomy-and-fable-ban.md) | High | 🚧 In Progress (tier selectors implemented; declared-vs-certified route follow-up open) | Cross-project model-selection cleanup |
-| 95 | [Require llm_client Registration Audit](95_require-llm-client-registration-audit.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project enforcement of shared LLM routing |
-| 96 | [Registration-Only Audit Fast Path](96_registration-only-audit-fastpath.md) | High | 🚧 In Progress (implemented; focused verified) | Cross-project llm_client registration classification |
+| 95 | [Require llm_client Registration Audit](95_require-llm-client-registration-audit.md) | High | ✅ Complete | Cross-project enforcement of shared LLM routing |
+| 96 | [Registration-Only Audit Fast Path](96_registration-only-audit-fastpath.md) | High | ✅ Complete | Cross-project llm_client registration classification |
 | 97 | [Lossless structured-output attempt observability](97_lossless-structured-output-attempt-observability.md) | High | 🚧 In Progress (Slice 3 + post-validation terminal boundary verified; DIGIMON consumer trace pending) | DIGIMON Plan #111 bound-trace refresh |
-| 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | 🚧 In Progress | DIGIMON Plan #111 bound-trace refresh |
+| 98 | [Async structured-attempt liveness](98_async_structured_attempt_liveness.md) | High | ✅ Complete | DIGIMON Plan #111 bound-trace refresh |
 | 99 | [Strict native JSON-schema execution](99_strict_native_json_schema_execution.md) | High | 🚧 In Progress (exact repair accepted; downstream binding verification pending) | onto-canon6 Plan 0141 R2 runtime authorization |
 | 109 | [Structured-Call Hard Deadline](109_structured_call_hard_deadline.md) | High | ✅ Complete | Reliable long-running structured simulations |
 | 110 | [Provider Capabilities and Opus Ban](110_provider-capabilities-opus-ban.md) | High | ✅ Complete | Cybernetic simulator DeepSeek V4 Flash max-reasoning sample |
 | 333 | [root budget scope across child traces](333_root-budget-scope-across-child-traces.md) | High | ✅ Complete | Plan #335 concurrent root-budget reservations |
-| 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | 🚧 In Progress | Plan #121 merged diagnostics contract |
-| 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | 🚧 In Progress | Plan #122 client deadline classification |
-| 335 | [Concurrent Root-Budget Reservations](335_concurrent-root-budget-reservations.md) | Critical | 🚧 In Progress | DIGIMON Plan #182 |
+| 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | 🧪 Implemented; downstream verification pending | Plan #121 merged diagnostics contract |
+| 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | 🧪 Implemented; downstream live trace pending | Plan #122 client deadline classification |
+| 335 | [Concurrent Root-Budget Reservations](335_concurrent-root-budget-reservations.md) | Critical | ✅ Complete | DIGIMON Plan #182 |
 
 
 ## Status Key
@@ -121,7 +136,9 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | Planned | Ready to implement |
 | In Progress | Being worked on |
 | Blocked | Waiting on dependency |
+| Implemented | Canonical code landed; named downstream acceptance remains |
 | Complete | Implemented and verified |
+| Superseded | Replaced by named plans or decisions; not active |
 | Cancelled | Explicitly rejected; no planned work |
 
 ## Creating a New Plan
