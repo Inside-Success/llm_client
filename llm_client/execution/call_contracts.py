@@ -156,22 +156,29 @@ def check_budget(
     max_budget: float,
     *,
     reservation: float = 0.0,
+    budget_scope_trace_id: str | None = None,
     warning_sink: list[str] | None = None,
 ) -> None:
-    """Block a dispatch when observed spend plus its declared reserve exceeds budget."""
+    """Block a dispatch when exact or scoped spend plus reserve exceeds budget."""
+    scope = resolve_budget_scope(trace_id, budget_scope_trace_id)
     if max_budget <= 0:
         return
     if reservation < 0:
         raise ValueError("budget reservation must be non-negative")
-    spent = _io_log.get_cost(trace_id=trace_id)
+    spent = (
+        _io_log.get_cost(trace_prefix=scope)
+        if scope is not None
+        else _io_log.get_cost(trace_id=trace_id)
+    )
+    budget_label = f"budget scope {scope}" if scope is not None else f"trace {trace_id}"
     if spent >= max_budget:
         raise LLMBudgetExceededError(
-            f"Budget exceeded for trace {trace_id}: "
+            f"Budget exceeded for {budget_label}: "
             f"${spent:.4f} spent >= ${max_budget:.4f} limit"
         )
     if spent + reservation > max_budget:
         raise LLMBudgetExceededError(
-            f"Budget reservation exceeds trace limit for {trace_id}: "
+            f"Budget reservation exceeds {budget_label} limit: "
             f"${spent:.4f} spent + ${reservation:.4f} reserve > ${max_budget:.4f} limit"
         )
     if warning_sink is None:
@@ -184,9 +191,28 @@ def check_budget(
     else:
         return
     warning_sink.append(
-        f"BUDGET_WARNING: trace {trace_id} has spent ${spent:.4f} "
+        f"BUDGET_WARNING: {budget_label} has spent ${spent:.4f} "
         f"({ratio:.0%}) of its ${max_budget:.4f} budget; {threshold}% threshold reached"
     )
+
+
+def resolve_budget_scope(
+    trace_id: str,
+    budget_scope_trace_id: str | None,
+) -> str | None:
+    """Validate an optional root trace whose descendants share one budget."""
+
+    if budget_scope_trace_id is None:
+        return None
+    if not isinstance(budget_scope_trace_id, str) or not budget_scope_trace_id.strip():
+        raise ValueError("budget_scope_trace_id must be a non-empty string when provided.")
+    scope = budget_scope_trace_id.strip()
+    if trace_id != scope and not trace_id.startswith(scope + "/"):
+        raise ValueError(
+            "budget_scope_trace_id must equal trace_id or be its slash-delimited ancestor: "
+            f"scope={scope!r}, trace_id={trace_id!r}."
+        )
+    return scope
 
 
 def agent_retry_safe_enabled(explicit: Any | None) -> bool:

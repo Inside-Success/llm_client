@@ -11,7 +11,12 @@ from unittest.mock import patch
 
 import pytest
 
-from llm_client.execution.call_contracts import check_budget, normalize_prompt_ref, require_tags
+from llm_client.execution.call_contracts import (
+    check_budget,
+    normalize_prompt_ref,
+    require_tags,
+    resolve_budget_scope,
+)
 from llm_client.execution.call_wrappers import _prepare_public_call_envelope
 from llm_client.core.errors import LLMBudgetExceededError
 
@@ -68,6 +73,27 @@ def test_public_envelope_reserves_budget_and_strips_internal_kwarg() -> None:
         )
     assert check.call_args.kwargs["reservation"] == 0.25
     assert "budget_reservation" not in envelope.runtime_kwargs
+
+
+def test_check_budget_aggregates_root_scope_and_descendants() -> None:
+    """A descendant charges the root scope's settled cost and reservation."""
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=4.8) as get_cost:
+        with pytest.raises(LLMBudgetExceededError, match="budget scope trace/root"):
+            check_budget(
+                "trace/root/operator",
+                5.0,
+                reservation=0.3,
+                budget_scope_trace_id="trace/root",
+            )
+
+    get_cost.assert_called_once_with(trace_prefix="trace/root")
+
+
+@pytest.mark.parametrize("scope", ["", "   ", "trace/other"])
+def test_budget_scope_must_be_a_nonempty_trace_ancestor(scope: str) -> None:
+    """A call cannot charge an unrelated or malformed trace scope."""
+    with pytest.raises(ValueError, match="budget_scope_trace_id"):
+        resolve_budget_scope("trace/root/child", scope)
 
 
 @pytest.mark.parametrize(("spent", "expected"), [(2.5, "50%"), (4.0, "80%")])

@@ -20,6 +20,7 @@ from llm_client.execution.call_contracts import (
     check_budget as _check_budget,
     normalize_prompt_ref as _normalize_prompt_ref,
     require_tags as _require_tags,
+    resolve_budget_scope as _resolve_budget_scope,
 )
 from llm_client.execution.call_lifecycle import (
     _AsyncLLMCallHeartbeatMonitor,
@@ -67,7 +68,16 @@ def _prepare_public_call_envelope(
         caller=caller,
     )
     reservation = kwargs.get("budget_reservation", 0.0)
-    _check_budget(resolved_trace_id, resolved_max_budget, reservation=float(reservation))
+    budget_scope_trace_id = _resolve_budget_scope(
+        resolved_trace_id,
+        kwargs.get("budget_scope_trace_id"),
+    )
+    _check_budget(
+        resolved_trace_id,
+        resolved_max_budget,
+        reservation=float(reservation),
+        budget_scope_trace_id=budget_scope_trace_id,
+    )
     effective_provider_timeout = _provider_timeout_for_lifecycle(timeout)
     prompt_sha256 = "sha256:" + hashlib.sha256(
         json.dumps(messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
@@ -75,6 +85,7 @@ def _prepare_public_call_envelope(
 
     runtime_kwargs = dict(kwargs)
     runtime_kwargs.pop("budget_reservation", None)
+    runtime_kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     heartbeat_interval_s, stall_after_s = _resolve_lifecycle_monitoring_settings(
         heartbeat_interval=runtime_kwargs.pop("lifecycle_heartbeat_interval_s", None),
         stall_after=runtime_kwargs.pop("lifecycle_stall_after_s", None),

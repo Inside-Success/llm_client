@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from llm_client import LRUCache
+from llm_client import LRUCache, acall_llm
 from llm_client.execution.text_runtime import _acall_llm_impl, _call_llm_impl
 
 
@@ -95,3 +95,25 @@ async def test_text_runtime_async_preserves_cache_and_identity_contracts(
     assert result2.resolved_model == "gpt-4"
     assert result2.routing_trace is not None
     assert result2.routing_trace["attempted_models"] == ["gpt-4"]
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_text_runtime_keeps_budget_scope_out_of_provider_kwargs(
+    mock_acompletion: AsyncMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """Scope metadata controls shared accounting but is not a provider parameter."""
+    mock_acompletion.return_value = _mock_response()
+
+    await acall_llm(
+        "gpt-4",
+        [{"role": "user", "content": "Hi"}],
+        task="test",
+        trace_id="scope.root/child",
+        budget_scope_trace_id="scope.root",
+        max_budget=0,
+    )
+
+    assert "budget_scope_trace_id" not in mock_acompletion.call_args.kwargs
