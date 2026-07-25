@@ -80,8 +80,10 @@ Negative:
 4. Strict tool-call tests must prove lifecycle metadata survives both sinks
    without introducing result-body persistence.
 5. Structured execution-failure events retain only bounded failure class and
-   exception type; exception messages and provider bodies remain outside the
-   shared metadata plane.
+   exception type. Plan 121's additive attempt-diagnostic child ledger may
+   retain a deterministically redacted, bounded operational summary plus typed
+   status/correlation metadata; raw exception messages, provider bodies,
+   prompts, credentials, and headers remain outside the shared metadata plane.
 
 Last verified: 2026-07-14 (Plan 97 Slice 3 additive event migration).
 
