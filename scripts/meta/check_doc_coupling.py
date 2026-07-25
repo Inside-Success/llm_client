@@ -24,7 +24,7 @@ Exit codes:
 import argparse
 import fnmatch
 import glob
-import yaml
+import yaml  # type: ignore[import-untyped]
 import subprocess
 import sys
 from pathlib import Path
@@ -237,7 +237,13 @@ def check_couplings(
         sources = coupling.get("sources", [])
         docs = coupling.get("docs", [])
         description = coupling.get("description", "")
-        is_soft = coupling.get("soft", False)
+        coupling_type = coupling.get("type", "locked")
+        explicit_soft = coupling.get("soft")
+        is_soft = (
+            bool(explicit_soft)
+            if explicit_soft is not None
+            else coupling_type == "validated"
+        )
         verify_sync = coupling.get("verify_sync")
 
         # Find which source patterns matched
@@ -264,6 +270,7 @@ def check_couplings(
                 "changed_sources": matched_sources,
                 "expected_docs": docs,
                 "soft": is_soft,
+                "type": coupling_type,
             }
             if is_soft:
                 soft_warnings.append(violation)
@@ -445,7 +452,8 @@ def main() -> int:
 
     if strict_violations:
         print("=" * 60)
-        print("If docs are already accurate, update 'Last verified' date.")
+        print("Do not make content-free documentation edits to satisfy this gate.")
+        print("Add a verifier, use an acknowledged no-impact record, or narrow the coupling.")
         print("=" * 60)
 
     return 1 if (args.strict and strict_violations) else 0

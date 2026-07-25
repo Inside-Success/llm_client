@@ -1,8 +1,11 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-04-05
-Verification context: shared observability storage now honors dynamic `LLM_CLIENT_LOG_ENABLED` env suppression unless explicitly overridden, preventing accidental writes into the shared SQLite data plane during disabled test lanes
+Last verified: 2026-07-16
+Verification context: Experiment-run start now makes SQLite's existing unique
+run_id row authoritative before appending JSONL metadata; no raw payload,
+dataset, artifact, or lineage field changed. Focused observability controls
+pass.
 Date: 2026-03-17
 
 ## Context
@@ -45,6 +48,9 @@ We need a clear line between:
    - `llm_client` logs the embedding event and its provenance,
    - vectors, indexes, and large embedding artifacts live in the data plane or
      in project-specific derived stores that are linked back to that event.
+7. Tool-call lifecycle rows may include bounded query metadata and result counts,
+   but bulk tool results remain in project/data-plane artifacts referenced by
+   the trace rather than being copied into the shared observability database.
 
 ## Consequences
 
@@ -71,3 +77,15 @@ Negative:
    missing or inconsistent.
 3. New storage integrations must preserve the distinction between shared
    metadata in `llm_client` and bulk payloads in the data plane.
+4. Strict tool-call tests must prove lifecycle metadata survives both sinks
+   without introducing result-body persistence.
+5. Structured execution-failure events retain only bounded failure class and
+   exception type. Plan 121's additive attempt-diagnostic child ledger may
+   retain a deterministically redacted, bounded operational summary plus typed
+   status/correlation metadata; raw exception messages, provider bodies,
+   prompts, credentials, and headers remain outside the shared metadata plane.
+
+Last verified: 2026-07-14 (Plan 97 Slice 3 additive event migration).
+
+Plan 101 receipts retain hashes and typed lifecycle metadata only; raw provider
+content remains external behind the optional artifact reference.

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import llm_client.core.client as client_mod
 from llm_client import (
@@ -17,6 +17,7 @@ from llm_client import (
     LLMStream,
     LRUCache,
     RetryPolicy,
+    StructuredOutputPolicy,
     acall_llm,
     acall_llm_batch,
     acall_llm_structured,
@@ -45,13 +46,18 @@ from llm_client.core.errors import (
     LLMModelNotFoundError,
     LLMQuotaExhaustedError,
 )
+from llm_client.core.model_availability import clear_model_unavailability
 
 
 @pytest.fixture(autouse=True)
 def _explicit_test_routing_policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Week-1 invariant: routing policy must be explicit in tests."""
+    """Keep mocked client tests independent of routing and shared cooldown state."""
     monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "off")
+    monkeypatch.setattr("llm_client.utils.rate_limit._cooldown_enabled", False)
     monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
+    clear_model_unavailability()
+    yield
+    clear_model_unavailability()
 
 
 class TestRequiredTags:
@@ -130,7 +136,7 @@ class TestCallLLM:
         mock_comp.return_value = _mock_response()
 
         call_llm(
-            "openrouter/openai/gpt-5-mini",
+            "openrouter/openai/gpt-5",
             [{"role": "user", "content": "Hi"}],
             task="test",
             trace_id="test_no_default_max_tokens",
@@ -154,17 +160,17 @@ class TestCallLLM:
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_reasoning_effort_for_claude(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:
         mock_comp.return_value = _mock_response()
-        call_llm("anthropic/claude-opus-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_reasoning_claude", max_budget=0)
+        call_llm("anthropic/claude-sonnet-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_reasoning_claude", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
         assert kwargs["reasoning_effort"] == "high"
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-    def test_reasoning_effort_ignored_for_non_claude(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:
+    def test_reasoning_effort_forwarded_for_non_claude(self, mock_comp: MagicMock, mock_cost: MagicMock) -> None:
         mock_comp.return_value = _mock_response()
         call_llm("gpt-4", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_reasoning_non_claude", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert "reasoning_effort" not in kwargs
+        assert kwargs["reasoning_effort"] == "high"
 
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
     def test_raises_on_error(self, mock_comp: MagicMock) -> None:
@@ -180,6 +186,42 @@ class TestCallLLM:
         assert result.usage["prompt_tokens"] == 10
         assert result.usage["completion_tokens"] == 5
         assert result.usage["total_tokens"] == 15
+
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_extracts_bounded_provider_usage_details(
+        self,
+        mock_comp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        response = _mock_response()
+        response.usage.prompt_tokens_details = SimpleNamespace(
+            cached_tokens=4,
+            cache_creation_tokens=2,
+        )
+        response.usage.completion_tokens_details = SimpleNamespace(
+            reasoning_tokens=3,
+            reasoning="must not persist",
+        )
+        mock_comp.return_value = response
+
+        result = call_llm(
+            "gpt-4",
+            [{"role": "user", "content": "Hi"}],
+            task="test",
+            trace_id="test_extracts_bounded_provider_usage_details",
+            max_budget=0,
+        )
+
+        assert result.usage["reasoning_tokens"] == 3
+        assert result.usage["cached_tokens"] == 4
+        assert result.usage["cache_creation_tokens"] == 2
+        assert result.usage["prompt_tokens_details"] == {
+            "cached_tokens": 4,
+            "cache_creation_tokens": 2,
+        }
+        assert result.usage["completion_tokens_details"] == {"reasoning_tokens": 3}
+        assert "must not persist" not in str(result.usage)
 
     @patch("llm_client.core.client.litellm.completion_cost", side_effect=Exception("no pricing"))
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -388,9 +430,34 @@ class TestAcallLLM:
     @patch("llm_client.core.client.litellm.acompletion")
     async def test_reasoning_effort_for_claude(self, mock_acomp: MagicMock, mock_cost: MagicMock) -> None:
         mock_acomp.return_value = _mock_response()
-        await acall_llm("anthropic/claude-opus-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_async_reasoning_claude", max_budget=0)
+        await acall_llm("anthropic/claude-sonnet-4-6", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_async_reasoning_claude", max_budget=0)
         kwargs = mock_acomp.call_args.kwargs
         assert kwargs["reasoning_effort"] == "high"
+
+    @pytest.mark.asyncio
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
+    @patch("llm_client.core.client.litellm.acompletion")
+    async def test_reasoning_effort_for_openrouter_deepseek(
+        self,
+        mock_acomp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        """Async calls preserve DeepSeek xhigh effort through OpenRouter."""
+        mock_acomp.return_value = _mock_response()
+
+        await acall_llm(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "Hi"}],
+            reasoning_effort="xhigh",
+            task="test",
+            trace_id="test_async_reasoning_deepseek_xhigh",
+            max_budget=0,
+        )
+
+        kwargs = mock_acomp.call_args.kwargs
+        assert kwargs["reasoning_effort"] == "xhigh"
+        assert kwargs["allowed_openai_params"] == ["reasoning_effort"]
+        assert kwargs["trace"]["trace_id"] == "test_async_reasoning_deepseek_xhigh"
 
     @pytest.mark.asyncio
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.01)
@@ -886,6 +953,62 @@ class TestNonRetryableErrors:
         assert result.content == "Hello!"
         assert mock_comp.call_count == 2
 
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_gemini_monthly_spend_cap_not_retried(self, mock_comp: MagicMock) -> None:
+        """Gemini monthly spend-cap 429s should fail immediately so fallback can engage."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            (
+                "GeminiException - {"
+                '"error": {"code": 429, '
+                '"message": "Your project has exceeded its monthly spending cap. '
+                'Please go to AI Studio at https://ai.studio/spend to manage your project spend cap.", '
+                '"status": "RESOURCE_EXHAUSTED"}}'
+            ),
+            model="gemini/gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_gemini_monthly_spend_cap",
+                max_budget=0,
+            )
+        assert mock_comp.call_count == 1
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_gemini_daily_request_cap_not_retried(self, mock_comp: MagicMock) -> None:
+        """Gemini daily request-cap 429s should fail immediately instead of retrying."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            (
+                "GeminiException - {"
+                '"error": {"code": 429, '
+                '"message": "Rate limit exceeded for GenerateContentRequestsPerDayPerProjectPerModel-FreeTier. '
+                'Please try again tomorrow.", '
+                '"status": "RESOURCE_EXHAUSTED"}}'
+            ),
+            model="gemini/gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_gemini_daily_request_cap",
+                max_budget=0,
+            )
+        assert mock_comp.call_count == 1
+
     @patch("llm_client.core.client.time.sleep")
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -917,6 +1040,35 @@ class TestNonRetryableErrors:
         )
         assert result.content == "Hello!"
         assert mock_comp.call_count == 2
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_long_quota_retry_delay_is_not_retried(
+        self,
+        mock_comp: MagicMock,
+    ) -> None:
+        """Quota-like 429 with a multi-hour retry window should fail over instead of sleeping."""
+        import litellm
+
+        mock_comp.side_effect = litellm.RateLimitError(
+            (
+                "Quota exceeded for metric: generativelanguage.googleapis.com/generate_requests_per_model_per_day. "
+                "Please retry in 9h40m20s. "
+                '{"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"34820s"}]}'
+            ),
+            model="gemini-2.5-flash",
+            llm_provider="gemini",
+        )
+
+        with pytest.raises(LLMQuotaExhaustedError):
+            call_llm(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "Hi"}],
+                num_retries=2,
+                task="test",
+                trace_id="test_long_quota_retry_delay",
+                max_budget=0,
+            )
+        assert mock_comp.call_count == 1
 
     @patch("llm_client.execution.execution_kernel.asyncio.sleep", new_callable=AsyncMock)
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -996,7 +1148,7 @@ class TestOpenRouterKeyRotation:
         class OpenRouterKeyLimitError(Exception):
             status_code = 403
             llm_provider = "openrouter"
-            model = "openrouter/openai/gpt-5-mini"
+            model = "openrouter/openai/gpt-5"
 
         seen_keys: list[str | None] = []
 
@@ -1009,7 +1161,7 @@ class TestOpenRouterKeyRotation:
         mock_comp.side_effect = _side_effect
 
         result = call_llm(
-            "openrouter/openai/gpt-5-mini",
+            "openrouter/openai/gpt-5",
             [{"role": "user", "content": "Hi"}],
             num_retries=2,
             task="test",
@@ -1080,7 +1232,7 @@ class TestOpenRouterKeyRotation:
         class OpenRouterKeyLimitError(Exception):
             status_code = 403
             llm_provider = "openrouter"
-            model = "openrouter/openai/gpt-5-mini"
+            model = "openrouter/openai/gpt-5"
 
         mock_comp.side_effect = OpenRouterKeyLimitError(
             "OpenRouter error: Key limit exceeded (total limit)",
@@ -1088,7 +1240,7 @@ class TestOpenRouterKeyRotation:
 
         with pytest.raises(Exception, match="Key limit exceeded"):
             call_llm(
-                "openrouter/openai/gpt-5-mini",
+                "openrouter/openai/gpt-5",
                 [{"role": "user", "content": "Hi"}],
                 num_retries=2,
                 task="test",
@@ -1111,7 +1263,7 @@ class TestOpenRouterKeyRotation:
         class OpenRouterKeyLimitError(Exception):
             status_code = 403
             llm_provider = "openrouter"
-            model = "openrouter/openai/gpt-5-mini"
+            model = "openrouter/openai/gpt-5"
 
         seen_api_keys: list[str | None] = []
 
@@ -1123,7 +1275,7 @@ class TestOpenRouterKeyRotation:
 
         with pytest.raises(Exception, match="Key limit exceeded"):
             call_llm(
-                "openrouter/openai/gpt-5-mini",
+                "openrouter/openai/gpt-5",
                 [{"role": "user", "content": "Hi"}],
                 api_key="manual-key-9999",
                 num_retries=2,
@@ -1137,35 +1289,33 @@ class TestOpenRouterKeyRotation:
 
 
 class TestThinkingModelDetection:
-    """Tests for automatic thinking model configuration."""
+    """Tests that direct Gemini no longer receives automatic thinking config."""
 
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-    def test_gemini_3_gets_thinking_config(
+    def test_gemini_3_does_not_get_automatic_thinking_config(
         self,
         mock_comp: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         mock_comp.return_value = _mock_response()
-        call_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini3_thinking", max_budget=0)
+        call_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], reasoning_effort="low", task="test", trace_id="test_gemini3_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert kwargs["reasoning_effort"] == "low"
+        assert "thinking" not in kwargs
 
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
-    def test_gemini_4_gets_thinking_config(
+    def test_gemini_4_does_not_get_automatic_thinking_config(
         self,
         mock_comp: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         mock_comp.return_value = _mock_response()
-        call_llm("gemini/gemini-4-pro", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gemini4_thinking", max_budget=0)
+        call_llm("gemini/gemini-4-pro", [{"role": "user", "content": "Hi"}], reasoning_effort="high", task="test", trace_id="test_gemini4_thinking", max_budget=0)
         kwargs = mock_comp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert kwargs["reasoning_effort"] == "high"
+        assert "thinking" not in kwargs
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1200,28 +1350,25 @@ class TestThinkingModelDetection:
         assert kwargs["thinking"] == custom
 
     @pytest.mark.asyncio
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion")
-    async def test_async_gemini_3_gets_thinking_config(
+    async def test_async_gemini_3_does_not_get_automatic_thinking_config(
         self,
         mock_acomp: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         mock_acomp.return_value = _mock_response()
-        await acall_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gemini3_thinking", max_budget=0)
+        await acall_llm("gemini/gemini-3-flash", [{"role": "user", "content": "Hi"}], reasoning_effort="low", task="test", trace_id="test_async_gemini3_thinking", max_budget=0)
         kwargs = mock_acomp.call_args.kwargs
-        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert kwargs["reasoning_effort"] == "low"
+        assert "thinking" not in kwargs
 
-    @patch("litellm.get_supported_openai_params", return_value=["thinking"])
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("instructor.from_litellm")
-    def test_structured_gemini_3_gets_thinking_config(
+    def test_structured_gemini_3_does_not_get_automatic_thinking_config(
         self,
         mock_from_litellm: MagicMock,
         mock_cost: MagicMock,
-        _mock_supported: MagicMock,
     ) -> None:
         class Item(BaseModel):
             name: str
@@ -1239,12 +1386,14 @@ class TestThinkingModelDetection:
             "gemini/gemini-3-flash",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
+            reasoning_effort="low",
             task="test",
             trace_id="test_structured_gemini3_thinking",
             max_budget=0,
         )
         call_kwargs = mock_client.chat.completions.create_with_completion.call_args.kwargs
-        assert call_kwargs["thinking"] == {"type": "enabled", "budget_tokens": 256}
+        assert call_kwargs["reasoning_effort"] == "low"
+        assert "thinking" not in call_kwargs
 
 
 class TestStripFences:
@@ -1319,7 +1468,7 @@ class TestGPT5TemperatureStripping:
         from llm_client import call_llm_structured
 
         call_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             temperature=0.5,
@@ -1496,7 +1645,7 @@ class TestResponsesAPIDetection:
 
     def test_gpt5_mini_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
-        assert _is_responses_api_model("gpt-5-mini") is True
+        assert _is_responses_api_model("gpt-5") is True
 
     def test_gpt5_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
@@ -1509,6 +1658,22 @@ class TestResponsesAPIDetection:
     def test_gpt52_pro_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-5.2-pro") is True
+
+    def test_gpt55_detected(self) -> None:
+        from llm_client.core.client import _is_responses_api_model
+        assert _is_responses_api_model("gpt-5.5") is True
+
+    def test_gpt55_pro_detected(self) -> None:
+        from llm_client.core.client import _is_responses_api_model
+        assert _is_responses_api_model("gpt-5.5-pro") is True
+
+    def test_gpt56_direct_models_use_responses_api(self) -> None:
+        """Registered direct GPT-5.6 aliases use Responses, never proxy aliases."""
+        from llm_client.core.client import _is_responses_api_model
+
+        assert _is_responses_api_model("gpt-5.6") is True
+        assert _is_responses_api_model("gpt-5.6-terra") is True
+        assert _is_responses_api_model("openrouter/openai/gpt-5.6") is False
 
     def test_gpt4_not_detected(self) -> None:
         from llm_client.core.client import _is_responses_api_model
@@ -1623,9 +1788,9 @@ class TestResponsesAPIRouting:
     def test_gpt5_routes_to_responses(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """GPT-5 models should use litellm.responses(), not completion()."""
         mock_resp.return_value = _mock_responses_api_response()
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_routes", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_routes", max_budget=0)
         assert result.content == "Hello from GPT-5!"
-        assert result.model == "gpt-5-mini"
+        assert result.model == "gpt-5"
         assert result.finish_reason == "stop"
         mock_resp.assert_called_once()
 
@@ -1634,7 +1799,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_passes_input_not_messages(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """Responses API receives 'input' string, not 'messages' list."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_gpt5_input", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_gpt5_input", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "input" in kwargs
         assert "User: Hello" in kwargs["input"]
@@ -1645,7 +1810,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_strips_max_tokens(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """max_tokens should be stripped for GPT-5 (reasoning tokens issue)."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_gpt5_strips_max", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_gpt5_strips_max", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "max_tokens" not in kwargs
         assert "max_output_tokens" not in kwargs
@@ -1663,7 +1828,7 @@ class TestResponsesAPIRouting:
                 "schema": {"type": "object"},
             },
         }
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], response_format=response_format, task="test", trace_id="test_gpt5_resp_format", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], response_format=response_format, task="test", trace_id="test_gpt5_resp_format", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "response_format" not in kwargs
         assert "text" in kwargs
@@ -1684,7 +1849,7 @@ class TestResponsesAPIRouting:
                 },
             }
         ]
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], tools=chat_completions_tools, task="test", trace_id="test_gpt5_flat_tools", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], tools=chat_completions_tools, task="test", trace_id="test_gpt5_flat_tools", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         tools = kwargs["tools"]
         assert len(tools) == 1
@@ -1709,6 +1874,29 @@ class TestResponsesAPIRouting:
             reasoning_effort="xhigh",
             task="test",
             trace_id="test_gpt52_background_reasoning",
+            max_budget=0,
+        )
+        kwargs = mock_resp.call_args.kwargs
+        assert kwargs["background"] is True
+        assert kwargs["reasoning"] == {"effort": "xhigh"}
+        assert isinstance(result.routing_trace, dict)
+        assert result.routing_trace.get("background_mode") is True
+
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.responses")
+    def test_gpt55_pro_xhigh_enables_background_with_reasoning(
+        self,
+        mock_resp: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        """gpt-5.5-pro with xhigh reasoning should use background mode and reasoning payload."""
+        mock_resp.return_value = _mock_responses_api_response()
+        result = call_llm(
+            "gpt-5.5-pro",
+            [{"role": "user", "content": "Deep review"}],
+            reasoning_effort="xhigh",
+            task="test",
+            trace_id="test_gpt55_background_reasoning",
             max_budget=0,
         )
         kwargs = mock_resp.call_args.kwargs
@@ -1757,7 +1945,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_strips_temperature(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """GPT-5 responses API does not support temperature — should be stripped."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], temperature=0.5, task="test", trace_id="test_gpt5_strips_temp", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], temperature=0.5, task="test", trace_id="test_gpt5_strips_temp", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert "temperature" not in kwargs
 
@@ -1767,7 +1955,7 @@ class TestResponsesAPIRouting:
         """GPT-5 requests should not forward unsupported sampling extras."""
         mock_resp.return_value = _mock_responses_api_response()
         call_llm(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Hi"}],
             top_p=0.7,
             logprobs=True,
@@ -1788,7 +1976,7 @@ class TestResponsesAPIRouting:
         mock_resp.return_value = _mock_responses_api_response(
             input_tokens=100, output_tokens=50, total_tokens=150,
         )
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_usage", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_usage", max_budget=0)
         assert result.usage["prompt_tokens"] == 100
         assert result.usage["completion_tokens"] == 50
         assert result.usage["total_tokens"] == 150
@@ -1799,7 +1987,7 @@ class TestResponsesAPIRouting:
         """raw_response should contain the original responses API object."""
         resp = _mock_responses_api_response()
         mock_resp.return_value = resp
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_raw_resp", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_raw_resp", max_budget=0)
         assert result.raw_response is resp
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -1815,7 +2003,7 @@ class TestResponsesAPIRouting:
         mock_resp.return_value = _mock_responses_api_response(output_text="", output=[tool_item])
         tools = [{"type": "function", "function": {"name": "get_weather", "parameters": {}}}]
         result = call_llm_with_tools(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Weather?"}],
             tools,
             task="test",
@@ -1833,7 +2021,7 @@ class TestResponsesAPIRouting:
         """Empty response from GPT-5 should raise ValueError (retryable)."""
         mock_resp.return_value = _mock_responses_api_response(output_text="")
         with pytest.raises(LLMError, match="Empty content"):
-            call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_empty", max_budget=0)
+            call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_empty", max_budget=0)
 
     @patch("llm_client.core.client.litellm.responses")
     def test_gpt5_incomplete_status_raises(self, mock_resp: MagicMock) -> None:
@@ -1844,7 +2032,7 @@ class TestResponsesAPIRouting:
         resp.incomplete_details = details
         mock_resp.return_value = resp
         with pytest.raises(LLMError, match="truncated"):
-            call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_incomplete", max_budget=0)
+            call_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_gpt5_incomplete", max_budget=0)
 
     @patch("llm_client.core.client.time.sleep")
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
@@ -1855,7 +2043,7 @@ class TestResponsesAPIRouting:
             Exception("rate limit exceeded"),
             _mock_responses_api_response(),
         ]
-        result = call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_gpt5_retry_transient", max_budget=0)
+        result = call_llm("gpt-5", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_gpt5_retry_transient", max_budget=0)
         assert result.content == "Hello from GPT-5!"
         assert mock_resp.call_count == 2
 
@@ -1864,7 +2052,7 @@ class TestResponsesAPIRouting:
     def test_gpt5_api_base_passed(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
         """api_base should be passed through for GPT-5 models."""
         mock_resp.return_value = _mock_responses_api_response()
-        call_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], api_base="https://custom.api/v1", task="test", trace_id="test_gpt5_api_base", max_budget=0)
+        call_llm("gpt-5", [{"role": "user", "content": "Hi"}], api_base="https://custom.api/v1", task="test", trace_id="test_gpt5_api_base", max_budget=0)
         kwargs = mock_resp.call_args.kwargs
         assert kwargs["api_base"] == "https://custom.api/v1"
 
@@ -1887,9 +2075,9 @@ class TestAsyncResponsesAPIRouting:
     async def test_async_gpt5_routes_to_aresponses(self, mock_aresp: MagicMock, mock_cost: MagicMock) -> None:
         """Async GPT-5 should use litellm.aresponses()."""
         mock_aresp.return_value = _mock_responses_api_response()
-        result = await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gpt5_routes", max_budget=0)
+        result = await acall_llm("gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_async_gpt5_routes", max_budget=0)
         assert result.content == "Hello from GPT-5!"
-        assert result.model == "gpt-5-mini"
+        assert result.model == "gpt-5"
         mock_aresp.assert_called_once()
 
     @pytest.mark.asyncio
@@ -1898,7 +2086,7 @@ class TestAsyncResponsesAPIRouting:
     async def test_async_gpt5_passes_input(self, mock_aresp: MagicMock, mock_cost: MagicMock) -> None:
         """Async responses API should receive 'input', not 'messages'."""
         mock_aresp.return_value = _mock_responses_api_response()
-        await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_async_gpt5_input", max_budget=0)
+        await acall_llm("gpt-5", [{"role": "user", "content": "Hello"}], task="test", trace_id="test_async_gpt5_input", max_budget=0)
         kwargs = mock_aresp.call_args.kwargs
         assert "input" in kwargs
         assert "User: Hello" in kwargs["input"]
@@ -1909,7 +2097,7 @@ class TestAsyncResponsesAPIRouting:
     async def test_async_gpt5_strips_max_tokens(self, mock_aresp: MagicMock, mock_cost: MagicMock) -> None:
         """Async: max_tokens should be stripped for GPT-5."""
         mock_aresp.return_value = _mock_responses_api_response()
-        await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_async_gpt5_strips_max", max_budget=0)
+        await acall_llm("gpt-5", [{"role": "user", "content": "Hi"}], max_tokens=4096, task="test", trace_id="test_async_gpt5_strips_max", max_budget=0)
         kwargs = mock_aresp.call_args.kwargs
         assert "max_tokens" not in kwargs
 
@@ -1923,7 +2111,7 @@ class TestAsyncResponsesAPIRouting:
             Exception("service unavailable"),
             _mock_responses_api_response(),
         ]
-        result = await acall_llm("gpt-5-mini", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_async_gpt5_retries", max_budget=0)
+        result = await acall_llm("gpt-5", [{"role": "user", "content": "Hi"}], num_retries=2, task="test", trace_id="test_async_gpt5_retries", max_budget=0)
         assert result.content == "Hello from GPT-5!"
         assert mock_aresp.call_count == 2
 
@@ -1978,7 +2166,7 @@ class TestAsyncResponsesAPIRouting:
         )
         mock_aresp.return_value = _mock_responses_api_response(output_text="", output=[tool_item])
         result = await acall_llm_with_tools(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Lookup entity"}],
             [{"type": "function", "function": {"name": "lookup", "parameters": {}}}],
             task="test",
@@ -3005,17 +3193,17 @@ class TestResponsesAPIRouting:
 
     def test_excludes_openrouter(self) -> None:
         from llm_client.core.client import _is_responses_api_model
-        assert _is_responses_api_model("openrouter/openai/gpt-5-mini") is False
+        assert _is_responses_api_model("openrouter/openai/gpt-5") is False
 
     def test_excludes_any_provider_prefix(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("azure/gpt-5") is False
-        assert _is_responses_api_model("custom/gpt-5-mini") is False
+        assert _is_responses_api_model("custom/gpt-5") is False
 
     def test_matches_bare_gpt5(self) -> None:
         from llm_client.core.client import _is_responses_api_model
         assert _is_responses_api_model("gpt-5") is True
-        assert _is_responses_api_model("gpt-5-mini") is True
+        assert _is_responses_api_model("gpt-5") is True
         assert _is_responses_api_model("gpt-5-nano") is True
 
     def test_no_substring_match(self) -> None:
@@ -3744,6 +3932,14 @@ class TestStreamWithTools:
 class TestGPT5StructuredOutput:
     """Tests for GPT-5 structured output via Responses API."""
 
+    def test_structured_output_policy_rejects_unknown_fields_and_modes(self) -> None:
+        """The public policy fails closed on misspelled controls or mode values."""
+
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            StructuredOutputPolicy.model_validate({"mode": "auto", "fallback": True})
+        with pytest.raises(ValidationError, match="Input should be"):
+            StructuredOutputPolicy.model_validate({"mode": "native-ish"})
+
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.responses")
     def test_structured_gpt5_uses_responses_api(self, mock_resp: MagicMock, mock_cost: MagicMock) -> None:
@@ -3754,7 +3950,7 @@ class TestGPT5StructuredOutput:
         mock_resp.return_value = _mock_responses_api_response(output_text='{"name": "test"}')
 
         result, meta = call_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             task="test",
@@ -3775,7 +3971,7 @@ class TestGPT5StructuredOutput:
         mock_resp.return_value = _mock_responses_api_response(output_text='{"name": "test"}')
 
         call_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             task="test",
@@ -3792,6 +3988,39 @@ class TestGPT5StructuredOutput:
         assert "name" in fmt["schema"]["properties"]
         assert fmt["schema"]["additionalProperties"] is False
 
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.responses")
+    def test_structured_gpt5_repairs_local_validation_error(
+        self, mock_resp: MagicMock, mock_cost: MagicMock
+    ) -> None:
+        """Responses API retries local schema failures with actionable feedback."""
+        from pydantic import Field
+
+        class Item(BaseModel):
+            count: int = Field(ge=1)
+
+        mock_resp.side_effect = [
+            _mock_responses_api_response(output_text='{"count": 0}'),
+            _mock_responses_api_response(output_text='{"count": 1}'),
+        ]
+
+        result, _ = call_llm_structured(
+            "gpt-5",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            num_retries=1,
+            base_delay=0,
+            task="test",
+            trace_id="test_gpt5_structured_repair",
+            max_budget=0,
+        )
+
+        assert result.count == 1
+        assert mock_resp.call_count == 2
+        repair_input = mock_resp.call_args_list[1].kwargs["input"]
+        assert isinstance(repair_input, str)
+        assert "User: Your previous response was valid JSON but failed schema validation" in repair_input
+
     @pytest.mark.asyncio
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.aresponses")
@@ -3803,7 +4032,7 @@ class TestGPT5StructuredOutput:
         mock_aresp.return_value = _mock_responses_api_response(output_text='{"name": "async_test"}')
 
         result, meta = await acall_llm_structured(
-            "gpt-5-mini",
+            "gpt-5",
             [{"role": "user", "content": "Extract"}],
             response_model=Item,
             task="test",
@@ -3812,6 +4041,40 @@ class TestGPT5StructuredOutput:
         )
         assert result.name == "async_test"
         mock_aresp.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.aresponses", new_callable=AsyncMock)
+    async def test_async_structured_gpt5_repairs_local_validation_error(
+        self, mock_aresp: AsyncMock, mock_cost: MagicMock
+    ) -> None:
+        """Async Responses API uses the same local validation repair contract."""
+        from pydantic import Field
+
+        class Item(BaseModel):
+            count: int = Field(ge=1)
+
+        mock_aresp.side_effect = [
+            _mock_responses_api_response(output_text='{"count": 0}'),
+            _mock_responses_api_response(output_text='{"count": 1}'),
+        ]
+
+        result, _ = await acall_llm_structured(
+            "gpt-5",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            num_retries=1,
+            base_delay=0,
+            task="test",
+            trace_id="test_async_gpt5_structured_repair",
+            max_budget=0,
+        )
+
+        assert result.count == 1
+        assert mock_aresp.call_count == 2
+        repair_input = mock_aresp.call_args_list[1].kwargs["input"]
+        assert isinstance(repair_input, str)
+        assert "User: Your previous response was valid JSON but failed schema validation" in repair_input
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.completion")
@@ -3932,6 +4195,242 @@ class TestGPT5StructuredOutput:
         assert meta.model == "gemini/gemini-2.5-flash-lite"
         mock_completion.assert_called_once()
         mock_from_litellm.assert_called_once()
+
+    # mock-ok: provider/adapter spies prove forbidden dispatch without network calls.
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.completion")
+    def test_strict_native_schema_rejects_unsupported_model_before_instructor_sync(
+        self,
+        mock_completion: MagicMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Strict mode must reject an unsupported model without any dispatch."""
+
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(LLMCapabilityError, match="native JSON schema"):
+            call_llm_structured(
+                "provider/no-native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_unsupported_sync",
+                max_budget=0,
+            )
+
+        mock_completion.assert_not_called()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: provider/adapter spies prove the async forbidden-dispatch boundary.
+    @pytest.mark.asyncio
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    async def test_strict_native_schema_rejects_unsupported_model_before_instructor_async(
+        self,
+        mock_acompletion: AsyncMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Async strict mode must reject an unsupported model without dispatch."""
+
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(LLMCapabilityError, match="native JSON schema"):
+            await acall_llm_structured(
+                "provider/no-native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_unsupported_async",
+                max_budget=0,
+            )
+
+        mock_acompletion.assert_not_called()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: controlled provider rejection proves dispatch count and adapter exclusion.
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.completion")
+    def test_strict_native_schema_rejects_provider_schema_fallback_sync(
+        self,
+        mock_completion: MagicMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """A native schema rejection must not change execution path in strict mode."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_completion.side_effect = Exception(
+            "INVALID_ARGUMENT: response_schema nesting depth exceeds limit"
+        )
+
+        with pytest.raises(LLMCapabilityError, match="rejected native JSON schema"):
+            call_llm_structured(
+                "provider/native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_schema_rejection_sync",
+                max_budget=0,
+            )
+
+        mock_completion.assert_called_once()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: controlled async rejection proves dispatch count and adapter exclusion.
+    @pytest.mark.asyncio
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("instructor.from_litellm")
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    async def test_strict_native_schema_rejects_provider_schema_fallback_async(
+        self,
+        mock_acompletion: AsyncMock,
+        mock_from_litellm: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Async native schema rejection must not enter Instructor in strict mode."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_acompletion.side_effect = Exception(
+            "INVALID_ARGUMENT: response_schema nesting depth exceeds limit"
+        )
+
+        with pytest.raises(LLMCapabilityError, match="rejected native JSON schema"):
+            await acall_llm_structured(
+                "provider/native-test-model",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_schema_rejection_async",
+                max_budget=0,
+            )
+
+        mock_acompletion.assert_awaited_once()
+        mock_from_litellm.assert_not_called()
+
+    # mock-ok: provider response is controlled; real schema construction and parsing run.
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.completion")
+    def test_strict_native_schema_accepts_native_success_sync(
+        self,
+        mock_completion: MagicMock,
+        mock_cost: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Strict mode preserves a successful native JSON-schema result."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_completion.return_value = _mock_response(content='{"name":"strict"}')
+        parsed, metadata = call_llm_structured(
+            "provider/native-test-model",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            retry=RetryPolicy(max_retries=0),
+            task="test",
+            trace_id="test_strict_native_success_sync",
+            max_budget=0,
+        )
+
+        assert parsed.name == "strict"
+        assert metadata.model == "provider/native-test-model"
+        assert mock_completion.call_args.kwargs["response_format"]["type"] == "json_schema"
+
+    # mock-ok: async response is controlled; real schema construction and parsing run.
+    @pytest.mark.asyncio
+    @patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=True)
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    async def test_strict_native_schema_accepts_native_success_async(
+        self,
+        mock_acompletion: AsyncMock,
+        mock_cost: MagicMock,
+        mock_supports: MagicMock,
+    ) -> None:
+        """Async strict mode preserves a successful native JSON-schema result."""
+
+        class Item(BaseModel):
+            name: str
+
+        mock_acompletion.return_value = _mock_response(content='{"name":"strict-async"}')
+        parsed, metadata = await acall_llm_structured(
+            "provider/native-test-model",
+            [{"role": "user", "content": "Extract"}],
+            response_model=Item,
+            structured_output_policy=StructuredOutputPolicy(
+                mode="require_native_json_schema"
+            ),
+            retry=RetryPolicy(max_retries=0),
+            task="test",
+            trace_id="test_strict_native_success_async",
+            max_budget=0,
+        )
+
+        assert parsed.name == "strict-async"
+        assert metadata.model == "provider/native-test-model"
+        assert mock_acompletion.call_args.kwargs["response_format"]["type"] == "json_schema"
+
+    # mock-ok: Agent SDK spy proves strict mode rejects before adapter dispatch.
+    @patch("llm_client.core.client._log_call_event")
+    @patch("llm_client.sdk.agents._route_call_structured")
+    def test_strict_native_schema_rejects_agent_sdk_before_dispatch(
+        self,
+        mock_agent_call: MagicMock,
+        mock_log: MagicMock,
+    ) -> None:
+        """Strict provider-native policy cannot silently use an Agent SDK."""
+
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(LLMCapabilityError, match="Agent SDK"):
+            call_llm_structured(
+                "claude-code",
+                [{"role": "user", "content": "Extract"}],
+                response_model=Item,
+                structured_output_policy=StructuredOutputPolicy(
+                    mode="require_native_json_schema"
+                ),
+                retry=RetryPolicy(max_retries=0),
+                task="test",
+                trace_id="test_strict_native_agent_sdk",
+                max_budget=0,
+            )
+
+        mock_agent_call.assert_not_called()
+        assert mock_log.call_args.kwargs["execution_path"] == "error"
+        assert isinstance(mock_log.call_args.kwargs["error"], LLMCapabilityError)
 
 
 class TestStrictJsonSchema:
@@ -4074,6 +4573,75 @@ class TestModelDeprecation:
         from llm_client.core.errors import DeprecatedModelError
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*mistral"):
             call_llm("mistral/mistral-large-latest", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_mistral", max_budget=0)
+
+    def test_fable_raises(self):
+        """Fable-family models are policy-banned, not generic accepted overrides."""
+        from llm_client.core.errors import DeprecatedModelError
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*fable"):
+            call_llm("anthropic/claude-fable-5", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_fable", max_budget=0)
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "anthropic/claude-opus-4-8",
+            "openrouter/anthropic/claude-opus-4.8",
+            "claude-code/opus",
+        ],
+    )
+    def test_opus_raises_before_any_execution_lane(self, model):
+        """Opus is banned for raw, routed, and workspace-agent calls."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*opus"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_depr_opus",
+                max_budget=0,
+            )
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "openrouter/auto",
+            "openrouter/auto-beta",
+            "@preset/account-default",
+            "openrouter/deepseek/deepseek-chat@preset/account-default",
+        ],
+    )
+    def test_opaque_model_selectors_raise_before_any_execution_lane(self, model):
+        """Account-side model selectors cannot prove that Opus is excluded."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_opaque_selector",
+                max_budget=0,
+            )
+
+    def test_opus_fallback_raises_before_primary_execution(self):
+        """The hard ban applies to every leg, not only the primary model."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with (
+            patch("litellm.completion") as mock_completion,
+            patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion,
+        ):
+            with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*opus"):
+                call_llm(
+                    "deepseek/deepseek-chat",
+                    [{"role": "user", "content": "hi"}],
+                    fallback_models=["openrouter/anthropic/claude-opus-4.8"],
+                    task="test",
+                    trace_id="test_opus_fallback",
+                    max_budget=0,
+                )
+        mock_completion.assert_not_called()
+        mock_acompletion.assert_not_called()
 
     def test_hard_block_not_bypassed_by_strict_env(self, monkeypatch):
         """Hard-blocked models raise even without LLM_CLIENT_STRICT_MODELS=1."""

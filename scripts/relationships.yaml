@@ -17,7 +17,21 @@ required_reading:
   - CLAUDE.md
 couplings:
 - sources:
+  - llm_client/provider_limits.py
+  - llm_client/cli/provider_limits.py
+  - llm_client/utils/openrouter.py
+  - llm_client/__main__.py
+  - llm_client/__init__.py
+  docs:
+  - docs/adr/0002-routing-config-precedence.md
+  - docs/adr/0003-warning-taxonomy.md
+  - docs/adr/0010-cross-project-runtime-substrate.md
+  - docs/plans/104_openrouter-provider-limit-observer.md
+  type: validated
+  description: Provider-limit inventory, observation, authorization, and public-surface boundary.
+- sources:
   - llm_client/core/client.py
+  - llm_client/core/model_execution_policy.py
   - llm_client/execution/*_runtime.py
   - llm_client/execution/execution_kernel.py
   - llm_client/core/routing.py
@@ -30,8 +44,22 @@ couplings:
   - docs/adr/0009-long-thinking-background-polling.md
   - docs/adr/0010-cross-project-runtime-substrate.md
   - docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md
-  type: locked
+  - docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md
+  - docs/plans/117_explicit_reasoning_policy.md
+  type: validated
   description: Core call path identity, routing, warning, and execution contracts.
+- sources:
+  - llm_client/execution/completion_runtime.py
+  - llm_client/execution/call_contracts.py
+  - llm_client/utils/openrouter.py
+  - llm_client/model_policy_audit.py
+  - llm_client/data/default_model_registry.json
+  docs:
+  - docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md
+  - docs/plans/110_provider-capabilities-opus-ban.md
+  - docs/plans/117_explicit_reasoning_policy.md
+  type: validated
+  description: Generic provider controls, OpenRouter telemetry projection, and complete model-ban invariants.
 - sources:
   - llm_client/agent/mcp_agent.py
   - llm_client/foundation.py
@@ -41,7 +69,7 @@ couplings:
   - docs/adr/0005-reason-code-registry-governance.md
   - docs/adr/0006-actor-id-issuance-policy.md
   - docs/adr/0010-cross-project-runtime-substrate.md
-  type: locked
+  type: validated
   description: MCP validation reason-code and Foundation actor identity governance.
 - sources:
   - llm_client/io_log.py
@@ -54,13 +82,13 @@ couplings:
   - docs/adr/0012-shared-data-plane-boundary.md
   - docs/adr/0013-stream-lifecycle-heartbeat-observability.md
   - docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md
-  type: locked
+  type: validated
   description: Observability sink/query compatibility and warning emission surface.
 - sources:
   - llm_client/prompts.py
   - llm_client/prompts/*.yaml
   docs:
   - docs/adr/0011-prompt-assets-explicit-identity.md
-  type: locked
+  type: validated
   description: Prompt asset identity, explicit rendering, and provenance constraints.
 overrides: {}

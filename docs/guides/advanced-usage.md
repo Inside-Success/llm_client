@@ -41,15 +41,27 @@ policy = RetryPolicy(
     retry_on=["custom error"],
     on_retry=lambda a, err, d: print(f"Retry {a}"),
 )
-result = call_llm("gpt-5-mini", messages, retry=policy, task="...", trace_id="...", max_budget=1.00)
+result = call_llm(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    reasoning_effort="none",
+    retry=policy,
+    model_policy="enforce_allowlist",
+    task="...",
+    trace_id="...",
+    max_budget=1.00,
+)
 ```
 
 ## Fallback models
 
 ```python
 result = call_llm(
-    "gpt-5-mini", messages,
-    fallback_models=["gemini/gemini-2.5-flash", "ollama/llama3"],
+    "openrouter/deepseek/deepseek-v4-flash", messages,
+    fallback_models=["gemini/gemini-2.5-flash"],
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
+    model_justification="Retain the reviewed Gemini route for provider continuity.",
     task="fallbacks",
     trace_id="fallbacks",
     max_budget=1.00,
@@ -67,7 +79,16 @@ hooks = Hooks(
     after_call=lambda result: print(f"${result.cost:.4f}"),
     on_error=lambda err, attempt: print(f"Attempt {attempt} failed"),
 )
-result = call_llm("gpt-5-mini", messages, hooks=hooks, task="...", trace_id="...", max_budget=1.00)
+result = call_llm(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    hooks=hooks,
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
+    task="...",
+    trace_id="...",
+    max_budget=1.00,
+)
 ```
 
 ## Response caching
@@ -76,7 +97,16 @@ result = call_llm("gpt-5-mini", messages, hooks=hooks, task="...", trace_id="...
 from llm_client import LRUCache, call_llm
 
 cache = LRUCache(maxsize=128, ttl=3600)
-result = call_llm("gpt-5-mini", messages, cache=cache, task="...", trace_id="...", max_budget=1.00)
+result = call_llm(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    cache=cache,
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
+    task="...",
+    trace_id="...",
+    max_budget=1.00,
+)
 # Second call with same args returns cached (cache_hit=True, marginal_cost=0.0)
 ```
 
@@ -90,7 +120,17 @@ OpenRouter-first routing is on by default. To use direct provider routing:
 from llm_client import ClientConfig, call_llm
 
 cfg = ClientConfig(routing_policy="direct")
-result = call_llm("gpt-5-mini", messages, config=cfg, task="...", trace_id="...", max_budget=1.00)
+result = call_llm(
+    "gpt-5.6-terra",
+    messages,
+    config=cfg,
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
+    model_justification="Use the certified direct Terra route for this task.",
+    task="...",
+    trace_id="...",
+    max_budget=1.00,
+)
 ```
 
 Or via environment: `LLM_CLIENT_OPENROUTER_ROUTING=off`

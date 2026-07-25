@@ -23,10 +23,12 @@ import json as _json
 import logging
 import os
 import re
+import threading
 import uuid
 from typing import Any, Literal, NoReturn
 
 import litellm
+from pydantic import BaseModel, ConfigDict, Field
 
 import llm_client.io_log as _io_log
 from llm_client.core.errors import (
@@ -36,6 +38,13 @@ from llm_client.core.errors import (
     LLMEmptyResponseError,
     LLMModelNotFoundError,
 )
+from llm_client.observability.budget_reservations import (
+    BudgetReservationLease,
+    acquire_budget_reservation,
+    release_tracked_budget_reservation,
+    settle_tracked_budget_reservation,
+    track_budget_reservation,
+)
 from llm_client.core.model_detection import (
     _base_model_name,
     _is_responses_api_model,
@@ -44,12 +53,37 @@ from llm_client.prompt_assets import parse_prompt_ref
 
 logger = logging.getLogger(__name__)
 
+# A scope is a request-level budget boundary.  Settled cost alone cannot make
+# concurrent child dispatch safe: both children could observe the same spend
+# before either has a terminal cost row.  Public calls therefore hold this
+# process-local lease for the duration of a scoped call.  Cross-process budget
+# coordination is intentionally not claimed by this lightweight client control.
+_active_budget_scopes: set[str] = set()
+_budget_scope_lock = threading.Lock()
+
 # ---------------------------------------------------------------------------
 # Tag / budget / retry-safety contracts (original surface)
 # ---------------------------------------------------------------------------
 
 REQUIRE_TAGS_ENV = "LLM_CLIENT_REQUIRE_TAGS"
 AGENT_RETRY_SAFE_ENV = "LLM_CLIENT_AGENT_RETRY_SAFE"
+
+
+class StructuredOutputPolicy(BaseModel):
+    """Select which structured-output execution paths a logical call may use.
+
+    Auto mode preserves the historical native-schema-to-Instructor routing.
+    Strict mode requires provider-native JSON schema and fails loudly rather
+    than changing execution mechanisms when capability checks or the provider
+    reject that schema.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: Literal["auto", "require_native_json_schema"] = Field(
+        default="auto",
+        description="Allowed structured-output execution paths for this logical call.",
+    )
 
 
 def truthy_env(value: Any) -> bool:
@@ -133,16 +167,154 @@ def require_tags(
     return resolved_task, resolved_trace_id, resolved_max_budget, auto_warnings
 
 
-def check_budget(trace_id: str, max_budget: float) -> None:
-    """Raise before dispatch if a trace has already spent its budget."""
+def check_budget(
+    trace_id: str,
+    max_budget: float,
+    *,
+    reservation: float = 0.0,
+    budget_scope_trace_id: str | None = None,
+    warning_sink: list[str] | None = None,
+) -> None:
+    """Block a dispatch when exact or scoped spend plus reserve exceeds budget."""
+    scope = resolve_budget_scope(trace_id, budget_scope_trace_id)
     if max_budget <= 0:
         return
-    spent = _io_log.get_cost(trace_id=trace_id)
+    if reservation < 0:
+        raise ValueError("budget reservation must be non-negative")
+    spent = (
+        _io_log.get_cost(trace_prefix=scope)
+        if scope is not None
+        else _io_log.get_cost(trace_id=trace_id)
+    )
+    budget_label = f"budget scope {scope}" if scope is not None else f"trace {trace_id}"
     if spent >= max_budget:
         raise LLMBudgetExceededError(
-            f"Budget exceeded for trace {trace_id}: "
+            f"Budget exceeded for {budget_label}: "
             f"${spent:.4f} spent >= ${max_budget:.4f} limit"
         )
+    if spent + reservation > max_budget:
+        raise LLMBudgetExceededError(
+            f"Budget reservation exceeds {budget_label} limit: "
+            f"${spent:.4f} spent + ${reservation:.4f} reserve > ${max_budget:.4f} limit"
+        )
+    if warning_sink is None:
+        return
+    ratio = spent / max_budget
+    if ratio >= 0.8:
+        threshold = 80
+    elif ratio >= 0.5:
+        threshold = 50
+    else:
+        return
+    warning_sink.append(
+        f"BUDGET_WARNING: {budget_label} has spent ${spent:.4f} "
+        f"({ratio:.0%}) of its ${max_budget:.4f} budget; {threshold}% threshold reached"
+    )
+
+
+def resolve_budget_scope(
+    trace_id: str,
+    budget_scope_trace_id: str | None,
+) -> str | None:
+    """Validate an optional root trace whose descendants share one budget."""
+
+    if budget_scope_trace_id is None:
+        return None
+    if not isinstance(budget_scope_trace_id, str) or not budget_scope_trace_id.strip():
+        raise ValueError("budget_scope_trace_id must be a non-empty string when provided.")
+    scope = budget_scope_trace_id.strip()
+    if trace_id != scope and not trace_id.startswith(scope + "/"):
+        raise ValueError(
+            "budget_scope_trace_id must equal trace_id or be its slash-delimited ancestor: "
+            f"scope={scope!r}, trace_id={trace_id!r}."
+        )
+    return scope
+
+
+def acquire_budget_scope(
+    trace_id: str,
+    max_budget: float,
+    *,
+    reservation: float = 0.0,
+    budget_scope_trace_id: str | None = None,
+    budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
+    warning_sink: list[str] | None = None,
+) -> str | BudgetReservationLease | None:
+    """Admit one bounded scoped call and return its lease token.
+
+    A scoped budget is deliberately sequential within one process.  This
+    prevents sibling calls from independently passing a settled-cost check
+    before either one records its final cost.  Callers must release a returned
+    token at every terminal boundary.
+    """
+
+    if budget_scope_mode not in {"sequential", "reserved_concurrent"}:
+        raise ValueError(f"unknown budget_scope_mode: {budget_scope_mode!r}")
+    scope = resolve_budget_scope(trace_id, budget_scope_trace_id)
+    if budget_scope_mode == "reserved_concurrent":
+        if scope is None:
+            raise ValueError("reserved_concurrent requires budget_scope_trace_id")
+        if max_budget <= 0:
+            raise ValueError("reserved_concurrent requires max_budget > 0")
+        lease = acquire_budget_reservation(
+            scope_trace_id=scope,
+            call_trace_id=trace_id,
+            max_budget=max_budget,
+            reservation=reservation,
+        )
+        track_budget_reservation(lease)
+        return lease
+    if scope is None or max_budget <= 0:
+        check_budget(
+            trace_id,
+            max_budget,
+            reservation=reservation,
+            budget_scope_trace_id=scope,
+            warning_sink=warning_sink,
+        )
+        return None
+    with _budget_scope_lock:
+        if scope in _active_budget_scopes:
+            raise LLMBudgetExceededError(
+                f"Budget scope {scope} already has an in-flight call; "
+                "scoped calls must complete sequentially."
+            )
+        check_budget(
+            trace_id,
+            max_budget,
+            reservation=reservation,
+            budget_scope_trace_id=scope,
+            warning_sink=warning_sink,
+        )
+        _active_budget_scopes.add(scope)
+    return scope
+
+
+def release_budget_scope(lease: str | BudgetReservationLease | None) -> None:
+    """Release a lease returned by :func:`acquire_budget_scope`."""
+
+    if lease is None:
+        return
+    if isinstance(lease, BudgetReservationLease):
+        release_tracked_budget_reservation(lease)
+        return
+    with _budget_scope_lock:
+        _active_budget_scopes.discard(lease)
+
+
+def settle_budget_scope(
+    lease: str | BudgetReservationLease | None,
+    *,
+    settled_cost: float,
+) -> None:
+    """Settle a durable concurrent lease; sequential leases only release."""
+
+    if lease is None:
+        return
+    if isinstance(lease, BudgetReservationLease):
+        settle_tracked_budget_reservation(lease, settled_cost=settled_cost)
+        return
+    release_budget_scope(lease)
 
 
 def agent_retry_safe_enabled(explicit: Any | None) -> bool:
@@ -233,11 +405,15 @@ _GPT5_REASONING_GATED_SAMPLING = {
     "gpt-5.1",
     "gpt-5.2",
     "gpt-5.2-pro",
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5.6",
+    "gpt-5.6-terra",
     "gpt-5.1-chat-latest",
     "gpt-5.2-chat-latest",
 }
 # Models that support long-thinking (5-10 min) and need background polling
-_LONG_THINKING_MODELS = {"gpt-5.2-pro"}
+_LONG_THINKING_MODELS = {"gpt-5.2-pro", "gpt-5.5-pro"}
 _LONG_THINKING_REASONING_EFFORTS = {"high", "xhigh"}
 _GPT5_SAMPLING_PARAMS = ("temperature", "top_p", "logprobs", "top_logprobs")
 _UNSUPPORTED_PARAM_POLICY_ENV = "LLM_CLIENT_UNSUPPORTED_PARAM_POLICY"
@@ -349,7 +525,12 @@ def _strip_llm_internal_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     provider contract and are intentionally excluded from cache keying and
     provider payloads.
     """
-    return {k: v for k, v in kwargs.items() if not k.startswith("_")}
+    internal = {
+        "budget_scope_trace_id",
+        "budget_scope_mode",
+        "budget_reservation",
+    }
+    return {k: v for k, v in kwargs.items() if not k.startswith("_") and k not in internal}
 
 
 def _apply_max_tokens(model: str, call_kwargs: dict[str, Any]) -> None:
@@ -433,7 +614,7 @@ def _is_codex_family_model(model: str) -> bool:
 def _is_agent_model(model: str) -> bool:
     """Check if model routes to an agent SDK instead of litellm.
 
-    Agent models like "claude-code" or "claude-code/opus" use the Claude
+    Agent models like "claude-code" or "claude-code/sonnet" use the Claude
     Agent SDK. "openai-agents/*" is reserved for future OpenAI Agents SDK.
     Codex-family models (e.g. "gpt-5.3-codex") are also recognized.
     """
@@ -590,6 +771,39 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "openrouter/auto": (
+        "an explicit, policy-approved model ID",
+        "OpenRouter Auto Router selects the final model account-side, so "
+        "llm_client cannot prove before dispatch that a banned model is excluded.",
+    ),
+    "@preset/": (
+        "an explicit, policy-approved model ID and provider routing kwargs",
+        "OpenRouter presets can replace the requested model or add fallbacks "
+        "account-side, so llm_client cannot enforce its model ban before dispatch.",
+    ),
+    "opus": (
+        "claude-code/sonnet for Claude workspace-agent review OR "
+        "the appropriate non-banned llm_client model tier for ordinary calls",
+        "Opus-family models are banned by ecosystem policy in every execution "
+        "lane, including raw provider routes and claude-code aliases.",
+    ),
+    "fable": (
+        "openrouter/openai/gpt-5.5 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
+        "Fable-family models are banned by ecosystem policy. Do not use them for "
+        "new calls, even with ordinary model_override_acceptance metadata.",
+    ),
+    "gpt-5.1-mini": (
+        "openrouter/deepseek/deepseek-v4-flash",
+        "GPT-5.1 Mini is prohibited by the shared model-execution policy.",
+    ),
+    "gpt-5-mini": (
+        "openrouter/deepseek/deepseek-v4-flash",
+        "GPT-5 Mini is prohibited by the shared model-execution policy.",
+    ),
+    "codex-mini": (
+        "codex/gpt-5.4",
+        "Codex Mini routes are prohibited by the shared model-execution policy.",
+    ),
     "gpt-4o-mini": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",
         "GPT-4o-mini (intel 30, $0.15/$0.60) is outclassed by DeepSeek V3.2 "
@@ -599,7 +813,7 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
     "o4-mini": (
         "o3-mini",
         "o4-mini was retired by OpenAI on Feb 16, 2026 and no longer accepts "
-        "requests. Use o3-mini for reasoning tasks or gpt-5-mini for general tasks.",
+        "requests. Use o3-mini for reasoning tasks or DeepSeek V4 Flash for general tasks.",
     ),
     "mistral-large": (
         "deepseek/deepseek-chat OR gemini/gemini-2.5-flash",
@@ -640,11 +854,6 @@ _DEPRECATED_MODELS: dict[str, tuple[str, str]] = {
         "anthropic/claude-sonnet-4-5-20250929 OR anthropic/claude-haiku-4-5-20251001",
         "Claude 3.5 models are superseded by 4.5 equivalents at the same price "
         "with better quality.",
-    ),
-    "claude-3-opus": (
-        "anthropic/claude-opus-4-6",
-        "Claude 3 Opus is superseded by Opus 4.5/4.6 at a lower price with "
-        "dramatically better quality.",
     ),
     "claude-3-sonnet": (
         "anthropic/claude-sonnet-4-5-20250929",

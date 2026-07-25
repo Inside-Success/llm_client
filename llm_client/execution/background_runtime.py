@@ -26,7 +26,7 @@ from llm_client.utils.openrouter import (
 
 logger = logging.getLogger(__name__)
 
-_LONG_THINKING_MODELS = {"gpt-5.2-pro"}
+_LONG_THINKING_MODELS = {"gpt-5.2-pro", "gpt-5.5-pro"}
 _LONG_THINKING_REASONING_EFFORTS = {"high", "xhigh"}
 _BACKGROUND_POLL_INTERVAL = 15
 _BACKGROUND_DEFAULT_TIMEOUT = 900

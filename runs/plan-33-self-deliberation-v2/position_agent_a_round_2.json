@@ -1,0 +1,105 @@
+{
+  "agent_name": "agent_a",
+  "agreed_with_peer": [
+    "b_polite_asymmetric_claim_count",
+    "b_synthesis_schema_misfit",
+    "b_no_task_family_hook"
+  ],
+  "claims": [
+    {
+      "claim": "The shipped convergence signal is not trustworthy as evidence of independent agreement because the deliberation topology is serial, not symmetric: `agent_b` always writes after seeing `agent_a`'s freshest position, while `detect_convergence()` only checks latest-round claim IDs plus empty disagreement lists. That means the chassis can report \"converged\" when the second mover has merely accommodated the first mover's latest frame. The highest-priority next improvement is a barriered round protocol that persists both round-N positions before either agent sees the other's round-N output.",
+      "claim_id": "a_convergence_protocol_serial",
+      "evidence_path": "llm_client/workflow/deliberate.py:9-17,275-310,364-387,466-480,765-795; tests/test_workflow_deliberate.py:205-260",
+      "severity": "high"
+    },
+    {
+      "claim": "The verifier ledger is structurally underused: it gates the router, but it is never rendered into the next-round agent prompt or the synthesis prompt. As shipped, unverified citations and lineage flags can block convergence, yet the agents are never shown what failed, and synthesis writes without the verifier's evidence state. This is a high-severity flaw, but it ranks below fixing the serial-turn topology because feedback inside an asymmetric debate still leaves second-mover bias intact.",
+      "claim_id": "a_verifier_feedback_gap",
+      "evidence_path": "llm_client/workflow/deliberate.py:339-402,405-435,525-576,585-606,655-682",
+      "severity": "high"
+    },
+    {
+      "claim": "Required `evidence_path` makes claims locatable, not truly falsifiable. The verifier parses citations, resolves files, and attaches snippets, but it marks entries `verified` once the citation resolves; it does not check whether the snippet actually supports the claim text. Bogus-but-existing citations therefore remain gameable, and the live schema-smoke tests explicitly validate provider schema acceptance rather than reviewer truthfulness.",
+      "claim_id": "a_evidence_locatable_not_proven",
+      "evidence_path": "llm_client/workflow/deliberate.py:100-143; llm_client/workflow/deliberate_verifier.py:177-257,318-373,381-417; tests/test_workflow_schema_smoke.py:62-67,101-123",
+      "severity": "high"
+    },
+    {
+      "claim": "The deliberation surface is materially less extensible than the duet chassis. Deliberation hard-rejects any agent count other than 2 and exposes no `task_family`/profile hook, even though its module docstring claims profile specialization and the sibling duet already supports registered domain schemas and prompt/context addenda. That blocks both three-role topologies and domain-specific debate schemas.",
+      "claim_id": "a_two_agent_profile_gap",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-31,690-740; llm_client/cli/deliberate.py:32-60,146-203; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:20-47; llm_client/workflow/profiles/plan_doc_review.py:37-80; llm_client/workflow/profiles/twin_update.py:149-157,193-200,337-349",
+      "severity": "warn"
+    },
+    {
+      "claim": "At `max_rounds > 5`, the first structural quality failure is debate drift from lossy agent memory, not raw prompt bloat. Each debater sees only `own_prior` plus `peer_latest`; full chronological history is withheld from the debaters and shown only to synthesis. Long debates therefore compress unresolved branches into last-turn summaries, making silent narrowing and forgotten objections more likely even before budget becomes the main problem.",
+      "claim_id": "a_long_round_drift",
+      "evidence_path": "llm_client/workflow/deliberate.py:339-397,405-435,466-480,506-507,585-589",
+      "severity": "warn"
+    },
+    {
+      "claim": "Reusing `Position` as the synthesis schema is a structural mismatch. The synthesis prompt asks for merged findings and residual disagreements, but the LLM is still bound to a per-agent schema, and `signoff.json` reconstructs residual disagreements from `latest_positions` instead of trusting the synthesis artifact. The code itself marks a future `SynthesisArtifact` as needed.",
+      "claim_id": "a_synthesis_schema_misfit",
+      "evidence_path": "llm_client/workflow/deliberate.py:146-181,405-435,585-606,611-645",
+      "severity": "info"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:9-17,275-310,364-387,466-480,765-795; tests/test_workflow_deliberate.py:205-260",
+      "my_counterclaim": "The verifier-feedback gap is real, but it is not the top-priority fix. The more fundamental flaw is that the shipped workflow is serial-turn, not symmetric: `agent_b` always writes after seeing `agent_a`'s freshest position, so a clean verifier loop on top of the current topology would still let convergence reflect second-mover accommodation rather than independent agreement.",
+      "peer_claim_id": "b_verifier_writeonly"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:9-17,364-387,466-480,765-795; tests/test_workflow_deliberate.py:205-260",
+      "my_counterclaim": "The asymmetry is not a one-shot round-1 contamination. In every round, the graph runs `agent_a` before `agent_b`, and `agent_b` reads `latest.get(peer_name)` after `agent_a` has already updated `latest_positions`, so `agent_b` has same-round second-mover advantage throughout the run.",
+      "peer_claim_id": "b_round1_asymmetry_factual"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:339-397,405-435,466-480,506-507,585-589",
+      "my_counterclaim": "Ledger growth and wall-clock are real operational costs, but the first structural failure in answer quality at high round counts is debate drift from lossy memory: the debaters never see full history or verifier output, only `own_prior` plus `peer_latest`, while synthesis alone gets chronology.",
+      "peer_claim_id": "b_max_rounds_failure_mode"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:9-17,765-795",
+      "content_snippet": "round 1: agent_a writes initial position \u2192 agent_b writes initial position ... edges=[('agent_a','agent_b'),('agent_b','verifier'),('verifier','round_increment')], entry_point='agent_a'",
+      "label": "Serial topology is built into the workflow graph"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:364-387,466-480",
+      "content_snippet": "if peer_latest: ... '## Peer's most-recent position' ... own_prior = latest.get(agent.name); peer_latest = latest.get(peer_name)",
+      "label": "Agent prompts always inject the freshest available peer position"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:339-402,405-435,585-606,655-682",
+      "content_snippet": "messages = _position_prompt(task, agent.name, round_num, own_prior=own_prior, peer_latest=peer_latest) ... messages = _synthesis_prompt(task, history, verdict) ... verdict = detect_convergence(latest, round_num, max_rounds, ledger=ledger)",
+      "label": "Verifier output is used by the router but omitted from agent and synthesis prompts"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:318-373,381-417",
+      "content_snippet": "status='verified' ... snippet=snippet ... Verify every cited evidence_path in a Position dict.",
+      "label": "Verification stops at citation resolution and snippet extraction"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:62-67,101-123",
+      "content_snippet": "We aren't testing the LLM's reviewing quality here \u2014 only that the schema is structurally valid for the provider's structured-output API.",
+      "label": "Schema smoke tests prove provider acceptance, not semantic support"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:24-31,690-740; llm_client/cli/deliberate.py:55-59",
+      "content_snippet": "deliberation can also be specialized by profile ... def build_deliberation_workflow(... agents ... max_rounds ...)  # no task_family ... '--agents must list exactly 2 entries for v1'",
+      "label": "Deliberation lacks duet-style profile and topology extension points"
+    }
+  ],
+  "open_questions": [
+    "If deliberation is made barriered, should the next-round prompt receive only the prior round's verified deltas, or a compact ledger summary plus both barrier snapshots?",
+    "After a true barriered protocol and verifier feedback exist, is a third agent still worth the cost, or does a `task_family` hook plus deterministic verifier cover most of that value?",
+    "Should synthesis become a dedicated `SynthesisArtifact` schema that includes verifier-summary fields, or should `signoff.json` remain the only place that carries residual disagreements and evidence status?"
+  ],
+  "reviewer_model": "codex/gpt-5.4",
+  "reviewer_summary": "Leverage ranking: (1) make deliberation genuinely barriered/symmetric by snapshotting both round-N positions before either agent sees the other's round-N output; this is the single highest-priority improvement because the shipped workflow's core promise is independent debate, and the current `agent_a -> agent_b` topology violates that promise on every round, making convergence structurally biased. (2) feed verifier results back into the next-round prompts and synthesis; agent_b is right that the ledger is currently write-only to the LLM-facing surface. (3) strengthen evidence semantics beyond path resolution/snippet extraction. (4) add extensibility parity with duet: `task_family` plus optional >2-agent/third-role support. (5) only then optimize long-round scaling; the first quality problem is drift from last-turn-only memory, not prompt bloat. Residual disagreements with agent_b are explicit: verifier feedback is not the top fix until topology is repaired, the asymmetry is not confined to round 1, and long-round correctness drift matters more than ledger size alone.",
+  "round": 2,
+  "state": "revised"
+}

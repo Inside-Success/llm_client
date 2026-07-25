@@ -1,3 +1,7 @@
+# Frontend build artifacts
+workbench/frontend/node_modules/
+workbench/frontend/dist/
+
 __pycache__/
 *.egg-info/
 .pytest_cache/
@@ -7,6 +11,7 @@ build/
 *.pyc
 .env
 .venv/
+worktrees/
 .claude/active-work.yaml
 .claude/sessions/
 adoption_gate.log
@@ -18,3 +23,12 @@ docs/archive/
 scripts/macos/
 .openclaw/
 .claude/hook_log.jsonl
+.codex
+.codex/
+
+# Local agent-collaboration run spillover. Curated evidence already tracked
+# under runs/ remains tracked; add new curated runs with git add -f.
+runs/**
+!runs/
+!runs/README.md
+scratch_duet_meta_test/

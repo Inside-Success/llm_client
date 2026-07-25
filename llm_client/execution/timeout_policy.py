@@ -12,9 +12,10 @@ normalization rules:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from typing import Any
+from typing import Any, Awaitable, TypeVar
 
 TIMEOUT_POLICY_ENV = "LLM_CLIENT_TIMEOUT_POLICY"
 SAFETY_TIMEOUT_ENV = "LLM_CLIENT_SAFETY_TIMEOUT"
@@ -22,13 +23,16 @@ DEFAULT_TIMEOUT_ENV = "LLM_CLIENT_DEFAULT_TIMEOUT"
 DEFAULT_STRUCTURED_TIMEOUT_ENV = "LLM_CLIENT_DEFAULT_STRUCTURED_TIMEOUT"
 
 DEFAULT_TIMEOUT_S = 60
-DEFAULT_STRUCTURED_TIMEOUT_S = 180
+DEFAULT_STRUCTURED_TIMEOUT_S = 60
 
-# Safety ceiling: maximum time any single LLM call can take, regardless of
-# timeout policy. This is NOT a request timeout (which controls expected
-# response time) — it is a dead-connection detector. No legitimate LLM call
-# takes 5 minutes without producing output. Override via LLM_CLIENT_SAFETY_TIMEOUT.
+# Safety ceiling: when an async provider attempt reaches this duration, request
+# cancellation independently of request-timeout policy. This is not a claim
+# that every legitimate call finishes within five minutes; long-thinking
+# workloads must configure a larger explicit value when needed. Override via
+# LLM_CLIENT_SAFETY_TIMEOUT.
 DEFAULT_SAFETY_TIMEOUT_S = 300  # 5 minutes
+
+_T = TypeVar("_T")
 
 _logger = logging.getLogger(__name__)
 _TIMEOUT_POLICY_LOGGED = False
@@ -110,9 +114,15 @@ def normalize_timeout(
     if log_policy_once_enabled:
         log_timeout_policy_once(caller=caller, logger=active_logger)
     try:
-        parsed = int(timeout)
+        numeric_timeout = float(timeout)
     except (TypeError, ValueError):
         parsed = 0
+    else:
+        if numeric_timeout > 0 and not numeric_timeout.is_integer():
+            raise ValueError(
+                f"timeout must be a whole number of seconds, got {timeout!r}"
+            )
+        parsed = int(numeric_timeout)
     if parsed < 0:
         parsed = 0
     if parsed > 0 and timeouts_disabled():
@@ -130,9 +140,9 @@ def normalize_timeout(
 def safety_timeout_s() -> int:
     """Return the safety ceiling timeout in seconds.
 
-    This timeout applies even when TIMEOUT_POLICY=ban. It prevents
-    infinite hangs on dead connections. Not a request timeout —
-    a dead-connection detector.
+    This timeout applies even when TIMEOUT_POLICY=ban. It requests
+    cancellation of cooperative async provider attempts independently of the
+    request-timeout policy; it is not a hard process kill.
 
     Override via LLM_CLIENT_SAFETY_TIMEOUT env var. Set to 0 to disable
     (not recommended).
@@ -143,8 +153,61 @@ def safety_timeout_s() -> int:
             val = int(raw)
             return max(val, 0)
         except (TypeError, ValueError):
-            pass
+            _logger.warning(
+                "INVALID_SAFETY_TIMEOUT[%s=%r]: using default=%ss",
+                SAFETY_TIMEOUT_ENV,
+                raw,
+                DEFAULT_SAFETY_TIMEOUT_S,
+            )
     return DEFAULT_SAFETY_TIMEOUT_S
+
+
+async def _await_with_safety_ceiling(
+    awaitable: Awaitable[_T],
+    *,
+    caller: str,
+    model: str,
+) -> _T:
+    """Await one provider attempt under the process-side safety ceiling.
+
+    Provider request timeouts are cooperative: a transport or SDK can ignore
+    them while its coroutine remains pending. This outer asyncio boundary is
+    therefore deliberately independent of ``LLM_CLIENT_TIMEOUT_POLICY``. It
+    applies to one provider attempt, not the enclosing retry/fallback chain.
+
+    A zero ``LLM_CLIENT_SAFETY_TIMEOUT`` explicitly delegates liveness to the
+    caller. Cancellation from outside this helper is propagated unchanged.
+    """
+
+    ceiling_s = safety_timeout_s()
+    if ceiling_s <= 0:
+        return await awaitable
+    task = asyncio.ensure_future(awaitable)
+    try:
+        done, _pending = await asyncio.wait({task}, timeout=float(ceiling_s))
+    except BaseException:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        raise
+    if task in done:
+        return await task
+
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError as exc:
+        raise TimeoutError(
+            f"{caller} timed out after {ceiling_s:g}s async attempt safety ceiling "
+            f"(model={model})"
+        ) from exc
+
+    raise TimeoutError(
+        f"{caller} timed out after {ceiling_s:g}s async attempt safety ceiling "
+        f"(model={model}); provider task returned after cancellation"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -199,12 +262,12 @@ def force_ipv4_if_configured() -> bool:
     import socket
     _original_getaddrinfo = socket.getaddrinfo
 
-    def _ipv4_only(*args: Any, **kwargs: Any) -> list:
+    def _ipv4_only(*args: Any, **kwargs: Any) -> list[Any]:
         results = _original_getaddrinfo(*args, **kwargs)
         ipv4 = [r for r in results if r[0] == socket.AF_INET]
         return ipv4 if ipv4 else results  # Fall back to original if no IPv4
 
-    socket.getaddrinfo = _ipv4_only  # type: ignore[assignment]
+    socket.getaddrinfo = _ipv4_only
     _IPV4_FORCED = True
     _logger.info("IPv4-only DNS resolution enabled (LLM_CLIENT_FORCE_IPV4=1)")
     return True

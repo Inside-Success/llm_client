@@ -9,8 +9,6 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
-import math
-import statistics
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -31,7 +29,7 @@ def activate_experiment_run(run_id: str) -> ActiveExperimentRun:
 def _build_auto_run_provenance(*, git_commit: str | None) -> dict[str, Any]:
     """Build automatic provenance metadata for an experiment run."""
     provenance: dict[str, Any] = {
-        "git_dirty": False,
+        "git_dirty": None,
         "changed_files": [],
         "diff_categories": [],
     }
@@ -42,8 +40,12 @@ def _build_auto_run_provenance(*, git_commit: str | None) -> dict[str, Any]:
         provenance["git_dirty"] = is_git_dirty()
         provenance["changed_files"] = changed_files
         provenance["diff_categories"] = sorted(classify_diff_files(changed_files))
-    except Exception:
-        logger.debug("observability.experiments._build_auto_run_provenance failed", exc_info=True)
+    except Exception as exc:
+        provenance["git_provenance_error"] = type(exc).__name__
+        logger.warning(
+            "observability.experiments._build_auto_run_provenance failed",
+            exc_info=True,
+        )
 
     if git_commit:
         provenance["git_commit"] = git_commit
@@ -74,7 +76,6 @@ def start_run(
     """Register an experiment run. Returns run_id."""
     if run_id is None:
         run_id = uuid.uuid4().hex[:12]
-    _io_log._start_run_timer(run_id)
 
     if git_commit is None:
         from llm_client.utils.git_utils import get_git_head
@@ -141,6 +142,39 @@ def start_run(
         merged_provenance["task"] = task
     provenance_payload = merged_provenance or None
 
+    # SQLite is the authoritative experiment-run index.  Insert before emitting
+    # derived JSONL evidence so a reused run_id fails loudly instead of leaving
+    # duplicate run_start lines that disagree with the canonical row.
+    def insert_run(db: Any) -> None:
+        """Insert one canonical start row under the shared SQLite write lock."""
+
+        db.execute(
+            """INSERT INTO experiment_runs
+               (run_id, timestamp, project, dataset, model, config,
+                provenance, condition_id, seed, replicate, scenario_id, phase,
+                metrics_schema, git_commit, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')""",
+            (
+                run_id,
+                timestamp,
+                proj,
+                dataset,
+                model,
+                json.dumps(config, default=str) if config else None,
+                json.dumps(provenance_payload, default=str) if provenance_payload else None,
+                normalized_condition_id,
+                normalized_seed,
+                normalized_replicate,
+                normalized_scenario_id,
+                normalized_phase,
+                json.dumps(metrics_schema) if metrics_schema else None,
+                git_commit,
+            ),
+        )
+
+    _io_log._run_db_write(insert_run)
+    _io_log._start_run_timer(run_id)
+
     try:
         d = _io_log._log_dir()
         d.mkdir(parents=True, exist_ok=True)
@@ -165,35 +199,6 @@ def start_run(
             f.write(json.dumps(record, default=str) + "\n")
     except Exception:
         logger.debug("observability.experiments.start_run JSONL write failed", exc_info=True)
-
-    try:
-        db = _io_log._get_db()
-        db.execute(
-            """INSERT INTO experiment_runs
-               (run_id, timestamp, project, dataset, model, config,
-                provenance, condition_id, seed, replicate, scenario_id, phase,
-                metrics_schema, git_commit, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')""",
-            (
-                run_id,
-                timestamp,
-                proj,
-                dataset,
-                model,
-                json.dumps(config, default=str) if config else None,
-                json.dumps(provenance_payload, default=str) if provenance_payload else None,
-                normalized_condition_id,
-                normalized_seed,
-                normalized_replicate,
-                normalized_scenario_id,
-                normalized_phase,
-                json.dumps(metrics_schema) if metrics_schema else None,
-                git_commit,
-            ),
-        )
-        db.commit()
-    except Exception:
-        logger.debug("observability.experiments.start_run DB write failed", exc_info=True)
 
     return run_id
 
@@ -991,4 +996,3 @@ from llm_client.observability.comparison import (  # noqa: E402, F401
     compare_cohorts,
     compare_runs,
 )
-

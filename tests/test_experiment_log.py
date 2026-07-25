@@ -3,8 +3,11 @@
 import json
 import os
 import sqlite3
+import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 
@@ -17,7 +20,7 @@ def _can_import_agent_spec() -> bool:
         from llm_client.agent_spec import load_agent_spec
         # The error stub raises ImportError when called; try calling with a
         # dummy path to see if it's the real function or the stub.
-        import tempfile, json
+        import tempfile
         p = Path(tempfile.mktemp(suffix=".json"))
         p.write_text(json.dumps({"tools": [], "contracts": []}))
         try:
@@ -274,6 +277,41 @@ class TestStartRun:
         assert record["run_id"] == "jsonl_test"
         assert record["dataset"] == "HotpotQA"
 
+    def test_concurrent_duplicate_run_id_fails_before_second_jsonl_start(self, tmp_path):
+        """Concurrent reuse cannot emit a second start line or return success twice."""
+
+        barrier = Barrier(2)
+
+        def start() -> str:
+            barrier.wait()
+            return io_log.start_run(dataset="X", model="Y", run_id="duplicate-run")
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(start) for _ in range(2)]
+            outcomes = []
+            for future in futures:
+                try:
+                    outcomes.append(future.result())
+                except sqlite3.IntegrityError:
+                    outcomes.append("duplicate")
+
+        assert outcomes.count("duplicate-run") == 1
+        assert outcomes.count("duplicate") == 1
+
+        jsonl = tmp_path / "test_project" / "test_project_llm_client_data" / "experiments.jsonl"
+        starts = [
+            json.loads(line)
+            for line in jsonl.read_text().splitlines()
+            if json.loads(line)["type"] == "run_start"
+        ]
+        assert len(starts) == 1
+        assert starts[0]["run_id"] == "duplicate-run"
+
+        rows = io_log._get_db().execute(
+            "SELECT run_id FROM experiment_runs WHERE run_id = ?", ("duplicate-run",)
+        ).fetchall()
+        assert rows == [("duplicate-run",)]
+
     def test_git_commit_explicit(self, tmp_path):
         io_log.start_run(dataset="X", model="Y", run_id="gc_test", git_commit="abc123")
         db = sqlite3.connect(str(tmp_path / "test.db"))
@@ -298,6 +336,58 @@ class TestStartRun:
         assert prov["prompt_template_sha256"] == "deadbeef"
         assert prov["git_commit"] == "abc123"
         assert "git_dirty" in prov
+        db.close()
+
+    def test_auto_provenance_reports_dirty_worktree(self, tmp_path, monkeypatch):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+        )
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+        (repo / "baseline.py").write_text("VALUE = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "baseline.py"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "baseline"], cwd=repo, check=True)
+        (repo / "changed.py").write_text("VALUE = 2\n", encoding="utf-8")
+        (repo / "tests").mkdir()
+        (repo / "tests" / "test_changed.py").write_text("assert True\n", encoding="utf-8")
+        monkeypatch.chdir(repo)
+
+        io_log.start_run(dataset="X", model="Y", run_id="dirty_provenance")
+
+        db = sqlite3.connect(str(tmp_path / "test.db"))
+        row = db.execute(
+            "SELECT provenance FROM experiment_runs WHERE run_id = 'dirty_provenance'"
+        ).fetchone()
+        assert row is not None
+        prov = json.loads(row[0])
+        assert prov["git_dirty"] is True
+        assert prov["changed_files"] == ["changed.py", "tests/test_changed.py"]
+        assert prov["diff_categories"] == ["code", "tests"]
+        db.close()
+
+    def test_auto_provenance_does_not_claim_clean_when_collection_fails(
+        self, tmp_path, monkeypatch
+    ):
+        # mock-ok: the negative control must force an otherwise environment-specific Git failure.
+        def fail_collection():
+            raise RuntimeError("git unavailable")
+
+        monkeypatch.setattr(
+            "llm_client.utils.git_utils.get_working_tree_files", fail_collection
+        )
+
+        io_log.start_run(dataset="X", model="Y", run_id="unknown_provenance")
+
+        db = sqlite3.connect(str(tmp_path / "test.db"))
+        row = db.execute(
+            "SELECT provenance FROM experiment_runs WHERE run_id = 'unknown_provenance'"
+        ).fetchone()
+        assert row is not None
+        prov = json.loads(row[0])
+        assert prov["git_dirty"] is None
+        assert prov["git_provenance_error"] == "RuntimeError"
         db.close()
 
     def test_feature_profile_in_provenance(self, tmp_path):
@@ -1135,7 +1225,7 @@ class TestAgentSpecEnforcement:
 
     @pytest.mark.skipif(
         not _can_import_agent_spec(),
-        reason="agent_spec.py extracted to project-meta (Plan #17); import fails in this environment",
+        reason="agent_spec.py extracted to prompt_eval (Plan #90); import fails in this environment",
     )
     def test_agent_spec_summary_stored_in_provenance(self, tmp_path):
         io_log.configure_agent_spec_enforcement(mode="error", task_patterns=["benchmark"])

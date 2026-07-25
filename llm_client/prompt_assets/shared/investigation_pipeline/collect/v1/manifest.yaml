@@ -1,0 +1,8 @@
+id: shared.investigation_pipeline.collect
+version: 1
+kind: chat_prompt
+status: canonical
+description: Evidence collection node — gathers evidence for a scoped investigation using available tools.
+template_path: template.yaml
+input_schema: investigation.collect_input.v1
+output_schema: investigation.collection_synthesis.v1

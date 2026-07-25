@@ -37,13 +37,20 @@ def lookup_result(trace_id: str) -> dict[str, Any] | None:
         return None
     row = db.execute(
         "SELECT response, model, cost, latency_s, finish_reason, "
-        "prompt_tokens, completion_tokens, timestamp, prompt_ref "
+        "prompt_tokens, completion_tokens, timestamp, prompt_ref, "
+        "reasoning_tokens, cached_tokens, cache_creation_tokens, usage_details "
         "FROM llm_calls WHERE trace_id = ? AND error IS NULL "
         "ORDER BY timestamp DESC LIMIT 1",
         (trace_id,),
     ).fetchone()
     if row is None:
         return None
+    usage_details = None
+    if row[12] is not None:
+        try:
+            usage_details = json.loads(row[12])
+        except (TypeError, json.JSONDecodeError):
+            usage_details = None
     return {
         "response": row[0],
         "model": row[1],
@@ -54,6 +61,10 @@ def lookup_result(trace_id: str) -> dict[str, Any] | None:
         "completion_tokens": row[6],
         "timestamp": row[7],
         "prompt_ref": row[8],
+        "reasoning_tokens": row[9],
+        "cached_tokens": row[10],
+        "cache_creation_tokens": row[11],
+        "usage_details": usage_details,
     }
 
 
@@ -128,10 +139,14 @@ def get_cost(
             if table == "llm_calls"
             else "COALESCE(SUM(cost), 0)"
         )
-        row = db.execute(
-            f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
-            params,
-        ).fetchone()
+        # ``check_same_thread=False`` permits sharing the connection but does
+        # not make overlapping statements safe. Use the writer lock for every
+        # statement on the shared connection.
+        with _io_log._db_write_lock:
+            row = db.execute(
+                f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
+                params,
+            ).fetchone()
         total += row[0] if row else 0.0
     return total
 
@@ -749,3 +764,77 @@ def get_background_mode_adoption(
         )
 
     return summary
+
+
+def get_call_lifecycle(*, logical_call_id: str | None = None, trace_id: str | None = None) -> list[dict[str, Any]]:
+    """Read typed lifecycle evidence and classify a missing terminal event honestly.
+
+    Non-terminal calls from a demonstrably live local process are reported as
+    ``active``. A missing terminal row with no live-process proof remains
+    ``interrupted_or_abandoned`` rather than silently disappearing.
+    """
+    if (logical_call_id is None) == (trace_id is None):
+        raise ValueError("provide exactly one of logical_call_id or trace_id")
+    column, value = ("logical_call_id", logical_call_id) if logical_call_id is not None else ("trace_id", trace_id)
+    rows = _io_log._get_db().execute(
+        f"""SELECT logical_call_id, trace_id, task, phase, timestamp,
+                   requested_model, resolved_model, error_type, process_id,
+                   host_name, process_start_token, provider_timeout_s,
+                   prompt_sha256, requested_timeout_s, transport_timeout_status, timeout_policy,
+                   payload
+            FROM call_lifecycle_events WHERE {column} = ? ORDER BY id""",  # noqa: S608
+        (value,),
+    ).fetchall()
+    calls: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        call = calls.setdefault(
+            row[0],
+            {"logical_call_id": row[0], "trace_id": row[1], "task": row[2], "events": []},
+        )
+        payload: dict[str, Any] = {}
+        try:
+            decoded = json.loads(row[16])
+            if isinstance(decoded, dict):
+                payload = decoded
+        except (TypeError, json.JSONDecodeError):
+            pass
+        call["events"].append(
+            {
+                "phase": row[3],
+                "timestamp": row[4],
+                "requested_model": row[5],
+                "resolved_model": row[6],
+                "error_type": row[7],
+                "provider_timeout_s": row[11],
+                "prompt_sha256": row[12],
+                "requested_timeout_s": row[13],
+                "transport_timeout_status": row[14],
+                "timeout_policy": row[15],
+                "schema_hash": payload.get("schema_hash"),
+                "attempt_ordinal": payload.get("attempt_ordinal"),
+            }
+        )
+        call["process_id"] = row[8]
+        call["host_name"] = row[9]
+        call["process_start_token"] = row[10]
+    for call in calls.values():
+        latest_event = call["events"][-1]
+        latest = latest_event["phase"]
+        call["latest_event"] = latest_event
+        started_at = _parse_iso_datetime(call["events"][0]["timestamp"])
+        if started_at is not None:
+            call["elapsed_s"] = max((datetime.now(timezone.utc) - started_at).total_seconds(), 0.0)
+        else:
+            call["elapsed_s"] = None
+        if latest in {"completed", "failed", "cancelled"}:
+            call["state"] = latest
+            call["process_alive"] = None
+            continue
+        process_alive = _same_host_process_status(
+            host_name=call.get("host_name"),
+            process_id=call.get("process_id"),
+            process_start_token=call.get("process_start_token"),
+        )
+        call["process_alive"] = process_alive
+        call["state"] = "active" if process_alive is True else "interrupted_or_abandoned"
+    return list(calls.values())

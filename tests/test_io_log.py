@@ -15,7 +15,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from llm_client import io_log
-from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
+from llm_client.observability.tool_calls import (
+    ToolCallResult,
+    log_tool_call,
+    log_tool_call_strict,
+)
 from llm_client.observability.query import summarize_trace
 
 
@@ -40,6 +44,94 @@ def _mock_result(
         cost=cost,
         finish_reason=finish_reason,
     )
+
+
+def _tool_result(
+    *,
+    call_id: str = "strict-tool-1",
+    trace_id: str | None = "digimon.query.strict-roundtrip",
+) -> ToolCallResult:
+    """Build one complete tool event for strict-persistence controls."""
+
+    now = datetime.now(timezone.utc).isoformat()
+    return ToolCallResult(
+        call_id=call_id,
+        tool_name="digimon.operator",
+        operation="structured.cypher",
+        status="succeeded",
+        started_at=now,
+        ended_at=now,
+        duration_ms=1,
+        task="digimon.query.operator",
+        trace_id=trace_id,
+        result_count=2,
+    )
+
+
+def test_strict_tool_call_persists_query_trace_round_trip(tmp_path: Path) -> None:
+    """Strict logging must write a row readable under the exact query trace id."""
+
+    log_tool_call_strict(_tool_result())
+
+    connection = sqlite3.connect(tmp_path / "test.db")
+    try:
+        row = connection.execute(
+            "SELECT operation, status, trace_id, result_count FROM tool_calls"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert row == (
+        "structured.cypher",
+        "succeeded",
+        "digimon.query.strict-roundtrip",
+        2,
+    )
+
+
+def test_strict_tool_call_propagates_persistence_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Critical traces fail loud while the compatibility API stays best effort."""
+
+    def fail_write(**_: object) -> None:
+        raise sqlite3.OperationalError("observability database is read-only")
+
+    monkeypatch.setattr(io_log, "_write_tool_call_to_db", fail_write)
+
+    with pytest.raises(sqlite3.OperationalError, match="read-only"):
+        log_tool_call_strict(_tool_result(call_id="strict-fails"))
+    log_tool_call(_tool_result(call_id="compatibility-swallows"))
+
+
+def test_strict_tool_call_propagates_jsonl_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken first persistence sink must prevent an unverifiable operation."""
+
+    def fail_jsonl(*_: object, **__: object) -> None:
+        raise OSError("observability log directory is read-only")
+
+    monkeypatch.setattr(io_log, "_append_jsonl", fail_jsonl)
+
+    with pytest.raises(OSError, match="read-only"):
+        log_tool_call_strict(_tool_result(call_id="strict-jsonl-fails"))
+
+
+@pytest.mark.parametrize("trace_id", [None, "", "   "])
+def test_strict_tool_call_rejects_unjoinable_trace_id(trace_id: str | None) -> None:
+    """A persisted row without a trace id cannot verify its parent request."""
+
+    with pytest.raises(ValueError, match="non-empty trace_id"):
+        log_tool_call_strict(_tool_result(trace_id=trace_id))
+
+
+def test_strict_tool_call_rejects_disabled_logging() -> None:
+    """Required trace evidence cannot silently disappear behind configuration."""
+
+    io_log._enabled = False
+
+    with pytest.raises(RuntimeError, match="requires logging to be enabled"):
+        log_tool_call_strict(_tool_result(call_id="strict-disabled"))
 
 
 @pytest.fixture(autouse=True)
@@ -143,6 +235,54 @@ class TestLogCall:
         assert row[2] == "sql_test"
         assert row[3] == 10
         assert row[4] == 15
+        db.close()
+
+    def test_writes_provider_usage_details_to_sqlite(self, tmp_path):
+        result = _mock_result(
+            usage={
+                "prompt_tokens": 10,
+                "completion_tokens": 8,
+                "total_tokens": 18,
+                "cached_tokens": 4,
+                "cache_creation_tokens": 2,
+                "reasoning_tokens": 3,
+                "prompt_tokens_details": {
+                    "cached_tokens": 4,
+                    "cache_creation_tokens": 2,
+                },
+                "completion_tokens_details": {"reasoning_tokens": 3},
+            },
+            cost=0.002,
+        )
+        io_log.log_call(
+            model="openrouter/test",
+            result=result,
+            latency_s=2.0,
+            task="usage_details",
+            trace_id="usage-details-trace",
+        )
+
+        db = sqlite3.connect(str(tmp_path / "test.db"))
+        row = db.execute(
+            """SELECT reasoning_tokens, cached_tokens, cache_creation_tokens,
+                      usage_details
+               FROM llm_calls"""
+        ).fetchone()
+        assert row is not None
+        assert row[:3] == (3, 4, 2)
+        assert json.loads(row[3]) == {
+            "prompt_tokens_details": {
+                "cached_tokens": 4,
+                "cache_creation_tokens": 2,
+            },
+            "completion_tokens_details": {"reasoning_tokens": 3},
+        }
+        looked_up = io_log.lookup_result("usage-details-trace")
+        assert looked_up is not None
+        assert looked_up["reasoning_tokens"] == 3
+        assert looked_up["cached_tokens"] == 4
+        assert looked_up["cache_creation_tokens"] == 2
+        assert looked_up["usage_details"] == json.loads(row[3])
         db.close()
 
     def test_disabled_skips_logging(self, tmp_path):
@@ -731,6 +871,13 @@ class TestSQLiteDB:
         assert "prompt_ref" in llm_cols
         assert "call_fingerprint" in llm_cols
         assert "call_snapshot" in llm_cols
+        assert "logical_call_id" in llm_cols
+        assert "reasoning_tokens" in llm_cols
+        assert "cached_tokens" in llm_cols
+        assert "cache_creation_tokens" in llm_cols
+        assert "usage_details" in llm_cols
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        assert "structured_attempt_events" in tables
 
 
 # ---------------------------------------------------------------------------
@@ -758,6 +905,47 @@ class TestImportJsonl:
         assert len(rows) == 2
         # Project inferred from path
         assert rows[0][1] == "myproj"
+
+    def test_import_calls_preserves_usage_details(self, tmp_path):
+        data_dir = tmp_path / "myproj" / "myproj_llm_client_data"
+        data_dir.mkdir(parents=True)
+        jsonl_file = data_dir / "calls.jsonl"
+        usage = {
+            "prompt_tokens": 10,
+            "completion_tokens": 8,
+            "total_tokens": 18,
+            "reasoning_tokens": 3,
+            "cached_tokens": 4,
+            "cache_creation_tokens": 2,
+            "prompt_tokens_details": {
+                "cached_tokens": 4,
+                "cache_creation_tokens": 2,
+            },
+            "completion_tokens_details": {"reasoning_tokens": 3},
+        }
+        jsonl_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-07-23T12:00:00+00:00",
+                    "model": "openrouter/test",
+                    "usage": usage,
+                }
+            )
+            + "\n"
+        )
+
+        assert io_log.import_jsonl(jsonl_file, table="llm_calls") == 1
+        row = io_log._get_db().execute(
+            """SELECT reasoning_tokens, cached_tokens, cache_creation_tokens,
+                      usage_details
+               FROM llm_calls"""
+        ).fetchone()
+        assert row is not None
+        assert row[:3] == (3, 4, 2)
+        assert json.loads(row[3]) == {
+            "prompt_tokens_details": usage["prompt_tokens_details"],
+            "completion_tokens_details": usage["completion_tokens_details"],
+        }
 
     def test_import_embeddings(self, tmp_path):
         data_dir = tmp_path / "proj" / "proj_llm_client_data"
@@ -1508,3 +1696,52 @@ class TestDateBasedLogRotation:
 
         monkeypatch.setenv("LLM_CLIENT_LOG_RETENTION_DAYS", "invalid")
         assert io_log._get_log_retention_days() == 30  # fallback
+
+
+class TestGetCostThreadSafety:
+    """Regression controls for shared-connection budget queries."""
+
+    def test_concurrent_reads_and_writes_do_not_raise(self):
+        """Budget reads and call writes serialize on the shared DB lock."""
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        io_log.log_call(
+            model="gpt-5",
+            result=_mock_result(cost=0.001),
+            latency_s=0.1,
+            trace_id="threads/seed",
+            task="thread-safety",
+        )
+        errors: list[BaseException] = []
+
+        def reader(_: int) -> None:
+            try:
+                for _ in range(25):
+                    io_log.get_cost(trace_id="threads/seed")
+            except BaseException as error:
+                errors.append(error)
+
+        def writer(worker: int) -> None:
+            try:
+                for index in range(25):
+                    io_log.log_call(
+                        model="gpt-5",
+                        result=_mock_result(cost=0.001),
+                        latency_s=0.1,
+                        trace_id=f"threads/{worker}/{index}",
+                        task="thread-safety",
+                    )
+            except BaseException as error:
+                errors.append(error)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = []
+            for worker in range(4):
+                futures.append(pool.submit(reader, worker))
+                futures.append(pool.submit(writer, worker))
+            for future in futures:
+                future.result()
+
+        assert errors == []
+        assert io_log.get_cost(trace_id="threads/seed") > 0

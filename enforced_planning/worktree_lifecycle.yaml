@@ -1,0 +1,12 @@
+schema_version: 1
+dispositions:
+  merged: merged
+  non_closeable:
+    - active
+    - handoff
+  recovery_required:
+    - superseded
+    - archived
+    - migrated
+  discard_requires_authorization:
+    - abandoned

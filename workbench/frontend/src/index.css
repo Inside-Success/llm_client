@@ -1,0 +1,369 @@
+/*
+ * Brian's dark theme design system — copy into any project's index.css.
+ * Extracted from Digimon_for_KG_application/workbench/frontend/src/index.css
+ * Last updated: 2026-06-25
+ *
+ * Usage: copy this file to <project>/workbench/frontend/src/index.css
+ * and extend it with project-specific overrides below the "Project overrides" comment.
+ */
+
+:root {
+  /* Surfaces */
+  --bg:       #141414;   /* page background */
+  --surface:  #1e1e1e;   /* card / panel background */
+  --surface2: #262626;   /* button / input background */
+  --border:   #333;      /* all borders */
+  --text:     #e0e0e0;   /* primary text */
+  --muted:    #777;      /* secondary / label text */
+
+  /* Semantic */
+  --accent:   #4a9eff;   /* interactive, selected, links */
+  --done:     #4caf50;   /* success, complete */
+  --error:    #f44336;   /* error, destructive */
+  --running:  #ff9800;   /* in-progress, loading */
+  --idle:     #555;      /* inactive, disabled */
+
+  /* Typography */
+  --font-mono: 'Menlo', 'Consolas', 'Monaco', monospace;
+
+  /* Spacing scale — 4px base unit */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* Font sizes */
+  --text-xs:  11px;
+  --text-sm:  12px;
+  --text-base: 14px;
+  --text-md:  16px;
+  --text-lg:  20px;
+}
+
+/* Reset */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root { height: 100vh; display: flex; flex-direction: column; }
+
+/* Buttons */
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+}
+button:hover:not(:disabled) { background: #2e2e2e; border-color: #555; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) { background: #3a8ee0; }
+
+/* Inputs */
+input, select, textarea {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Tables */
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* ── Project overrides below this line ─────────────────────────────────── */
+
+.workbench-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.workbench-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.workbench-header h1 {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tab-bar {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  padding: 0 var(--space-5);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover:not(:disabled) { background: none; color: var(--text); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-4);
+}
+
+/* Headline stat */
+.stat-headline {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin-top: var(--space-1);
+}
+
+/* Side-by-side layout */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+/* Bar chart */
+.bar-chart-wrap {
+  overflow-x: auto;
+}
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 200px;
+  min-width: max-content;
+}
+
+.bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.bar {
+  width: 18px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+  transition: opacity 0.1s;
+  min-height: 2px;
+}
+.bar:hover { opacity: 1; }
+
+.bar-label {
+  font-size: 10px;
+  color: var(--muted);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  max-height: 50px;
+  overflow: hidden;
+}
+
+/* Status dots */
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-green  { background: var(--done); }
+.dot-yellow { background: var(--running); }
+.dot-red    { background: var(--error); }
+
+/* Provider rows */
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.provider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.provider-name {
+  font-weight: 600;
+  min-width: 100px;
+}
+
+.provider-status {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Call log filter bar */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.filter-bar input {
+  width: 220px;
+}
+
+/* Scrollable table container */
+.table-scroll {
+  overflow-y: auto;
+  max-height: calc(100vh - 250px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.table-scroll table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+/* Status badge */
+.status-ok  { color: var(--done); }
+.status-err { color: var(--error); }
+
+/* Detail drawer */
+.detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  padding: var(--space-5);
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.detail-drawer h2 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+}
+
+.detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-3);
+}
+
+.detail-key {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-val {
+  font-size: var(--text-sm);
+  color: var(--text);
+  word-break: break-all;
+  font-family: var(--font-mono);
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+.clickable-row:hover td {
+  background: var(--surface2);
+}

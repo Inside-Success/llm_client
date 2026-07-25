@@ -1,0 +1,19 @@
+{
+  "constraints": [
+    "Every claim and disagreement must have an evidence_path citation (file:line, $defs name, or doc#section). The schema enforces this.",
+    "Do not propose features that already exist \u2014 read the code first. Examples that exist: TaskFamily registry, grounded schemas, alias resolution, schema-smoke integration tests.",
+    "Disagree explicitly when you disagree. Politeness that hides disagreement defeats the deliberation.",
+    "If you cite agreed_with_peer, do so by the peer's actual claim_id. Don't fabricate."
+  ],
+  "extra": {},
+  "question": "The duet (asymmetric implementer+reviewer, 1 revise cycle) and deliberation (symmetric N-agent debate, multi-round, convergence-driven) sibling workflows just shipped on aisteno/llm_client (commit 4d3e5ce on main). Five dogfood-on-self loops caught real bugs during build (claude-code/opus routing, codex cwd, CLI threading, missing rubric rule, OpenAI strict-mode), and the schema-smoke integration tests verify strict-mode works live. This is the first real-task deliberation \u2014 your job is to scrutinize the SHIPPED design and surface the highest-leverage improvement we're missing. Specifically argue about: (1) is the rule-based convergence detector (disagreed_with_peer empty + agreed_with_peer covers peer claim IDs) trustworthy, or does it false-converge on polite-agent behavior? (2) does the schema's required evidence_path actually make findings falsifiable, or do agents game it with bogus citations? (3) does two-agent topology miss blind spots that three-agent would catch? (4) what fails first at max_rounds > 5 (context bloat? non-cumulative budget? convergence drift?) and is fixing that the right next priority, or is something else higher-leverage? (5) is asymmetric duet + symmetric deliberation the right partition, or do we need a third pattern? Cite duet.py / deliberate.py / duet_base.py / duet_registry.py / profiles/* / cli/duet.py / cli/deliberate.py / tests/test_workflow_schema_smoke.py line ranges. Disagree explicitly. The single highest-priority next improvement is the deliverable.",
+  "success_criteria": [
+    "Each agent identifies at least three structural weaknesses with file:line citations.",
+    "Each agent ranks the weaknesses by leverage and defends the ranking.",
+    "Residual disagreements over the ranking are explicit, not papered over by the synthesis.",
+    "The synthesis names the single highest-priority improvement with a one-paragraph justification."
+  ],
+  "task_id": "plan-33-self-deliberation",
+  "title": "Self-deliberation: what's structurally wrong with the duet + deliberation chassis?",
+  "workspace_path": "/home/brian/brian-work-next/repos/llm_client_worktrees/plan-29-duet"
+}

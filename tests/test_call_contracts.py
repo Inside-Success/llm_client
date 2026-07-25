@@ -11,7 +11,15 @@ from unittest.mock import patch
 
 import pytest
 
-from llm_client.execution.call_contracts import check_budget, normalize_prompt_ref, require_tags
+from llm_client.execution.call_contracts import (
+    acquire_budget_scope,
+    check_budget,
+    normalize_prompt_ref,
+    release_budget_scope,
+    require_tags,
+    resolve_budget_scope,
+)
+from llm_client.execution.call_wrappers import _prepare_public_call_envelope
 from llm_client.core.errors import LLMBudgetExceededError
 
 
@@ -49,3 +57,117 @@ def test_check_budget_raises_when_trace_is_spent() -> None:
     with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=5.0):
         with pytest.raises(LLMBudgetExceededError, match="Budget exceeded for trace trace/budget"):
             check_budget("trace/budget", 5.0)
+
+
+def test_check_budget_blocks_before_dispatch_when_reservation_would_cross_limit() -> None:
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=4.8):
+        with pytest.raises(LLMBudgetExceededError, match="reservation exceeds"):
+            check_budget("trace/budget", 5.0, reservation=0.3)
+
+
+def test_public_envelope_reserves_budget_and_strips_internal_kwarg() -> None:
+    with patch("llm_client.execution.call_wrappers._acquire_budget_scope") as admit:
+        envelope = _prepare_public_call_envelope(
+            caller="call_llm", timeout=30,
+            messages=[{"role": "user", "content": "test"}],
+            kwargs={"task": "test.task", "trace_id": "test/trace", "max_budget": 1.0,
+                    "budget_reservation": 0.25, "temperature": 0.1},
+        )
+    assert admit.call_args.kwargs["reservation"] == 0.25
+    assert "budget_reservation" not in envelope.runtime_kwargs
+
+
+def test_public_envelope_uses_durable_mode_and_strips_all_budget_controls() -> None:
+    """Concurrent reservations are admitted once and never reach a provider runtime."""
+
+    with patch("llm_client.execution.call_wrappers._acquire_budget_scope") as admit:
+        envelope = _prepare_public_call_envelope(
+            caller="acall_llm",
+            timeout=30,
+            messages=[{"role": "user", "content": "test"}],
+            kwargs={
+                "task": "test.task",
+                "trace_id": "root/child",
+                "max_budget": 1.0,
+                "budget_scope_trace_id": "root",
+                "budget_scope_mode": "reserved_concurrent",
+                "budget_reservation": 0.25,
+            },
+        )
+
+    assert admit.call_args.kwargs["budget_scope_mode"] == "reserved_concurrent"
+    assert admit.call_args.kwargs["reservation"] == 0.25
+    assert "budget_scope_trace_id" not in envelope.runtime_kwargs
+    assert "budget_scope_mode" not in envelope.runtime_kwargs
+    assert "budget_reservation" not in envelope.runtime_kwargs
+
+
+def test_reserved_concurrent_requires_a_scope() -> None:
+    with pytest.raises(ValueError, match="requires budget_scope_trace_id"):
+        acquire_budget_scope(
+            "trace/no-scope",
+            1.0,
+            reservation=0.25,
+            budget_scope_mode="reserved_concurrent",
+        )
+
+
+def test_check_budget_aggregates_root_scope_and_descendants() -> None:
+    """A descendant charges the root scope's settled cost and reservation."""
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=4.8) as get_cost:
+        with pytest.raises(LLMBudgetExceededError, match="budget scope trace/root"):
+            check_budget(
+                "trace/root/operator",
+                5.0,
+                reservation=0.3,
+                budget_scope_trace_id="trace/root",
+            )
+
+    get_cost.assert_called_once_with(trace_prefix="trace/root")
+
+
+def test_budget_scope_rejects_concurrent_child_dispatch_and_releases() -> None:
+    """One process cannot dispatch two unsettled children under one scope."""
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=0.0):
+        lease = acquire_budget_scope(
+            "trace/root/planner",
+            1.0,
+            budget_scope_trace_id="trace/root",
+        )
+        with pytest.raises(LLMBudgetExceededError, match="in-flight call"):
+            acquire_budget_scope(
+                "trace/root/operator",
+                1.0,
+                budget_scope_trace_id="trace/root",
+            )
+        release_budget_scope(lease)
+        replacement = acquire_budget_scope(
+            "trace/root/operator",
+            1.0,
+            budget_scope_trace_id="trace/root",
+        )
+        release_budget_scope(replacement)
+
+
+@pytest.mark.parametrize("scope", ["", "   ", "trace/other"])
+def test_budget_scope_must_be_a_nonempty_trace_ancestor(scope: str) -> None:
+    """A call cannot charge an unrelated or malformed trace scope."""
+    with pytest.raises(ValueError, match="budget_scope_trace_id"):
+        resolve_budget_scope("trace/root/child", scope)
+
+
+@pytest.mark.parametrize(("spent", "expected"), [(2.5, "50%"), (4.0, "80%")])
+def test_check_budget_emits_pre_dispatch_threshold_warning(
+    spent: float, expected: str,
+) -> None:
+    warnings: list[str] = []
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=spent):
+        check_budget("trace/budget", 5.0, warning_sink=warnings)
+    assert len(warnings) == 1
+    assert expected in warnings[0]
+
+
+def test_check_budget_does_not_warn_for_unlimited_budget() -> None:
+    warnings: list[str] = []
+    check_budget("trace/unlimited", 0.0, warning_sink=warnings)
+    assert warnings == []

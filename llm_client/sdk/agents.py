@@ -22,7 +22,7 @@ import concurrent.futures
 import json as _json
 import logging
 import os
-from typing import Any, Awaitable, Callable, TypeVar, cast
+from typing import Any, Awaitable, Callable, TypeVar
 
 from pydantic import BaseModel
 
@@ -57,7 +57,7 @@ def _parse_agent_model(model: str) -> tuple[str, str | None]:
 
     Examples:
         "claude-code"         → ("claude-code", None)
-        "claude-code/opus"    → ("claude-code", "opus")
+        "claude-code/sonnet"  → ("claude-code", "sonnet")
         "codex"               → ("codex", None)
         "codex/gpt-5"         → ("codex", "gpt-5")
         "gpt-5.3-codex"      → ("codex", "gpt-5.3-codex")
@@ -217,38 +217,22 @@ _AGENT_KWARGS = frozenset({
 _CODEX_PROCESS_ISOLATION_ENV = "LLM_CLIENT_CODEX_PROCESS_ISOLATION"
 _CODEX_PROCESS_START_METHOD_ENV = "LLM_CLIENT_CODEX_PROCESS_START_METHOD"
 _CODEX_PROCESS_GRACE_ENV = "LLM_CLIENT_CODEX_PROCESS_GRACE_S"
-_CODEX_ALLOW_MINIMAL_EFFORT_ENV = "LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT"
 _CODEX_TRANSPORT_ENV = "LLM_CLIENT_CODEX_TRANSPORT"
 
 
 def _normalize_codex_reasoning_effort(value: Any) -> str:
-    """Normalize Codex reasoning effort to SDK-accepted values.
+    """Validate an explicit Codex reasoning effort without coercion."""
 
-    Some Codex-backed models reject ``xhigh``; normalize aliases to
-    minimal/low/medium/high and default to ``high`` when omitted.
-    """
-    raw = str(value or "").strip().lower()
-    if not raw:
-        return "high"
+    if value is None or not str(value).strip():
+        raise ValueError(
+            "Codex requires explicit reasoning_effort: low, medium, or high"
+        )
+    raw = str(value).strip().lower()
     if raw in {"low", "medium", "high"}:
         return raw
-    if raw == "minimal":
-        # Codex ChatGPT-account lanes can reject minimal effort because the
-        # platform auto-enables web_search tooling. Keep a controlled override
-        # for environments where minimal has been validated.
-        if _as_bool(os.environ.get(_CODEX_ALLOW_MINIMAL_EFFORT_ENV), default=False):
-            return "minimal"
-        logger.warning(
-            "Codex model_reasoning_effort=minimal is often rejected by the platform; "
-            "coercing to low (set %s=1 to force minimal).",
-            _CODEX_ALLOW_MINIMAL_EFFORT_ENV,
-        )
-        return "low"
-    if raw in {"xhigh", "very_high", "highest", "max"}:
-        return "high"
-    if raw in {"none", "off", "disabled"}:
-        return "minimal"
-    return "high"
+    raise ValueError(
+        f"Unsupported Codex reasoning effort {value!r}; allowed: low, medium, high"
+    )
 
 
 def _apply_agent_yolo_defaults(agent_name: str, agent_kw: dict[str, Any]) -> dict[str, Any]:
@@ -400,11 +384,40 @@ from llm_client.sdk.agents_codex import (  # noqa: F401
     _stream_codex,
     _strip_fences,
     _terminate_pid_tree,
+    log_codex_exec_session,
+    parse_codex_exec_events,
 )
 
 # ===========================================================================
 # Routing dispatchers — dispatch by SDK name
 # ===========================================================================
+
+
+def _normalize_workspace_kwargs(sdk_name: str, kwargs: dict[str, Any]) -> None:
+    """Alias ``cwd`` <-> ``working_directory`` across SDK boundaries.
+
+    The Claude Agent SDK reads ``cwd`` (claude_agent_sdk.ClaudeAgentOptions.cwd)
+    while the Codex SDK reads ``working_directory`` (agents_codex.py falls back
+    to ``os.getcwd()`` when missing). Callers like ``duet.py`` that thread one
+    canonical kwarg name shouldn't be silently dropped by whichever SDK doesn't
+    happen to recognize that spelling.
+
+    Aliases are applied only when the SDK-native key is absent so explicit
+    callers retain precedence. The normalization is in-place to keep the
+    routing layer thin.
+    """
+    if sdk_name == "codex":
+        if "cwd" in kwargs and "working_directory" not in kwargs:
+            kwargs["working_directory"] = kwargs.pop("cwd")
+        elif "cwd" in kwargs:
+            # Both present — drop the unused alias to avoid leaking
+            # claude-style kwargs into the codex adapter.
+            kwargs.pop("cwd", None)
+    elif sdk_name == "claude-code":
+        if "working_directory" in kwargs and "cwd" not in kwargs:
+            kwargs["cwd"] = kwargs.pop("working_directory")
+        elif "working_directory" in kwargs:
+            kwargs.pop("working_directory", None)
 
 
 def _route_call(
@@ -418,6 +431,7 @@ def _route_call(
     timeout = _normalize_timeout(timeout, caller="_route_call", logger=logger)
     on_turn = kwargs.pop("on_turn", None)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return _call_codex(model, messages, timeout=timeout, on_turn=on_turn, **kwargs)
     if sdk_name == "claude-code":
@@ -441,6 +455,7 @@ async def _route_acall(
     timeout = _normalize_timeout(timeout, caller="_route_acall", logger=logger)
     on_turn = kwargs.pop("on_turn", None)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return await _acall_codex(model, messages, timeout=timeout, on_turn=on_turn, **kwargs)
     if sdk_name == "claude-code":
@@ -464,6 +479,7 @@ def _route_call_structured(
     """Route a sync structured agent call to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_call_structured", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return _call_codex_structured(model, messages, response_model, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":
@@ -487,6 +503,7 @@ async def _route_acall_structured(
     """Route an async structured agent call to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_acall_structured", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return await _acall_codex_structured(model, messages, response_model, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":
@@ -510,6 +527,7 @@ def _route_stream(
     """Route a sync agent stream to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_stream", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return _stream_codex(model, messages, hooks=hooks, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":
@@ -533,6 +551,7 @@ async def _route_astream(
     """Route an async agent stream to the appropriate SDK."""
     timeout = _normalize_timeout(timeout, caller="_route_astream", logger=logger)
     sdk_name, _ = _parse_agent_model(model)
+    _normalize_workspace_kwargs(sdk_name, kwargs)
     if sdk_name == "codex":
         return await _astream_codex(model, messages, hooks=hooks, timeout=timeout, **kwargs)
     if sdk_name == "claude-code":

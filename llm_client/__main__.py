@@ -10,6 +10,7 @@ Usage:
     python -m llm_client backfill
     python -m llm_client tool-lint
     python -m llm_client tools
+    python -m llm_client tool-usage {import,report}
 """
 
 from __future__ import annotations
@@ -20,11 +21,24 @@ import sys
 from llm_client.cli.adoption import register_parser as register_adoption_parser
 from llm_client.cli.backfill import register_parser as register_backfill_parser
 from llm_client.cli.cost import register_parser as register_cost_parser
+from llm_client.cli.dashboard import register_parser as register_dashboard_parser
+from llm_client.cli.deliberate import register_parser as register_deliberate_parser
+from llm_client.cli.duet import register_parser as register_duet_parser
 from llm_client.cli.experiments import register_parser as register_experiments_parser
+from llm_client.cli.json_schema_call import (
+    register_parser as register_json_schema_call_parser,
+)
 from llm_client.cli.models import register_parser as register_models_parser
+from llm_client.cli.provider_limits import register_parser as register_provider_limits_parser
 from llm_client.cli.replay import register_parser as register_replay_parser
+from llm_client.cli.route_certification import (
+    register_parser as register_route_certification_parser,
+)
+from llm_client.cli.review_artifact import register_parser as register_review_artifact_parser
+from llm_client.cli.review_cycle import register_parser as register_review_cycle_parser
 from llm_client.cli.scores import register_parser as register_scores_parser
 from llm_client.cli.tool_lint import register_parser as register_tool_lint_parser
+from llm_client.cli.tool_usage import register_parser as register_tool_usage_parser
 from llm_client.cli.tools import register_parser as register_tools_parser
 from llm_client.cli.traces import register_parser as register_traces_parser
 
@@ -37,14 +51,23 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     register_cost_parser(subparsers)
+    register_dashboard_parser(subparsers)
+    register_deliberate_parser(subparsers)
+    register_duet_parser(subparsers)
     register_models_parser(subparsers)
+    register_provider_limits_parser(subparsers)
     register_replay_parser(subparsers)
+    register_route_certification_parser(subparsers)
+    register_review_artifact_parser(subparsers)
+    register_review_cycle_parser(subparsers)
     register_traces_parser(subparsers)
     register_scores_parser(subparsers)
     register_experiments_parser(subparsers)
+    register_json_schema_call_parser(subparsers)
     register_adoption_parser(subparsers)
     register_backfill_parser(subparsers)
     register_tool_lint_parser(subparsers)
+    register_tool_usage_parser(subparsers)
     register_tools_parser(subparsers)
 
     args = parser.parse_args()

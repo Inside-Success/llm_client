@@ -2,8 +2,10 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-04-08
-Verification context: routing still canonicalizes exact gpt-5.4 requests through the typed provider-governance policy before direct or openrouter policy application, `routing_trace["provider_governance_events"]` still exposes those governance decisions explicitly, and direct Gemini thinking defaults are now resolved from shared config
+Last verified: 2026-07-16
+Verification context: Plan 94 registers a provider-free route-certification
+query command; it does not change call, environment, or default routing
+precedence. Focused CLI and route-contract controls pass.
 
 ## Context
 
@@ -41,3 +43,10 @@ Negative:
 
 Week 2+: extract pure routing resolver with typed output:
 `resolve_call(request, config) -> ResolvedCallPlan`.
+
+Verification context (2026-07-13): the resolved fallback order now determines
+globally increasing structured-attempt ordinals. This adds observability of the
+existing route; it does not change configuration precedence.
+
+The runtime now treats a validated native-schema response as terminal for model
+fallback; this is an execution-integrity boundary, not a new routing precedence.

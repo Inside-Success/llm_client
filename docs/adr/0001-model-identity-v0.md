@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-04-08
-Verification context: exact gpt-5.4 requests still canonicalize through the typed provider-governance policy to codex/gpt-5.4, routing traces still expose `provider_governance_events`, and direct Gemini thinking defaults are now shared-config driven instead of hardcoded to `budget_tokens=0`
+Last verified: 2026-07-15
+Verification context: Plan 105 serializes public Instructor construction and changes cost-source selection without changing requested, resolved, or executed model identity. Structured runtime, attempt, replay, and raw-artifact controls pass.
 
 ## Context
 
@@ -51,3 +51,10 @@ Negative:
 
 After router extraction (`resolve_call -> ResolvedCallPlan`) and shared kernel
 work, propose a follow-up ADR to unify or deprecate ambiguous `model` usage.
+
+Verification context (2026-07-13): native-schema attempt identity now includes
+one logical-call-global ordinal across model fallback. Each event records the
+actual model used; final requested/resolved model semantics remain unchanged.
+
+Post-validation finalization failures now stop retry and model fallback, so a
+validated response cannot fabricate a later executed-model identity.

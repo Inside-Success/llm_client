@@ -1,5 +1,17 @@
 """Observability module boundaries (events, experiments, query, replay)."""
 
+from llm_client.observability.agent_tool_usage import (
+    AgentToolUsageEvent,
+    ToolSurfaceMatcher,
+    ToolUsageImportSummary,
+    ToolUsageReport,
+    TranscriptParseError,
+    build_usage_report,
+    import_transcripts,
+    parse_claude_transcript,
+    parse_codex_transcript,
+    persist_usage_events,
+)
 from llm_client.observability.events import (
     ActiveFeatureProfile,
     configure_logging,
@@ -28,6 +40,7 @@ from llm_client.observability.experiments import (
 )
 from llm_client.observability.query import (
     get_active_llm_calls,
+    get_call_lifecycle,
     get_background_mode_adoption,
     get_completed_traces,
     get_cost,
@@ -38,27 +51,82 @@ from llm_client.observability.query import (
     import_jsonl,
     lookup_result,
 )
+from llm_client.observability.budget_reservations import (
+    BudgetReservationLease,
+    BudgetScopeMode,
+    BudgetScopeSnapshot,
+    acquire_budget_reservation,
+    get_budget_scope_snapshot,
+    release_budget_reservation,
+    renew_budget_reservation,
+    settle_budget_reservation,
+)
+from llm_client.observability.attempt_diagnostics import (
+    AttemptDiagnosis,
+    AttemptDiagnosticEnvelope,
+    TraceAttemptDiagnosis,
+    get_attempt_diagnosis,
+    get_attempt_diagnostics,
+    get_trace_attempt_diagnosis,
+    record_attempt_diagnostic,
+)
 from llm_client.observability.replay import (
     compare_call_snapshots,
     format_call_diff,
     get_call_snapshot,
     replay_call_snapshot,
 )
-from llm_client.observability.tool_calls import ToolCallResult, log_tool_call
+
+from llm_client.observability.selected_attempts import (
+    RuntimeSelectedAttemptReceipt,
+    RuntimeSelectedRawContent,
+    SelectedAttemptReceiptError,
+    get_runtime_selected_attempt_receipt,
+    get_runtime_selected_raw_content,
+    diagnose_runtime_selected_attempt_receipt_for_trace,
+)
+from llm_client.observability.raw_artifacts import (
+    StructuredRawArtifactError,
+    cleanup_structured_raw_artifacts,
+)
+from llm_client.observability.tool_calls import (
+    ToolCallResult,
+    log_tool_call,
+    log_tool_call_strict,
+)
+from llm_client.observability.structured_attempts import (
+    StructuredAttemptEvent,
+    StructuredValidationIssue,
+    get_structured_attempt_events,
+    get_structured_attempt_histories,
+    record_structured_attempt_event,
+)
 
 __all__ = [
+    "AgentToolUsageEvent",
+    "BudgetReservationLease",
+    "BudgetScopeMode",
+    "BudgetScopeSnapshot",
+    "AttemptDiagnosis",
+    "AttemptDiagnosticEnvelope",
+    "TraceAttemptDiagnosis",
     "ActiveFeatureProfile",
     "ActiveExperimentRun",
+    "RuntimeSelectedAttemptReceipt",
+    "RuntimeSelectedRawContent",
     "ExperimentRun",
     "activate_experiment_run",
+    "acquire_budget_reservation",
     "activate_feature_profile",
     "compare_runs",
     "compare_cohorts",
     "compare_call_snapshots",
+    "cleanup_structured_raw_artifacts",
     "configure_agent_spec_enforcement",
     "configure_experiment_enforcement",
     "configure_feature_profile",
     "configure_logging",
+    "build_usage_report",
     "enforce_agent_spec",
     "experiment_run",
     "format_call_diff",
@@ -66,7 +134,15 @@ __all__ = [
     "get_active_experiment_run_id",
     "get_active_feature_profile",
     "get_active_llm_calls",
+    "get_attempt_diagnosis",
+    "get_attempt_diagnostics",
+    "get_trace_attempt_diagnosis",
+    "get_runtime_selected_attempt_receipt",
+    "get_runtime_selected_raw_content",
+    "diagnose_runtime_selected_attempt_receipt_for_trace",
     "get_background_mode_adoption",
+    "get_budget_scope_snapshot",
+    "get_call_lifecycle",
     "get_call_snapshot",
     "get_completed_traces",
     "get_cost",
@@ -76,13 +152,33 @@ __all__ = [
     "get_runs",
     "get_trace_tree",
     "import_jsonl",
+    "import_transcripts",
     "log_embedding",
     "log_experiment_aggregate",
     "log_foundation_event",
     "log_tool_call",
+    "log_tool_call_strict",
     "log_item",
     "lookup_result",
+    "parse_claude_transcript",
+    "parse_codex_transcript",
+    "persist_usage_events",
     "replay_call_snapshot",
     "start_run",
+    "SelectedAttemptReceiptError",
+    "StructuredRawArtifactError",
     "ToolCallResult",
+    "ToolSurfaceMatcher",
+    "ToolUsageImportSummary",
+    "ToolUsageReport",
+    "TranscriptParseError",
+    "StructuredAttemptEvent",
+    "StructuredValidationIssue",
+    "get_structured_attempt_events",
+    "get_structured_attempt_histories",
+    "record_structured_attempt_event",
+    "record_attempt_diagnostic",
+    "release_budget_reservation",
+    "renew_budget_reservation",
+    "settle_budget_reservation",
 ]

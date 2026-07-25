@@ -168,14 +168,110 @@ class TestParseAgentModel:
         assert model == "Opus"  # underlying model preserves case
 
 
-class TestCodexReasoningEffortNormalization:
-    def test_minimal_coerces_to_low_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT", raising=False)
-        assert _normalize_codex_reasoning_effort("minimal") == "low"
+class TestWorkspaceKwargAliasing:
+    """The Claude SDK reads ``cwd``; the Codex SDK reads ``working_directory``.
 
-    def test_minimal_can_be_forced_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT", "1")
-        assert _normalize_codex_reasoning_effort("minimal") == "minimal"
+    Callers like the duet that thread one canonical name shouldn't be silently
+    dropped by whichever SDK doesn't recognize that spelling. The
+    ``_normalize_workspace_kwargs`` helper aliases between them at the route
+    boundary; these tests assert the aliasing happens before the SDK adapter
+    consumes the kwargs.
+    """
+
+    def test_normalize_aliases_cwd_to_working_directory_for_codex(self) -> None:
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"cwd": "/workspace"}
+        _normalize_workspace_kwargs("codex", kwargs)
+        assert kwargs == {"working_directory": "/workspace"}
+
+    def test_normalize_aliases_working_directory_to_cwd_for_claude(self) -> None:
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"working_directory": "/workspace"}
+        _normalize_workspace_kwargs("claude-code", kwargs)
+        assert kwargs == {"cwd": "/workspace"}
+
+    def test_normalize_preserves_sdk_native_when_both_present_codex(self) -> None:
+        """Explicit ``working_directory`` wins; ``cwd`` is dropped on codex."""
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"working_directory": "/native", "cwd": "/alias"}
+        _normalize_workspace_kwargs("codex", kwargs)
+        assert kwargs == {"working_directory": "/native"}
+
+    def test_normalize_preserves_sdk_native_when_both_present_claude(self) -> None:
+        """Explicit ``cwd`` wins; ``working_directory`` is dropped on claude-code."""
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"cwd": "/native", "working_directory": "/alias"}
+        _normalize_workspace_kwargs("claude-code", kwargs)
+        assert kwargs == {"cwd": "/native"}
+
+    def test_normalize_noop_when_neither_present(self) -> None:
+        from llm_client.sdk.agents import _normalize_workspace_kwargs
+
+        kwargs = {"timeout": 60}
+        _normalize_workspace_kwargs("codex", kwargs)
+        assert kwargs == {"timeout": 60}
+
+    def test_route_call_passes_working_directory_to_codex_adapter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """End-to-end: a caller passing ``cwd=`` to a codex model must surface
+        ``working_directory=`` at the codex adapter boundary.
+
+        This catches the Plan #30 gap that the workflow-layer stub-seam test
+        could not: the codex SDK falls back to ``os.getcwd()`` when
+        ``working_directory`` is missing, so silent kwarg drop = silent wrong-tree
+        inspection.
+        """
+        from llm_client.sdk import agents as agents_mod
+
+        captured: dict = {}
+
+        def fake_call_codex(model, messages, **kwargs):
+            captured.update(kwargs)
+            return None
+
+        monkeypatch.setattr(agents_mod, "_call_codex", fake_call_codex)
+        agents_mod._route_call(
+            "codex/gpt-5.4",
+            [{"role": "user", "content": "hi"}],
+            cwd="/abs/workspace",
+        )
+        assert captured.get("working_directory") == "/abs/workspace"
+        assert "cwd" not in captured
+
+    def test_route_call_passes_cwd_to_claude_adapter(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Inverse: ``working_directory=`` on a claude-code model must surface as ``cwd=``."""
+        from llm_client.sdk import agents as agents_mod
+
+        captured: dict = {}
+
+        def fake_call_agent(model, messages, **kwargs):
+            captured.update(kwargs)
+            return None
+
+        monkeypatch.setattr(agents_mod, "_call_agent", fake_call_agent)
+        agents_mod._route_call(
+            "claude-code/opus",
+            [{"role": "user", "content": "hi"}],
+            working_directory="/abs/workspace",
+        )
+        assert captured.get("cwd") == "/abs/workspace"
+        assert "working_directory" not in captured
+
+
+class TestCodexReasoningEffortNormalization:
+    def test_omission_fails_instead_of_defaulting_high(self) -> None:
+        with pytest.raises(ValueError, match="requires explicit reasoning_effort"):
+            _normalize_codex_reasoning_effort(None)
+
+    def test_unsupported_effort_fails_instead_of_coercing(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported Codex reasoning effort"):
+            _normalize_codex_reasoning_effort("xhigh")
+
+    def test_supported_effort_is_preserved(self) -> None:
+        assert _normalize_codex_reasoning_effort("low") == "low"
 
     def test_bare_codex(self) -> None:
         assert _parse_agent_model("codex") == ("codex", None)
@@ -493,10 +589,10 @@ class TestAgentCallMocked:
     @pytest.mark.usefixtures("_mock_agent_sdk")
     def test_agent_with_model_suffix(self) -> None:
         result = call_llm(
-            "claude-code/opus", [{"role": "user", "content": "Hi"}],
+            "claude-code/sonnet", [{"role": "user", "content": "Hi"}],
             task="test", trace_id="test_agent_model_suffix", max_budget=0,
         )
-        assert result.model == "claude-code/opus"
+        assert result.model == "claude-code/sonnet"
 
 
 class TestBuildAgentOptions:
@@ -562,6 +658,49 @@ class TestBuildAgentOptions:
             yolo_mode=True,
         )
         assert options.permission_mode == "bypassPermissions"
+
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    @pytest.mark.parametrize(
+        "alias, full_id",
+        [
+            ("sonnet", "claude-sonnet-4-6"),
+            ("haiku", "claude-haiku-4-5-20251001"),
+            ("SONNET", "claude-sonnet-4-6"),
+        ],
+    )
+    def test_short_alias_resolves_to_full_model_id(self, monkeypatch, alias, full_id) -> None:
+        """Permitted short aliases resolve to full Anthropic model IDs.
+
+        Bare aliases are silently ignored by the Claude Agent SDK and cause the
+        session to fall back to its default model.
+        """
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr("llm_client._auto_loaded_keys", frozenset())
+        _, options, _ = _build_agent_options(
+            f"claude-code/{alias}",
+            [{"role": "user", "content": "Hi"}],
+        )
+        assert options.model == full_id
+
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    def test_resolve_unknown_alias_passes_through(self) -> None:
+        """Unknown values pass through unchanged so callers can pin specific IDs."""
+        from llm_client.sdk.agents_claude import _resolve_claude_code_model
+
+        assert _resolve_claude_code_model("some-future-model") == "some-future-model"
+        assert _resolve_claude_code_model(None) is None
+
+    @pytest.mark.parametrize("model", ["opus", "Opus", "claude-opus-4-7"])
+    def test_claude_adapter_rejects_opus_defense_in_depth(self, model) -> None:
+        """Direct use of the private SDK seam cannot bypass public policy."""
+        from llm_client.core.errors import DeprecatedModelError
+        from llm_client.sdk.agents_claude import _resolve_claude_code_model
+
+        with pytest.raises(
+            DeprecatedModelError,
+            match=r"(?i)HARD-BLOCKED MODEL.*opus",
+        ):
+            _resolve_claude_code_model(model)
 
 
 class TestOnTurnCallback:
@@ -1147,7 +1286,7 @@ class TestCodexGuards:
 class TestCodexCall:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     def test_call_llm_sync(self) -> None:
-        result = call_llm("codex", [{"role": "user", "content": "What is 2+2?"}], task="test", trace_id="test_codex_call_sync", max_budget=0)
+        result = call_llm("codex", [{"role": "user", "content": "What is 2+2?"}], reasoning_effort="medium", task="test", trace_id="test_codex_call_sync", max_budget=0)
         assert isinstance(result, LLMCallResult)
         assert "4" in result.content
         assert result.model == "codex"
@@ -1156,7 +1295,7 @@ class TestCodexCall:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     @pytest.mark.asyncio
     async def test_acall_llm_async(self) -> None:
-        result = await acall_llm("codex", [{"role": "user", "content": "What is 2+2?"}], task="test", trace_id="test_codex_call_async", max_budget=0)
+        result = await acall_llm("codex", [{"role": "user", "content": "What is 2+2?"}], reasoning_effort="medium", task="test", trace_id="test_codex_call_async", max_budget=0)
         assert isinstance(result, LLMCallResult)
         assert "4" in result.content
         assert result.finish_reason == "stop"
@@ -1202,7 +1341,7 @@ class TestCodexCall:
             before_call=lambda m, msgs, kw: before_calls.append(m),
             after_call=lambda r: after_calls.append(r),
         )
-        result = call_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, task="test", trace_id="test_codex_hooks", max_budget=0)
+        result = call_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, reasoning_effort="medium", task="test", trace_id="test_codex_hooks", max_budget=0)
         assert len(before_calls) == 1
         assert before_calls[0] == "codex"
         assert len(after_calls) == 1
@@ -1210,7 +1349,7 @@ class TestCodexCall:
 
     @pytest.mark.usefixtures("_mock_codex_sdk")
     def test_model_suffix(self) -> None:
-        result = call_llm("codex/gpt-5", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_model_suffix", max_budget=0)
+        result = call_llm("codex/gpt-5", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_model_suffix", max_budget=0)
         assert result.model == "codex/gpt-5"
 
     def test_codex_timeout_is_explicit(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1229,6 +1368,7 @@ class TestCodexCall:
                 "codex",
                 [{"role": "user", "content": "Hi"}],
                 timeout=1,
+                reasoning_effort="medium",
                 task="test",
                 trace_id="test_codex_timeout_explicit",
                 max_budget=0,
@@ -1266,6 +1406,7 @@ class TestCodexCall:
             [{"role": "user", "content": "Hi"}],
             codex_process_isolation=True,
             timeout=17,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_isolation_dispatch",
             max_budget=0,
@@ -1301,6 +1442,7 @@ class TestCodexCall:
             "codex",
             [{"role": "user", "content": "Hi"}],
             timeout=17,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_isolation_dispatch_env",
             max_budget=0,
@@ -1334,6 +1476,7 @@ class TestCodexCall:
             "codex",
             [{"role": "user", "content": "Hi"}],
             timeout=99,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_agent_timeout_policy_ban",
             max_budget=0,
@@ -1398,6 +1541,7 @@ class TestCodexCall:
             codex_transport="auto",
             timeout=99,
             agent_hard_timeout=21,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_agent_timeout_ban_cli_auto",
             max_budget=0,
@@ -1437,6 +1581,7 @@ class TestCodexStructured:
             "codex",
             [{"role": "user", "content": "Info about Tokyo"}],
             response_model=_CityInfo,
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_structured_sync", max_budget=0,
         )
         assert isinstance(parsed, _CityInfo)
@@ -1452,6 +1597,7 @@ class TestCodexStructured:
             "codex",
             [{"role": "user", "content": "Info about Tokyo"}],
             response_model=_CityInfo,
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_structured_async", max_budget=0,
         )
         assert isinstance(parsed, _CityInfo)
@@ -1496,6 +1642,7 @@ class TestCodexStructured:
             response_model=_CityInfo,
             codex_process_isolation=True,
             timeout=19,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_structured_isolation_dispatch",
             max_budget=0,
@@ -1524,6 +1671,7 @@ class TestCodexStructured:
             "codex",
             [{"role": "user", "content": "Info about Berlin"}],
             response_model=_CityInfo,
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_structured_fenced", max_budget=0,
         )
         assert parsed.name == "Berlin"
@@ -1538,7 +1686,7 @@ class TestCodexStructured:
 class TestCodexStream:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     def test_stream_sync(self) -> None:
-        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_stream_sync", max_budget=0)
+        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_stream_sync", max_budget=0)
         chunks: list[str] = []
         for chunk in stream:
             chunks.append(chunk)
@@ -1551,7 +1699,7 @@ class TestCodexStream:
     @pytest.mark.usefixtures("_mock_codex_sdk")
     @pytest.mark.asyncio
     async def test_astream_async(self) -> None:
-        stream = await astream_llm("codex", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_astream_async", max_budget=0)
+        stream = await astream_llm("codex", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_astream_async", max_budget=0)
         chunks: list[str] = []
         async for chunk in stream:
             chunks.append(chunk)
@@ -1568,7 +1716,7 @@ class TestCodexStream:
             before_call=lambda m, msgs, kw: before_calls.append(m),
             after_call=lambda r: after_calls.append(r),
         )
-        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, task="test", trace_id="test_codex_stream_hooks", max_budget=0)
+        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], hooks=hooks, reasoning_effort="medium", task="test", trace_id="test_codex_stream_hooks", max_budget=0)
         for _ in stream:
             pass
         assert len(before_calls) == 1
@@ -1590,7 +1738,7 @@ class TestCodexStream:
         monkeypatch.setitem(sys.modules, "openai_codex_sdk", fake_mod)
         monkeypatch.setitem(sys.modules, "openai_codex_sdk.codex", codex_submod)
 
-        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], task="test", trace_id="test_codex_stream_multi", max_budget=0)
+        stream = stream_llm("codex", [{"role": "user", "content": "Hi"}], reasoning_effort="medium", task="test", trace_id="test_codex_stream_multi", max_budget=0)
         chunks = list(stream)
         assert len(chunks) == 2
         assert chunks[0] == "First. "
@@ -1609,7 +1757,7 @@ class TestCodexBatch:
             [{"role": "user", "content": f"What is {i}+{i}?"}]
             for i in range(3)
         ]
-        results = call_llm_batch("codex", messages_list, max_concurrent=3, task="test", trace_id="test_codex_batch_sync", max_budget=0)
+        results = call_llm_batch("codex", messages_list, max_concurrent=3, reasoning_effort="medium", task="test", trace_id="test_codex_batch_sync", max_budget=0)
         assert len(results) == 3
         for r in results:
             assert isinstance(r, LLMCallResult)
@@ -1622,7 +1770,7 @@ class TestCodexBatch:
             [{"role": "user", "content": f"What is {i}+{i}?"}]
             for i in range(2)
         ]
-        results = await acall_llm_batch("codex", messages_list, task="test", trace_id="test_codex_batch_async", max_budget=0)
+        results = await acall_llm_batch("codex", messages_list, reasoning_effort="medium", task="test", trace_id="test_codex_batch_async", max_budget=0)
         assert len(results) == 2
 
 
@@ -1948,6 +2096,7 @@ class TestCodexFallback:
             [{"role": "user", "content": "Hi"}],
             codex_transport="cli",
             timeout=19,
+            reasoning_effort="medium",
             task="test",
             trace_id="test_codex_transport_cli_async",
             max_budget=0,
@@ -1968,7 +2117,7 @@ class TestCodexFallback:
                 "approval_policy": "never",
                 "sandbox_mode": "workspace-write",
                 "skip_git_repo_check": True,
-                "model_reasoning_effort": "xhigh",
+                "model_reasoning_effort": "high",
             },
             output_path=str(tmp_path / "last.txt"),
             schema_path=None,
@@ -1988,6 +2137,7 @@ class TestCodexFallback:
             kwargs={
                 "working_directory": str(tmp_path),
                 "yolo_mode": True,
+                "model_reasoning_effort": "medium",
             },
             output_path=str(tmp_path / "last.txt"),
             schema_path=None,
@@ -1996,6 +2146,49 @@ class TestCodexFallback:
         assert "--skip-git-repo-check" in command
         assert "--dangerously-bypass-approvals-and-sandbox" in command
         assert stdin_payload == "Reply with OK only."
+
+    def test_build_codex_cli_command_preserves_sandbox_for_never_approval(self, tmp_path) -> None:
+        """Headless approval must not silently discard the requested sandbox."""
+
+        command, _env, _stdin_payload = _build_codex_cli_command(
+            "codex",
+            "Reply with OK only.",
+            output_schema=None,
+            kwargs={
+                "working_directory": str(tmp_path),
+                "approval_policy": "never",
+                "sandbox_mode": "read-only",
+                "model_reasoning_effort": "medium",
+            },
+            output_path=str(tmp_path / "last.txt"),
+            schema_path=None,
+        )
+
+        assert "--dangerously-bypass-approvals-and-sandbox" not in command
+        assert "-a" not in command
+        assert 'approval_policy="never"' in command
+        assert command[command.index("-s") + 1] == "read-only"
+
+    def test_build_codex_cli_command_forwards_non_never_approval(self, tmp_path) -> None:
+        """Current Codex receives approval policy via config, not removed `-a`."""
+
+        command, _env, _stdin_payload = _build_codex_cli_command(
+            "codex",
+            "Reply with OK only.",
+            output_schema=None,
+            kwargs={
+                "working_directory": str(tmp_path),
+                "approval_policy": "on-request",
+                "sandbox_mode": "read-only",
+                "model_reasoning_effort": "medium",
+            },
+            output_path=str(tmp_path / "last.txt"),
+            schema_path=None,
+        )
+
+        assert "-a" not in command
+        assert 'approval_policy="on-request"' in command
+        assert "--dangerously-bypass-approvals-and-sandbox" not in command
 
     def test_call_codex_via_cli_uses_subprocess_transport(
         self,
@@ -2020,6 +2213,7 @@ class TestCodexFallback:
             approval_policy="never",
             sandbox_mode="workspace-write",
             skip_git_repo_check=True,
+            model_reasoning_effort="medium",
         )
 
         assert result.content == "cli transport ok"
@@ -2140,6 +2334,7 @@ class TestCodexMcpServers:
                     "args": ["hello"],
                 },
             },
+            reasoning_effort="medium",
             task="test", trace_id="test_codex_mcp_e2e", max_budget=0,
         )
         assert isinstance(result, LLMCallResult)

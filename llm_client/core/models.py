@@ -60,6 +60,7 @@ class TaskRequirements(BaseModel):
     structured_output: bool = False
     min_intelligence: int = 0
     min_context: int = 0
+    required_tags: list[str] = []
 
 
 class TaskProfile(BaseModel):
@@ -492,6 +493,24 @@ def supports_tool_calling(litellm_id: str) -> bool:
     return True  # unknown models assumed capable
 
 
+def supports_structured_output(litellm_id: str) -> bool | None:
+    """Registry-declared native structured-output (json_schema) capability.
+
+    Returns the registry's ``structured_output`` value for a known model, or
+    ``None`` for models not in the registry. The execution runtime treats the
+    registry as authoritative for curated models and falls back to litellm's
+    capability map only for unknown ids — litellm's map lags new OpenRouter
+    releases (e.g. deepseek-v4-flash, minimax-m3 were marked unsupported),
+    which silently rerouted schema-capable models onto the instructor path.
+    """
+    config = _load_config()
+    for m in config["models"]:
+        entry = m if isinstance(m, dict) else m.model_dump()
+        if entry.get("litellm_id") == litellm_id:
+            return bool(entry.get("structured_output", False))
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -519,6 +538,12 @@ def _model_qualifies_for_profile(
 ) -> bool:
     """Apply static requirement and availability checks for one model."""
     req = profile.require
+    required_tags = set(req.required_tags)
+    model_tags = set(model.tags)
+    if required_tags and not required_tags.issubset(model_tags):
+        return False
+    if not required_tags and "manual-selection" in model_tags:
+        return False
     if req.structured_output and not model.structured_output:
         return False
     if model.intelligence < req.min_intelligence:

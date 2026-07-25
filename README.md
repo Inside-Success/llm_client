@@ -28,6 +28,24 @@ make worktree-remove BRANCH=plan-22-example
 Those entrypoints should be preferred over ad hoc local worktree commands when
 doing bounded implementation work in this repo.
 
+## Agent collaboration workflows
+
+This branch includes the Claude/Codex collaboration work that replaces manual
+paste-between-terminal loops with structured `llm_client` calls and on-disk
+artifacts:
+
+- `python -m llm_client duet-review --help` reviews an existing plan and,
+  optionally, the implementation diff against that plan.
+- `python -m llm_client review-artifact --help` performs a standalone
+  adversarial review of a patch, plan, decision, or text artifact. It is
+  designed to run in the background while the foreground agent keeps working.
+- `python -m llm_client deliberate-task --help` runs a two-agent symmetric
+  debate, usually `codex/gpt-5.4` plus `claude-code/sonnet`, with persisted
+  positions and synthesis.
+
+See [docs/guides/agent-collaboration.md](docs/guides/agent-collaboration.md)
+for install notes, command examples, and the tracked dogfood evidence map.
+
 ## Install
 
 ```bash
@@ -38,13 +56,13 @@ pip install -e "~/projects/llm_client[structured]"  # + instructor for Pydantic 
 ## Quick start
 
 ```python
-from llm_client import call_llm, get_model
+from llm_client import DEFAULT_EXECUTION_MODEL, call_llm
 
-# Task-based model selection (preferred)
-model = get_model("extraction")
 result = call_llm(
-    model,
+    DEFAULT_EXECUTION_MODEL,
     [{"role": "user", "content": "Summarize this note"}],
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
     task="extraction",
     trace_id="demo/basic",
     max_budget=1.00,
@@ -64,9 +82,11 @@ class Sentiment(BaseModel):
     score: float
 
 sentiment, meta = call_llm_structured(
-    "openrouter/openai/gpt-5-mini",
+    "openrouter/deepseek/deepseek-v4-flash",
     [{"role": "user", "content": "I love this product!"}],
     response_model=Sentiment,
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
     task="sentiment",
     trace_id="demo/sentiment",
     max_budget=1.00,
@@ -74,16 +94,32 @@ sentiment, meta = call_llm_structured(
 print(sentiment.label, sentiment.score, f"${meta.cost:.4f}")
 ```
 
+Callers that own JSON Schema outside Python can use `call_llm_json_schema` or
+the versioned local bridge:
+
+```bash
+python -m llm_client json-schema-call --request request.json
+```
+
+The request requires a model, messages, `responseSchema`, `task`, `traceId`,
+and `maxBudget`. Credentials and provider endpoints are intentionally absent.
+Results are validated against the original schema even when a provider needs
+a narrower projected schema.
+
 ### Async
 
 ```python
 from llm_client import acall_llm, acall_llm_structured, acall_llm_batch
 
-result = await acall_llm("openrouter/openai/gpt-5-mini", messages,
+result = await acall_llm("openrouter/deepseek/deepseek-v4-flash", messages,
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
     task="async_demo", trace_id="demo/async", max_budget=1.00)
 
 # Concurrent batch
-results = await acall_llm_batch("openrouter/openai/gpt-5-mini", [msgs1, msgs2, msgs3],
+results = await acall_llm_batch("openrouter/deepseek/deepseek-v4-flash", [msgs1, msgs2, msgs3],
+    reasoning_effort="none",
+    model_policy="enforce_allowlist",
     max_concurrent=5, task="batch_demo", trace_id="demo/batch", max_budget=2.00)
 ```
 
@@ -103,6 +139,10 @@ Sixteen functions (8 sync + 8 async):
 | `embed` | `aembed` | `EmbeddingResult` | Embeddings |
 
 **Required on every call:** `task=`, `trace_id=`, `max_budget=`
+
+Reasoning-configurable models also require an explicit `reasoning_effort=`.
+Use `"none"` only for routes whose reviewed capability supports turning
+reasoning off; omitted effort never delegates the choice to the provider.
 
 **Result fields:** `.content`, `.usage`, `.cost`, `.marginal_cost`, `.model`,
 `.tool_calls`, `.finish_reason`, `.routing_trace`, `.cache_hit`

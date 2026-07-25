@@ -31,10 +31,13 @@ from llm_client.execution.call_contracts import (
     _DEPRECATED_MODEL_EXCEPTIONS,
     _DEPRECATED_MODELS,
     _WARNED_MODELS,
+    _check_model_deprecation,
 )
 from llm_client.core.config import ClientConfig
 from llm_client.core.data_types import LLMCallResult
 from llm_client.core.model_detection import _resolve_api_base_for_model
+from llm_client.core.model_availability import filter_available_models
+from llm_client.core.model_execution_policy import evaluate_model_execution_policy
 from llm_client.utils.openrouter import _openrouter_routing_enabled
 from llm_client.result_finalization import finalize_result as _finalize_result_base
 from llm_client.result_metadata import (
@@ -73,9 +76,10 @@ def _build_routing_trace(
     sticky_fallback: bool | None = None,
     background_mode: bool | None = None,
     routing_policy: str | None = None,
+    model_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a minimal routing trace for week-1 contract characterization."""
-    return _build_routing_trace_base(
+    trace = _build_routing_trace_base(
         requested_model=requested_model,
         attempted_models=attempted_models,
         selected_model=selected_model,
@@ -85,6 +89,9 @@ def _build_routing_trace(
         background_mode=background_mode,
         routing_policy=routing_policy or _routing_policy_label(),
     )
+    if model_policy is not None:
+        trace["model_policy"] = dict(model_policy)
+    return trace
 
 
 def _resolve_call_plan(
@@ -93,13 +100,56 @@ def _resolve_call_plan(
     fallback_models: list[str] | None,
     api_base: str | None,
     config: ClientConfig | None = None,
+    model_policy: str = "enforce_allowlist",
+    model_justification: str | None = None,
+    reasoning_effort: str | None = None,
 ) -> ResolvedCallPlan:
     """Resolve and log routing plan once per entrypoint."""
     cfg = config or ClientConfig.from_env()
-    plan = resolve_call(
+    resolved_plan = resolve_call(
         CallRequest(model=model, fallback_models=fallback_models, api_base=api_base),
         cfg,
     )
+    policy_decision = evaluate_model_execution_policy(
+        resolved_plan.models,
+        mode=model_policy,
+        justification=model_justification,
+        reasoning_effort=reasoning_effort,
+    )
+    for resolved_model in resolved_plan.models:
+        _check_model_deprecation(resolved_model)
+    available_models, suppressed_models = filter_available_models(resolved_plan.models)
+    if not available_models:
+        suppressed_summary = ", ".join(
+            f"{item['model']}[{item['reason']} retry_after_s={item['retry_after_s']}]"
+            for item in suppressed_models
+        )
+        raise RuntimeError(
+            "All models in the resolved chain are temporarily unavailable due to recent provider exhaustion: "
+            f"{suppressed_summary}"
+        )
+
+    routing_trace = dict(resolved_plan.routing_trace)
+    routing_trace["model_policy"] = policy_decision.model_dump(mode="json")
+    if suppressed_models:
+        routing_trace["suppressed_models"] = suppressed_models
+        for item in suppressed_models:
+            logger.warning(
+                "ROUTE_SKIP_UNAVAILABLE: skipping %s (%s, retry_after_s=%.1f)",
+                item["model"],
+                item["reason"],
+                item["retry_after_s"],
+            )
+    plan = ResolvedCallPlan(
+        requested_model=resolved_plan.requested_model,
+        models=available_models,
+        primary_model=available_models[0],
+        fallback_models=available_models[1:],
+        routing_policy=resolved_plan.routing_policy,
+        requested_api_base=resolved_plan.requested_api_base,
+        routing_trace=routing_trace,
+    )
+
     normalization_events = plan.routing_trace.get("normalization_events")
     if isinstance(normalization_events, list):
         for event in normalization_events:
@@ -116,6 +166,7 @@ def _build_model_chain(
     model: str,
     fallback_models: list[str] | None,
     config: ClientConfig | None = None,
+    reasoning_effort: str | None = None,
 ) -> list[str]:
     """Build primary+fallback model chain with stable de-duplication."""
     plan = _resolve_call_plan(
@@ -123,6 +174,7 @@ def _build_model_chain(
         fallback_models=fallback_models,
         api_base=None,
         config=config,
+        reasoning_effort=reasoning_effort,
     )
     return plan.models
 
@@ -202,6 +254,7 @@ def _build_structured_call_result(
     effective_api_base: str | None,
     background_mode: bool | None = None,
     routing_policy: str,
+    model_policy: dict[str, Any] | None = None,
 ) -> LLMCallResult:
     """Build and identity-annotate a structured-call result consistently."""
     llm_result = LLMCallResult(
@@ -226,6 +279,7 @@ def _build_structured_call_result(
             effective_api_base=effective_api_base,
             background_mode=background_mode,
             routing_policy=routing_policy,
+            model_policy=model_policy,
         ),
     )
 
@@ -394,6 +448,7 @@ def _log_call_event(
     response_format_type: str | None = None,
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
+    logical_call_id: str | None = None,
 ) -> None:
     """Write one observability record for an LLM call."""
     from llm_client.observability.replay import snapshot_fingerprint as _snapshot_fingerprint
@@ -420,6 +475,7 @@ def _log_call_event(
         response_format_type=response_format_type,
         validation_errors=validation_errors,
         causal_parent_id=causal_parent_id,
+        logical_call_id=logical_call_id,
     )
 
 
@@ -485,6 +541,10 @@ def _clean_schema_for_gemini(schema: dict[str, Any]) -> dict[str, Any]:
     def _clean(node: Any) -> Any:
         if not isinstance(node, dict):
             return node
+        # Track whether this node was a free-form dict (additionalProperties: true).
+        # If so, don't add an empty `properties: {}` later — that would convert a
+        # permissive schema into a zero-property schema, which OpenAI enforces strictly.
+        _was_open_object = node.get("additionalProperties") is True
         # Remove unsupported top-level fields
         for key in ("additionalProperties", "strict", "title", "$schema"):
             node.pop(key, None)
@@ -511,8 +571,11 @@ def _clean_schema_for_gemini(schema: dict[str, Any]) -> dict[str, Any]:
         items = node.get("items")
         if isinstance(items, dict):
             node["items"] = _clean(items)
-        # Ensure object type has properties
-        if node.get("type") == "object" and "properties" not in node:
+        # Ensure object type has properties (required by Gemini).
+        # Exception: free-form dicts (additionalProperties was True) — adding
+        # empty properties: {} would make them MORE restrictive, not less, because
+        # OpenAI and other providers may enforce "no properties declared" strictly.
+        if node.get("type") == "object" and "properties" not in node and not _was_open_object:
             node["properties"] = {}
         return node
 

@@ -20,6 +20,26 @@ if TYPE_CHECKING:
     from llm_client.core.config import ClientConfig
 
 
+def _bind_codex_reasoning_effort(
+    model: str,
+    runtime_kwargs: dict[str, Any],
+    reasoning_effort: str | None,
+) -> None:
+    """Translate the public reasoning control to the Codex adapter contract."""
+
+    if not model.startswith("codex"):
+        return
+    legacy_effort = runtime_kwargs.get("model_reasoning_effort")
+    if (
+        legacy_effort is not None
+        and str(legacy_effort).strip().lower() != reasoning_effort
+    ):
+        raise ValueError(
+            "reasoning_effort conflicts with model_reasoning_effort for Codex"
+        )
+    runtime_kwargs["model_reasoning_effort"] = reasoning_effort
+
+
 def _stream_terminal_payload(
     stream: Any,
     resolved_model: str | None,
@@ -120,6 +140,14 @@ def _emit_stream_terminal_event(
     )
 
 
+def _stream_settled_cost(stream: Any) -> float:
+    """Read the completed stream's normal result cost after observability writes."""
+
+    result = stream.result
+    raw_cost = getattr(result, "cost", 0.0)
+    return 0.0 if raw_cost is None else float(raw_cost)
+
+
 class _SyncStreamLifecycleAdapter:
     """Wrap a sync stream and emit lifecycle terminal events when consumed."""
 
@@ -139,6 +167,7 @@ class _SyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
+        budget_scope_lease: Any = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -154,6 +183,7 @@ class _SyncStreamLifecycleAdapter:
         self._stall_after_s = stall_after_s
         self._started_at = started_at
         self._finalized = False
+        self._budget_scope_lease = budget_scope_lease
 
     def __iter__(self) -> "_SyncStreamLifecycleAdapter":
         return self
@@ -193,6 +223,29 @@ class _SyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
+        if error is None:
+            _client._settle_budget_scope(
+                self._budget_scope_lease,
+                settled_cost=_stream_settled_cost(self._stream),
+            )
+        else:
+            _client._release_budget_scope(self._budget_scope_lease)
+
+    def close(self) -> None:
+        """Explicitly abandon a stream and idempotently release its lease."""
+
+        if self._finalized:
+            return
+        error: Exception = RuntimeError("stream closed before completion")
+        close = getattr(self._stream, "close", None)
+        try:
+            if callable(close):
+                close()
+        except Exception as exc:
+            error = exc
+            raise
+        finally:
+            self._finalize(error=error)
 
     @property
     def result(self) -> Any:
@@ -219,6 +272,7 @@ class _AsyncStreamLifecycleAdapter:
         heartbeat_interval_s: float,
         stall_after_s: float,
         started_at: float,
+        budget_scope_lease: Any = None,
     ) -> None:
         self._stream = stream
         self._call_id = call_id
@@ -234,6 +288,7 @@ class _AsyncStreamLifecycleAdapter:
         self._stall_after_s = stall_after_s
         self._started_at = started_at
         self._finalized = False
+        self._budget_scope_lease = budget_scope_lease
 
     def __aiter__(self) -> "_AsyncStreamLifecycleAdapter":
         return self
@@ -273,6 +328,29 @@ class _AsyncStreamLifecycleAdapter:
             started_at=self._started_at,
             monitor=self._monitor,
         )
+        if error is None:
+            _client._settle_budget_scope(
+                self._budget_scope_lease,
+                settled_cost=_stream_settled_cost(self._stream),
+            )
+        else:
+            _client._release_budget_scope(self._budget_scope_lease)
+
+    async def aclose(self) -> None:
+        """Explicitly abandon an async stream and idempotently release its lease."""
+
+        if self._finalized:
+            return
+        error: Exception = RuntimeError("stream closed before completion")
+        close = getattr(self._stream, "aclose", None)
+        try:
+            if callable(close):
+                await close()
+        except Exception as exc:
+            error = exc
+            raise
+        finally:
+            await self._finalize(error=error)
 
     @property
     def result(self) -> Any:
@@ -300,20 +378,37 @@ def stream_llm_impl(
     **kwargs: Any,
 ) -> LLMStream:
     """Implementation for stream_llm extracted out of client facade."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     _client._check_model_deprecation(model)
     cfg = config or _client.ClientConfig.from_env()
     timeout = _client._normalize_timeout(timeout, caller="stream_llm")
     task = kwargs.pop("task", None)
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
+    budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
+    budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
+    budget_scope_mode = kwargs.pop("budget_scope_mode", "sequential")
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,
         trace_id,
         max_budget,
         caller="stream_llm",
     )
-    _client._check_budget(trace_id, max_budget)
+    budget_scope_lease = _client._acquire_budget_scope(
+        trace_id,
+        max_budget,
+        reservation=budget_reservation,
+        budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
+        warning_sink=_entry_warnings,
+    )
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)
@@ -330,9 +425,14 @@ def stream_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
+    _bind_codex_reasoning_effort(plan.primary_model, runtime_kwargs, reasoning_effort)
     routing_policy = str(plan.routing_trace.get("routing_policy", _client._routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     _warnings = list(_entry_warnings)
     backoff_fn = r.backoff or _client.exponential_backoff
 
@@ -413,6 +513,7 @@ def stream_llm_impl(
                         requested_api_base=api_base,
                         effective_api_base=current_api_base,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ),
             )
@@ -488,6 +589,7 @@ def stream_llm_impl(
             heartbeat_interval_s=heartbeat_interval_s,
             stall_after_s=stall_after_s,
             started_at=started_at,
+            budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
         _emit_stream_terminal_event(
@@ -506,6 +608,7 @@ def stream_llm_impl(
             started_at=started_at,
             monitor=monitor,
         )
+        _client._release_budget_scope(budget_scope_lease)
         raise _client.wrap_error(exc) from exc
 
 
@@ -529,20 +632,37 @@ async def astream_llm_impl(
     **kwargs: Any,
 ) -> AsyncLLMStream:
     """Implementation for astream_llm extracted out of client facade."""
+    reasoning_effort = (
+        str(reasoning_effort).strip().lower()
+        if reasoning_effort is not None
+        else None
+    )
     _client._check_model_deprecation(model)
     cfg = config or _client.ClientConfig.from_env()
     timeout = _client._normalize_timeout(timeout, caller="astream_llm")
     task = kwargs.pop("task", None)
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
+    budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
+    budget_scope_trace_id: str | None = kwargs.pop("budget_scope_trace_id", None)
+    budget_scope_mode = kwargs.pop("budget_scope_mode", "sequential")
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
+    model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
+    model_justification = kwargs.pop("model_justification", None)
     task, trace_id, max_budget, _entry_warnings = _client._require_tags(
         task,
         trace_id,
         max_budget,
         caller="astream_llm",
     )
-    _client._check_budget(trace_id, max_budget)
+    budget_scope_lease = _client._acquire_budget_scope(
+        trace_id,
+        max_budget,
+        reservation=budget_reservation,
+        budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
+        warning_sink=_entry_warnings,
+    )
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)
@@ -559,9 +679,14 @@ async def astream_llm_impl(
         fallback_models=fallback_models,
         api_base=api_base,
         config=cfg,
+        model_policy=model_policy,
+        model_justification=model_justification,
+        reasoning_effort=reasoning_effort,
     )
     models = plan.models
+    _bind_codex_reasoning_effort(plan.primary_model, runtime_kwargs, reasoning_effort)
     routing_policy = str(plan.routing_trace.get("routing_policy", _client._routing_policy_label(cfg)))
+    model_policy_trace = plan.routing_trace.get("model_policy")
     _warnings = list(_entry_warnings)
     backoff_fn = r.backoff or _client.exponential_backoff
 
@@ -642,6 +767,7 @@ async def astream_llm_impl(
                         requested_api_base=api_base,
                         effective_api_base=current_api_base,
                         routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
                     ),
                 ),
             )
@@ -719,6 +845,7 @@ async def astream_llm_impl(
             heartbeat_interval_s=heartbeat_interval_s,
             stall_after_s=stall_after_s,
             started_at=started_at,
+            budget_scope_lease=budget_scope_lease,
         )
     except Exception as exc:
         _emit_stream_terminal_event(
@@ -737,4 +864,5 @@ async def astream_llm_impl(
             started_at=started_at,
             monitor=monitor,
         )
+        _client._release_budget_scope(budget_scope_lease)
         raise _client.wrap_error(exc) from exc

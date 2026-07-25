@@ -10,8 +10,10 @@ Usage:
 
     # Sync
     result = call_llm(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         task="demo",
         trace_id="init/sync",
         max_budget=1.0,
@@ -22,22 +24,28 @@ Usage:
     result = call_llm(
         "claude-code",
         [{"role": "user", "content": "Fix the bug"}],
+        model_policy="enforce_allowlist",
+        model_justification="This task requires workspace editing tools.",
         task="demo_agent",
         trace_id="init/agent",
         max_budget=0,
     )
     result = call_llm(
-        "claude-code/opus",
+        "claude-code/sonnet",
         [{"role": "user", "content": "Review code"}],
+        model_policy="enforce_allowlist",
+        model_justification="This task requires an independent workspace reviewer.",
         task="demo_agent",
-        trace_id="init/agent_opus",
+        trace_id="init/agent_sonnet",
         max_budget=0,
     )
 
     # Batch (concurrent)
     results = call_llm_batch(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [msgs1, msgs2, msgs3],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         max_concurrent=5,
         task="demo_batch",
         trace_id="init/batch",
@@ -46,8 +54,10 @@ Usage:
 
     # Streaming
     for chunk in stream_llm(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         task="demo_stream",
         trace_id="init/stream",
         max_budget=1.0,
@@ -58,8 +68,10 @@ Usage:
     from llm_client import acall_llm, astream_llm
 
     result = await acall_llm(
-        "gpt-4o",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Hello"}],
+        reasoning_effort="none",
+        model_policy="enforce_allowlist",
         task="demo_async",
         trace_id="init/async",
         max_budget=1.0,
@@ -126,6 +138,9 @@ from llm_client.core.errors import (
     LLMConfigurationError,
     LLMCapabilityError,
     LLMBudgetExceededError,
+    LLMBudgetLeaseLostError,
+    LLMBudgetReservationOverrunError,
+    LLMBudgetReservationStoreError,
     LLMContentFilterError,
     LLMError,
     LLMModelNotFoundError,
@@ -137,14 +152,20 @@ from llm_client.core.errors import (
 )
 
 from llm_client.utils.rate_limit import configure as configure_rate_limit
+from llm_client.utils.logging_setup import setup_logging
 from llm_client.observability import (
     ActiveFeatureProfile,
     ActiveExperimentRun,
+    RuntimeSelectedAttemptReceipt,
+    RuntimeSelectedRawContent,
     ExperimentRun,
+    SelectedAttemptReceiptError,
+    StructuredRawArtifactError,
     ToolCallResult,
     activate_feature_profile,
     activate_experiment_run,
     compare_call_snapshots,
+    cleanup_structured_raw_artifacts,
     compare_runs,
     compare_cohorts,
     configure_logging,
@@ -162,6 +183,10 @@ from llm_client.observability import (
     get_active_experiment_run_id,
     get_active_feature_profile,
     get_active_llm_calls,
+    get_call_lifecycle,
+    get_runtime_selected_attempt_receipt,
+    get_runtime_selected_raw_content,
+    diagnose_runtime_selected_attempt_receipt_for_trace,
     get_experiment_aggregates,
     get_run,
     get_run_items,
@@ -191,6 +216,16 @@ from llm_client.core.model_selection import (
     resolve_model_selection,
     strict_model_policy,
 )
+from llm_client.core.model_execution_policy import (
+    ALLOWED_EXECUTION_MODELS,
+    DEFAULT_EXECUTION_MODEL,
+    ModelExecutionDecision,
+    evaluate_model_execution_policy,
+)
+from llm_client.route_certification_runtime import (
+    openrouter_native_provider_schema,
+    route_schema_sha256,
+)
 from llm_client.prompt_assets import (
     PromptAssetManifest,
     PromptAssetRef,
@@ -200,7 +235,17 @@ from llm_client.prompt_assets import (
     resolve_prompt_asset,
 )
 from llm_client.prompts import render_prompt
-# Relocated (Plan #17): agent_spec → project-meta, validators → agentic_scaffolding
+from llm_client.provider_limits import (
+    OpenRouterKeyEnvironmentV1,
+    OpenRouterKeyLimitObservationV1,
+    OpenRouterProviderLimitPreflightV1,
+    ProviderLimitErrorCodeV1,
+    ProviderLimitObservationErrorV1,
+    ProviderLimitObserverConfigV1,
+    inspect_openrouter_key_environment_v1,
+    observe_openrouter_key_limit_v1,
+)
+# Relocated: agent_spec → prompt_eval, validators → agentic_scaffolding
 
 if _TYPE_CHECKING:
     from llm_client.difficulty import (
@@ -235,9 +280,11 @@ from llm_client.tools.tool_utils import (
 )
 from llm_client.tools.decorator import (
     ToolInfo,
-    ToolRegistry as ToolDecoratorRegistry,
+    ToolRegistry,
+    ToolRegistry as ToolDecoratorRegistry,  # backwards compat alias
     ToolResult,
-    registry as tool_registry,
+    registry,
+    registry as tool_registry,  # backwards compat alias
     tool,
 )
 
@@ -279,6 +326,14 @@ from llm_client.core.client import (
     stream_llm,
     stream_llm_with_tools,
     strip_fences,
+)
+from llm_client.execution.call_contracts import StructuredOutputPolicy
+from llm_client.json_schema import (
+    JsonScalar,
+    JsonValue,
+    acall_llm_json_schema,
+    call_llm_json_schema,
+    json_schema_response_model,
 )
 from llm_client.core.data_types import TurnEvent
 from llm_client.parsing_utils import (
@@ -331,6 +386,7 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "ResolvedCallPlan",
     "resolve_call",
     "RetryPolicy",
+    "StructuredOutputPolicy",
     "acall_llm",
     "acall_llm_batch",
     "acall_llm_structured",
@@ -351,9 +407,17 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "stream_llm",
     "stream_llm_with_tools",
     "compare_call_snapshots",
+    "cleanup_structured_raw_artifacts",
+    "RuntimeSelectedAttemptReceipt",
+    "RuntimeSelectedRawContent",
+    "SelectedAttemptReceiptError",
+    "StructuredRawArtifactError",
     "configure_logging",
     "format_call_diff",
     "get_call_snapshot",
+    "get_runtime_selected_attempt_receipt",
+    "get_runtime_selected_raw_content",
+    "diagnose_runtime_selected_attempt_receipt_for_trace",
     "import_jsonl",
     "log_embedding",
     "log_foundation_event",
@@ -383,8 +447,11 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "tool",
     "ToolResult",
     "ToolInfo",
+    "ToolRegistry",
+    "registry",
     "ToolDecoratorRegistry",
     "tool_registry",
+    "setup_logging",
 )
 
 _COMPAT_HOLD_EXPORTS: tuple[str, ...] = (
@@ -411,9 +478,10 @@ _COMPAT_HOLD_EXPORTS: tuple[str, ...] = (
     "get_active_experiment_run_id",
     "get_active_feature_profile",
     "get_active_llm_calls",
+    "get_call_lifecycle",
     "get_background_mode_adoption",
     "get_completed_traces",
-    # Relocated (Plan #17): agent_spec, validators
+    # Relocated: agent_spec, validators
     "callable_to_openai_tool",
     "prepare_direct_tools",
     "PlanningConfig",
@@ -508,7 +576,7 @@ def __getattr__(name: str) -> object:
         "load_gate_policy": "prompt_eval.experiment_eval",
         "build_gate_signals": "prompt_eval.experiment_eval",
         "evaluate_gate_policy": "prompt_eval.experiment_eval",
-        "load_agent_spec": "project-meta (scripts/meta/agent_spec.py)",
+        "load_agent_spec": "prompt_eval.agent_spec",
         "experiment_run": "prompt_eval.experiment_eval",
     }
     if name in _EXTRACTED_FUNCTIONS:

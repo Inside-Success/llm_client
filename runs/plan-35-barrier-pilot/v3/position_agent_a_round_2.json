@@ -1,0 +1,122 @@
+{
+  "agent_name": "agent_a",
+  "agreed_with_peer": [
+    "b1_polite_convergence_loophole",
+    "b2_evidence_path_is_existence_not_support",
+    "b3_deliberation_has_no_taskfamily",
+    "b4_synthesis_judge_is_an_interested_party",
+    "b5_silent_rename_uses_brittle_prefix_key",
+    "b7_partition_missing_arbiter_pattern"
+  ],
+  "claims": [
+    {
+      "claim": "The single highest-priority next improvement is to promote the verifier from a passive veto ledger into an active adjudicator/repair loop: unresolved citation/support failures should be emitted as machine-readable obligations and fed into the next-round prompt. Today agents only see the peer's last Position and their own prior Position, while the verifier only persists `verifier_ledger` and `prior_positions_by_agent`, so a failed verification can block convergence without telling either agent what must be repaired.",
+      "claim_id": "A1_active_adjudicator_loop_top_priority",
+      "evidence_path": "llm_client/workflow/deliberate.py:361-419;llm_client/workflow/deliberate.py:558-607;llm_client/workflow/deliberate.py:694-707;llm_client/workflow/deliberate_verifier.py:123-136",
+      "severity": "high"
+    },
+    {
+      "claim": "The first thing that breaks as rounds grow is not context bloat; the round contract is already off by one. The graph increments `state[\"round\"]` before the router runs, then uses that incremented value for `detect_convergence`, `synthesis.json.round`, and `signoff.total_rounds`. That means `max_rounds=3` can terminate as `productive_disagreement` after only two completed position rounds, and the persisted round counts are inflated.",
+      "claim_id": "A2_round_accounting_off_by_one",
+      "evidence_path": "llm_client/workflow/deliberate.py:549-554;llm_client/workflow/deliberate.py:694-705;llm_client/workflow/deliberate.py:634-638;llm_client/workflow/deliberate.py:668-677;llm_client/workflow/deliberate.py:837-847;tests/test_workflow_deliberate.py:115-165",
+      "severity": "high"
+    },
+    {
+      "claim": "Required `evidence_path` makes claims parseable, not semantically falsifiable. Verification ends once a citation parses, resolves, and yields a snippet; `PositionEvidence.content_snippet` is defined in the schema but never checked by the verifier, and the live smoke test only proves that providers accept the Position schema, not that citations support claims.",
+      "claim_id": "A3_evidence_path_is_parseable_not_falsifiable",
+      "evidence_path": "llm_client/workflow/deliberate.py:117-129;llm_client/workflow/deliberate_verifier.py:318-373;llm_client/workflow/deliberate_verifier.py:381-417;tests/test_workflow_schema_smoke.py:14-17;tests/test_workflow_schema_smoke.py:100-125",
+      "severity": "high"
+    },
+    {
+      "claim": "The shipped deliberation is structurally pair-only and therefore cannot add a third substantive perspective or neutral skeptic where shared blind spots matter. Both the CLI and builder reject anything but two agents, and the default synthesis model is the same model family as default `agent_b`, so even the tie-breaking step is not diversity-increasing by default.",
+      "claim_id": "A4_pair_only_topology_and_nonneutral_synthesis",
+      "evidence_path": "llm_client/cli/deliberate.py:32-60;llm_client/workflow/deliberate.py:66-69;llm_client/workflow/deliberate.py:768-779;llm_client/workflow/deliberate.py:798-829",
+      "severity": "warn"
+    },
+    {
+      "claim": "Deliberation claims it shares the duet's `TaskFamily` specialization chassis, but no `task_family` hook exists in the deliberation builder or CLI. By contrast duet resolves registered families through `duet_registry` and first-party `profiles`, so the sibling workflows are asymmetrically extensible.",
+      "claim_id": "A5_deliberation_lacks_duet_profile_extension",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-31;llm_client/workflow/deliberate.py:723-850;llm_client/workflow/duet.py:833-884;llm_client/workflow/duet_base.py:63-92;llm_client/workflow/duet_registry.py:16-50;llm_client/cli/duet.py:130-149",
+      "severity": "warn"
+    },
+    {
+      "claim": "Asymmetric duet plus symmetric deliberation is a reasonable base partition, but it is still missing a third workflow pattern: adjudicated audit/repair. Duet has reviewer-gated revise/block control flow, while deliberation has symmetric peers and a passive verifier; nothing currently requires agents to answer adjudicated obligations before termination.",
+      "claim_id": "A6_missing_third_pattern",
+      "evidence_path": "llm_client/workflow/duet.py:797-825;llm_client/workflow/deliberate.py:226-315;llm_client/workflow/deliberate.py:558-607",
+      "severity": "info"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:549-554;llm_client/workflow/deliberate.py:694-707;llm_client/workflow/deliberate.py:837-847;llm_client/workflow/deliberate.py:361-419",
+      "my_counterclaim": "The earlier failure is round-accounting drift plus repair starvation, not ledger growth: the graph spends the round counter before checking convergence and never feeds verifier findings back into the next prompt, so the chassis can terminate early or keep looping blindly before ledger size matters.",
+      "peer_claim_id": "b6_max_rounds_first_failure_is_ledger_growth_not_prompt_bloat"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:361-419;llm_client/workflow/deliberate.py:558-607;llm_client/workflow/deliberate.py:694-707;llm_client/workflow/deliberate_verifier.py:123-136;llm_client/workflow/deliberate_verifier.py:381-417",
+      "my_counterclaim": "Semantic claim-support verification is necessary but not sufficient as the top next move; without injecting verifier findings into the next-round prompt and making agents answer them, a stricter verifier mostly creates more non-converged rounds rather than better repairs.",
+      "peer_claim_id": "b8_highest_leverage_next_improvement"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:386-418",
+      "content_snippet": "Prompt includes only \"Peer's most-recent position\" and \"Your prior position (last round)\" before the Position schema; there is no verifier-ledger section.",
+      "label": "position_prompt_inputs"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:570-607",
+      "content_snippet": "Verifier persists `verifier_ledger.json` and returns `{\"verifier_ledger\": ..., \"prior_positions_by_agent\": next_prior}`.",
+      "label": "verifier_updates_state_only"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:694-707",
+      "content_snippet": "`verdict = detect_convergence(...)`; if verdict is `None`, router returns `\"agent_a\"` and the next round starts with no verifier findings injected.",
+      "label": "router_loops_without_repair_contract"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:549-554;llm_client/workflow/deliberate.py:798-825",
+      "content_snippet": "`round_increment` does `state.get(\"round\", 0) + 1`, and the graph routes from `verifier` to `round_increment`, then runs the post-round router there.",
+      "label": "round_increment_before_router"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:634-638;llm_client/workflow/deliberate.py:668-677",
+      "content_snippet": "Synthesis writes `payload[\"round\"] = state.get(\"round\", 0)` and signoff sets `total_rounds=state.get(\"round\", 0)`.",
+      "label": "synthesis_and_signoff_use_incremented_round"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:350-373",
+      "content_snippet": "If `_extract_snippet` succeeds, `_verify_one_citation` returns `status=\"verified\"` with `file_path`, `line_range`, `snippet`, and `notes`.",
+      "label": "verified_status_is_existence_plus_snippet"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:117-129;llm_client/workflow/deliberate_verifier.py:381-417",
+      "content_snippet": "`PositionEvidence` defines `label`, `citation`, `content_snippet`, but `verify_position` walks only `claims` and `disagreed_with_peer` evidence paths.",
+      "label": "position_evidence_unused_by_verifier"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:14-17;tests/test_workflow_schema_smoke.py:100-125",
+      "content_snippet": "The smoke tests are a \"minimum live-LLM round-trip\" that asserts the Position schema is accepted by providers; they do not test citation truth or convergence behavior.",
+      "label": "schema_smoke_scope"
+    },
+    {
+      "citation": "llm_client/cli/deliberate.py:55-60;llm_client/workflow/deliberate.py:768-779",
+      "content_snippet": "CLI errors unless `--agents` has exactly 2 entries, and builder raises `Deliberation v1 requires exactly 2 agents`.",
+      "label": "pair_only_gate"
+    },
+    {
+      "citation": "llm_client/workflow/duet.py:841-883;llm_client/workflow/duet_registry.py:16-50",
+      "content_snippet": "Duet builder accepts `task_family`, imports profiles, and resolves the family through `get_task_family(...)` before building nodes.",
+      "label": "duet_has_taskfamily_registry"
+    }
+  ],
+  "open_questions": [
+    "Should the adjudication contract live in a new verifier artifact with obligation IDs, or should `Position` grow an explicit field for answering prior obligations?",
+    "When fixing round semantics, should state track both `next_round_to_run` and `completed_rounds` so routing and persisted artifacts stop overloading one field?"
+  ],
+  "reviewer_model": "codex/gpt-5.4",
+  "reviewer_summary": "Revised ranking after the peer read: (1) the passive verifier is the load-bearing miss, so the next improvement should be an adjudication/repair loop that emits support failures as obligations and feeds them into the next round; this subsumes my prior repair-loop point and incorporates the peer's semantic-verification concern. (2) Round accounting is already off by one, so the `max_rounds > 5` discussion is premature until `round` means one thing consistently. (3) `evidence_path` is still only existence-checked, so claims remain gameable even though they are inspectable. (4) Pair-only topology plus default synthesis-model overlap leaves blind spots a third perspective could catch. (5) Deliberation still lacks the duet's `TaskFamily` extension path. Single highest-priority improvement: promote the verifier into an active adjudicator that produces machine-readable unresolved obligations and support failures, threads them into the next-round prompts, and gates convergence on their resolution.",
+  "round": 2,
+  "state": "revised"
+}

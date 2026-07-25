@@ -9,11 +9,13 @@ are imported directly from ``call_contracts``, ``model_detection``, and
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json as _json
 import logging
 from typing import Any
 
 import litellm
+from pydantic import BaseModel
 
 from llm_client.execution.background_runtime import _needs_background_mode
 from llm_client.execution.call_contracts import (
@@ -23,11 +25,31 @@ from llm_client.execution.call_contracts import (
     _resolve_unsupported_param_policy,
     _strip_llm_internal_kwargs,
 )
-from llm_client.utils.cost_utils import FALLBACK_COST_FLOOR_USD_PER_TOKEN, _parse_cost_result
+from llm_client.utils.cost_utils import (
+    FALLBACK_COST_FLOOR_USD_PER_TOKEN,
+    _add_token_details,
+    _parse_cost_result,
+    _provider_reported_cost,
+)
 from llm_client.core.data_types import LLMCallResult
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
+from llm_client.utils.openrouter import _enable_openrouter_inline_metadata
 
 logger = logging.getLogger(__name__)
+
+
+_PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS = frozenset({
+    "exclusiveMaximum",
+    "exclusiveMinimum",
+    "maxItems",
+    "maxLength",
+    "maximum",
+    "minItems",
+    "minLength",
+    "minimum",
+    "multipleOf",
+    "pattern",
+})
 
 
 def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -51,6 +73,177 @@ def _strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     for defn in schema.get("$defs", {}).values():
         _strict_json_schema(defn)
     return schema
+
+
+def _strict_openai_response_model_schema(
+    response_model: type[BaseModel],
+) -> dict[str, Any]:
+    """Return the OpenAI SDK's provider-compatible strict Pydantic schema.
+
+    The SDK normalizer resolves a Pydantic ``$ref`` when a field-level
+    description is its sibling and removes unsupported ``None`` defaults.
+    Our generic dictionary helper does neither, and direct Responses rejects
+    those shapes before generation.
+    """
+    from openai.lib._pydantic import to_strict_json_schema
+
+    return to_strict_json_schema(response_model)
+
+
+def _provider_compatible_discriminated_union_schema(
+    schema: dict[str, Any],
+) -> dict[str, Any]:
+    """Project provably disjoint ``oneOf`` unions onto provider-safe ``anyOf``.
+
+    Some OpenAI-compatible structured-output routes reject ``oneOf`` even when
+    Pydantic emits it for a discriminated union.  ``anyOf`` has identical
+    acceptance semantics when every branch requires the same property with a
+    distinct literal value.  Rewrite only that provable case; leave arbitrary
+    or overlapping ``oneOf`` schemas unchanged so unsupported contracts still
+    fail visibly at the provider boundary.  Callers continue to validate the
+    response with the original Pydantic model.
+    """
+
+    projected = deepcopy(schema)
+    _project_disjoint_one_of_unions(projected, root=projected, visited=set())
+    return projected
+
+
+def _project_disjoint_one_of_unions(
+    node: dict[str, Any],
+    *,
+    root: dict[str, Any],
+    visited: set[int],
+) -> None:
+    """Mutate one private schema copy without expanding internal references."""
+
+    node_identity = id(node)
+    if node_identity in visited:
+        return
+    visited.add(node_identity)
+
+    branches = node.get("oneOf")
+    if isinstance(branches, list) and len(branches) >= 2:
+        resolved = [
+            _resolve_local_schema_branch(branch, root)
+            for branch in branches
+            if isinstance(branch, dict)
+        ]
+        if len(resolved) == len(branches) and _branches_have_disjoint_literals(
+            resolved,
+            discriminator=node.get("discriminator"),
+        ):
+            node["anyOf"] = node.pop("oneOf")
+            node.pop("discriminator", None)
+
+    for value in node.values():
+        if isinstance(value, dict):
+            _project_disjoint_one_of_unions(value, root=root, visited=visited)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _project_disjoint_one_of_unions(item, root=root, visited=visited)
+
+
+def _resolve_local_schema_branch(
+    branch: dict[str, Any],
+    root: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve a bare local JSON Pointer used by Pydantic union branches."""
+
+    ref = branch.get("$ref")
+    if not isinstance(ref, str) or not ref.startswith("#/") or len(branch) != 1:
+        return branch
+    current: Any = root
+    for raw_part in ref[2:].split("/"):
+        part = raw_part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or part not in current:
+            return branch
+        current = current[part]
+    return current if isinstance(current, dict) else branch
+
+
+def _branches_have_disjoint_literals(
+    branches: list[dict[str, Any]],
+    *,
+    discriminator: Any,
+) -> bool:
+    """Return true only for a common required property with unique constants."""
+
+    requested_property: str | None = None
+    if isinstance(discriminator, dict):
+        property_name = discriminator.get("propertyName")
+        if isinstance(property_name, str) and property_name:
+            requested_property = property_name
+
+    candidates: set[str] | None = None
+    for branch in branches:
+        properties = branch.get("properties")
+        required = branch.get("required")
+        if not isinstance(properties, dict) or not isinstance(required, list):
+            return False
+        literal_properties = {
+            name
+            for name, value in properties.items()
+            if name in required and isinstance(value, dict) and "const" in value
+        }
+        candidates = (
+            literal_properties
+            if candidates is None
+            else candidates.intersection(literal_properties)
+        )
+
+    if requested_property is not None:
+        if not candidates or requested_property not in candidates:
+            return False
+        candidates = {requested_property}
+    if not candidates:
+        return False
+
+    for property_name in candidates:
+        values = [branch["properties"][property_name]["const"] for branch in branches]
+        try:
+            if len(set(values)) == len(values):
+                return True
+        except TypeError:
+            continue
+    return False
+
+
+def _openrouter_compatible_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Project a strict schema onto OpenRouter's structural subset.
+
+    OpenRouter's provider routes reject value-level JSON Schema constraints such
+    as ``minimum`` for some native-schema backends.  Those constraints are not
+    reliably decode-enforced by providers in any case; callers still validate
+    the returned JSON with the original Pydantic response model.  Keep the
+    structural contract (objects, properties, required fields, enums, and
+    additional-properties policy) in the provider request while retaining the
+    full local validation contract.
+    """
+
+    projected = _provider_compatible_discriminated_union_schema(schema)
+    _project_openrouter_compatible_schema(projected)
+    return projected
+
+
+def _project_openrouter_compatible_schema(schema: dict[str, Any]) -> None:
+    """Mutate one private schema copy onto OpenRouter's structural subset."""
+
+    for key in _PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS:
+        schema.pop(key, None)
+    if not schema:
+        raise ValueError(
+            "OpenRouter native JSON Schema cannot represent an unconstrained "
+            "value schema; define an explicit structural response contract."
+        )
+    for value in schema.values():
+        if isinstance(value, dict):
+            _project_openrouter_compatible_schema(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _project_openrouter_compatible_schema(item)
 
 
 def _convert_messages_to_input(messages: list[dict[str, Any]]) -> str:
@@ -171,6 +364,7 @@ def _prepare_responses_kwargs(
         provider_kwargs["tools"] = _convert_tools_for_responses_api(provider_kwargs["tools"])
 
     resp_kwargs.update(provider_kwargs)
+    _enable_openrouter_inline_metadata(model, resp_kwargs)
     return resp_kwargs
 
 
@@ -184,15 +378,21 @@ def _extract_responses_usage(response: Any) -> dict[str, Any]:
             "completion_tokens": getattr(usage, "output_tokens", 0) or 0,
             "total_tokens": getattr(usage, "total_tokens", 0) or 0,
         }
-        itd = getattr(usage, "input_tokens_details", None)
-        if itd is not None:
-            result["cached_tokens"] = getattr(itd, "cached_tokens", None) or 0
+        _add_token_details(
+            result,
+            prompt_details=getattr(usage, "input_tokens_details", None),
+            completion_details=getattr(usage, "output_tokens_details", None),
+        )
         return result
     return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
 def _compute_responses_cost(response: Any, usage: dict[str, Any]) -> tuple[float, str]:
-    """Compute cost for one Responses API call."""
+    """Compute Responses cost with the same precedence as Completions."""
+
+    provider_cost = _provider_reported_cost(response)
+    if provider_cost is not None:
+        return provider_cost, "provider_reported"
 
     try:
         cost = float(litellm.completion_cost(completion_response=response))
@@ -200,10 +400,6 @@ def _compute_responses_cost(response: Any, usage: dict[str, Any]) -> tuple[float
             return cost, "computed"
     except Exception:
         pass
-
-    raw_usage = getattr(response, "usage", None)
-    if raw_usage and hasattr(raw_usage, "cost") and raw_usage.cost:
-        return float(raw_usage.cost), "provider_reported"
 
     total = usage["total_tokens"]
     fallback = total * FALLBACK_COST_FLOOR_USD_PER_TOKEN

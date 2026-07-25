@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, Literal, TypeVar
+
+from llm_client.core.model_availability import record_model_unavailability
 
 T = TypeVar("T")
+RetryDisposition = Literal["retry", "exhausted"]
 
 
 def _error_text(exc: Exception) -> str:
@@ -72,6 +75,7 @@ def run_sync_with_retry(
     logger: logging.Logger,
     on_error: Callable[[Exception, int], None] | None = None,
     on_retry: Callable[[int, Exception, float], None] | None = None,
+    on_decision: Callable[[int, Exception, RetryDisposition], None] | None = None,
     maybe_retry_hook: Callable[[Exception, int, int], bool] | None = None,
 ) -> T:
     """Execute sync attempts with shared retry behavior."""
@@ -88,13 +92,19 @@ def run_sync_with_retry(
                 logger=logger,
             )
             if maybe_retry_hook is not None and maybe_retry_hook(exc, attempt, max_retries):
+                if on_decision is not None:
+                    on_decision(attempt, exc, "retry")
                 continue
             if not should_retry(exc) or attempt >= max_retries:
+                if on_decision is not None:
+                    on_decision(attempt, exc, "exhausted")
                 raise
 
             delay, retry_delay_source = compute_delay(attempt, exc)
             effective_delay = max(delay, registered_cooldown)
             sleep_delay = max(0.0, effective_delay - registered_cooldown)
+            if on_decision is not None:
+                on_decision(attempt, exc, "retry")
             if on_retry is not None:
                 on_retry(attempt, exc, effective_delay)
             warning_sink.append(
@@ -129,6 +139,7 @@ async def run_async_with_retry(
     logger: logging.Logger,
     on_error: Callable[[Exception, int], None] | None = None,
     on_retry: Callable[[int, Exception, float], None] | None = None,
+    on_decision: Callable[[int, Exception, RetryDisposition], None] | None = None,
     maybe_retry_hook: Callable[[Exception, int, int], bool] | None = None,
 ) -> T:
     """Execute async attempts with shared retry behavior."""
@@ -145,13 +156,19 @@ async def run_async_with_retry(
                 logger=logger,
             )
             if maybe_retry_hook is not None and maybe_retry_hook(exc, attempt, max_retries):
+                if on_decision is not None:
+                    on_decision(attempt, exc, "retry")
                 continue
             if not should_retry(exc) or attempt >= max_retries:
+                if on_decision is not None:
+                    on_decision(attempt, exc, "exhausted")
                 raise
 
             delay, retry_delay_source = compute_delay(attempt, exc)
             effective_delay = max(delay, registered_cooldown)
             sleep_delay = max(0.0, effective_delay - registered_cooldown)
+            if on_decision is not None:
+                on_decision(attempt, exc, "retry")
             if on_retry is not None:
                 on_retry(attempt, exc, effective_delay)
             warning_sink.append(
@@ -178,17 +195,27 @@ def run_sync_with_fallback(
     *,
     models: list[str],
     execute_model: Callable[[int, str], T],
+    should_fallback: Callable[[Exception], bool] | None = None,
     on_fallback: Callable[[str, Exception, str], Any] | None = None,
     warning_sink: list[str] | None = None,
     logger: logging.Logger | None = None,
 ) -> T:
-    """Execute sync model chain with fallback behavior."""
+    """Execute a sync model chain while preserving caller-defined terminals."""
     last_error: Exception | None = None
     for model_idx, current_model in enumerate(models):
         try:
             return execute_model(model_idx, current_model)
         except Exception as exc:
             last_error = exc
+            if should_fallback is not None and not should_fallback(exc):
+                raise
+            exhaustion_record = record_model_unavailability(current_model, exc)
+            if exhaustion_record is not None and warning_sink is not None:
+                warning_sink.append(
+                    "MODEL_UNAVAILABLE: "
+                    f"{exhaustion_record['model']} "
+                    f"({exhaustion_record['reason']}, cooldown_s={exhaustion_record['cooldown_s']})"
+                )
             if model_idx < len(models) - 1:
                 next_model = models[model_idx + 1]
                 if on_fallback is not None:
@@ -216,17 +243,27 @@ async def run_async_with_fallback(
     *,
     models: list[str],
     execute_model: Callable[[int, str], Awaitable[T]],
+    should_fallback: Callable[[Exception], bool] | None = None,
     on_fallback: Callable[[str, Exception, str], Any] | None = None,
     warning_sink: list[str] | None = None,
     logger: logging.Logger | None = None,
 ) -> T:
-    """Execute async model chain with fallback behavior."""
+    """Execute an async model chain while preserving caller-defined terminals."""
     last_error: Exception | None = None
     for model_idx, current_model in enumerate(models):
         try:
             return await execute_model(model_idx, current_model)
         except Exception as exc:
             last_error = exc
+            if should_fallback is not None and not should_fallback(exc):
+                raise
+            exhaustion_record = record_model_unavailability(current_model, exc)
+            if exhaustion_record is not None and warning_sink is not None:
+                warning_sink.append(
+                    "MODEL_UNAVAILABLE: "
+                    f"{exhaustion_record['model']} "
+                    f"({exhaustion_record['reason']}, cooldown_s={exhaustion_record['cooldown_s']})"
+                )
             if model_idx < len(models) - 1:
                 next_model = models[model_idx + 1]
                 if on_fallback is not None:

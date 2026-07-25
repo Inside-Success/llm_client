@@ -1,0 +1,153 @@
+{
+  "agent_name": "synthesis",
+  "agreed_with_peer": [
+    "a_convergence_protocol_serial",
+    "a_verifier_feedback_gap",
+    "a_evidence_locatable_not_proven",
+    "a_two_agent_profile_gap",
+    "a_synthesis_schema_misfit",
+    "a_long_round_drift",
+    "b_serial_topology_every_round",
+    "b_verifier_writeonly",
+    "b_polite_asymmetric_claim_count",
+    "b_evidence_resolution_not_semantic",
+    "b_synthesis_schema_misfit",
+    "b_no_task_family_hook",
+    "b_max_rounds_failure_mode",
+    "b_third_pattern_is_feedback_not_fanout"
+  ],
+  "claims": [
+    {
+      "claim": "Single highest-priority improvement: replace the agent_a -> agent_b serial edge with a barriered round protocol that runs both agents on round N from a common pre-round snapshot and writes both round-N positions to latest_positions atomically before either agent's round-(N+1) call. This protects every downstream fix.",
+      "claim_id": "syn_barrier_top_priority",
+      "evidence_path": "llm_client/workflow/deliberate.py:9-17,275-310,364-387,466-480,765-795; tests/test_workflow_deliberate.py:205-260",
+      "severity": "high"
+    },
+    {
+      "claim": "Serial topology is a per-round bias, not a one-shot round-1 contamination. The graph edges run agent_a -> agent_b -> verifier in every round; agent_b's round-N call reads agent_a's freshest round-N position via latest.get(peer_name); the convergence detector checks same-round agreed_with_peer subset coverage. Both agents agreed on this framing in round 2.",
+      "claim_id": "syn_serial_topology_per_round",
+      "evidence_path": "llm_client/workflow/deliberate.py:280-294,466-480,765-795",
+      "severity": "high"
+    },
+    {
+      "claim": "The Plan #34 verifier ledger is write-only to the LLM-facing surface: it gates the convergence router but is never rendered into _position_prompt (next round) or _synthesis_prompt. Convergence can be silently refused without the agents being told why, and synthesis writes blind to unresolved evidence. Ranks #2 jointly.",
+      "claim_id": "syn_verifier_writeonly",
+      "evidence_path": "llm_client/workflow/deliberate.py:300-307,339-402,405-435,585-606,655-682",
+      "severity": "high"
+    },
+    {
+      "claim": "Required evidence_path enforces locatability, not falsifiability. The verifier marks a citation 'verified' once the path resolves and a snippet is extracted; it does not check that the snippet semantically supports the claim text. Schema-smoke tests explicitly disclaim testing reviewer quality.",
+      "claim_id": "syn_evidence_locatable_not_falsifiable",
+      "evidence_path": "llm_client/workflow/deliberate.py:100-143; llm_client/workflow/deliberate_verifier.py:318-373,381-417; tests/test_workflow_schema_smoke.py:62-67,101-123",
+      "severity": "high"
+    },
+    {
+      "claim": "The convergence detector terminates when other_claim_ids.issubset(agreed_set) for both agents. The empty set is a subset of any set, so an agent that emits zero claims trivially satisfies peer coverage; the global all-empty 'stalled' guard does not fire when one agent produced claims and the other produced none. Small surgical fix, independent of topology.",
+      "claim_id": "syn_empty_claim_convergence_loophole",
+      "evidence_path": "llm_client/workflow/deliberate.py:260-294",
+      "severity": "high"
+    },
+    {
+      "claim": "Deliberation lacks duet's extension parity: no task_family parameter in build_deliberation_workflow, no addendum splice point in _position_prompt, CLI hard-rejects any agent count != 2 ('--agents must list exactly 2 entries for v1'). Duet threads TaskFamily through plan/implement/review via _family_context_blocks and family.*_prompt_addendum and has a profile registry. Ranks below evidence-semantic verification per both agents' explicit rankings.",
+      "claim_id": "syn_no_task_family_hook",
+      "evidence_path": "llm_client/workflow/deliberate.py:24-31,339-402,690-740; llm_client/cli/deliberate.py:32-60,146-203; llm_client/workflow/duet_base.py:68-100; llm_client/workflow/duet_registry.py:20-47; llm_client/workflow/profiles/plan_doc_review.py:37-80",
+      "severity": "warn"
+    },
+    {
+      "claim": "Reusing Position as the synthesis output schema is a structural misfit: _make_synthesis_node calls call_llm_structured with schema=Position then post-hoc overwrites agent_name='synthesis' and round=state['round']; signoff.json reconstructs residual_disagreements from latest_positions rather than trusting the synthesis artifact. Code comment acknowledges a future SynthesisArtifact schema.",
+      "claim_id": "syn_synthesis_schema_misfit",
+      "evidence_path": "llm_client/workflow/deliberate.py:146-181,589-606,611-647",
+      "severity": "warn"
+    },
+    {
+      "claim": "At max_rounds>5 there are two distinct failure modes, both real: (a) first QUALITY failure is debate drift from lossy debater memory \u2014 debaters see only own_prior + peer_latest while synthesis alone gets chronology; (b) first OPERATOR-VISIBLE failure is append-only verifier_ledger growth (extended = VerifierLedger(entries=list(prior_ledger.entries)); extended.extend(new_entries)) plus 300s x 3 stages x N rounds wall-clock. Both rank below the topology, verifier-feedback, and evidence-semantic fixes.",
+      "claim_id": "syn_max_rounds_two_failure_modes",
+      "evidence_path": "llm_client/workflow/deliberate.py:73,339-397,405-435,466-480,506-507,585-589; llm_client/workflow/deliberate_verifier.py:533-580",
+      "severity": "info"
+    },
+    {
+      "claim": "On Q5: the asymmetric duet + symmetric deliberation partition is correct in kind. The missing pattern is not a third top-level workflow but two integrations INSIDE deliberation \u2014 barriered rounds and verifier-as-feedback. Adding 'independent fan-out + adjudicator' as a third workflow before barriering would replicate second-mover bias at higher cost. Reassessment of a third pattern is correctly deferred until barrier + feedback land.",
+      "claim_id": "syn_partition_is_correct_in_kind",
+      "evidence_path": "llm_client/workflow/duet.py:471-499,559-591; llm_client/workflow/duet_base.py:8-12,68-100; llm_client/workflow/deliberate.py:339-402,525-576,655-682,765-797; llm_client/workflow/deliberate_verifier.py:96-139,468-530",
+      "severity": "warn"
+    }
+  ],
+  "confidence": "high",
+  "disagreed_with_peer": [
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:339-402,466-480,585-606,655-682,765-795",
+      "my_counterclaim": "Residual disagreement (sequencing): agent_a frames verifier-feedback as strictly downstream of the barrier \u2014 feedback on a biased topology still produces biased convergence. Agent_b frames barrier and verifier-feedback as co-required, since even a perfectly barriered protocol leaves agents unable to see lineage_flag/unverified status without the feedback edge. Both framings are defensible; the synthesis preserves the disagreement rather than collapsing it. Implementation order 'barrier then feedback' is agreed on pragmatic grounds (barrier is a smaller graph change), but the logical priority is unresolved.",
+      "peer_claim_id": "b_verifier_writeonly"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:73,339-397,405-435,466-480,506-507,585-589; llm_client/workflow/deliberate_verifier.py:533-580",
+      "my_counterclaim": "Residual disagreement (failure-mode taxonomy): agent_a frames the first failure at max_rounds>5 as debate drift from lossy debater memory. Agent_b agrees drift is the first QUALITY failure but maintains the first OPERATOR-VISIBLE failure is append-only verifier_ledger growth plus wall-clock (300s x 3 stages x N rounds). The synthesis records BOTH as distinct, real failure modes rather than picking one; both should be tracked.",
+      "peer_claim_id": "a_long_round_drift"
+    },
+    {
+      "evidence_path": "llm_client/workflow/deliberate.py:690-740; llm_client/workflow/deliberate_verifier.py:318-373",
+      "my_counterclaim": "Recorded reconciliation per agent_b's explicit traceability flag: evidence-semantic verification outranks the profile-hook/topology-parity gap ('trust before reach'). Both agents agree on this ordering; agent_b raised the flag defensively to prevent silent reordering during synthesis. Not a substantive disagreement, but documented here so the ranking cannot be quietly inverted later.",
+      "peer_claim_id": "a_two_agent_profile_gap"
+    }
+  ],
+  "evidence": [
+    {
+      "citation": "llm_client/workflow/deliberate.py:466-480,765-795",
+      "content_snippet": "latest = state.get('latest_positions') or {}; own_prior = latest.get(agent.name); peer_latest = latest.get(peer_name)  ...  edges=[('agent_a','agent_b'),('agent_b','verifier'),('verifier','round_increment')], entry_point='agent_a'",
+      "label": "Graph edges run agent_a -> agent_b every round; agent_b reads latest after agent_a wrote"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:280-294",
+      "content_snippet": "agreed_set = set(pos.get('agreed_with_peer') or []); other_claim_ids = {c.get('claim_id') ...}; if not other_claim_ids.issubset(agreed_set): converged_signal = False  # empty set issubset of any set",
+      "label": "Convergence detector uses same-round subset rule with empty-set loophole"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:300-307,585-606,655-682",
+      "content_snippet": "if ledger.has_unverified_in_round(latest_round) or ledger.has_lineage_flag_in_round(latest_round): converged_signal = False ... messages = _synthesis_prompt(task, history, verdict)  # no ledger argument",
+      "label": "Verifier ledger gates router but is omitted from agent and synthesis prompts"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:318-373,381-417",
+      "content_snippet": "status='verified' ... snippet=snippet ... 'Verify every cited evidence_path in a Position dict.'",
+      "label": "Verifier marks 'verified' on path resolution + snippet extraction, not semantic support"
+    },
+    {
+      "citation": "tests/test_workflow_schema_smoke.py:62-67,101-123",
+      "content_snippet": "We aren't testing the LLM's reviewing quality here \u2014 only that the schema is structurally valid for the provider's structured-output API.",
+      "label": "Schema-smoke tests explicitly disclaim testing reviewer quality"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:589-606,611-647",
+      "content_snippet": "synthesis_position, _meta = ctx.call_llm_structured(synthesis_model, messages, Position, ...); payload['agent_name']='synthesis'; payload['round']=state.get('round',0) ... for pos in (state.get('latest_positions') or {}).values(): for dis in pos.get('disagreed_with_peer') or []: residual.append(dis)",
+      "label": "Synthesis schema is Position; output partially discarded; signoff reconstructs residuals from latest_positions"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:690-740; llm_client/cli/deliberate.py:32-60",
+      "content_snippet": "def build_deliberation_workflow(*, run_dir, task, trace_id, max_budget, agents=None, max_rounds=3, task_prefix='deliberate', synthesis_model=None, checkpointer=None) ... '--agents must list exactly 2 entries for v1'",
+      "label": "Deliberation builder has no task_family parameter; CLI rejects !=2 agents"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate_verifier.py:533-580",
+      "content_snippet": "extended = VerifierLedger(entries=list(prior_ledger.entries)); extended.extend(new_entries); return extended",
+      "label": "Verifier ledger is append-only across rounds and persisted in full each round"
+    },
+    {
+      "citation": "llm_client/workflow/deliberate.py:339-397,466-480,585-589",
+      "content_snippet": "_position_prompt(task, agent.name, round_num, own_prior=own_prior, peer_latest=peer_latest) ... history = state.get('position_history') or []; messages = _synthesis_prompt(task, history, verdict)",
+      "label": "Debaters see only own_prior + peer_latest; chronology goes only to synthesis"
+    }
+  ],
+  "open_questions": [
+    "Once barriering exists, should the next-round prompt receive (a) only the prior round's verified deltas, (b) a compact ledger summary, or (c) both barrier snapshots plus a per-agent unverified/lineage-flag digest? Bandwidth/context tradeoff is non-obvious.",
+    "Does the polite-claim-count-asymmetry rule need a hard floor ('each agent must produce >=1 grounded claim per round') or is 'require mutual non-empty coverage' sufficient?",
+    "Should evidence-semantic verification be deterministic (substring/regex on snippet against the claim's structured fields) or a small LLM-as-judge step gated by cost? The verifier is currently the only deterministic signal in the chassis; adding a stochastic step weakens that property.",
+    "After barriering and verifier feedback are both in, is a third agent still worth the cost, or do task_family hook + barrier + ledger feedback render most of that value?",
+    "Should SynthesisArtifact include ledger_summary as a first-class field so synthesis cannot write a 'converged' narrative blind to unresolved evidence, or should the verifier ledger remain a sibling artifact alongside signoff.json?",
+    "Should silent_retire / silent_rename feedback be shown only to the agent that committed it, or to both agents so the peer can hold the line?",
+    "Is logical priority of barrier-vs-feedback (residual disagreement #1) decidable empirically \u2014 e.g., by running a controlled deliberation with feedback-only vs barrier-only vs both \u2014 or only by argument?"
+  ],
+  "reviewer_model": "claude-code/opus",
+  "reviewer_summary": "Both agents converged in round 2 on the same single highest-priority improvement: implement a BARRIERED round protocol that snapshots both round-N positions atomically before either agent sees the other's round-N output. Justification: the shipped graph wires agent_a -> agent_b -> verifier on every round (deliberate.py:765-795), each _make_agent_position_node reads peer_latest = latest.get(peer_name) at call time (466-480), and detect_convergence reads same-round agreed_with_peer (280-289) \u2014 exactly the signal that second-mover accommodation produces. The chassis's core promise of independent debate is silently violated on every round, and every downstream improvement (verifier-feedback rendering, evidence-semantic verification, empty-claim convergence rule, profile hook) consumes positions whose independence we currently cannot guarantee. Agent_b explicitly revised away from its round-1 ranking of verifier-feedback-first and conceded barrier-first; agent_a held the line. Ranking after the barrier: (2) wire verifier_ledger into _position_prompt + _synthesis_prompt and add SynthesisArtifact.ledger_summary; (3) harden evidence semantics beyond path resolution; (4) fix empty-claim convergence loophole; (5) add task_family hook + topology parity with duet; (6) at max_rounds>5, debate drift from lossy debater memory (first quality failure) and append-only ledger + wall-clock (first operator-visible failure) are both real and distinct. Residual disagreements remain explicit: (a) whether verifier feedback is strictly downstream of barrier or co-required with it; (b) two distinct failure modes at high round counts that both deserve tracking; (c) agent_b's defensive flag that evidence-semantic verification must outrank profile-hook gap to prevent silent reordering (both agents in fact agree on this ordering \u2014 flagged for traceability).",
+  "round": 3,
+  "state": "stable"
+}

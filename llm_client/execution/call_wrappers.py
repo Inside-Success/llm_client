@@ -9,21 +9,29 @@ wrapper mechanics that were previously copied across four entrypoints.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Literal, TypeVar
 
 from llm_client.execution.call_contracts import (
-    check_budget as _check_budget,
+    acquire_budget_scope as _acquire_budget_scope,
     normalize_prompt_ref as _normalize_prompt_ref,
+    release_budget_scope as _release_budget_scope,
+    settle_budget_scope as _settle_budget_scope,
     require_tags as _require_tags,
+    resolve_budget_scope as _resolve_budget_scope,
 )
+from llm_client.observability.budget_reservations import BudgetReservationLease
 from llm_client.execution.call_lifecycle import (
     _AsyncLLMCallHeartbeatMonitor,
     _SyncLLMCallHeartbeatMonitor,
     _emit_llm_call_lifecycle_event,
     _new_llm_call_lifecycle_id,
     _provider_timeout_for_lifecycle,
+    _requested_timeout_for_lifecycle,
     _resolve_lifecycle_monitoring_settings,
 )
 
@@ -35,12 +43,15 @@ class PreparedPublicCallEnvelope:
     """Resolved public-call envelope before runtime dispatch begins."""
 
     normalized_prompt_ref: str | None
+    prompt_sha256: str
     resolved_task: str
     resolved_trace_id: str
     resolved_max_budget: float
     effective_provider_timeout: int
+    requested_timeout_s: int | None
     heartbeat_interval_s: float
     stall_after_s: float
+    budget_scope_lease: str | BudgetReservationLease | None
     runtime_kwargs: dict[str, Any]
 
 
@@ -49,6 +60,7 @@ def _prepare_public_call_envelope(
     caller: str,
     timeout: int,
     kwargs: dict[str, Any],
+    messages: list[dict[str, Any]],
 ) -> PreparedPublicCallEnvelope:
     """Resolve call tags, lifecycle settings, and provider-safe runtime kwargs."""
 
@@ -59,10 +71,28 @@ def _prepare_public_call_envelope(
         kwargs.get("max_budget"),
         caller=caller,
     )
-    _check_budget(resolved_trace_id, resolved_max_budget)
+    reservation = kwargs.get("budget_reservation", 0.0)
+    budget_scope_mode = kwargs.get("budget_scope_mode", "sequential")
+    budget_scope_trace_id = _resolve_budget_scope(
+        resolved_trace_id,
+        kwargs.get("budget_scope_trace_id"),
+    )
+    budget_scope_lease = _acquire_budget_scope(
+        resolved_trace_id,
+        resolved_max_budget,
+        reservation=float(reservation),
+        budget_scope_trace_id=budget_scope_trace_id,
+        budget_scope_mode=budget_scope_mode,
+    )
     effective_provider_timeout = _provider_timeout_for_lifecycle(timeout)
+    prompt_sha256 = "sha256:" + hashlib.sha256(
+        json.dumps(messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
 
     runtime_kwargs = dict(kwargs)
+    runtime_kwargs.pop("budget_reservation", None)
+    runtime_kwargs.pop("budget_scope_trace_id", None)
+    runtime_kwargs.pop("budget_scope_mode", None)
     heartbeat_interval_s, stall_after_s = _resolve_lifecycle_monitoring_settings(
         heartbeat_interval=runtime_kwargs.pop("lifecycle_heartbeat_interval_s", None),
         stall_after=runtime_kwargs.pop("lifecycle_stall_after_s", None),
@@ -74,14 +104,25 @@ def _prepare_public_call_envelope(
 
     return PreparedPublicCallEnvelope(
         normalized_prompt_ref=normalized_prompt_ref,
+        prompt_sha256=prompt_sha256,
         resolved_task=resolved_task,
         resolved_trace_id=resolved_trace_id,
         resolved_max_budget=resolved_max_budget,
         effective_provider_timeout=effective_provider_timeout,
+        requested_timeout_s=_requested_timeout_for_lifecycle(timeout),
         heartbeat_interval_s=heartbeat_interval_s,
         stall_after_s=stall_after_s,
+        budget_scope_lease=budget_scope_lease,
         runtime_kwargs=runtime_kwargs,
     )
+
+
+def _result_cost(result: Any) -> float:
+    """Extract the settled call cost from text or structured public results."""
+
+    metadata = result[1] if isinstance(result, tuple) and len(result) == 2 else result
+    raw_cost = getattr(metadata, "cost", 0.0)
+    return 0.0 if raw_cost is None else float(raw_cost)
 
 
 def _run_sync_public_call(
@@ -121,6 +162,9 @@ def _run_sync_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
+        prompt_sha256=envelope.prompt_sha256,
         prompt_ref=envelope.normalized_prompt_ref,
         heartbeat_interval_s=envelope.heartbeat_interval_s,
         stall_after_s=envelope.stall_after_s,
@@ -130,6 +174,7 @@ def _run_sync_public_call(
     )
     runtime_kwargs = dict(envelope.runtime_kwargs)
     runtime_kwargs["_lifecycle_monitor"] = monitor
+    runtime_kwargs["_lifecycle_logical_call_id"] = call_id
     monitor.start()
     try:
         result = invoke(runtime_kwargs)
@@ -145,6 +190,8 @@ def _run_sync_public_call(
             trace_id=envelope.resolved_trace_id,
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
+            requested_timeout_s=envelope.requested_timeout_s,
+            transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
             error=exc,
@@ -154,6 +201,7 @@ def _run_sync_public_call(
             progress_source=snapshot.progress_source,
             progress_event_count=snapshot.progress_event_count,
         )
+        _release_budget_scope(envelope.budget_scope_lease)
         raise
     monitor.stop()
     elapsed_s = time.monotonic() - started_at
@@ -167,6 +215,8 @@ def _run_sync_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         resolved_model=resolve_model(result),
         elapsed_s=elapsed_s,
@@ -177,6 +227,7 @@ def _run_sync_public_call(
         progress_source=completed_snapshot.progress_source,
         progress_event_count=completed_snapshot.progress_event_count,
     )
+    _settle_budget_scope(envelope.budget_scope_lease, settled_cost=_result_cost(result))
     return result
 
 
@@ -217,6 +268,9 @@ async def _run_async_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
+        prompt_sha256=envelope.prompt_sha256,
         prompt_ref=envelope.normalized_prompt_ref,
         heartbeat_interval_s=envelope.heartbeat_interval_s,
         stall_after_s=envelope.stall_after_s,
@@ -226,9 +280,34 @@ async def _run_async_public_call(
     )
     runtime_kwargs = dict(envelope.runtime_kwargs)
     runtime_kwargs["_lifecycle_monitor"] = monitor
+    runtime_kwargs["_lifecycle_logical_call_id"] = call_id
     monitor.start()
     try:
         result = await invoke(runtime_kwargs)
+    except asyncio.CancelledError:
+        await monitor.stop()
+        snapshot = monitor.snapshot()
+        _emit_llm_call_lifecycle_event(
+            call_id=call_id,
+            phase="cancelled",
+            call_kind=call_kind,
+            caller=caller,
+            task=envelope.resolved_task,
+            trace_id=envelope.resolved_trace_id,
+            requested_model=model,
+            provider_timeout_s=envelope.effective_provider_timeout,
+            requested_timeout_s=envelope.requested_timeout_s,
+            transport_timeout_status="forwarded_to_runtime",
+            prompt_ref=envelope.normalized_prompt_ref,
+            latency_s=time.monotonic() - started_at,
+            heartbeat_interval_s=envelope.heartbeat_interval_s,
+            stall_after_s=envelope.stall_after_s,
+            progress_observable=snapshot.progress_observable,
+            progress_source=snapshot.progress_source,
+            progress_event_count=snapshot.progress_event_count,
+        )
+        _release_budget_scope(envelope.budget_scope_lease)
+        raise
     except Exception as exc:
         await monitor.stop()
         snapshot = monitor.snapshot()
@@ -241,6 +320,8 @@ async def _run_async_public_call(
             trace_id=envelope.resolved_trace_id,
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
+            requested_timeout_s=envelope.requested_timeout_s,
+            transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
             error=exc,
@@ -250,6 +331,7 @@ async def _run_async_public_call(
             progress_source=snapshot.progress_source,
             progress_event_count=snapshot.progress_event_count,
         )
+        _release_budget_scope(envelope.budget_scope_lease)
         raise
     await monitor.stop()
     elapsed_s = time.monotonic() - started_at
@@ -263,6 +345,8 @@ async def _run_async_public_call(
         trace_id=envelope.resolved_trace_id,
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
+        requested_timeout_s=envelope.requested_timeout_s,
+        transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         resolved_model=resolve_model(result),
         elapsed_s=elapsed_s,
@@ -273,4 +357,5 @@ async def _run_async_public_call(
         progress_source=completed_snapshot.progress_source,
         progress_event_count=completed_snapshot.progress_event_count,
     )
+    _settle_budget_scope(envelope.budget_scope_lease, settled_cost=_result_cost(result))
     return result

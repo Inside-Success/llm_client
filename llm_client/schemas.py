@@ -43,6 +43,10 @@ class LLMCallResultSchema(BaseModel):
         default=None,
         description="Alias for resolved terminal model, kept additive for migration clarity",
     )
+    logical_call_id: str | None = Field(
+        default=None,
+        description="Runtime identity joining a structured result to its persisted attempts",
+    )
     routing_trace: dict[str, Any] | None = Field(
         default=None,
         description="Optional routing/fallback trace for contract characterization and debugging",
@@ -78,6 +82,13 @@ class LLMCallResultSchema(BaseModel):
     marginal_cost: float | None = Field(
         default=None,
         description="Incremental cost attributed to this call; defaults to cost when omitted",
+    )
+    cost_covers_all_attempts: bool | None = Field(
+        default=None,
+        description=(
+            "Whether cost covers every provider attempt behind this logical call; "
+            "None when the execution path cannot establish coverage"
+        ),
     )
     cache_hit: bool = Field(
         default=False,

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from llm_client.core.client import Hooks, LLMCallResult
 from llm_client.core.data_types import TurnEvent
+from llm_client.core.errors import DeprecatedModelError
 from llm_client.execution.timeout_policy import normalize_timeout as _normalize_timeout
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,38 @@ def _import_sdk() -> tuple[Any, ...]:
 # ---------------------------------------------------------------------------
 
 
+# Short aliases accepted in the ``claude-code/<alias>`` model-string syntax.
+# The Claude Agent SDK's ``ClaudeAgentOptions.model`` parameter only accepts
+# full Anthropic model IDs; bare strings are silently ignored and the session
+# falls back to its default model. This map resolves permitted short aliases to
+# current canonical full IDs. Opus is rejected separately before any SDK call.
+CLAUDE_CODE_MODEL_ALIASES: dict[str, str] = {
+    "sonnet": "claude-sonnet-4-6",
+    "haiku": "claude-haiku-4-5-20251001",
+}
+
+
+def _resolve_claude_code_model(underlying_model: str | None) -> str | None:
+    """Reject Opus and map permitted aliases to full Claude model IDs.
+
+    Case-insensitive on the alias key; pass-through if the value already looks
+    like a full model ID (i.e. doesn't match a known alias).
+    """
+    if underlying_model is None:
+        return None
+    normalized = underlying_model.lower()
+    if "opus" in normalized:
+        replacement = "claude-code/sonnet"
+        raise DeprecatedModelError(
+            f"HARD-BLOCKED MODEL: claude-code/{underlying_model}\n"
+            "Reason: Opus-family models are banned by ecosystem policy in every "
+            "execution lane.\n"
+            f"Use instead: {replacement}",
+            replacement=replacement,
+        )
+    return CLAUDE_CODE_MODEL_ALIASES.get(normalized, underlying_model)
+
+
 def _build_agent_options(
     model: str,
     messages: list[dict[str, Any]],
@@ -83,6 +116,7 @@ def _build_agent_options(
     )
 
     _, underlying_model = _parse_agent_model(model)
+    underlying_model = _resolve_claude_code_model(underlying_model)
 
     sdk = _import_sdk()
     _, ClaudeAgentOptions, _, _, _, _ = sdk

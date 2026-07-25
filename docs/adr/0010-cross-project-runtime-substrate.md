@@ -2,8 +2,15 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-04-08
-Verification context: the shared substrate still owns typed provider-governance policy and explicit governance events, its observability layer still honors dynamic env-based logging suppression, and direct Gemini thinking defaults are now expressed as shared runtime policy instead of per-call hardcoding
+Last verified: 2026-07-16
+Verification context: The shared experiment substrate now serializes canonical
+run-start insertion before emitting JSONL evidence, preventing duplicate
+run_id starts from appearing as two attempts. Focused persistence and
+observability controls pass.
+
+Plan 94 adds shared authenticated OpenRouter generation evidence, an immutable
+exact route-certification registry, and a provider-free query CLI. Semantic
+acceptance and project-specific promotion remain above this substrate.
 
 ## Context
 
@@ -53,6 +60,8 @@ existing libraries already solve well.
 7. Workflow orchestration is above the core client boundary. `task_graph` may
    remain as a simple orchestrator, but `llm_client` should not turn into a
    bespoke general-purpose workflow engine.
+8. Cross-project callers that require tool execution to be auditable use the
+   shared strict tool-call API rather than implementing project-local sinks.
 
 ## Consequences
 
@@ -80,3 +89,17 @@ Negative:
    shared facility rather than a prompt-specific one.
 3. Integration work in higher-level packages should verify that they can depend
    on `llm_client` without recreating primary execution or analytics backends.
+4. Strict cross-project tool traces must prove sink failures propagate and the
+   persisted event remains joinable to its parent trace.
+5. Cross-project structured traces must prove every provider attempt begins at
+   `started`, preserves pre-response failures, and records the retry kernel's
+   actual disposition with logical-call-global ordinals.
+
+Last verified: 2026-07-14 (DIGIMON-bound Plan 97 transport failure).
+
+The shared runtime now distinguishes provider recovery from local finalization:
+once native structured output validates, hook/cache/log failures fail loud
+without repeating generation or switching models.
+
+Plan 101 consumers pin the logical call identity returned by the same runtime
+result; trace-only lookup is diagnostic.

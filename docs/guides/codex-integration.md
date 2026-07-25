@@ -70,15 +70,18 @@ result = call_llm(
     max_budget=5.00,
     codex_transport="auto",
     agent_hard_timeout=300,
-    model_reasoning_effort="medium",
+    reasoning_effort="medium",
 )
 ```
 
 ## Reasoning effort
 
-- `model_reasoning_effort=minimal` is often rejected on ChatGPT-account Codex
-  lanes. `llm_client` coerces `minimal -> low` by default.
-- Set `LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT=1` to force minimal unchanged.
+- Codex calls require explicit public `reasoning_effort="low"`, `"medium"`,
+  or `"high"`.
+- Omission and unsupported values fail before agent dispatch. The client does
+  not default or coerce the requested effort.
+- `model_reasoning_effort` is an adapter transport detail; ordinary callers
+  should use the public `reasoning_effort` control.
 
 ## Agent billing and retry
 
