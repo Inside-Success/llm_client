@@ -278,17 +278,10 @@ flowchart TB
 
 | Test | Evidence |
 | --- | --- |
-| valid structured success | request/schema identity and no diagnostic failure fabricated |
-| pre-dispatch serialization failure | `origin=client_serialization`, no provider attribution |
-| transport timeout | explicit client/transport timeout kind, no provider blame |
-| typed 429/5xx response | retained status, request ID when present, retry-after, gateway/provider-confirmed attribution |
-| SDK exception with nested cause | bounded class-chain and stable fingerprint, no raw body |
-| secret/prompt/raw-body redaction | writer rejects or redacts before SQLite persistence |
-| retry then success | each attempt remains independently diagnosable and joins to recovery |
-| process interruption | `interrupted_or_abandoned`, no invented diagnostic terminal event |
-| migration and legacy read | old rows remain queryable as unavailable rather than null-filled facts |
-| live structured DeepSeek success | exact route produces a bound diagnosis and lifecycle receipt |
-| Process Tracing V3 probe | downstream can make a bounded causal statement about the observed failure |
+| `tests/test_attempt_diagnostics.py` | Temporary-SQLite identity binding, legacy status, redaction rejection, confirmation limits, writer failure, migration, typed gateway response, and timeout attribution. |
+| `tests/test_structured_attempts.py` | Existing native structured-attempt lifecycle, retry, timeout, malformed-response, and strict-schema negative controls continue to pass. |
+| governed live DeepSeek V4 Flash structured probe | Exact route produces a trace-bound diagnosis and lifecycle receipt; recorded in Slice 1 evidence. |
+| governed Process Tracing V3 atomic probe | Downstream can make only the causal statement warranted by the returned diagnostic evidence; blocked until the runtime revision is promoted and the downstream harness is in a clean governed worktree. |
 
 ## Acceptance Criteria
 
