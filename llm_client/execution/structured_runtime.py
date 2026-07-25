@@ -558,9 +558,16 @@ def _record_execution_failure(
         value is not None
         for value in (status, provider_error_code, provider_request_id, gateway_request_id)
     )
-    timeout_kind = "client_attempt_safety" if (
-        isinstance(error, TimeoutError) and "safety deadline" in str(error).lower()
-    ) else ("unknown" if isinstance(error, TimeoutError) else None)
+    timeout_message = str(error).lower()
+    timeout_kind = (
+        "client_attempt_deadline"
+        if isinstance(error, TimeoutError) and "client deadline" in timeout_message
+        else (
+            "client_attempt_safety"
+            if isinstance(error, TimeoutError) and "safety deadline" in timeout_message
+            else ("unknown" if isinstance(error, TimeoutError) else None)
+        )
+    )
     if not _io_log._logging_enabled():
         return
     record_attempt_diagnostic(AttemptDiagnosticEnvelope(
