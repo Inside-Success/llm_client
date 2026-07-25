@@ -331,6 +331,7 @@ def stream_llm_impl(
     task = kwargs.pop("task", None)
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
+    budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -340,7 +341,7 @@ def stream_llm_impl(
         max_budget,
         caller="stream_llm",
     )
-    _client._check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
+    _client._check_budget(trace_id, max_budget, reservation=budget_reservation, warning_sink=_entry_warnings)
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)
@@ -573,6 +574,7 @@ async def astream_llm_impl(
     task = kwargs.pop("task", None)
     trace_id = kwargs.pop("trace_id", None)
     max_budget: float | None = kwargs.pop("max_budget", None)
+    budget_reservation = float(kwargs.pop("budget_reservation", 0.0))
     prompt_ref = _client._normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
@@ -582,7 +584,7 @@ async def astream_llm_impl(
         max_budget,
         caller="astream_llm",
     )
-    _client._check_budget(trace_id, max_budget, warning_sink=_entry_warnings)
+    _client._check_budget(trace_id, max_budget, reservation=budget_reservation, warning_sink=_entry_warnings)
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
 
     runtime_kwargs = dict(kwargs)

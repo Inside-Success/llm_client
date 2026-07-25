@@ -155,16 +155,24 @@ def check_budget(
     trace_id: str,
     max_budget: float,
     *,
+    reservation: float = 0.0,
     warning_sink: list[str] | None = None,
 ) -> None:
-    """Warn at declared trace-budget thresholds and block exhausted traces."""
+    """Block a dispatch when observed spend plus its declared reserve exceeds budget."""
     if max_budget <= 0:
         return
+    if reservation < 0:
+        raise ValueError("budget reservation must be non-negative")
     spent = _io_log.get_cost(trace_id=trace_id)
     if spent >= max_budget:
         raise LLMBudgetExceededError(
             f"Budget exceeded for trace {trace_id}: "
             f"${spent:.4f} spent >= ${max_budget:.4f} limit"
+        )
+    if spent + reservation > max_budget:
+        raise LLMBudgetExceededError(
+            f"Budget reservation exceeds trace limit for {trace_id}: "
+            f"${spent:.4f} spent + ${reservation:.4f} reserve > ${max_budget:.4f} limit"
         )
     if warning_sink is None:
         return

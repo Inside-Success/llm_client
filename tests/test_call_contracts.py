@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from llm_client.execution.call_contracts import check_budget, normalize_prompt_ref, require_tags
+from llm_client.execution.call_wrappers import _prepare_public_call_envelope
 from llm_client.core.errors import LLMBudgetExceededError
 
 
@@ -49,6 +50,24 @@ def test_check_budget_raises_when_trace_is_spent() -> None:
     with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=5.0):
         with pytest.raises(LLMBudgetExceededError, match="Budget exceeded for trace trace/budget"):
             check_budget("trace/budget", 5.0)
+
+
+def test_check_budget_blocks_before_dispatch_when_reservation_would_cross_limit() -> None:
+    with patch("llm_client.execution.call_contracts._io_log.get_cost", return_value=4.8):
+        with pytest.raises(LLMBudgetExceededError, match="reservation exceeds"):
+            check_budget("trace/budget", 5.0, reservation=0.3)
+
+
+def test_public_envelope_reserves_budget_and_strips_internal_kwarg() -> None:
+    with patch("llm_client.execution.call_wrappers._check_budget") as check:
+        envelope = _prepare_public_call_envelope(
+            caller="call_llm", timeout=30,
+            messages=[{"role": "user", "content": "test"}],
+            kwargs={"task": "test.task", "trace_id": "test/trace", "max_budget": 1.0,
+                    "budget_reservation": 0.25, "temperature": 0.1},
+        )
+    assert check.call_args.kwargs["reservation"] == 0.25
+    assert "budget_reservation" not in envelope.runtime_kwargs
 
 
 @pytest.mark.parametrize(("spent", "expected"), [(2.5, "50%"), (4.0, "80%")])
