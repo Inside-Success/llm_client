@@ -458,7 +458,7 @@ observability or forwards control fields.
   emission.
 - A process-wide daemon keeper renews only locally owned active durable leases;
   lost custody fails at the terminal boundary rather than returning a success.
-- Focused zero-spend verification: 39 tests passed across reservation,
+- Focused zero-spend verification: 40 tests passed across reservation,
   call-contract, lifecycle, and text-runtime suites. The integrated held-call
   canary observed two concurrent children and rejected a third before runtime
   dispatch. Focused Ruff and `git diff --check` passed.

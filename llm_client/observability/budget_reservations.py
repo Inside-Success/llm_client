@@ -378,6 +378,10 @@ def settle_budget_reservation(
                    WHERE reservation_id = ? AND owner_id = ? AND status = 'active'""",
                 (completed_iso, observed_settled, lease.reservation_id, lease.owner_id),
             )
+        elif status == "expired":
+            raise LLMBudgetLeaseLostError(
+                "durable budget reservation expired before call completion"
+            )
         elif status != "settled":
             return False
         else:

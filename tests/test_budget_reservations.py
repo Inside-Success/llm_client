@@ -11,6 +11,7 @@ import pytest
 import llm_client.io_log as io_log
 from llm_client.core.errors import (
     LLMBudgetExceededError,
+    LLMBudgetLeaseLostError,
     LLMBudgetReservationStoreError,
 )
 from llm_client.observability.budget_reservations import (
@@ -207,3 +208,19 @@ def test_expired_lease_cannot_be_renewed(reservation_db: Path) -> None:
     assert renew_budget_reservation(
         lease, now=started + timedelta(seconds=2), lease_ttl_seconds=1
     ) is False
+
+
+def test_expired_lease_fails_at_terminal_settlement(reservation_db: Path) -> None:
+    started = datetime(2026, 7, 25, tzinfo=timezone.utc)
+    lease = acquire_budget_reservation(
+        scope_trace_id="root/lost", call_trace_id="root/lost/child",
+        max_budget=1.0, reservation=0.20, now=started, lease_ttl_seconds=1,
+    )
+    # A successor admission performs the authoritative expiry transition.
+    acquire_budget_reservation(
+        scope_trace_id="root/lost", call_trace_id="root/lost/successor",
+        max_budget=1.0, reservation=0.20,
+        now=started + timedelta(seconds=2), lease_ttl_seconds=1,
+    )
+    with pytest.raises(LLMBudgetLeaseLostError):
+        settle_budget_reservation(lease, settled_cost=0.10)
