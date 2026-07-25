@@ -11,6 +11,7 @@ Tests cover:
 """
 
 import asyncio
+import json
 import sys
 import types
 from dataclasses import dataclass, field
@@ -2217,7 +2218,111 @@ class TestCodexFallback:
         )
 
         assert result.content == "cli transport ok"
-        assert result.raw_response == {"transport": "codex_cli"}
+        assert result.raw_response == {
+            "transport": "codex_cli",
+            "session_id": None,
+            "n_turns": 0,
+        }
+
+    def test_call_codex_via_cli_attaches_mcp_and_returns_tool_evidence(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """CLI transport should attach MCP config and retain completed call evidence."""
+
+        captured_home: Path | None = None
+
+        def _fake_run(command, *, input, text, capture_output, check, timeout, env):
+            nonlocal captured_home
+            del input, text, capture_output, check, timeout
+            assert "--json" in command
+            captured_home = Path(env["CODEX_HOME"]).parent
+            config = (Path(env["CODEX_HOME"]) / "config.toml").read_text()
+            assert '[mcp_servers."twitter"]' in config
+            assert 'command = "python"' in config
+            output_path = command[command.index("-o") + 1]
+            Path(output_path).write_text('{"candidates":[]}\n')
+            event = {
+                "type": "item.completed",
+                "item": {
+                    "id": "item-1",
+                    "type": "mcp_tool_call",
+                    "server": "twitter",
+                    "tool": "advanced_search",
+                    "arguments": {"query": "founder"},
+                    "result": {"count": 3},
+                    "status": "completed",
+                },
+            }
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(event),
+                stderr="",
+            )
+
+        monkeypatch.setattr(agents_codex_mod.subprocess, "run", _fake_run)
+
+        result = agents_codex_mod._call_codex_via_cli(
+            "codex",
+            [{"role": "user", "content": "Find candidates."}],
+            working_directory=str(tmp_path),
+            model_reasoning_effort="medium",
+            mcp_servers={
+                "twitter": {
+                    "command": "python",
+                    "args": ["server.py"],
+                    "env": {"API_KEY": "test-only-secret"},
+                }
+            },
+        )
+
+        assert result.tool_calls == [
+            {
+                "id": "item-1",
+                "type": "function",
+                "function": {
+                    "name": "advanced_search",
+                    "arguments": {"query": "founder"},
+                },
+                "server": "twitter",
+                "status": "completed",
+                "result_preview": '{"count": 3}',
+                "is_error": False,
+                "error": "",
+            }
+        ]
+        assert captured_home is not None
+        assert not captured_home.exists()
+
+    def test_call_codex_via_cli_cleans_mcp_home_on_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """A failed CLI subprocess must not retain its credential-bearing temp home."""
+
+        captured_home: Path | None = None
+
+        def _fake_run(command, *, input, text, capture_output, check, timeout, env):
+            nonlocal captured_home
+            del command, input, text, capture_output, check, timeout
+            captured_home = Path(env["CODEX_HOME"]).parent
+            return types.SimpleNamespace(returncode=2, stdout="", stderr="failed")
+
+        monkeypatch.setattr(agents_codex_mod.subprocess, "run", _fake_run)
+
+        with pytest.raises(RuntimeError, match="CODEX_CLI_ERROR"):
+            agents_codex_mod._call_codex_via_cli(
+                "codex",
+                [{"role": "user", "content": "Find candidates."}],
+                working_directory=str(tmp_path),
+                model_reasoning_effort="medium",
+                mcp_servers={"twitter": {"command": "python"}},
+            )
+
+        assert captured_home is not None
+        assert not captured_home.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -2253,8 +2358,9 @@ class TestCodexMcpServers:
             content = config_path.read_text()
             assert '[mcp_servers."my-server"]' in content
             assert 'command = "/usr/bin/python"' in content
+            assert "required = true" in content
             assert 'args = ["-u", "server.py"]' in content
-            assert 'FOO = "bar"' in content
+            assert '"FOO" = "bar"' in content
             assert '[mcp_servers."simple"]' in content
             assert 'cwd = "/tmp/test"' in content
         finally:

@@ -112,6 +112,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 38 | [Exhausted-Model Cooldown Routing](38_exhausted_model_cooldown_routing.md) | High | ✅ Complete | - |
 | 39 | [Long Retry-Hint Failover](39_long_retry_hint_failover.md) | High | ✅ Complete | 38 |
 | 40 | [Provider Governance and Shared Coordination](40_provider-governance-and-shared-coordination.md) | Critical | ↩️ Superseded | 94, 104, 115-122, 333-335 |
+| 42 | [Codex CLI MCP Parity](42_codex_cli_mcp_parity.md) | High | ✅ Complete | Inside Success Twitter prospecting agent |
 | 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | 🚧 In Progress | - |
 | 93 | [Agent tool-usage ledger](93_agent-tool-usage-ledger.md) | High | ✅ Complete | project-meta Plan #213 reporting and comparative selection evaluation |
 | 92 | [Worktree Lifecycle Governance and Cleanup](92_worktree-lifecycle-governance-and-cleanup.md) | Critical | ✅ Complete | Merge-or-disposition enforcement live; historical checkout cleanup reconciled |
