@@ -230,6 +230,10 @@ def classify_error(error: Exception) -> type[LLMError]:
         if budget_types and isinstance(error, budget_types):
             return LLMQuotaExhaustedError
 
+        schema_validation_types = _litellm_error_types(_lt, ("JSONSchemaValidationError",))
+        if schema_validation_types and isinstance(error, schema_validation_types):
+            return LLMError
+
         rate_types = _litellm_error_types(_lt, ("RateLimitError",))
         if rate_types and isinstance(error, rate_types):
             error_str = str(error).lower()
@@ -256,9 +260,11 @@ def classify_error(error: Exception) -> type[LLMError]:
 
     if any(p in error_str for p in _QUOTA_PATTERNS):
         return LLMQuotaExhaustedError
-    if "401" in error_str or "authentication" in error_str or "unauthorized" in error_str:
+    has_401_status = bool(re.search(r"(?:^|\D)401(?:\D|$)", error_str))
+    if has_401_status or "authentication" in error_str or "unauthorized" in error_str:
         return LLMAuthError
-    if "403" in error_str or "forbidden" in error_str or "permission" in error_str:
+    has_403_status = bool(re.search(r"(?:^|\D)403(?:\D|$)", error_str))
+    if has_403_status or "forbidden" in error_str or "permission" in error_str:
         return LLMAuthError
     has_404_status = bool(re.search(r"(?:^|\\D)404(?:\\D|$)", error_str))
     if has_404_status or "not found" in error_str or "does not exist" in error_str:
