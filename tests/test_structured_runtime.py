@@ -465,6 +465,63 @@ def _explicit_test_runtime_policy(monkeypatch: pytest.MonkeyPatch) -> None:
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.completion")
+def test_sync_timeout_ban_preserves_provider_safety_ceiling(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A disabled caller timeout must not become HTTPX's nonblocking timeout=0."""
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    mock_comp.return_value = _mock_structured_response()
+
+    _call_llm_structured_impl(
+        "gpt-4",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.sync.timeout-ban",
+        max_budget=0,
+    )
+
+    assert mock_comp.call_args.kwargs["timeout"] == 300
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+@pytest.mark.asyncio
+async def test_async_timeout_ban_preserves_provider_safety_ceiling(
+    mock_comp: AsyncMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The async native-schema path preserves the same safety timeout."""
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    mock_comp.return_value = _mock_structured_response()
+
+    await _acall_llm_structured_impl(
+        "gpt-4",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.async.timeout-ban",
+        max_budget=0,
+    )
+
+    assert mock_comp.call_args.kwargs["timeout"] == 300
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
 def test_structured_runtime_sync_preserves_cache_and_identity_contracts(
     mock_comp: MagicMock,
     _mock_supports_schema: MagicMock,
