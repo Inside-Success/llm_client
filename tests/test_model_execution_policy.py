@@ -60,6 +60,22 @@ def test_allowed_alternate_requires_and_records_justification() -> None:
     )
 
 
+def test_openrouter_sol_requires_explicit_justification_and_reasoning() -> None:
+    model = "openrouter/openai/gpt-5.6-sol"
+    decision = evaluate_model_execution_policy(
+        [model],
+        mode="enforce_allowlist",
+        justification="Certify the explicit OpenRouter Sol route for typed authoring.",
+        reasoning_effort="medium",
+    )
+
+    assert model in ALLOWED_EXECUTION_MODELS
+    assert decision.reasoning_policy.effort == "medium"
+    assert REASONING_CAPABILITIES[model].supported_efforts == frozenset(
+        {"none", "low", "medium", "high", "xhigh", "max"}
+    )
+
+
 def test_allowed_alternate_without_justification_fails() -> None:
     with pytest.raises(LLMConfigurationError, match="require model_justification"):
         evaluate_model_execution_policy(

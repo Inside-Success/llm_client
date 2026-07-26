@@ -44,6 +44,7 @@ class TestGetModel:
         """Current OpenRouter planner candidates expose their tested capabilities."""
 
         for model in (
+            "openrouter/openai/gpt-5.6-sol",
             "openrouter/openai/gpt-5.6-terra",
         ):
             assert supports_structured_output(model) is True
