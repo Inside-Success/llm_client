@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from llm_client.prompt_assets import parse_prompt_ref
+from llm_client.prompts import render_prompt
 from llm_client.workflow.duet import (
     ContractViolation,
     CorrectnessFinding,
@@ -124,6 +126,7 @@ class ReviewProfile:
     """Prompt/schema extension for standalone artifact review."""
 
     name: str
+    prompt_ref: str = "shared.review.adversarial_artifact.generic@1"
     system_addendum: str = ""
     user_addendum: str = ""
     requires_schema_v2: bool = False
@@ -136,6 +139,7 @@ def register_review_profile(profile: ReviewProfile) -> None:
     """Register a standalone review profile by unique name."""
     if not profile.name.strip():
         raise ValueError("ReviewProfile.name must be non-empty")
+    parse_prompt_ref(profile.prompt_ref)
     if profile.name in _REGISTRY:
         raise ValueError(f"Review profile already registered: {profile.name}")
     _REGISTRY[profile.name] = profile
@@ -261,47 +265,15 @@ def build_review_prompt(
     """Build messages for a standalone adversarial review."""
     selected_profile = profile or get_review_profile("generic")
     schema_name = response_schema.__name__
-    system = (
-        "You are an adversarial reviewer. Your job is to find what's WRONG "
-        "with the artifact below, not to validate it. The author of the "
-        "artifact is biased toward their own work; your role is the opposite "
-        "bias — look for bugs, missed edge cases, contradictions with stated "
-        "constraints, unverifiable claims, and scope drift. Inspect the "
-        "workspace via your file-reading tools to verify any claim against "
-        "actual code. Do not edit any files."
+    return render_prompt(
+        prompt_ref=selected_profile.prompt_ref,
+        artifact_label=artifact_label,
+        artifact_body=artifact_body,
+        context_body=context_body or "(no context provided - review on intrinsic merit)",
+        schema_name=schema_name,
+        profile_system_addendum=selected_profile.system_addendum.strip(),
+        profile_user_addendum=selected_profile.user_addendum.strip(),
     )
-    if selected_profile.system_addendum.strip():
-        system = f"{system}\n\n{selected_profile.system_addendum.strip()}"
-
-    user_parts = [
-        f"## Artifact under review: {artifact_label}",
-        "",
-        "## Context (what the author was attempting)",
-        context_body or "(no context provided — review on intrinsic merit)",
-        "",
-        "## Artifact body",
-        artifact_body,
-        "",
-        f"Return a {schema_name} JSON object. Verdict must be one of: "
-        "pass, concerns, blocker. Groundedness rules: every "
-        "correctness_findings entry MUST have file_path (str) and line (int); "
-        "every contract_violations entry MUST have constraint, violation, "
-        "and evidence_path. If you cannot cite a specific file:line, use "
-        "unverified_claims (UnverifiedClaim with claim + reason_unverified) "
-        "or a free-text scope_drift_findings entry instead. Use 'blocker' "
-        "verdict only when at least one finding would break correctness or "
-        "a stated constraint. Use 'concerns' when at least one significant "
-        "correctness or contract issue exists but none is catastrophic. Use 'pass' when "
-        "the artifact is shippable as-is (nits/unverified may still appear).",
-    ]
-    if selected_profile.user_addendum.strip():
-        user_parts.extend(
-            ["", "## Review profile instructions", selected_profile.user_addendum.strip()]
-        )
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": "\n".join(user_parts)},
-    ]
 
 
 def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
@@ -401,30 +373,6 @@ def render_quality_optimal_sections(review: AdversarialReviewV1) -> str:
     return "\n".join(lines)
 
 
-_QUALITY_OPTIMAL_SYSTEM_ADDENDUM = (
-    "You are reviewing a methodology white paper whose explicit purpose is to "
-    "describe the quality-optimal architecture for its task, with compute cost "
-    "treated as unconstrained. Do not recommend cutting, simplifying, gating, "
-    "cheapening, or staging anything to save cost, time, latency, or effort. "
-    "Also do not recommend adding machinery merely because it is conventional "
-    "or more complete. Every proposed change must improve correctness or "
-    "fidelity to the actual optimum."
-)
-
-_QUALITY_OPTIMAL_USER_ADDENDUM = (
-    "Classify feedback through the canonical AdversarialReview schema. Put "
-    "wrong claims, contradictions, and incoherence in correctness_findings or "
-    "contract_violations. Put genuine optimum gaps in correctness_findings and "
-    "link them with profile_annotations kind=optimum_gap, including the "
-    "concrete validity loss in validity_loss_without_change. Put tempting but "
-    "rejected additions in profile_annotations kind=spurious. Put uncertain "
-    "items in unverified_claims or profile_annotations kind=uncertain. "
-    "Explicitly check internal coherence between definitions, worked examples, "
-    "and sections. Rank high-impact defects first. Distinguish a useful "
-    "epistemic tension from an error to remove."
-)
-
-
 def _register_builtins() -> None:
     if "generic" not in _REGISTRY:
         register_review_profile(ReviewProfile(name="generic"))
@@ -432,8 +380,7 @@ def _register_builtins() -> None:
         register_review_profile(
             ReviewProfile(
                 name="quality_optimal_whitepaper",
-                system_addendum=_QUALITY_OPTIMAL_SYSTEM_ADDENDUM,
-                user_addendum=_QUALITY_OPTIMAL_USER_ADDENDUM,
+                prompt_ref="shared.review.adversarial_artifact.quality_optimal_whitepaper@1",
                 requires_schema_v2=True,
             )
         )

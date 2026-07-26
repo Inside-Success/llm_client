@@ -54,8 +54,7 @@ os.kill(os.getpid(), 9)
         io_log._db_conn = None
         result = get_call_lifecycle(logical_call_id=logical_call_id)
     finally:
-        if io_log._db_conn is not None:
-            io_log._db_conn.close()
+        io_log.close()
         io_log._db_path, io_log._db_conn = previous_path, previous_conn
     assert result[0]["state"] == "interrupted_or_abandoned"
 

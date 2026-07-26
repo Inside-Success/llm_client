@@ -52,6 +52,7 @@ class PreparedPublicCallEnvelope:
     heartbeat_interval_s: float
     stall_after_s: float
     runtime_kwargs: dict[str, Any]
+    logical_timeout_s: float | None = None
     # Optional for callers constructing a test/compatibility envelope directly;
     # production preparation always supplies the acquired lease.
     budget_scope_lease: str | BudgetReservationLease | None = None
@@ -63,6 +64,7 @@ def _prepare_public_call_envelope(
     timeout: int,
     kwargs: dict[str, Any],
     messages: list[dict[str, Any]],
+    logical_timeout: float | None = None,
 ) -> PreparedPublicCallEnvelope:
     """Resolve call tags, lifecycle settings, and provider-safe runtime kwargs."""
 
@@ -112,6 +114,7 @@ def _prepare_public_call_envelope(
         resolved_max_budget=resolved_max_budget,
         effective_provider_timeout=effective_provider_timeout,
         requested_timeout_s=_requested_timeout_for_lifecycle(timeout),
+        logical_timeout_s=logical_timeout,
         heartbeat_interval_s=heartbeat_interval_s,
         stall_after_s=stall_after_s,
         budget_scope_lease=budget_scope_lease,
@@ -165,6 +168,7 @@ def _run_sync_public_call(
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
         requested_timeout_s=envelope.requested_timeout_s,
+        logical_timeout_s=envelope.logical_timeout_s,
         transport_timeout_status="forwarded_to_runtime",
         prompt_sha256=envelope.prompt_sha256,
         prompt_ref=envelope.normalized_prompt_ref,
@@ -193,6 +197,7 @@ def _run_sync_public_call(
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
             requested_timeout_s=envelope.requested_timeout_s,
+            logical_timeout_s=envelope.logical_timeout_s,
             transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
@@ -218,6 +223,7 @@ def _run_sync_public_call(
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
         requested_timeout_s=envelope.requested_timeout_s,
+        logical_timeout_s=envelope.logical_timeout_s,
         transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         resolved_model=resolve_model(result),
@@ -271,6 +277,7 @@ async def _run_async_public_call(
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
         requested_timeout_s=envelope.requested_timeout_s,
+        logical_timeout_s=envelope.logical_timeout_s,
         transport_timeout_status="forwarded_to_runtime",
         prompt_sha256=envelope.prompt_sha256,
         prompt_ref=envelope.normalized_prompt_ref,
@@ -299,6 +306,7 @@ async def _run_async_public_call(
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
             requested_timeout_s=envelope.requested_timeout_s,
+            logical_timeout_s=envelope.logical_timeout_s,
             transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
@@ -323,6 +331,7 @@ async def _run_async_public_call(
             requested_model=model,
             provider_timeout_s=envelope.effective_provider_timeout,
             requested_timeout_s=envelope.requested_timeout_s,
+            logical_timeout_s=envelope.logical_timeout_s,
             transport_timeout_status="forwarded_to_runtime",
             prompt_ref=envelope.normalized_prompt_ref,
             latency_s=time.monotonic() - started_at,
@@ -348,6 +357,7 @@ async def _run_async_public_call(
         requested_model=model,
         provider_timeout_s=envelope.effective_provider_timeout,
         requested_timeout_s=envelope.requested_timeout_s,
+        logical_timeout_s=envelope.logical_timeout_s,
         transport_timeout_status="forwarded_to_runtime",
         prompt_ref=envelope.normalized_prompt_ref,
         resolved_model=resolve_model(result),

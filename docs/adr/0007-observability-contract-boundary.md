@@ -84,3 +84,12 @@ retain prompts, responses, provider payloads, credentials, or exception text.
 The canonical transaction logic lives in
 `llm_client/observability/budget_reservations.py`; `io_log.py` owns only schema
 creation and compatibility access to the shared SQLite connection.
+
+## 2026-07-25 Amendment: Synchronized Sink Shutdown
+
+The compatibility facade owns synchronized closure of its shared SQLite
+connection. Shutdown waits behind the same write lock used by persistence and
+then takes the connection lock in the normal write-path order. Tests and
+maintenance commands must call `io_log.close()` rather than closing
+`_db_conn` directly; this prevents lifecycle heartbeat writers from operating
+on a connection closed concurrently by teardown.

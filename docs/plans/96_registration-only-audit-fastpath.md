@@ -1,6 +1,6 @@
 # Plan #96: Registration-Only Audit Fast Path
 
-**Status:** In Progress (implemented; focused verified)
+**Status:** Complete
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -71,7 +71,7 @@ question before classifying and migrating projects.
 
 | Test Pattern | Why |
 |--------------|-----|
-| `pytest -q tests/test_model_policy_audit.py` | Full scanner contract for this slice. |
+| `tests/test_model_policy_audit.py` | Full scanner contract for this slice. |
 
 ---
 
@@ -86,7 +86,7 @@ question before classifying and migrating projects.
 
 ## Verification Evidence
 
-- `pytest -q tests/test_model_policy_audit.py` — passed, 13 tests.
+- `pytest -q tests/test_model_policy_audit.py` — passed, 14 tests on 2026-07-25.
 - `python -m py_compile llm_client/model_policy_audit.py` — passed.
 - `python -m llm_client.model_policy_audit --registration-only tests/test_model_policy_audit.py` — passed, `MODEL POLICY OK`.
 - `git diff --check` — passed.

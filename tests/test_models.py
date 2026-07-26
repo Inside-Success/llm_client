@@ -207,8 +207,7 @@ class TestPerformanceDemotion:
 
         yield
 
-        if io_log._db_conn is not None:
-            io_log._db_conn.close()
+        io_log.close()
         io_log._db_path = old_db_path
         io_log._db_conn = old_db_conn
         io_log._enabled = old_enabled
@@ -382,8 +381,7 @@ class TestQueryPerformance:
         io_log._db_path = tmp_path / "test_perf.db"
         io_log._db_conn = None
         yield
-        if io_log._db_conn is not None:
-            io_log._db_conn.close()
+        io_log.close()
         io_log._db_path = old_db_path
         io_log._db_conn = old_db_conn
 

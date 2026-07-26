@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from llm_client import load_prompt_asset, resolve_prompt_asset
 from llm_client.workflow.adversarial_review import (
     AdversarialReview,
     ReviewAnnotation,
@@ -26,11 +29,42 @@ def test_builtin_profiles_registered() -> None:
     assert "quality_optimal_whitepaper" in list_review_profiles()
     assert not get_review_profile("generic").requires_schema_v2
     assert get_review_profile("quality_optimal_whitepaper").requires_schema_v2
+    assert get_review_profile("generic").prompt_ref == "shared.review.adversarial_artifact.generic@1"
+    assert (
+        get_review_profile("quality_optimal_whitepaper").prompt_ref
+        == "shared.review.adversarial_artifact.quality_optimal_whitepaper@1"
+    )
+
+
+def test_builtin_profile_prompt_assets_exist() -> None:
+    assert load_prompt_asset("shared.review.adversarial_artifact.generic@1").status == "canonical"
+    quality = load_prompt_asset("shared.review.adversarial_artifact.quality_optimal_whitepaper@1")
+    assert quality.derived_from == "shared.review.adversarial_artifact.generic@1"
+    assert quality.output_schema == "llm_client.adversarial_review.v2"
+
+
+def test_builtin_profile_prompt_assets_exist_in_package_fallback() -> None:
+    asset_root = Path(__file__).resolve().parents[1] / "llm_client" / "prompt_assets"
+
+    generic = resolve_prompt_asset("shared.review.adversarial_artifact.generic@1", asset_root=asset_root)
+    quality = resolve_prompt_asset(
+        "shared.review.adversarial_artifact.quality_optimal_whitepaper@1",
+        asset_root=asset_root,
+    )
+
+    assert generic.manifest.status == "canonical"
+    assert quality.manifest.derived_from == "shared.review.adversarial_artifact.generic@1"
+    assert quality.template_path.name == "template.yaml"
 
 
 def test_registry_rejects_duplicate_profile() -> None:
     with pytest.raises(ValueError):
         register_review_profile(ReviewProfile(name="generic"))
+
+
+def test_registry_rejects_malformed_prompt_ref() -> None:
+    with pytest.raises(ValueError, match="Invalid prompt_ref"):
+        register_review_profile(ReviewProfile(name="bad_prompt_ref", prompt_ref="not a prompt ref"))
 
 
 def test_registry_unknown_profile_raises_clear_error() -> None:
@@ -171,6 +205,15 @@ def test_quality_profile_adds_prompt_contract() -> None:
     assert "compute cost treated as unconstrained" in system
     assert "profile_annotations kind=optimum_gap" in user
     assert "methodology.md" in user
+
+
+def test_review_prompt_policy_text_is_not_embedded_in_python() -> None:
+    source_path = Path(__file__).resolve().parents[1] / "llm_client" / "workflow" / "adversarial_review.py"
+    source = source_path.read_text(encoding="utf-8")
+
+    assert "compute cost treated as unconstrained" not in source
+    assert "Do not recommend cutting, simplifying, gating" not in source
+    assert "profile_annotations kind=optimum_gap" not in source
 
 
 def test_normalize_rejects_boolean_optimum_gap_link() -> None:

@@ -1,6 +1,6 @@
 # Plan #335: Concurrent Root-Budget Reservations
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** Plan #333
@@ -516,19 +516,25 @@ Do not run paid provider calls. All implementation evidence is zero-spend.
 
 ## Acceptance Criteria
 
-- [ ] Canonical and negative examples pass against real temporary SQLite.
-- [ ] Concurrent admission is atomic across processes sharing one DB.
-- [ ] Sequential mode remains backward compatible.
-- [ ] Reserved-concurrent mode cannot run without durable storage and a
+- [x] Canonical and negative examples pass against real temporary SQLite.
+- [x] Concurrent admission is atomic across processes sharing one DB.
+- [x] Sequential mode remains backward compatible.
+- [x] Reserved-concurrent mode cannot run without durable storage and a
       positive reservation.
-- [ ] Lease crash recovery and ownership loss fail as specified.
-- [ ] Retries/fallbacks reuse one reservation.
-- [ ] Result, error, cancellation, and stream terminal paths close leases in
+- [x] Lease crash recovery and ownership loss fail as specified.
+- [x] Retries/fallbacks reuse one reservation.
+- [x] Result, error, cancellation, and stream terminal paths close leases in
       the required order.
-- [ ] Provider payloads contain no budget controls.
-- [ ] Personal and Inside-Success `main` satisfy the Plan #105 ancestry/tree
+- [x] Provider payloads contain no budget controls.
+- [x] Personal and Inside-Success `main` satisfy the Plan #105 ancestry/tree
       rule at immutable SHAs.
-- [ ] DIGIMON has not yet removed its local ledger.
+- [x] DIGIMON has not yet removed its local ledger.
+
+Completion evidence was refreshed on 2026-07-25: personal merge
+`dc61e356a1191b595c76b277fa618b219294b21d` is an ancestor of Inside Success
+merge `b78d86bc47bb787c6751dbdf8d7dddcfc51f4045`, and both commits have the
+same Git tree. DIGIMON still retains `_QueryBudgetLedger`; removal remains a
+downstream Plan #182 decision.
 
 ## Rollback
 

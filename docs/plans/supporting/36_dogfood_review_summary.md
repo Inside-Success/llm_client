@@ -1,4 +1,4 @@
-# Plan #36 Dogfood Review Summary
+# Supporting Evidence: Plan #36 Dogfood Review Summary
 
 This file is the tracked, redacted evidence note for the dogfood review that
 shaped Plan #36. The raw review artifacts are local run outputs and are not

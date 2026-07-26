@@ -66,11 +66,19 @@ def embed_impl(
     api_key: str | None = None,
     task: str | None = None,
     trace_id: str | None = None,
+    max_budget: float | None = None,
     **kwargs: Any,
 ) -> EmbeddingResult:
     """Implementation for embed extracted out of client facade."""
     texts = [input] if isinstance(input, str) else list(input)
     _log_t0 = time.monotonic()
+    task, trace_id, max_budget, _ = _client._require_tags(
+        task,
+        trace_id,
+        max_budget,
+        caller="embed",
+    )
+    _client._check_budget(trace_id, max_budget)
     timeout = _client._normalize_timeout(timeout, caller="embed")
     resolved_model, resolved_api_base = _resolve_embedding_route(model=model, api_base=api_base)
     retry_policy = _resolve_embedding_retry_policy(kwargs)
@@ -175,11 +183,19 @@ async def aembed_impl(
     api_key: str | None = None,
     task: str | None = None,
     trace_id: str | None = None,
+    max_budget: float | None = None,
     **kwargs: Any,
 ) -> EmbeddingResult:
     """Implementation for aembed extracted out of client facade."""
     texts = [input] if isinstance(input, str) else list(input)
     _log_t0 = time.monotonic()
+    task, trace_id, max_budget, _ = _client._require_tags(
+        task,
+        trace_id,
+        max_budget,
+        caller="aembed",
+    )
+    _client._check_budget(trace_id, max_budget)
     timeout = _client._normalize_timeout(timeout, caller="aembed")
     resolved_model, resolved_api_base = _resolve_embedding_route(model=model, api_base=api_base)
     retry_policy = _resolve_embedding_retry_policy(kwargs)
