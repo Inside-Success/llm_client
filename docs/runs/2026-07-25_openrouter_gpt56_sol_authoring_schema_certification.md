@@ -12,7 +12,7 @@ quality or make the route an automatic default.
 ## Environment and invalidation inputs
 
 - Source branch: `feature/openrouter-sol-route`.
-- Shared client revision: recorded by the landing commit for this change.
+- Shared client revision: `0a6d0268d62443499e9ef8cc5208a00ef4573a90`.
 - Provider catalog: authenticated `GET https://openrouter.ai/api/v1/models`,
   observed 2026-07-25; the returned model supports `structured_outputs` and
   `reasoning_effort`.
