@@ -1,26 +1,19 @@
-# Handoff: llm_client runtime follow-up relevant to DIGIMON
+# Handoff: `llm_client` runtime follow-up relevant to DIGIMON
 
-Updated: 2026-04-14
-Working branch: `fix/instructor-retry-unwrapping`
+Updated: 2026-07-25
+Canonical revision checked: `5a3369e`
 
 ## Current Posture
 
-- `llm_client` is in maintenance mode, not an open-ended refactor sprint.
-- Plans `#25`, `#26`, and `#27` already landed the GraphRAG-critical provider
-  exhaustion fixes:
-  - monthly spend-cap exhaustion is treated as immediate failover,
-  - exhausted models are cooled down across calls,
-  - multi-hour provider retry hints fail over instead of sleeping inside the
-    call.
-- The branch is ahead of `origin/fix/instructor-retry-unwrapping` by two
-  unpublished commits:
-  - `2308465` `[Plan #178] Add goal metadata to tool decorator`
-  - `3739578` `[Plan #179] Add tool complexity and routing metadata`
+- Personal `main` is clean and synchronized with `origin/main`.
+- Plan `#91` is implemented in the shared runtime; only a governed downstream
+  DIGIMON replay remains.
+- Plan `#94` still owns the undefined task-configured technical-output ceiling.
+- Plans `#121`, `#122`, `#124`, and `#334` are merged and await the downstream
+  acceptance named in the plan index.
+- Plan `#35` remains intentionally blocked on the optional Phase 6 decision.
 
-Those two commits are repo-local metadata improvements, not GraphRAG blockers,
-but they were not yet pushed before this handoff.
-
-## What Is Finished
+## Relevant Finished Work
 
 - Provider exhaustion classification is materially better than it was during the
   failed DIGIMON rebuild attempts.
@@ -36,38 +29,23 @@ but they were not yet pushed before this handoff.
 The new tool metadata is implemented and tested, but downstream consumers have
 not yet been broadly updated to exploit it.
 
-## Unfinished Work
+## Remaining Work
 
-### 1. Plan `#91` is still the live shared-runtime blocker for DIGIMON controller churn
+### 1. Verify Plan `#91` in DIGIMON
 
 Plan: `docs/plans/91_pending_atom_submit_churn_requires_todo_progress.md`
 
-Problem:
+Canonical implementation commits:
 
-- repeated `submit_answer` attempts rejected for `pending_atoms` can still
-  escalate into forced-terminal behavior;
-- that is the wrong shared policy for DIGIMON’s unresolved-hop failure family;
-- the correct shared behavior is to require genuine TODO/evidence progress
-  before another submit is attempted.
+- `0fda376`
+- `1c10156`
+- `f349655`
+- `db6a6c2`
 
-Why this still matters:
-
-- DIGIMON Plan `#30` should not hand-roll an app-local patch for this;
-- if the controller keeps churning around unresolved atoms, the shared runtime
-  is still the right fix surface.
-
-Files:
-
-- `llm_client/agent/mcp_turn_tools.py`
-- `llm_client/agent/mcp_turn_outcomes.py`
-- `llm_client/agent/mcp_turn_execution.py`
-- `tests/test_mcp_agent.py`
-
-Acceptance already written in the plan:
-
-- pending-atom submit retries are suppressed until TODO progress occurs;
-- the runtime no longer emits forced-final acceptance for this family;
-- existing submit-evidence gating remains green.
+Focused tests pass: pending-atom submit retries are suppressed until TODO
+progress occurs, and the runtime no longer emits forced-final acceptance for
+this family. The remaining acceptance item is a governed DIGIMON replay on the
+original unresolved-hop failure family.
 
 ### 2. The new tool-routing metadata is landed but not yet widely consumed
 
@@ -99,10 +77,9 @@ obvious missing implementation.
 
 ## Recommended Next Steps
 
-1. Push this branch so the tool-metadata commits and current handoff are no
-   longer local-only.
-2. When DIGIMON restarts controller anti-churn work, implement Plan `#91`
-   before app-local controller patches.
+1. Run the Plan `#91` governed downstream replay in DIGIMON; do not add an
+   app-local duplicate of the shared controller behavior.
+2. Bound Plan `#94`'s output-ceiling contract before assigning implementation.
 3. After the next real long-running DIGIMON rebuild or benchmark batch, review
    whether any remaining provider failure mode still belongs in shared runtime.
 4. Decide whether `goal` / `complexity` / routing metadata should be treated as
