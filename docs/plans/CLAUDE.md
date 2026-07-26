@@ -38,13 +38,14 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 ## Current Execution
 
-- **Canonical main:** includes lifecycle-integrity repair `f870362` (verified
-  2026-07-25; 1,930 tests passed).
+- **Canonical main:** `5a3369e` (verified 2026-07-25; 1,948 passed, 3 skipped,
+  12 deselected).
 - **Merged, awaiting downstream acceptance:** Plans #121, #122, #124, and
   #334. Plan #124's shared implementation is verified locally; its remaining
   acceptance is one governed Process Tracing replay.
-- **Other open work:** Plan #91 controller churn and Plan #94's technical
-  output ceiling. Neither silently blocks Plan #124.
+- **Other open work:** Plan #91's shared controller-churn implementation is
+  landed and awaits one governed DIGIMON replay. Plan #94's technical output
+  ceiling remains an implementation gap. Neither silently blocks Plan #124.
 - **Blocked:** Plan #35 optional Phase 6 requires a fresh user decision.
 
 ## Gap Summary
@@ -116,7 +117,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 42 | [Codex CLI MCP Parity](42_codex_cli_mcp_parity.md) | High | ✅ Complete | Inside Success Twitter prospecting agent |
 | 43 | [Version Adversarial Review Prompts as Assets](43_review_prompt_assets.md) | Medium | ✅ Complete | - |
 | 44 | [Reconcile Completed Cross-Project Plan Status](44_plan_status_reconciliation.md) | Medium | ✅ Complete | - |
-| 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | 🚧 In Progress | - |
+| 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | 🧪 Implemented; downstream verification pending | DIGIMON governed replay |
 | 93 | [Agent tool-usage ledger](93_agent-tool-usage-ledger.md) | High | ✅ Complete | project-meta Plan #213 reporting and comparative selection evaluation |
 | 92 | [Worktree Lifecycle Governance and Cleanup](92_worktree-lifecycle-governance-and-cleanup.md) | Critical | ✅ Complete | Merge-or-disposition enforcement live; historical checkout cleanup reconciled |
 | 94 | [Model Tier Taxonomy and Fable Ban](94_model-tier-taxonomy-and-fable-ban.md) | High | 🚧 In Progress (tier selectors implemented; declared-vs-certified route follow-up open) | Cross-project model-selection cleanup |

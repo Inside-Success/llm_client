@@ -1,6 +1,6 @@
 # Plan #91: Pending-Atom Submit Churn Requires TODO Progress
 
-**Status:** In Progress
+**Status:** Implemented; downstream verification pending
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -33,11 +33,33 @@ When `submit_answer` is rejected for pending atoms, the shared runtime should:
 
 ## Acceptance
 
-- Focused agent tests show repeated pending-atom submit retries are suppressed
+- [x] Focused agent tests show repeated pending-atom submit retries are suppressed
   until TODO progress occurs.
-- The runtime no longer emits `SUBMIT_FORCED_ACCEPT_FORCED_FINAL` for this
+- [x] The runtime no longer emits `SUBMIT_FORCED_ACCEPT_FORCED_FINAL` for this
   specific rejection family.
-- Existing submit-evidence gating tests still pass.
+- [x] Existing submit-evidence gating tests still pass.
+- [ ] A governed DIGIMON replay confirms the shared behavior on the original
+  unresolved-hop failure family.
+
+## Canonical implementation evidence
+
+The shared implementation is on `main` through these commits:
+
+- `0fda376` — gate pending-atom submit churn on TODO progress;
+- `1c10156` — preserve repair guidance across control suppression;
+- `f349655` — stop repeated suppressed submit churn earlier;
+- `db6a6c2` — land the TODO-progress behavior on mainline.
+
+Focused verification on `main` at `5a3369e`:
+
+```text
+pytest -q tests/test_mcp_agent.py \
+  -k 'pending_atom_submit_rejections_require_todo_progress or repeated_submit_suppressions_without_todo_progress'
+2 passed, 107 deselected
+```
+
+The remaining work is downstream acceptance, not another shared-runtime
+implementation.
 
 ## Files
 
