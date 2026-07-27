@@ -15,6 +15,7 @@ from llm_client import (
     Hooks,
     LLMCallResult,
     LLMStream,
+    OpenRouterRoutePolicyV1,
     LRUCache,
     RetryPolicy,
     StructuredOutputPolicy,
@@ -112,6 +113,35 @@ def _mock_response(
 
 class TestCallLLM:
     """Tests for call_llm."""
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.0)
+    def test_typed_openrouter_route_policy_reaches_provider_payload(
+        self, mock_cost: MagicMock, mock_completion: AsyncMock
+    ) -> None:
+        mock_completion.return_value = _mock_response()
+
+        call_llm(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "hello"}],
+            openrouter_route_policy=OpenRouterRoutePolicyV1(
+                allowed_providers=("Morph",),
+                zero_data_retention=True,
+                allow_provider_fallbacks=False,
+            ),
+            task="test.openrouter.route_policy",
+            trace_id="test/openrouter/route-policy",
+            max_budget=1.0,
+        )
+
+        payload = mock_completion.call_args.kwargs
+        assert payload["provider"] == {
+            "require_parameters": True,
+            "only": ["Morph"],
+            "zdr": True,
+            "allow_fallbacks": False,
+        }
+        assert "openrouter_route_policy" not in payload
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)

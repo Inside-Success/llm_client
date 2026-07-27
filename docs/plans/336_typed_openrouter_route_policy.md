@@ -1,6 +1,6 @@
 # Plan #336: Typed OpenRouter Route Policy and Consumer Migration
 
-**Status:** 📋 Planned
+**Status:** 🚧 In Progress
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None for the shared-client slice; the Inside Success integration
@@ -27,6 +27,20 @@ listed stop condition instead of inventing another routing mechanism.
 | Landscape disposition | `linked` to ADR 0016 and OpenRouter's provider-routing contract |
 | Shared-client baseline | personal `main` at `287d0cb2af229db4c03923ad4047d7dfe79310dd` on 2026-07-27 |
 | Work graph | `docs/plans/supporting/336_work_graph.json` |
+
+## Implementation Progress (2026-07-27)
+
+- **Completed:** WU-336-01 shared-client typed policy boundary, deterministic
+  payload compiler, pre-dispatch conflict checks, typed no-compatible-route
+  classification, public text/structured/stream entry points, and replay-safe
+  policy serialization.
+- **Observed:** one non-private native-JSON-Schema probe against
+  `openrouter/deepseek/deepseek-v4-flash` returned a Pydantic-validated
+  result under `data_collection="deny"` and `zdr=true`; no provider was
+  allowlisted for that probe, so it is not private-data authorization evidence.
+- **Remaining:** complete the shared-client verification/closeout, then migrate
+  the separately claimed Inside Success runner only after its worktree is
+  available. Do not broaden that runner's provider authorization automatically.
 
 ## Objective and Target
 

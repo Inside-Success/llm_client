@@ -18,6 +18,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from llm_client.core.errors import LLMConfigurationError
+from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
 from llm_client.execution.retry import _error_status_code
 
 logger = logging.getLogger(__name__)
@@ -214,6 +216,47 @@ def _reject_unsafe_openrouter_model_selection(call_kwargs: Mapping[str, Any]) ->
             _check_model_deprecation(model_id)
 
 
+def compile_openrouter_route_policy(policy: OpenRouterRoutePolicyV1) -> dict[str, Any]:
+    """Compile the stable public policy into OpenRouter's provider payload."""
+
+    provider: dict[str, Any] = {"require_parameters": True}
+    if policy.allowed_providers is not None:
+        provider["only"] = list(policy.allowed_providers)
+    if policy.data_collection is not None:
+        provider["data_collection"] = policy.data_collection
+    if policy.zero_data_retention is not None:
+        provider["zdr"] = policy.zero_data_retention
+    if not policy.allow_provider_fallbacks:
+        provider["allow_fallbacks"] = False
+    if policy.sort is not None:
+        provider["sort"] = policy.sort
+    return provider
+
+
+def _apply_openrouter_route_policy(
+    model: str,
+    call_kwargs: dict[str, Any],
+    policy: OpenRouterRoutePolicyV1 | None,
+) -> None:
+    """Apply a typed route policy or reject ambiguous/raw route controls locally."""
+
+    raw_provider = call_kwargs.get("provider")
+    if policy is None:
+        return
+    api_base = call_kwargs.get("api_base")
+    if not _is_openrouter_call(model, str(api_base) if api_base is not None else None):
+        raise LLMConfigurationError(
+            "openrouter_route_policy requires an OpenRouter model or API base",
+            error_code="openrouter_route_policy_on_non_openrouter_route",
+        )
+    if raw_provider is not None:
+        raise LLMConfigurationError(
+            "openrouter_route_policy cannot be combined with raw provider kwargs",
+            error_code="openrouter_route_policy_conflicts_with_provider_kwargs",
+        )
+    call_kwargs["provider"] = compile_openrouter_route_policy(policy)
+
+
 def _enable_openrouter_inline_metadata(
     model: str,
     call_kwargs: dict[str, Any],
@@ -231,6 +274,13 @@ def _enable_openrouter_inline_metadata(
     destinations can join their traces to local evidence. Explicit caller
     trace hierarchy and custom fields always win.
     """
+
+    policy_value = call_kwargs.pop("openrouter_route_policy", None)
+    if isinstance(policy_value, Mapping):
+        policy_value = OpenRouterRoutePolicyV1.model_validate(policy_value)
+    if policy_value is not None and not isinstance(policy_value, OpenRouterRoutePolicyV1):
+        raise TypeError("openrouter_route_policy must be an OpenRouterRoutePolicyV1")
+    _apply_openrouter_route_policy(model, call_kwargs, policy_value)
 
     api_base = call_kwargs.get("api_base")
     if not _is_openrouter_call(

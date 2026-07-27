@@ -115,6 +115,10 @@ class LLMCapabilityError(LLMError):
     """Requested execution mode/capabilities are incompatible with model/kwargs."""
 
 
+class LLMNoCompatibleRouteError(LLMCapabilityError):
+    """OpenRouter has no endpoint satisfying the requested route constraints."""
+
+
 class LLMConfigurationError(LLMError):
     """Invalid client/runtime configuration (machine-readable error_code attached)."""
 
@@ -211,6 +215,8 @@ def classify_error(error: Exception) -> type[LLMError]:
     """
     # Unwrap instructor retry wrapper to get the actual provider error
     error = _unwrap_instructor_retry(error)
+    if "no endpoints found that can handle the requested parameters" in _error_message(error).lower():
+        return LLMNoCompatibleRouteError
     try:
         import litellm as _lt
 

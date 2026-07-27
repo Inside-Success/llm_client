@@ -11,6 +11,7 @@ from llm_client.core.errors import (
     LLMContentFilterError,
     LLMError,
     LLMModelNotFoundError,
+    LLMNoCompatibleRouteError,
     LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMTransientError,
@@ -44,6 +45,14 @@ class TestClassifyLitellmTypes:
             message="Model not found", model="gpt-99", llm_provider="openai"
         )
         assert classify_error(err) is LLMModelNotFoundError
+
+    def test_openrouter_no_compatible_endpoint_is_not_model_missing(self):
+        err = litellm.NotFoundError(
+            message="No endpoints found that can handle the requested parameters",
+            model="deepseek/deepseek-v4-flash",
+            llm_provider="openrouter",
+        )
+        assert classify_error(err) is LLMNoCompatibleRouteError
 
     def test_content_policy(self):
         err = litellm.ContentPolicyViolationError(
@@ -212,6 +221,7 @@ class TestErrorHierarchy:
             LLMContentFilterError,
             LLMTransientError,
             LLMModelNotFoundError,
+            LLMNoCompatibleRouteError,
             LLMConfigurationError,
         ]:
             assert issubclass(cls, LLMError)

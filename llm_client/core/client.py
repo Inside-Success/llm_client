@@ -88,6 +88,7 @@ import llm_client.utils.rate_limit as _rate_limit
 from llm_client.execution.call_contracts import (
     AGENT_RETRY_SAFE_ENV,
     ExecutionMode,
+    OpenRouterRoutePolicyV1,
     StructuredOutputPolicy,
     _AGENT_ONLY_KWARGS,
     _CODEX_AGENT_ALIASES,
@@ -467,6 +468,7 @@ def call_llm(
     hooks: Hooks | None = None,
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     parent_trace_id: str | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
@@ -537,6 +539,8 @@ def call_llm(
     """
     from llm_client.execution.text_runtime import _call_llm_impl
 
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
     if budget_scope_trace_id is not None:
@@ -608,6 +612,7 @@ def call_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -656,6 +661,8 @@ def call_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="call_llm_structured")
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     kwargs["budget_scope_mode"] = budget_scope_mode
@@ -807,6 +814,7 @@ async def acall_llm(
     hooks: Hooks | None = None,
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     parent_trace_id: str | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
@@ -851,6 +859,8 @@ async def acall_llm(
     """
     from llm_client.execution.text_runtime import _acall_llm_impl
 
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
     if budget_scope_trace_id is not None:
@@ -922,6 +932,7 @@ async def acall_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -970,6 +981,8 @@ async def acall_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="acall_llm_structured")
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     kwargs["budget_scope_mode"] = budget_scope_mode
@@ -1368,6 +1381,7 @@ def stream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -1411,6 +1425,8 @@ def stream_llm(
         LLMStream that yields text chunks and exposes ``.result``
     """
     from llm_client.execution.stream_runtime import stream_llm_impl
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
 
     return stream_llm_impl(
         model,
@@ -1452,6 +1468,7 @@ async def astream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -1465,6 +1482,8 @@ async def astream_llm(
         AsyncLLMStream that yields text chunks and exposes ``.result``
     """
     from llm_client.execution.stream_runtime import astream_llm_impl
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
 
     return await astream_llm_impl(
         model,

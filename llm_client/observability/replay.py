@@ -365,6 +365,12 @@ def _normalize_public_kwargs(public_kwargs: Mapping[str, Any]) -> tuple[JSONObje
         if key in _OBSERVABILITY_ONLY_KWARGS:
             continue
         value = public_kwargs[key]
+        if key == "openrouter_route_policy":
+            from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
+
+            if isinstance(value, OpenRouterRoutePolicyV1):
+                normalized_kwargs[key] = value.model_dump(mode="json")
+                continue
         if key == "mcp_servers":
             redacted_servers: dict[str, Any] = {}
             if isinstance(value, Mapping):
