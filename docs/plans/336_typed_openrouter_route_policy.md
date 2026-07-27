@@ -31,13 +31,16 @@ listed stop condition instead of inventing another routing mechanism.
 ## Implementation Progress (2026-07-27)
 
 - **Completed:** WU-336-01 shared-client typed policy boundary, deterministic
-  payload compiler, pre-dispatch conflict checks, typed no-compatible-route
-  classification, public text/structured/stream entry points, and replay-safe
-  policy serialization.
-- **Observed:** one non-private native-JSON-Schema probe against
-  `openrouter/deepseek/deepseek-v4-flash` returned a Pydantic-validated
-  result under `data_collection="deny"` and `zdr=true`; no provider was
-  allowlisted for that probe, so it is not private-data authorization evidence.
+  payload compiler, whole-chain pre-dispatch conflict checks, typed
+  no-compatible-route classification, public text/structured/stream entry
+  points, and replay-safe policy serialization.
+- **Observed:** a non-private native-JSON-Schema probe against
+  `openrouter/deepseek/deepseek-v4-flash` returned a Pydantic-validated result
+  under `data_collection="deny"` and `zdr=true`. Authenticated post-call
+  evidence observed `Fireworks` as the selected upstream. See
+  [`2026-07-27_typed_openrouter_route_policy_probe.md`](../runs/2026-07-27_typed_openrouter_route_policy_probe.md).
+  No provider was allowlisted for that public probe, so it is not private-data
+  authorization evidence.
 - **Remaining:** complete the shared-client verification/closeout, then migrate
   the separately claimed Inside Success runner only after its worktree is
   available. Do not broaden that runner's provider authorization automatically.

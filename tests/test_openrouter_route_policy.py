@@ -10,7 +10,7 @@ from llm_client.utils.openrouter import (
     _enable_openrouter_inline_metadata,
     compile_openrouter_route_policy,
 )
-from llm_client.observability.replay import build_call_snapshot
+from llm_client.observability.replay import build_call_snapshot, snapshot_fingerprint
 
 
 def test_compiles_typed_policy_without_unrelated_defaults() -> None:
@@ -37,6 +37,11 @@ def test_policy_rejects_empty_or_conflicting_constraints() -> None:
         OpenRouterRoutePolicyV1(allowed_providers=())
     with pytest.raises(ValueError, match="conflicts"):
         OpenRouterRoutePolicyV1(data_collection="allow", zero_data_retention=True)
+
+
+def test_policy_normalizes_provider_names_without_changing_order() -> None:
+    policy = OpenRouterRoutePolicyV1(allowed_providers=(" Morph ", "DeepInfra"))
+    assert policy.allowed_providers == ("Morph", "DeepInfra")
 
 
 def test_policy_applies_to_openrouter_payload() -> None:
@@ -111,3 +116,32 @@ def test_policy_is_replay_serializable() -> None:
         "require_parameters": True,
     }
     assert snapshot["replay"]["unsupported_keys"] == []
+
+
+def test_policy_mutation_changes_snapshot_identity() -> None:
+    common = {
+        "public_api": "call_llm",
+        "call_kind": "text",
+        "requested_model": "openrouter/deepseek/deepseek-v4-flash",
+        "messages": [{"role": "user", "content": "hello"}],
+        "prompt_ref": None,
+        "max_budget": 1.0,
+        "timeout": 30,
+        "num_retries": 0,
+        "reasoning_effort": None,
+        "api_base": None,
+        "base_delay": 0.0,
+        "max_delay": 0.0,
+        "retry_on": None,
+        "fallback_models": None,
+    }
+    strict = build_call_snapshot(
+        **common,
+        public_kwargs={"openrouter_route_policy": OpenRouterRoutePolicyV1(zero_data_retention=True)},
+    )
+    relaxed = build_call_snapshot(
+        **common,
+        public_kwargs={"openrouter_route_policy": OpenRouterRoutePolicyV1(zero_data_retention=False)},
+    )
+
+    assert snapshot_fingerprint(strict) != snapshot_fingerprint(relaxed)

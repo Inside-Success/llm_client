@@ -266,6 +266,13 @@ async def _acall_llm_impl(
         reasoning_effort=reasoning_effort,
     )
     models = plan.models
+    route_policy = kwargs.get("openrouter_route_policy")
+    for resolved_model in models:
+        _client._validate_openrouter_route_policy_model(
+            resolved_model,
+            _resolve_api_base_for_model(resolved_model, api_base, cfg),
+            route_policy,
+        )
     fallback_chain = plan.fallback_models or None
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
     model_policy_trace = plan.routing_trace.get("model_policy")

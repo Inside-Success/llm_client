@@ -28,7 +28,7 @@ import uuid
 from typing import Any, Literal, NoReturn
 
 import litellm
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import llm_client.io_log as _io_log
 from llm_client.core.errors import (
@@ -102,6 +102,18 @@ class OpenRouterRoutePolicyV1(BaseModel):
     sort: Literal["price", "throughput", "latency"] | None = None
     require_parameters: Literal[True] = True
 
+    @field_validator("allowed_providers")
+    @classmethod
+    def normalize_allowed_providers(
+        cls, value: tuple[str, ...] | None
+    ) -> tuple[str, ...] | None:
+        if value is None:
+            return None
+        return tuple(
+            provider.strip() if isinstance(provider, str) else provider
+            for provider in value
+        )
+
     @model_validator(mode="after")
     def validate_constraints(self) -> "OpenRouterRoutePolicyV1":
         if self.allowed_providers is not None:
@@ -111,7 +123,7 @@ class OpenRouterRoutePolicyV1(BaseModel):
             for provider in self.allowed_providers:
                 if not isinstance(provider, str) or not provider.strip():
                     raise ValueError("allowed_providers entries must be non-empty strings")
-                key = provider.casefold().strip()
+                key = provider.casefold()
                 if key in normalized:
                     raise ValueError("allowed_providers must not contain duplicates")
                 normalized.add(key)

@@ -241,20 +241,36 @@ def _apply_openrouter_route_policy(
     """Apply a typed route policy or reject ambiguous/raw route controls locally."""
 
     raw_provider = call_kwargs.get("provider")
+    api_base = call_kwargs.get("api_base")
+    _validate_openrouter_route_policy_model(
+        model,
+        str(api_base) if api_base is not None else None,
+        policy,
+    )
     if policy is None:
         return
-    api_base = call_kwargs.get("api_base")
-    if not _is_openrouter_call(model, str(api_base) if api_base is not None else None):
-        raise LLMConfigurationError(
-            "openrouter_route_policy requires an OpenRouter model or API base",
-            error_code="openrouter_route_policy_on_non_openrouter_route",
-        )
     if raw_provider is not None:
         raise LLMConfigurationError(
             "openrouter_route_policy cannot be combined with raw provider kwargs",
             error_code="openrouter_route_policy_conflicts_with_provider_kwargs",
         )
     call_kwargs["provider"] = compile_openrouter_route_policy(policy)
+
+
+def _validate_openrouter_route_policy_model(
+    model: str,
+    api_base: str | None,
+    policy: OpenRouterRoutePolicyV1 | None,
+) -> None:
+    """Reject a typed policy on a resolved route outside OpenRouter."""
+
+    if policy is None:
+        return
+    if not _is_openrouter_call(model, api_base):
+        raise LLMConfigurationError(
+            "openrouter_route_policy requires every resolved model leg to use OpenRouter",
+            error_code="openrouter_route_policy_on_non_openrouter_route",
+        )
 
 
 def _enable_openrouter_inline_metadata(

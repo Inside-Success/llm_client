@@ -305,6 +305,7 @@ from llm_client.utils.openrouter import (  # noqa: F811
     OPENROUTER_API_KEYS_ENV,
     OPENROUTER_DEFAULT_API_BASE,
     OPENROUTER_ROUTING_ENV,
+    _validate_openrouter_route_policy_model,
 )
 
 
