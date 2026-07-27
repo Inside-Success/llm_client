@@ -14,10 +14,12 @@ dependencies = [
     "pyyaml>=6.0",
     "httpx>=0.28,<1.0",
     "jsonschema>=4.18,<5.0",
+    # Core, not an extra: structured fallback imports instructor at runtime.
+    "instructor>=1.14.0",
 ]
 
 [project.optional-dependencies]
-structured = ["instructor>=1.14.0"]
+structured = ["instructor>=1.14.0"]  # Retained compatibility alias; instructor is core.
 workflow = ["langgraph>=1.1.3"]
 agents = ["claude-agent-sdk>=0.1.30"]
 codex = ["openai-codex-sdk>=0.1.11"]
