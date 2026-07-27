@@ -29,6 +29,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--project")
     parser.add_argument("--branch")
+    parser.add_argument(
+        "--include-active-decisions",
+        action="store_true",
+        help="Explicitly query agent-memory for active-decision warnings.",
+    )
     parser.add_argument("--fail-on-active-decisions", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
@@ -40,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         args.repo_root,
         project=args.project,
         branch=args.branch,
+        include_active_decisions=args.include_active_decisions,
         fail_on_active_decisions=args.fail_on_active_decisions,
     )
     if args.json:

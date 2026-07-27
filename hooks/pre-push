@@ -1,96 +1,65 @@
 #!/bin/bash
-# Pre-push guard:
-# 1) Block direct pushes to main (enforce PR/worktree workflow).
-# 2) Optionally verify non-main branches have an active claim.
-#
-# Escape hatches:
-# - ALLOW_MAIN_PUSH=1          Allow direct pushes to main for emergency use.
-# - SKIP_CLAIM_VERIFY=1        Skip branch-claim verification.
+# Pre-push hook for canonical governed-branch publication safety.
 
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ -z "$REPO_ROOT" ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-fi
-REMOTE_NAME="${1:-origin}"
-REMOTE_URL="${2:-}"
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
 
-if [[ "${ALLOW_MAIN_PUSH:-0}" == "1" ]]; then
-    exit 0
-fi
-
-find_claim_script() {
-    local candidates=(
-        "$REPO_ROOT/scripts/meta/worktree-coordination/check_claims.py"
-        "$REPO_ROOT/scripts/worktree-coordination/check_claims.py"
-        "$REPO_ROOT/scripts/meta/check_claims.py"
-        "$REPO_ROOT/scripts/check_claims.py"
-    )
-    local script
-    for script in "${candidates[@]}"; do
-        if [[ -f "$script" ]]; then
-            echo "$script"
-            return 0
-        fi
-    done
-    return 1
+find_push_check() {
+    if [[ -f "$REPO_ROOT/scripts/meta/check_push_safety.py" ]]; then
+        printf '%s\n' "$REPO_ROOT/scripts/meta/check_push_safety.py"
+    elif [[ -f "$REPO_ROOT/scripts/check_push_safety.py" ]]; then
+        printf '%s\n' "$REPO_ROOT/scripts/check_push_safety.py"
+    fi
 }
 
-CLAIM_SCRIPT=""
-if [[ "${SKIP_CLAIM_VERIFY:-0}" != "1" ]]; then
-    CLAIM_SCRIPT="$(find_claim_script || true)"
+PUSH_CHECK=$(find_push_check)
+if [[ -z "$PUSH_CHECK" ]]; then
+    echo "ERROR: canonical check_push_safety.py is missing; refusing governed branch push." >&2
+    exit 1
 fi
 
-declare -A CHECKED_BRANCHES=()
+if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+    PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=$(command -v python3)
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN=$(command -v python)
+else
+    echo "ERROR: Python is required for canonical pre-push validation." >&2
+    exit 1
+fi
 
-while read -r local_ref local_sha remote_ref remote_sha; do
-    [[ -z "${local_ref:-}" ]] && continue
+CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+VALIDATED_BRANCH=""
 
-    # Ignore tag pushes and other non-branch refs.
-    if [[ "$remote_ref" != refs/heads/* && "$local_ref" != refs/heads/* ]]; then
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    if [[ -z "${LOCAL_REF:-}" || "$LOCAL_REF" != refs/heads/* ]]; then
+        continue
+    fi
+    if [[ "${LOCAL_SHA:-}" =~ ^0+$ ]]; then
         continue
     fi
 
-    remote_branch=""
-    if [[ "$remote_ref" == refs/heads/* ]]; then
-        remote_branch="${remote_ref#refs/heads/}"
-    elif [[ "$local_ref" == refs/heads/* ]]; then
-        remote_branch="${local_ref#refs/heads/}"
-    fi
-
-    [[ -z "$remote_branch" ]] && continue
-
-    if [[ "$remote_branch" == "main" ]]; then
-        echo "ERROR: direct push to main is blocked by pre-push guard." >&2
-        echo "" >&2
-        echo "Use worktree/branch + PR merge flow instead." >&2
-        echo "Emergency override (use sparingly):" >&2
-        echo "  ALLOW_MAIN_PUSH=1 git push $REMOTE_NAME ${local_ref#refs/heads/}:main" >&2
-        echo "" >&2
-        echo "Remote: $REMOTE_NAME $REMOTE_URL" >&2
+    BRANCH="${LOCAL_REF#refs/heads/}"
+    if [[ -z "$CURRENT_BRANCH" || "$BRANCH" != "$CURRENT_BRANCH" ]]; then
+        echo "ERROR: governed pre-push validation only supports the checked-out branch." >&2
+        echo "Requested local branch: $BRANCH" >&2
+        echo "Checked-out branch: ${CURRENT_BRANCH:-detached HEAD}" >&2
+        echo "Check out the branch in its claimed worktree and push from there." >&2
         exit 1
     fi
 
-    # Skip claim verification for deleted refs.
-    if [[ "$local_sha" =~ ^0+$ ]]; then
+    if [[ "$VALIDATED_BRANCH" == "$BRANCH" ]]; then
         continue
     fi
 
-    if [[ -n "$CLAIM_SCRIPT" && -z "${CHECKED_BRANCHES[$remote_branch]:-}" ]]; then
-        CHECKED_BRANCHES["$remote_branch"]="1"
-        if ! python "$CLAIM_SCRIPT" --verify-branch "$remote_branch" >/dev/null 2>&1; then
-            echo "ERROR: push blocked. Branch '$remote_branch' has no active claim." >&2
-            echo "" >&2
-            echo "Create claim before pushing:" >&2
-            echo "  python scripts/meta/worktree-coordination/check_claims.py --claim --task \"<task>\" --id $remote_branch" >&2
-            echo "" >&2
-            echo "Bypass claim check (not recommended):" >&2
-            echo "  SKIP_CLAIM_VERIFY=1 git push $REMOTE_NAME" >&2
-            exit 1
-        fi
-    fi
+    echo "Running canonical pre-push claim validation for '$BRANCH'..."
+    "$PYTHON_BIN" "$PUSH_CHECK" \
+        --repo-root "$REPO_ROOT" \
+        --branch "$BRANCH"
+    VALIDATED_BRANCH="$BRANCH"
 done
 
 exit 0

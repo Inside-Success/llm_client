@@ -223,9 +223,10 @@ WORKTREE_SESSION_FINISH_SCRIPT := scripts/meta/worktree-coordination/../session_
 WORKTREE_SESSION_CLOSE_SCRIPT := scripts/meta/worktree-coordination/../session_close.py
 WORKTREE_REVIEW_CLAIM_SCRIPT := scripts/meta/worktree-coordination/create_review_claim.py
 WORKTREE_RAISE_CONCERN_SCRIPT := scripts/meta/worktree-coordination/raise_concern.py
+WORKTREE_PLAN_READINESS_SCRIPT := scripts/meta/worktree-coordination/../check_plan_readiness.py
 WORKTREE_DIR ?= $(shell python "$(WORKTREE_CREATE_SCRIPT)" --repo-root . --print-default-worktree-dir)
 WORKTREE_START_POINT ?= HEAD
-WORKTREE_PROJECT ?= $(notdir $(CURDIR))
+WORKTREE_PROJECT ?= $(shell python "$(WORKTREE_CREATE_SCRIPT)" --repo-root . --print-canonical-project)
 WORKTREE_AGENT ?= $(shell if [ -n "$$CODEX_THREAD_ID" ]; then printf codex; elif [ -n "$$CLAUDE_SESSION_ID" ] || [ -n "$$CLAUDE_CODE_SSE_PORT" ]; then printf claude-code; elif [ -n "$$OPENCLAW_SESSION_ID" ] || [ -n "$$OPENCLAW_RUN_ID" ]; then printf openclaw; fi)
 SESSION_GOAL ?=
 SESSION_PHASE ?=
@@ -233,6 +234,15 @@ SESSION_NEXT ?=
 SESSION_DEPENDS ?=
 SESSION_STOP_CONDITIONS ?=
 SESSION_NOTE ?=
+ALLOW_UNPLANNED ?=
+PLAN_RESUME ?=
+WORKTREE_EXECUTION_PROFILE ?= coordinated
+PLAN_PROJECT ?= $(WORKTREE_PROJECT)
+PLAN_READINESS_COMMAND ?=
+SESSION_CLAIM_TYPE ?= program
+SESSION_PARENT_SCOPE ?=
+SESSION_WRITE_PATHS ?=
+SESSION_READ_PATHS ?=
 WORKTREE_DISPOSITION ?= merged
 WORKTREE_DISPOSITION_REASON ?=
 WORKTREE_RECOVERY_REF ?=
@@ -241,7 +251,19 @@ REVIEW_SCOPE ?=
 REVIEW_NOTES ?=
 RECIPIENT ?=
 
-.PHONY: worktree worktree-list worktree-remove session-start session-heartbeat session-status session-finish session-close review-claim raise-concern
+.PHONY: worktree worktree-list worktree-remove session-start session-heartbeat session-status session-finish session-close review-claim raise-concern verification-batch-freeze verification-batch-check verification-batch-thaw
+
+verification-batch-freeze:  ## Freeze clean HEAD for DECISION="..." VERIFY_COMMAND="..."
+	@test -n "$(DECISION)" || (echo "DECISION is required" && exit 1)
+	@test -n "$(VERIFY_COMMAND)" || (echo "VERIFY_COMMAND is required" && exit 1)
+	$(PYTHON) scripts/meta/verification_batch.py --repo-root . freeze --decision "$(DECISION)" --command "$(VERIFY_COMMAND)" $(if $(ALLOW_UNTRACKED),--allow-untracked "$(ALLOW_UNTRACKED)",)
+
+verification-batch-check:  ## Require the active batch to match exact clean HEAD
+	$(PYTHON) scripts/meta/verification_batch.py --repo-root . check --require-active
+
+verification-batch-thaw:  ## Invalidate the batch with REASON="..." before a scoped fix
+	@test -n "$(REASON)" || (echo "REASON is required" && exit 1)
+	$(PYTHON) scripts/meta/verification_batch.py --repo-root . thaw --reason "$(REASON)"
 
 worktree:  ## Create claimed worktree (BRANCH=name TASK="..." [PLAN=N] [AGENT=name])
 ifndef BRANCH
@@ -274,15 +296,32 @@ endif
 		echo "Install or sync the sanctioned session lifecycle module before using make worktree."; \
 		exit 1; \
 	fi
+	@python "$(WORKTREE_PLAN_READINESS_SCRIPT)" \
+		$(if $(PLAN),--qualified-plan-id "$(PLAN_PROJECT)#$(PLAN)",) \
+		--execution-profile "$(WORKTREE_EXECUTION_PROFILE)" \
+		$(if $(PLAN_READINESS_COMMAND),--query-command "$(PLAN_READINESS_COMMAND)",) \
+		--repository "$(WORKTREE_PROJECT)" \
+		--lane-id "$(BRANCH)" \
+		$(if $(SESSION_PARENT_SCOPE),--parent-lane-id "$(SESSION_PARENT_SCOPE)",) \
+		--branch "$(BRANCH)" \
+		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
+		--agent "$(WORKTREE_AGENT)" \
+		--scope "$(BRANCH)" \
+		$(if $(ALLOW_UNPLANNED),--allow-unplanned,) \
+		$(if $(PLAN_RESUME),--resume,)
 	@python "$(WORKTREE_CLAIMS_SCRIPT)" --claim \
 		--agent "$(WORKTREE_AGENT)" \
 		--project "$(WORKTREE_PROJECT)" \
 		--scope "$(BRANCH)" \
 		--intent "$(TASK)" \
-		--claim-type program \
+		--claim-type "$(SESSION_CLAIM_TYPE)" \
 		--branch "$(BRANCH)" \
 		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
-		$(if $(PLAN),--plan "Plan #$(PLAN)",)
+		--session-name "$(SESSION_GOAL)" \
+		$(if $(SESSION_PARENT_SCOPE),--parent-scope "$(SESSION_PARENT_SCOPE)",) \
+		$(foreach path,$(SESSION_WRITE_PATHS),--write-path "$(path)") \
+		$(foreach path,$(SESSION_READ_PATHS),--read-path "$(path)") \
+		$(if $(PLAN),--plan "$(PLAN_PROJECT)#$(PLAN)",)
 	@mkdir -p "$(WORKTREE_DIR)"
 	@if ! python "$(WORKTREE_CREATE_SCRIPT)" --repo-root . --path "$(WORKTREE_DIR)/$(BRANCH)" --branch "$(BRANCH)" --start-point "$(WORKTREE_START_POINT)"; then \
 		python "$(WORKTREE_CLAIMS_SCRIPT)" --release --agent "$(WORKTREE_AGENT)" --project "$(WORKTREE_PROJECT)" --scope "$(BRANCH)" >/dev/null 2>&1 || true; \
@@ -298,7 +337,12 @@ endif
 		--branch "$(BRANCH)" \
 		--broader-goal "$(SESSION_GOAL)" \
 		--current-phase "$(SESSION_PHASE)" \
-		$(if $(PLAN),--plan "Plan #$(PLAN)",) \
+		--claim-type "$(SESSION_CLAIM_TYPE)" \
+		$(if $(SESSION_PARENT_SCOPE),--parent-scope "$(SESSION_PARENT_SCOPE)",) \
+		$(foreach path,$(SESSION_WRITE_PATHS),--write-path "$(path)") \
+		$(foreach path,$(SESSION_READ_PATHS),--read-path "$(path)") \
+		$(if $(PLAN),--plan "$(PLAN_PROJECT)#$(PLAN)",) \
+		$(if $(ALLOW_UNPLANNED),--allow-unplanned,) \
 		$(if $(SESSION_NEXT),--next-phase "$(SESSION_NEXT)",) \
 		$(if $(SESSION_DEPENDS),--depends-on "$(SESSION_DEPENDS)",) \
 		$(if $(SESSION_STOP_CONDITIONS),--stop-condition "$(SESSION_STOP_CONDITIONS)",) \
@@ -339,7 +383,12 @@ endif
 		--branch "$(BRANCH)" \
 		--broader-goal "$(SESSION_GOAL)" \
 		--current-phase "$(SESSION_PHASE)" \
+		--claim-type "$(SESSION_CLAIM_TYPE)" \
+		$(if $(SESSION_PARENT_SCOPE),--parent-scope "$(SESSION_PARENT_SCOPE)",) \
+		$(foreach path,$(SESSION_WRITE_PATHS),--write-path "$(path)") \
+		$(foreach path,$(SESSION_READ_PATHS),--read-path "$(path)") \
 		$(if $(PLAN),--plan "Plan #$(PLAN)",) \
+		$(if $(ALLOW_UNPLANNED),--allow-unplanned,) \
 		$(if $(SESSION_NEXT),--next-phase "$(SESSION_NEXT)",) \
 		$(if $(SESSION_DEPENDS),--depends-on "$(SESSION_DEPENDS)",) \
 		$(if $(SESSION_STOP_CONDITIONS),--stop-condition "$(SESSION_STOP_CONDITIONS)",) \
@@ -424,6 +473,9 @@ endif
 ifndef TASK
 	$(error TASK is required. Describe the review intent)
 endif
+ifndef SESSION_GOAL
+	$(error SESSION_GOAL is required. Name the broader review objective)
+endif
 ifndef WORKTREE_AGENT
 	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
 endif
@@ -433,6 +485,7 @@ endif
 		--project "$(WORKTREE_PROJECT)" \
 		--target-branch "$(TARGET_BRANCH)" \
 		--intent "$(TASK)" \
+		--session-name "$(SESSION_GOAL)" \
 		--write-path "$(WRITE_PATHS)" \
 		$(if $(PLAN),--plan "Plan #$(PLAN)",) \
 		$(if $(REVIEW_SCOPE),--scope "$(REVIEW_SCOPE)",) \
@@ -463,3 +516,8 @@ endif
 		$(if $(MESSAGE_FILE),--content-file "$(MESSAGE_FILE)",) \
 		$(if $(RECIPIENT),--recipient "$(RECIPIENT)",)
 # <<< META-PROCESS WORKTREE TARGETS <<<
+
+PROJECT_STATUS_PYTHON ?= $(if $(strip $(PYTHON)),$(PYTHON),$(if $(wildcard .venv/bin/python),.venv/bin/python,python3))
+PROJECT_STATUS_SCRIPT ?= scripts/meta/project_status.py
+status:  ## Verify repository authority freshness and show branch status
+	@$(PROJECT_STATUS_PYTHON) $(PROJECT_STATUS_SCRIPT) --repo-root .

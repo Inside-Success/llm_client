@@ -129,6 +129,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Print the canonical default worktrees/ directory inside the repo and exit.",
     )
+    parser.add_argument(
+        "--print-canonical-project",
+        action="store_true",
+        help="Print the canonical main repository directory name and exit.",
+    )
     return parser.parse_args(argv)
 
 
@@ -168,6 +173,12 @@ def get_default_worktree_dir(repo_root: Path) -> Path:
     """Return the canonical worktrees/ directory inside this repo."""
     main_repo_root = resolve_main_repo_root(repo_root.resolve())
     return main_repo_root / "worktrees"
+
+
+def get_canonical_project_name(repo_root: Path) -> str:
+    """Return a stable project name from root or linked-worktree context."""
+
+    return resolve_main_repo_root(repo_root.resolve()).name
 
 
 def _load_claims_module() -> Any:
@@ -633,6 +644,13 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"default_worktree_dir": str(default_dir)}, indent=2))
         else:
             print(default_dir)
+        return 0
+    if args.print_canonical_project:
+        project_name = get_canonical_project_name(repo_root)
+        if args.json:
+            print(json.dumps({"canonical_project": project_name}, indent=2))
+        else:
+            print(project_name)
         return 0
 
     if not args.path or not args.branch:

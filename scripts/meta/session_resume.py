@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh heartbeat state for one sanctioned session."""
+"""Resume one plan-bound sanctioned session with a fresh runtime attachment."""
 
 from __future__ import annotations
 
@@ -35,36 +35,37 @@ from enforced_planning import session_lifecycle  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse the session selector and optional phase refresh."""
+    """Parse the bounded session-resume identity and phase contract."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agent", required=True)
     parser.add_argument("--project", required=True)
-    parser.add_argument("--scope")
-    parser.add_argument("--branch")
+    parser.add_argument("--scope", required=True)
+    parser.add_argument("--worktree-path", required=True)
+    parser.add_argument("--branch", required=True)
+    parser.add_argument("--current-phase", required=True)
     parser.add_argument("--session-id")
-    parser.add_argument("--current-phase")
+    parser.add_argument("--note")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Refresh the session heartbeat and expose its mailbox state."""
+    """Resume the session and expose its current mailbox state."""
     args = parse_args(argv)
-    payload = session_lifecycle.heartbeat_session(
+    payload = session_lifecycle.resume_session(
         agent=args.agent,
         project=args.project,
-        session_id=args.session_id,
         scope=args.scope,
+        worktree_path=args.worktree_path,
         branch=args.branch,
         current_phase=args.current_phase,
+        session_id=args.session_id,
+        note=args.note,
     )
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        print(
-            f"heartbeat: updated {payload['updated_count']} claims "
-            f"for session {payload['session_id']} at {payload['heartbeat_at']}"
-        )
+        print(f"{payload['action']}: {payload['plan_ref']} -> {payload['session_id']}")
         print(payload["coordination_mailbox"]["summary"])
     return 0
 

@@ -16,12 +16,24 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
-from enforced_planning import coordination_claims, push_safety, session_contracts
+from enforced_planning import coordination_claims, coordination_messages, push_safety, session_contracts
 from enforced_planning import doc_authority
 from enforced_planning.worktree_paths import resolve_canonical_repo_root
 
 
 WORKTREE_LIFECYCLE_CONFIG_PATH = Path(__file__).with_name("worktree_lifecycle.yaml")
+
+
+def _poll_mailbox(*, agent: str, project: str, session_id: str) -> dict[str, Any]:
+    """Inject canonical mailbox state into a shared lifecycle response."""
+
+    notice = coordination_messages.poll_session_inbox(
+        agent=agent,
+        project=project,
+        session_id=session_id,
+        observe=True,
+    )
+    return notice.model_dump(mode="json")
 
 
 def _load_worktree_lifecycle_policy(path: Path) -> tuple[str, frozenset[str], frozenset[str], frozenset[str]]:
@@ -146,7 +158,10 @@ def _upsert_session_claim(
     broader_goal: str,
     session_name: str,
     tracker_path: str,
-    claim_type: str = "program",
+    claim_type: str | None = None,
+    write_paths: list[str] | None = None,
+    read_paths: list[str] | None = None,
+    parent_scope: str | None = None,
     ttl_hours: float = coordination_claims.DEFAULT_TTL_HOURS,
 ) -> str:
     """Create or update the compact claim-side session contract metadata."""
@@ -161,7 +176,9 @@ def _upsert_session_claim(
             scope=scope,
             intent=intent,
             plan_ref=plan_ref,
-            claim_type=claim_type,
+            claim_type=claim_type or "program",
+            write_paths=write_paths,
+            read_paths=read_paths,
             repo_root=repo_root,
             worktree_path=worktree_path,
             branch=branch,
@@ -169,46 +186,86 @@ def _upsert_session_claim(
             session_name=session_name,
             broader_goal=broader_goal,
             tracker_path=tracker_path,
+            parent_scope=parent_scope,
             ttl_hours=ttl_hours,
         )
         if not ok:
             raise ValueError(message)
         return "created"
 
-    existing = coordination_claims.normalize_claim(existing_payload, source_file=str(path))
-    if existing is None:
-        raise ValueError(f"Existing claim at {path} is invalid")
-    if existing.agent != agent:
-        raise ValueError(f"Claim at {path} belongs to {existing.agent}, not {agent}")
-    if existing.session_id and existing.session_id != session_id:
-        raise ValueError(
-            f"Claim at {path} belongs to session {existing.session_id}, not {session_id}"
+    with coordination_claims.claim_registry_lock():
+        refreshed_payload = _load_claim_payload(agent, project, scope)
+        if refreshed_payload is None:
+            raise ValueError(
+                f"Claim at {path} disappeared during session activation; retry session start"
+            )
+        existing = coordination_claims.normalize_claim(
+            refreshed_payload,
+            source_file=str(path),
+        )
+        if existing is None:
+            raise ValueError(f"Existing claim at {path} is invalid")
+        if existing.agent != agent:
+            raise ValueError(f"Claim at {path} belongs to {existing.agent}, not {agent}")
+        if existing.session_id and existing.session_id != session_id:
+            raise ValueError(
+                f"Claim at {path} belongs to session {existing.session_id}, not {session_id}"
+            )
+
+        effective_claim_type = claim_type or existing.claim_type
+        effective_write_paths = existing.write_paths if write_paths is None else write_paths
+        effective_read_paths = existing.read_paths if read_paths is None else read_paths
+        effective_parent_scope = existing.parent_scope if parent_scope is None else parent_scope
+        candidate = coordination_claims.build_candidate_claim(
+            agent=agent,
+            project=project,
+            scope=scope,
+            intent=intent,
+            plan_ref=plan_ref,
+            claim_type=effective_claim_type,
+            write_paths=effective_write_paths,
+            read_paths=effective_read_paths,
+            repo_root=repo_root,
+            worktree_path=worktree_path,
+            branch=branch,
+            session_id=session_id,
+            session_name=session_name,
+            broader_goal=broader_goal,
+            tracker_path=tracker_path,
+            parent_scope=effective_parent_scope,
+        )
+        coordination_claims.validate_claim_hierarchy_for_creation(
+            candidate,
+            active_claims=coordination_claims.check_claims(project),
         )
 
-    expires_at = existing.expires_at or (now + timedelta(hours=ttl_hours)).isoformat()
-    payload = {
-        **existing_payload,
-        "agent": agent,
-        "project": project,
-        "projects": [project],
-        "scope": scope,
-        "intent": intent,
-        "plan_ref": plan_ref,
-        "repo_root": repo_root,
-        "worktree_path": worktree_path,
-        "branch": branch,
-        "session_id": session_id,
-        "session_name": session_name,
-        "broader_goal": broader_goal,
-        "tracker_path": tracker_path,
-        "status": "active",
-        "heartbeat_at": now.isoformat(),
-        "updated_at": now.isoformat(),
-        "claimed_at": existing.claimed_at or now.isoformat(),
-        "expires_at": expires_at,
-        "claim_type": existing.claim_type or claim_type,
-    }
-    _write_claim_payload(path, payload)
+        expires_at = existing.expires_at or (now + timedelta(hours=ttl_hours)).isoformat()
+        payload = {
+            **refreshed_payload,
+            "agent": agent,
+            "project": project,
+            "projects": [project],
+            "scope": scope,
+            "intent": intent,
+            "plan_ref": plan_ref,
+            "repo_root": repo_root,
+            "worktree_path": worktree_path,
+            "branch": branch,
+            "session_id": session_id,
+            "session_name": session_name,
+            "broader_goal": broader_goal,
+            "tracker_path": tracker_path,
+            "status": "active",
+            "heartbeat_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "claimed_at": existing.claimed_at or now.isoformat(),
+            "expires_at": expires_at,
+            "claim_type": effective_claim_type,
+            "write_paths": effective_write_paths,
+            "read_paths": effective_read_paths,
+            "parent_scope": effective_parent_scope,
+        }
+        _write_claim_payload(path, payload)
     return "updated"
 
 
@@ -258,14 +315,28 @@ def _claim_status(claim: coordination_claims.ClaimRecord) -> str:
     return claim.status
 
 
-def _recovery_action_for_claim(claim: coordination_claims.ClaimRecord) -> str:
+def _recovery_action_for_claim(
+    claim: coordination_claims.ClaimRecord,
+    *,
+    active_claims: list[coordination_claims.ClaimRecord] | None = None,
+) -> str:
     """Return the operator action implied by one claim's lifecycle state."""
 
-    health_status = coordination_claims.claim_runtime_status(claim)
+    health_status = coordination_claims.claim_runtime_status(
+        claim,
+        active_claims=active_claims,
+    )
     if claim.status == "handoff":
         return "resume_or_finish_handoff"
     if health_status == "stale":
         return "resume_or_abandon_or_prune"
+    if health_status == "weak":
+        if active_claims and coordination_claims.claim_hierarchy_issues(
+            claim,
+            active_claims=active_claims,
+        ):
+            return "repair_claim_hierarchy"
+        return "repair_session_contract"
     return "continue"
 
 
@@ -417,21 +488,37 @@ def _validate_closeout_preflight(
 
     branch_ref = f"refs/heads/{branch}"
     default_ref = f"refs/heads/{default_branch}"
-    merged_to_default = _is_ancestor(repo_root, branch_ref, default_ref)
     default_remote_ref = f"refs/remotes/origin/{default_branch}"
+    remote_default_exists = _ref_exists(repo_root, default_remote_ref)
+    merged_to_local_default = _is_ancestor(repo_root, branch_ref, default_ref)
+    merged_to_remote_default = (
+        _is_ancestor(repo_root, branch_ref, default_remote_ref)
+        if remote_default_exists
+        else None
+    )
+    merged_to_default = (
+        merged_to_remote_default
+        if merged_to_remote_default is not None
+        else merged_to_local_default
+    )
     default_branch_pushed = (
         _is_ancestor(repo_root, default_ref, default_remote_ref)
-        if _ref_exists(repo_root, default_remote_ref)
+        if remote_default_exists
         else None
     )
     if normalized_disposition == MERGED_DISPOSITION:
         if not merged_to_default:
+            if merged_to_local_default and default_branch_pushed is False:
+                raise ValueError(
+                    f"Canonical default branch '{default_branch}' has commits not present in "
+                    f"'{default_remote_ref}'. Push the default branch before closeout."
+                )
             raise ValueError(
                 f"Branch '{branch}' is clean but not integrated into canonical default "
                 f"branch '{default_branch}'. Merge it first or supply an explicit "
                 "non-merge disposition with required evidence."
             )
-        if default_branch_pushed is False:
+        if default_branch_pushed is False and merged_to_remote_default is not True:
             raise ValueError(
                 f"Canonical default branch '{default_branch}' has commits not present in "
                 f"'{default_remote_ref}'. Push the default branch before closeout."
@@ -444,7 +531,10 @@ def _validate_closeout_preflight(
             default_remote_ref=default_remote_ref,
             default_branch_pushed=default_branch_pushed,
             recovery_ref=None,
-            force_delete_branch=False,
+            # Git's ordinary -d check substitutes a configured feature upstream
+            # for HEAD. The explicit checks above already proved the stronger
+            # authority: this tip is in the pushed canonical default branch.
+            force_delete_branch=delete_branch,
         )
 
     if normalized_disposition not in (
@@ -556,6 +646,10 @@ def start_session(
     requires_shared_infra_changes: bool = False,
     stop_conditions: list[str] | None = None,
     notes: str | None = None,
+    claim_type: str | None = None,
+    write_paths: list[str] | None = None,
+    read_paths: list[str] | None = None,
+    parent_scope: str | None = None,
     tracker_dir: Path = session_contracts.DEFAULT_SESSION_TRACKERS_DIR,
     allow_unplanned: bool = False,
     allow_parallel: bool = False,
@@ -623,10 +717,19 @@ def start_session(
             broader_goal=contract.broader_goal,
             session_name=contract.session_name,
             tracker_path=str(tracker_path),
+            claim_type=claim_type,
+            write_paths=write_paths,
+            read_paths=read_paths,
+            parent_scope=parent_scope,
         )
     except Exception:
         tracker_path.unlink(missing_ok=True)
         raise
+    persisted_claim = _single_matching_live_claim(
+        agent=agent,
+        project=project,
+        scope=scope,
+    )
     return {
         "action": action,
         "session_id": resolved_session_id,
@@ -634,6 +737,13 @@ def start_session(
         "broader_goal": contract.broader_goal,
         "tracker_path": str(tracker_path),
         "plan_ref": contract.plan_ref,
+        "claim_type": persisted_claim.claim_type,
+        "parent_scope": persisted_claim.parent_scope,
+        "coordination_mailbox": _poll_mailbox(
+            agent=agent,
+            project=project,
+            session_id=resolved_session_id,
+        ),
     }
 
 
@@ -656,6 +766,12 @@ def heartbeat_session(
         scope=scope,
         branch=branch,
     )
+    if updated_count == 0:
+        raise ValueError(
+            "Heartbeat matched no live claim for "
+            f"agent={agent}, project={project}, scope={scope or '<any>'}, "
+            f"branch={branch or '<any>'}, session_id={resolved_session_id}."
+        )
     tracker_paths_updated: list[str] = []
     for claim in _iter_matching_live_claims(
         agent=agent,
@@ -682,6 +798,11 @@ def heartbeat_session(
         "session_id": resolved_session_id,
         "heartbeat_at": heartbeat_at,
         "tracker_paths_updated": sorted(tracker_paths_updated),
+        "coordination_mailbox": _poll_mailbox(
+            agent=agent,
+            project=project,
+            session_id=resolved_session_id,
+        ),
     }
 
 
@@ -695,12 +816,15 @@ def status_sessions(
     """Return live session summaries derived from claims plus linked trackers."""
 
     sessions: list[dict[str, Any]] = []
-    for claim in _iter_matching_live_claims(
-        agent=agent,
-        project=project,
-        scope=scope,
-        branch=branch,
-    ):
+    project_claims = _iter_matching_live_claims(project=project)
+    matching_claims = [
+        claim
+        for claim in project_claims
+        if (not agent or claim.agent == agent)
+        and (not scope or claim.scope == scope)
+        and (not branch or claim.branch == branch)
+    ]
+    for claim in matching_claims:
         tracker_payload: dict[str, Any] | None = None
         if claim.tracker_path:
             path = Path(claim.tracker_path).expanduser()
@@ -708,6 +832,10 @@ def status_sessions(
                 tracker_payload = session_contracts.read_session_tracker(path)
         tracker_section = tracker_payload.get("tracker") if isinstance(tracker_payload, dict) else {}
         timestamps = tracker_payload.get("timestamps") if isinstance(tracker_payload, dict) else {}
+        health_issues = coordination_claims.coordination_health_issues(
+            claim,
+            active_claims=project_claims,
+        )
         sessions.append(
             {
                 "project": claim.primary_project(),
@@ -716,12 +844,26 @@ def status_sessions(
                 "branch": claim.branch,
                 "worktree_path": claim.worktree_path,
                 "plan_ref": claim.plan_ref,
+                "plan_identity": coordination_claims.normalize_plan_identity(claim.plan_ref),
+                "claim_type": claim.claim_type,
+                "parent_scope": claim.parent_scope,
+                "hierarchy_role": (
+                    "child"
+                    if claim.parent_scope
+                    else "root"
+                    if claim.claim_type == "program"
+                    else "standalone"
+                ),
                 "session_id": claim.session_id,
                 "session_name": claim.session_name,
                 "broader_goal": claim.broader_goal,
                 "tracker_path": claim.tracker_path,
                 "claim_status": claim.status,
-                "health_status": coordination_claims.claim_runtime_status(claim),
+                "health_status": coordination_claims.claim_runtime_status(
+                    claim,
+                    active_claims=project_claims,
+                ),
+                "health_issues": health_issues,
                 "current_phase": tracker_section.get("current_phase") if isinstance(tracker_section, dict) else None,
                 "intended_next_phases": tracker_section.get("intended_next_phases") if isinstance(tracker_section, dict) else [],
                 "depends_on_repos": tracker_section.get("depends_on_repos") if isinstance(tracker_section, dict) else [],
@@ -729,7 +871,10 @@ def status_sessions(
                 "stop_conditions": tracker_section.get("stop_conditions") if isinstance(tracker_section, dict) else [],
                 "notes": tracker_section.get("notes") if isinstance(tracker_section, dict) else None,
                 "tracker_updated_at": timestamps.get("updated_at") if isinstance(timestamps, dict) else None,
-                "recovery_action": _recovery_action_for_claim(claim),
+                "recovery_action": _recovery_action_for_claim(
+                    claim,
+                    active_claims=project_claims,
+                ),
             }
         )
     return {
@@ -985,6 +1130,11 @@ def resume_session(
         "session_id": resolved_session_id,
         "tracker_path": tracker_path_text,
         "plan_ref": claim.plan_ref,
+        "coordination_mailbox": _poll_mailbox(
+            agent=agent,
+            project=project,
+            session_id=resolved_session_id,
+        ),
     }
 
 

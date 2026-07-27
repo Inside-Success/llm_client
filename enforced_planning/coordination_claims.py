@@ -19,11 +19,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import posixpath
+import re
 import subprocess
 import sys
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -36,13 +41,66 @@ DEFAULT_TTL_HOURS = 24  # Sprints run 24h; 2h caused false-expiry conflicts mid-
 LIVE_STATUSES = {"active", "blocked", "handoff"}
 COMPLETED_STATUSES = {"complete", "completed"}
 CLAIM_TYPES = {"program", "write", "review", "research"}
-STRICT_LIVE_METADATA_CLAIM_TYPES = {"program", "write", "research"}
+STRICT_LIVE_METADATA_CLAIM_TYPES = {"program", "write", "review", "research"}
+CREATION_BLOCKING_HEALTH_ISSUES = {
+    "missing_project",
+    "missing_write_paths",
+    "missing_branch",
+    "missing_worktree_path",
+    "missing_session_id",
+    "missing_session_name",
+}
 DEFAULT_HEARTBEAT_STALE_MINUTES = 120
 SESSION_ENV_KEYS = {
     "codex": ("CODEX_THREAD_ID",),
     "claude-code": ("CLAUDE_SESSION_ID", "CLAUDE_CODE_SSE_PORT"),
     "openclaw": ("OPENCLAW_SESSION_ID", "OPENCLAW_RUN_ID"),
 }
+
+
+@contextmanager
+def claim_registry_lock() -> Iterator[None]:
+    """Serialize claim check-and-write mutations across local agent processes."""
+
+    claims_dir = CLAIMS_DIR.expanduser().resolve()
+    claims_dir.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = claims_dir.parent / f".{claims_dir.name}.lock"
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        lock_path.chmod(0o600)
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _atomic_write_claim(path: Path, payload: dict[str, Any]) -> None:
+    """Replace one claim without exposing a truncated or partially written file."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            yaml.safe_dump(
+                payload,
+                handle,
+                default_flow_style=False,
+                sort_keys=False,
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
 
 
 @dataclass(frozen=True)
@@ -142,12 +200,160 @@ def claim_health_issues(claim: ClaimRecord) -> list[str]:
             issues.append("missing_worktree_path")
         if not claim.session_id:
             issues.append("missing_session_id")
+        if not claim.session_name:
+            issues.append("missing_session_name")
+        if claim.plan_ref and claim.session_id:
+            if not claim.repo_root:
+                issues.append("missing_repo_root")
+            if not claim.broader_goal:
+                issues.append("missing_broader_goal")
+            if not claim.tracker_path:
+                issues.append("missing_tracker_path")
     return issues
 
 
 def claim_health_status(claim: ClaimRecord) -> str:
     """Classify one claim as healthy or weak for registry/reporting surfaces."""
     return "weak" if claim_health_issues(claim) else "healthy"
+
+
+def normalize_plan_identity(plan_ref: str | None) -> str | None:
+    """Return one stable numbered-plan identity from descriptive plan text."""
+
+    if not isinstance(plan_ref, str):
+        return None
+    qualified = re.fullmatch(
+        r"\s*([A-Za-z0-9_.-]+)#0*(\d+)\s*",
+        plan_ref,
+        flags=re.IGNORECASE,
+    )
+    if qualified:
+        project = qualified.group(1).lower().replace("_", "-")
+        return f"{project}#{int(qualified.group(2))}"
+    match = re.search(r"\bPlan\s*#\s*0*(\d+)\b", plan_ref, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return f"Plan #{int(match.group(1))}"
+
+
+def _same_claim(left: ClaimRecord, right: ClaimRecord) -> bool:
+    """Return whether two records identify the same canonical claim slot."""
+
+    return (
+        left.agent == right.agent
+        and left.primary_project() == right.primary_project()
+        and left.scope == right.scope
+    )
+
+
+def claim_hierarchy_issues(
+    claim: ClaimRecord,
+    *,
+    active_claims: list[ClaimRecord],
+) -> list[str]:
+    """Validate one claim against the existing root-program hierarchy.
+
+    A single live session remains valid on its own. Once execution for the same
+    project and normalized numbered plan becomes parallel, exactly one
+    unparented program claim coordinates every other claim through
+    ``parent_scope``.
+    """
+
+    if not claim.is_live() or not claim.session_id:
+        return []
+    project = claim.primary_project()
+    plan_identity = normalize_plan_identity(claim.plan_ref)
+    if not project or not plan_identity:
+        return []
+
+    issues: list[str] = []
+    if claim.parent_scope:
+        if claim.parent_scope == claim.scope:
+            issues.append("self_parent_scope")
+        parents = [
+            other
+            for other in active_claims
+            if other.is_live()
+            and other.primary_project() == project
+            and other.scope == claim.parent_scope
+            and not _same_claim(other, claim)
+        ]
+        if not parents:
+            issues.append("missing_parent_claim")
+        elif len(parents) > 1:
+            issues.append("ambiguous_parent_scope")
+        else:
+            parent = parents[0]
+            if parent.claim_type != "program":
+                issues.append("parent_not_program")
+            if not parent.session_id or claim_health_issues(parent):
+                issues.append("parent_not_healthy")
+            if normalize_plan_identity(parent.plan_ref) != plan_identity:
+                issues.append("parent_plan_mismatch")
+
+    cohort = [
+        other
+        for other in active_claims
+        if other.is_live()
+        and other.session_id
+        and other.primary_project() == project
+        and normalize_plan_identity(other.plan_ref) == plan_identity
+    ]
+    if not any(_same_claim(other, claim) for other in cohort):
+        cohort.append(claim)
+    if len(cohort) < 2:
+        return list(dict.fromkeys(issues))
+
+    roots = [
+        other
+        for other in cohort
+        if other.claim_type == "program" and not other.parent_scope
+    ]
+    if not roots:
+        issues.append("missing_program_root")
+    elif len(roots) > 1:
+        issues.append("multiple_program_roots")
+    else:
+        root = roots[0]
+        if not _same_claim(root, claim):
+            if not claim.parent_scope:
+                issues.append("missing_parent_scope")
+            elif claim.parent_scope != root.scope:
+                issues.append("wrong_parent_scope")
+    return list(dict.fromkeys(issues))
+
+
+def coordination_health_issues(
+    claim: ClaimRecord,
+    *,
+    active_claims: list[ClaimRecord],
+) -> list[str]:
+    """Return local metadata plus cross-claim hierarchy health issues."""
+
+    return list(
+        dict.fromkeys(
+            claim_health_issues(claim)
+            + claim_hierarchy_issues(claim, active_claims=active_claims)
+        )
+    )
+
+
+def validate_claim_hierarchy_for_creation(
+    candidate: ClaimRecord,
+    *,
+    active_claims: list[ClaimRecord],
+) -> None:
+    """Reject a new or refreshed session claim that would be hierarchically invalid."""
+
+    prospective = [
+        claim for claim in active_claims if not _same_claim(claim, candidate)
+    ] + [candidate]
+    issues = claim_hierarchy_issues(candidate, active_claims=prospective)
+    if issues:
+        raise ValueError(
+            "Invalid plan claim hierarchy for "
+            f"{candidate.primary_project()}:{candidate.scope}: {', '.join(issues)}"
+        )
 
 
 def _heartbeat_stale_after() -> timedelta:
@@ -256,7 +462,7 @@ def claim_liveness_issues(
 
     Backward compatibility rule: a live claim with no `heartbeat_at` remains
     readable and does not become stale solely because the heartbeat rollout has
-    not touched it yet.
+    not touched it yet. It is explicitly uninstrumented rather than healthy.
     """
 
     if not claim.is_live():
@@ -264,7 +470,7 @@ def claim_liveness_issues(
     if not claim.session_id:
         return []
     if not claim.heartbeat_at:
-        return []
+        return ["missing_session_heartbeat"]
     heartbeat = _parse_iso_datetime(claim.heartbeat_at)
     if heartbeat is None:
         return ["invalid_heartbeat_at"]
@@ -274,16 +480,32 @@ def claim_liveness_issues(
     return []
 
 
-def claim_runtime_status(claim: ClaimRecord) -> str:
+def claim_runtime_status(
+    claim: ClaimRecord,
+    *,
+    active_claims: list[ClaimRecord] | None = None,
+) -> str:
     """Classify one live claim across stale/weak/healthy states."""
-    if claim_lifecycle_issues(claim) or claim_liveness_issues(claim):
+    if claim_lifecycle_issues(claim):
         return "stale"
-    return claim_health_status(claim)
+    liveness_issues = claim_liveness_issues(claim)
+    if any(issue != "missing_session_heartbeat" for issue in liveness_issues):
+        return "stale"
+    issues = (
+        coordination_health_issues(claim, active_claims=active_claims)
+        if active_claims is not None
+        else claim_health_issues(claim)
+    )
+    return "weak" if issues or liveness_issues else "healthy"
 
 
 def validate_claim_for_creation(claim: ClaimRecord) -> None:
     """Reject new claims that omit required ownership metadata for live coordination."""
-    issues = claim_health_issues(claim)
+    issues = [
+        issue
+        for issue in claim_health_issues(claim)
+        if issue in CREATION_BLOCKING_HEALTH_ISSUES
+    ]
     if not issues:
         return
     if not claim.is_live():
@@ -294,6 +516,7 @@ def validate_claim_for_creation(claim: ClaimRecord) -> None:
         "missing_branch": "--branch",
         "missing_worktree_path": "--worktree-path",
         "missing_session_id": "--session-id",
+        "missing_session_name": "--session-name",
     }
     required_flags = [flag_map[item] for item in issues if item in flag_map]
     required_text = ", ".join(required_flags)
@@ -468,13 +691,14 @@ def normalize_claim(data: dict[str, Any], *, source_file: str | None = None) -> 
     )
 
 
-def _load_claims() -> list[ClaimRecord]:
-    """Load all live claim files, pruning expired entries on read."""
-    if not CLAIMS_DIR.exists():
+def _load_claims(claims_dir: Path | None = None) -> list[ClaimRecord]:
+    """Load live claim files from the configured or explicitly supplied registry."""
+    resolved_claims_dir = claims_dir or CLAIMS_DIR
+    if not resolved_claims_dir.exists():
         return []
     claims: list[ClaimRecord] = []
     now = datetime.now(timezone.utc)
-    for claim_file in CLAIMS_DIR.glob("*.yaml"):
+    for claim_file in resolved_claims_dir.glob("*.yaml"):
         try:
             data = yaml.safe_load(claim_file.read_text(encoding="utf-8"))
         except Exception:
@@ -483,7 +707,9 @@ def _load_claims() -> list[ClaimRecord]:
             continue
         expires_at = _parse_iso_datetime(data.get("expires_at"))
         if expires_at is not None and expires_at < now:
-            claim_file.unlink()
+            # Loading and listing are read-only. Expired source records remain
+            # auditable until the explicit --prune lifecycle action removes
+            # them.
             continue
         claim = normalize_claim(data, source_file=str(claim_file))
         if claim is not None:
@@ -516,9 +742,9 @@ def _claim_filename(agent: str, project: str, scope: str) -> str:
     return f"{safe(agent)}_{safe(project)}_{safe(scope)}.yaml"
 
 
-def check_claims(project: str | None = None) -> list[ClaimRecord]:
-    """Check for active live claims, optionally filtered by project."""
-    claims = [claim for claim in _load_claims() if claim.is_live()]
+def check_claims(project: str | None = None, *, claims_dir: Path | None = None) -> list[ClaimRecord]:
+    """Check active claims, optionally selecting a registry and project."""
+    claims = [claim for claim in _load_claims(claims_dir) if claim.is_live()]
     if project:
         claims = [claim for claim in claims if project in claim.projects]
     return claims
@@ -721,23 +947,23 @@ def create_claim(
     )
     validate_claim_for_creation(candidate)
 
-    check_result = evaluate_claim(candidate, active_claims=check_claims(project))
-    if check_result.hard_conflicts:
-        formatted = "; ".join(
-            f"{item.other_agent} ({item.other_scope}: {', '.join(item.overlapping_write_paths)})"
-            for item in check_result.hard_conflicts
-        )
-        return False, f"CONFLICT: active write claim overlap in '{project}' — {formatted}"
+    with claim_registry_lock():
+        active_claims = check_claims(project)
+        validate_claim_hierarchy_for_creation(candidate, active_claims=active_claims)
+        check_result = evaluate_claim(candidate, active_claims=active_claims)
+        if check_result.hard_conflicts:
+            formatted = "; ".join(
+                f"{item.other_agent} ({item.other_scope}: {', '.join(item.overlapping_write_paths)})"
+                for item in check_result.hard_conflicts
+            )
+            return False, f"CONFLICT: active write claim overlap in '{project}' — {formatted}"
 
-    CLAIMS_DIR.mkdir(parents=True, exist_ok=True)
-    filename = _claim_filename(agent, project, scope)
-    claim_payload = candidate.to_dict()
-    claim_payload.pop("source_file", None)
-    claim_payload.pop("project", None)
-    (CLAIMS_DIR / filename).write_text(
-        yaml.safe_dump(claim_payload, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
-    )
+        CLAIMS_DIR.mkdir(parents=True, exist_ok=True)
+        filename = _claim_filename(agent, project, scope)
+        claim_payload = candidate.to_dict()
+        claim_payload.pop("source_file", None)
+        claim_payload.pop("project", None)
+        _atomic_write_claim(CLAIMS_DIR / filename, claim_payload)
     return True, (
         f"Claimed: {agent} → {project}:{scope} "
         f"[{candidate.claim_type}] (expires in {ttl_hours}h)"
@@ -792,10 +1018,7 @@ def hydrate_missing_session_ids(
         data["session_id"] = resolved_session_id
         data["heartbeat_at"] = now
         data["updated_at"] = now
-        claim_file.write_text(
-            yaml.safe_dump(data, default_flow_style=False, sort_keys=False),
-            encoding="utf-8",
-        )
+        _atomic_write_claim(claim_file, data)
         updated_scopes.append(claim.scope)
     return len(updated_scopes), sorted(updated_scopes), resolved_session_id
 
@@ -807,6 +1030,8 @@ def heartbeat_claims(
     session_id: str | None = None,
     scope: str | None = None,
     branch: str | None = None,
+    claims_dir: Path | None = None,
+    require_exact_session: bool = False,
 ) -> tuple[int, list[str], str, str]:
     """Refresh heartbeat metadata for matching live claims owned by one session."""
 
@@ -816,12 +1041,13 @@ def heartbeat_claims(
             "Unable to resolve a session ID. Pass --session-id explicitly or run from a supported tool runtime."
         )
 
-    if not CLAIMS_DIR.exists():
+    resolved_claims_dir = claims_dir or CLAIMS_DIR
+    if not resolved_claims_dir.exists():
         return 0, [], resolved_session_id, datetime.now(timezone.utc).isoformat()
 
     heartbeat_at = datetime.now(timezone.utc).isoformat()
     updated_scopes: list[str] = []
-    for claim_file in CLAIMS_DIR.glob("*.yaml"):
+    for claim_file in resolved_claims_dir.glob("*.yaml"):
         try:
             data = yaml.safe_load(claim_file.read_text(encoding="utf-8"))
         except Exception:
@@ -839,15 +1065,14 @@ def heartbeat_claims(
             continue
         if branch and claim.branch != branch:
             continue
-        if claim.session_id and claim.session_id != resolved_session_id:
+        if require_exact_session and claim.session_id != resolved_session_id:
+            continue
+        if not require_exact_session and claim.session_id and claim.session_id != resolved_session_id:
             continue
         data["session_id"] = resolved_session_id
         data["heartbeat_at"] = heartbeat_at
         data["updated_at"] = heartbeat_at
-        claim_file.write_text(
-            yaml.safe_dump(data, default_flow_style=False, sort_keys=False),
-            encoding="utf-8",
-        )
+        _atomic_write_claim(claim_file, data)
         updated_scopes.append(claim.scope)
     return len(updated_scopes), sorted(updated_scopes), resolved_session_id, heartbeat_at
 
@@ -903,10 +1128,7 @@ def complete_claims_for_plan(
                     data["notes"] = f"{existing_notes.rstrip()} | {note}"
             else:
                 data["notes"] = note
-        claim_file.write_text(
-            yaml.safe_dump(data, default_flow_style=False, sort_keys=False),
-            encoding="utf-8",
-        )
+        _atomic_write_claim(claim_file, data)
         completed_scopes.append(claim.scope)
     return len(completed_scopes), sorted(completed_scopes)
 
@@ -944,7 +1166,11 @@ def prune_stale() -> tuple[int, list[str]]:
         claim = normalize_claim(data, source_file=str(claim_file))
         if claim is None or not claim.is_live():
             continue
-        if not (claim_lifecycle_issues(claim) or claim_liveness_issues(claim)):
+        liveness_issues = claim_liveness_issues(claim)
+        proven_stale_liveness = [
+            issue for issue in liveness_issues if issue != "missing_session_heartbeat"
+        ]
+        if not (claim_lifecycle_issues(claim) or proven_stale_liveness):
             continue
         claim_file.unlink()
         removed_labels.append(f"{claim.primary_project()}:{claim.scope}")
@@ -1022,6 +1248,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--worktree-path", help="Worktree path for this claim")
     parser.add_argument("--branch", help="Branch for this claim")
     parser.add_argument("--session-id", help="Session identifier")
+    parser.add_argument(
+        "--session-name",
+        help="Human-readable broader-goal session name; required for live program/write/research claims",
+    )
     parser.add_argument("--status", default="active", help="Claim status (default: active)")
     parser.add_argument("--parent-scope", help="Parent/broad-scope identifier")
     parser.add_argument("--notes", help="Freeform notes")
@@ -1042,8 +1272,14 @@ def _render_check_output(
         "claims": [
             {
                 **claim.to_dict(),
-                "health_status": claim_runtime_status(claim),
-                "health_issues": claim_health_issues(claim),
+                "health_status": claim_runtime_status(
+                    claim,
+                    active_claims=claims,
+                ),
+                "health_issues": coordination_health_issues(
+                    claim,
+                    active_claims=claims,
+                ),
                 "lifecycle_issues": claim_lifecycle_issues(claim),
                 "liveness_issues": claim_liveness_issues(claim),
             }
@@ -1052,10 +1288,19 @@ def _render_check_output(
         "unregistered_claim_files": unregistered_claim_files(),
     }
     if candidate is not None:
+        prospective_claims = [
+            claim for claim in claims if not _same_claim(claim, candidate)
+        ] + [candidate]
         payload["check"] = {
             **evaluate_claim(candidate, active_claims=claims).to_dict(),
-            "candidate_health_status": claim_runtime_status(candidate),
-            "candidate_health_issues": claim_health_issues(candidate),
+            "candidate_health_status": claim_runtime_status(
+                candidate,
+                active_claims=prospective_claims,
+            ),
+            "candidate_health_issues": coordination_health_issues(
+                candidate,
+                active_claims=prospective_claims,
+            ),
             "candidate_lifecycle_issues": claim_lifecycle_issues(candidate),
             "candidate_liveness_issues": claim_liveness_issues(candidate),
         }
@@ -1081,6 +1326,7 @@ def main(argv: list[str] | None = None) -> int:
                 read_paths=args.read_path,
                 worktree_path=args.worktree_path,
                 branch=args.branch,
+                session_name=args.session_name,
                 session_id=args.session_id,
                 status=args.status,
                 parent_scope=args.parent_scope,
@@ -1154,6 +1400,7 @@ def main(argv: list[str] | None = None) -> int:
                 read_paths=args.read_path,
                 worktree_path=args.worktree_path,
                 branch=args.branch,
+                session_name=args.session_name,
                 session_id=args.session_id,
                 status=args.status,
                 parent_scope=args.parent_scope,
