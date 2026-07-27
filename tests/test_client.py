@@ -4,6 +4,7 @@ import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import litellm
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -15,6 +16,7 @@ from llm_client import (
     Hooks,
     LLMCallResult,
     LLMStream,
+    OpenRouterRoutePolicyV1,
     LRUCache,
     RetryPolicy,
     StructuredOutputPolicy,
@@ -44,6 +46,7 @@ from llm_client.core.errors import (
     LLMContentFilterError,
     LLMError,
     LLMModelNotFoundError,
+    LLMNoCompatibleRouteError,
     LLMQuotaExhaustedError,
 )
 from llm_client.core.model_availability import clear_model_unavailability
@@ -112,6 +115,76 @@ def _mock_response(
 
 class TestCallLLM:
     """Tests for call_llm."""
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.0)
+    def test_typed_openrouter_route_policy_reaches_provider_payload(
+        self, mock_cost: MagicMock, mock_completion: AsyncMock
+    ) -> None:
+        mock_completion.return_value = _mock_response()
+
+        call_llm(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "hello"}],
+            openrouter_route_policy=OpenRouterRoutePolicyV1(
+                allowed_providers=("Morph",),
+                zero_data_retention=True,
+                allow_provider_fallbacks=False,
+            ),
+            task="test.openrouter.route_policy",
+            trace_id="test/openrouter/route-policy",
+            max_budget=1.0,
+        )
+
+        payload = mock_completion.call_args.kwargs
+        assert payload["provider"] == {
+            "require_parameters": True,
+            "only": ["Morph"],
+            "zdr": True,
+            "allow_fallbacks": False,
+        }
+        assert "openrouter_route_policy" not in payload
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_typed_policy_rejects_non_openrouter_fallback_before_dispatch(
+        self, mock_completion: AsyncMock
+    ) -> None:
+        with pytest.raises(LLMConfigurationError) as raised:
+            call_llm(
+                "openrouter/deepseek/deepseek-v4-flash",
+                [{"role": "user", "content": "hello"}],
+                fallback_models=["openai/gpt-4o"],
+                openrouter_route_policy=OpenRouterRoutePolicyV1(),
+                task="test.openrouter.route_policy_fallback",
+                trace_id="test/openrouter/route-policy-fallback",
+                max_budget=1.0,
+            )
+
+        assert raised.value.error_code == "openrouter_route_policy_on_non_openrouter_route"
+        mock_completion.assert_not_awaited()
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_no_compatible_route_has_no_internal_retry(
+        self, mock_completion: AsyncMock
+    ) -> None:
+        mock_completion.side_effect = litellm.NotFoundError(
+            message="No endpoints found that can handle the requested parameters",
+            model="deepseek/deepseek-v4-flash",
+            llm_provider="openrouter",
+        )
+
+        with pytest.raises(LLMNoCompatibleRouteError):
+            call_llm(
+                "openrouter/deepseek/deepseek-v4-flash",
+                [{"role": "user", "content": "hello"}],
+                openrouter_route_policy=OpenRouterRoutePolicyV1(zero_data_retention=True),
+                num_retries=3,
+                task="test.openrouter.no_compatible_route",
+                trace_id="test/openrouter/no-compatible-route",
+                max_budget=1.0,
+            )
+
+        assert mock_completion.await_count == 1
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)

@@ -4,6 +4,28 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-07-27 Amendment: Typed OpenRouter Route Policy
+
+Plan #336 adds `OpenRouterRoutePolicyV1` as the supported named public
+contract for stable OpenRouter provider-routing requirements: provider
+allowlists, data-collection mode, zero-data-retention, same-model provider
+fallback permission, sorting, and `require_parameters=true`. `llm_client`
+compiles this object into OpenRouter's native `provider` payload, retains the
+canonical policy in call snapshots, and rejects ambiguous raw `provider` kwargs
+when the typed policy is present.
+
+This amendment does not create a local endpoint inventory or preflight call.
+OpenRouter remains the runtime authority on whether a current endpoint satisfies
+the fixed model and requested constraints. An OpenRouter response that no
+endpoint can satisfy those constraints is a non-retryable
+`LLMNoCompatibleRouteError`, not evidence that the model is absent.
+
+The policy constrains routing only. It does not authorize a provider to receive
+private source fields; callers remain responsible for an authorization covering
+every allowed upstream processor. Every resolved primary/fallback model leg
+must be an OpenRouter route when this policy is used, and embeddings remain
+outside the typed-policy surface.
+
 ## 2026-07-23 Amendment: Explicit Reasoning Policy
 
 Plan #117 makes reasoning selection an explicit pre-dispatch policy for exact

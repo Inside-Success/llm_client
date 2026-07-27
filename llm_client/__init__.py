@@ -144,6 +144,7 @@ from llm_client.core.errors import (
     LLMContentFilterError,
     LLMError,
     LLMModelNotFoundError,
+    LLMNoCompatibleRouteError,
     LLMLogicalDeadlineError,
     LLMQuotaExhaustedError,
     LLMRateLimitError,
@@ -328,7 +329,7 @@ from llm_client.core.client import (
     stream_llm_with_tools,
     strip_fences,
 )
-from llm_client.execution.call_contracts import StructuredOutputPolicy
+from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1, StructuredOutputPolicy
 from llm_client.json_schema import (
     JsonScalar,
     JsonValue,
@@ -365,6 +366,7 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "LLMContentFilterError",
     "LLMError",
     "LLMModelNotFoundError",
+    "LLMNoCompatibleRouteError",
     "LLMLogicalDeadlineError",
     "LLMQuotaExhaustedError",
     "LLMRateLimitError",
@@ -389,6 +391,7 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "resolve_call",
     "RetryPolicy",
     "StructuredOutputPolicy",
+    "OpenRouterRoutePolicyV1",
     "acall_llm",
     "acall_llm_batch",
     "acall_llm_structured",

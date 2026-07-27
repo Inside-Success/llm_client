@@ -100,6 +100,42 @@ An account-level default model does not replace an explicit model in a normal
 `llm_client` call. Keep explicit model selection in code/config and use
 OpenRouter provider routing only to choose a compatible endpoint.
 
+For stable OpenRouter route constraints, use the typed policy instead of
+constructing a raw `provider={...}` payload:
+
+```python
+from llm_client import OpenRouterRoutePolicyV1, call_llm_structured
+
+result, call = call_llm_structured(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    response_model=Decision,
+    openrouter_route_policy=OpenRouterRoutePolicyV1(
+        allowed_providers=("authorized-upstream",),
+        data_collection="deny",
+        zero_data_retention=True,
+        allow_provider_fallbacks=False,
+    ),
+    reasoning_effort="none",
+    task="bounded_decision",
+    trace_id=trace_id,
+    max_budget=0.05,
+)
+```
+
+The policy is validated locally, compiled once into OpenRouter's provider
+controls, and retained in replay identity. It cannot be combined with raw
+`provider` kwargs, and every resolved fallback leg must remain on OpenRouter.
+`LLMNoCompatibleRouteError` means the fixed model has no current endpoint that
+satisfies the requested policy; it is not a model-not-found error and is not
+retried within the same call.
+
+This object does not grant permission to transmit private data. A caller that
+uses `allowed_providers` must still have an explicit authorization for every
+listed upstream processor and source field. The client does not query a live
+endpoint registry before a call, so model-level structured capability remains
+separate from policy-constrained route availability.
+
 ## Local and Vendor Observability
 
 OpenRouter can log inputs/outputs and [Broadcast traces to existing
