@@ -43,7 +43,11 @@ listed stop condition instead of inventing another routing mechanism.
   authorization evidence.
 - **Remaining:** complete the shared-client verification/closeout, then migrate
   the separately claimed Inside Success runner only after its worktree is
-  available. Do not broaden that runner's provider authorization automatically.
+  available. The shared implementation is currently a clean candidate branch
+  (`f57cecf`), not canonical `main`; do not represent it as an accepted
+  dependency or change the consumer pin until it is merged through the owning
+  repository workflow. Do not broaden that runner's provider authorization
+  automatically.
 
 ## Objective and Target
 
