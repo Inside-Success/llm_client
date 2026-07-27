@@ -519,6 +519,72 @@ async def test_async_timeout_ban_preserves_provider_safety_ceiling(
     assert mock_comp.call_args.kwargs["timeout"] == 300
 
 
+@patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+def test_sync_instructor_fallback_timeout_ban_preserves_provider_safety_ceiling(
+    _mock_cost: MagicMock,
+    _mock_supports_schema: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Instructor fallback must retain the provider safety ceiling, never timeout=0."""
+
+    import instructor
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create_with_completion.return_value = (
+        _City(name="Tokyo"),
+        _mock_structured_response(),
+    )
+    monkeypatch.setattr(instructor, "from_litellm", lambda _completion: fake_client)
+
+    _call_llm_structured_impl(
+        "openrouter/test-instructor-fallback",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.sync.instructor.timeout-ban",
+        max_budget=0,
+    )
+
+    assert fake_client.chat.completions.create_with_completion.call_args.kwargs["timeout"] == 300
+
+
+@pytest.mark.asyncio
+@patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+async def test_async_instructor_fallback_timeout_ban_preserves_provider_safety_ceiling(
+    _mock_cost: MagicMock,
+    _mock_supports_schema: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Async Instructor fallback must retain the provider safety ceiling too."""
+
+    import instructor
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create_with_completion = AsyncMock(
+        return_value=(_City(name="Tokyo"), _mock_structured_response())
+    )
+    monkeypatch.setattr(instructor, "from_litellm", lambda _completion: fake_client)
+
+    await _acall_llm_structured_impl(
+        "openrouter/test-instructor-fallback",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.async.instructor.timeout-ban",
+        max_budget=0,
+    )
+
+    assert fake_client.chat.completions.create_with_completion.call_args.kwargs["timeout"] == 300
+
+
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.completion")
