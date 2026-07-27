@@ -43,16 +43,13 @@ listed stop condition instead of inventing another routing mechanism.
   authorization evidence.
 - **Remaining:** complete the shared-client verification/closeout, then migrate
   the separately claimed Inside Success runner only after its worktree is
-  available. The shared implementation is currently a clean candidate branch
-  (`f57cecf`), not canonical `main`; do not represent it as an accepted
-  dependency or change the consumer pin until it is merged through the owning
-  repository workflow. Do not broaden that runner's provider authorization
-  automatically.
-- **Publication blocker (observed 2026-07-27):** the actual `llm_client`
-  checkout is clean on `main`, while `project-meta/PROJECT_GRAPH.json` names
-  `fix/instructor-retry-unwrapping` as its canonical publication branch. Those
-  authorities conflict, so this plan must not merge or push the candidate until
-  the owning project-graph record is reconciled.
+  available. The shared implementation was accepted into local canonical
+  `main` at `b6906ba`; the consumer must pin that revision (or its approved
+  published equivalent) rather than duplicate the raw provider dictionary.
+  Do not broaden that runner's provider authorization automatically.
+- **Publication authority resolved (2026-07-27):**
+  `project-meta/PROJECT_GRAPH.json` now names `llm_client/main` as the
+  canonical checkout and publication branch, matching the actual repository.
 
 ## Objective and Target
 

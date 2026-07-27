@@ -13,7 +13,7 @@
       "objective": "Implement and verify the typed route policy, compiler, replay identity, precise failure, and a non-private live structured route probe.",
       "profile": "standard",
       "execution_class": "independently_executable",
-      "claimability": "ready_for_execution",
+      "claimability": "not_applicable",
       "authorization_mode": "host_workspace",
       "scope": {
         "included": [
@@ -130,7 +130,7 @@
         "approvals": [],
         "failed_guards": []
       },
-      "status": "ready",
+      "status": "accepted",
       "record_version": 1
     },
     {
@@ -170,7 +170,7 @@
         {
           "kind": "WorkUnitOutput",
           "id": "WU-336-01",
-          "revision": "accepted-revision-required"
+          "revision": "b6906ba8c02d8c4e19f01844d795ab01edb4965"
         },
         {
           "kind": "ConsumerExecutionContract",
@@ -252,7 +252,6 @@
         ],
         "approvals": [],
         "failed_guards": [
-          "WU-336-01 is not accepted.",
           "The Inside Success preprocessing paths have an active write claim.",
           "The execution-time private provider authorization has not been validated against the requested upstream."
         ]
@@ -292,7 +291,7 @@
         {
           "kind": "WorkUnitOutput",
           "id": "WU-336-01",
-          "revision": "accepted-revision-required"
+          "revision": "b6906ba8c02d8c4e19f01844d795ab01edb4965"
         }
       ],
       "outputs": [
@@ -340,14 +339,12 @@
         }
       ],
       "readiness": {
-        "status": "blocked",
+        "status": "ready",
         "required_approval_types": [],
         "approvals": [],
-        "failed_guards": [
-          "WU-336-01 is not accepted."
-        ]
+        "failed_guards": []
       },
-      "status": "blocked",
+      "status": "ready",
       "record_version": 1
     },
     {
