@@ -1267,7 +1267,8 @@ def _call_llm_structured_impl(
 
                 try:
                     attempt_timeout, logical_cap = _attempt_timeout()
-                    call_kwargs["timeout"] = attempt_timeout
+                    if attempt_timeout > 0:
+                        call_kwargs["timeout"] = attempt_timeout
                     response = _run_sync_with_deadline(
                         provider_call,
                         timeout=attempt_timeout,
@@ -1812,7 +1813,8 @@ def _call_llm_structured_impl(
 
             def _invoke_instructor_attempt(attempt: int) -> tuple[T, LLMCallResult]:
                 attempt_timeout, logical_cap = _attempt_timeout()
-                call_kwargs["timeout"] = attempt_timeout
+                if attempt_timeout > 0:
+                    call_kwargs["timeout"] = attempt_timeout
                 parsed, completion_response = _run_sync_with_deadline(
                     lambda: client.chat.completions.create_with_completion(**call_kwargs),
                     timeout=attempt_timeout,
@@ -2348,7 +2350,8 @@ async def _acall_llm_structured_impl(
 
                 try:
                     attempt_timeout, logical_cap = _attempt_timeout()
-                    call_kwargs["timeout"] = attempt_timeout
+                    if attempt_timeout > 0:
+                        call_kwargs["timeout"] = attempt_timeout
                     response = await _run_async_with_deadline(
                         provider_call,
                         timeout=attempt_timeout,
@@ -2903,7 +2906,8 @@ async def _acall_llm_structured_impl(
                     )
 
                 attempt_timeout, logical_cap = _attempt_timeout()
-                call_kwargs["timeout"] = attempt_timeout
+                if attempt_timeout > 0:
+                    call_kwargs["timeout"] = attempt_timeout
                 parsed, completion_response = await _run_async_with_deadline(
                     instructor_call,
                     timeout=attempt_timeout,
