@@ -48,6 +48,11 @@ listed stop condition instead of inventing another routing mechanism.
   dependency or change the consumer pin until it is merged through the owning
   repository workflow. Do not broaden that runner's provider authorization
   automatically.
+- **Publication blocker (observed 2026-07-27):** the actual `llm_client`
+  checkout is clean on `main`, while `project-meta/PROJECT_GRAPH.json` names
+  `fix/instructor-retry-unwrapping` as its canonical publication branch. Those
+  authorities conflict, so this plan must not merge or push the candidate until
+  the owning project-graph record is reconciled.
 
 ## Objective and Target
 
