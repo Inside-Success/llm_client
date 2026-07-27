@@ -1,0 +1,451 @@
+{
+  "units": [
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-336-01",
+      "initiative_id": "llm-client-runtime-substrate",
+      "goal_id": "llm-client-openrouter-route-policy-v1",
+      "design_revision": "plan-336-v1",
+      "spec_revision": "wu-336-01-v1",
+      "title": "Typed OpenRouter policy through a real structured call",
+      "class": "implementation",
+      "objective": "Implement and verify the typed route policy, compiler, replay identity, precise failure, and a non-private live structured route probe.",
+      "profile": "standard",
+      "execution_class": "independently_executable",
+      "claimability": "ready_for_execution",
+      "authorization_mode": "host_workspace",
+      "scope": {
+        "included": [
+          "Typed OpenRouterRoutePolicyV1 contract and public exports",
+          "Completions and Responses compilers for sync, async, structured, tool, and streaming calls",
+          "Snapshot/replay identity",
+          "LLMNoCompatibleRouteError classification and no-retry behavior",
+          "Focused and full deterministic verification",
+          "One bounded non-private OpenRouter route probe"
+        ],
+        "excluded": [
+          "Private Slack data",
+          "Live endpoint registry or preflight cache",
+          "Model selection or Auto Router",
+          "Embeddings",
+          "Caller repository migration",
+          "Package publication or deployment"
+        ]
+      },
+      "inputs": [
+        {
+          "kind": "ImplementationPlan",
+          "id": "plan-336",
+          "revision": "plan-336-v1"
+        },
+        {
+          "kind": "GitRevision",
+          "id": "llm-client-main",
+          "revision": "287d0cb2af229db4c03923ad4047d7dfe79310dd"
+        },
+        {
+          "kind": "ArchitectureDecision",
+          "id": "ADR-0016",
+          "revision": "2026-07-23-amended"
+        }
+      ],
+      "outputs": [
+        "Public OpenRouterRoutePolicyV1 API",
+        "Deterministic provider-payload compiler",
+        "Replayable route-policy snapshot",
+        "Non-retryable compatible-route failure",
+        "Passing deterministic test evidence",
+        "Non-private live route observation"
+      ],
+      "dependencies": [],
+      "conflict_surfaces": [
+        {
+          "kind": "repository_path",
+          "target": "llm_client/",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-336-runtime"
+        },
+        {
+          "kind": "repository_path",
+          "target": "tests/",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-336-tests"
+        },
+        {
+          "kind": "repository_path",
+          "target": "docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-adr-0016"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-336-01-contract",
+          "criterion": "The typed policy validates and compiles exactly as Plan 336 specifies.",
+          "evidence_required": [
+            "Passing positive and malformed policy tests",
+            "Exact compiled provider object assertion"
+          ],
+          "negative_control": "Raw provider kwargs plus typed policy fail before provider dispatch."
+        },
+        {
+          "id": "AC-336-01-replay",
+          "criterion": "The canonical route policy participates in snapshot, cache identity, and replay.",
+          "evidence_required": [
+            "Original and replay provider objects match",
+            "Policy mutation changes request identity",
+            "Old snapshot compatibility test"
+          ],
+          "negative_control": "A malformed replay policy fails before dispatch."
+        },
+        {
+          "id": "AC-336-01-failure",
+          "criterion": "No-compatible-route is distinct from model absence and receives no internal retry.",
+          "evidence_required": [
+            "Typed error classification test",
+            "One-attempt lifecycle test",
+            "Ordinary model-not-found control"
+          ],
+          "negative_control": "A generic OpenRouter 404 without the compatible-route signature remains model-not-found."
+        },
+        {
+          "id": "AC-336-01-live",
+          "criterion": "A bounded non-private strict-schema call returns validated output through an allowed upstream and retains actual upstream evidence.",
+          "evidence_required": [
+            "Fresh trace ID",
+            "Validated Pydantic result",
+            "Authenticated OpenRouter generation evidence",
+            "Exact accepted Git revision"
+          ],
+          "negative_control": "The live fixture contains no private or customer content and uses num_retries=0."
+        }
+      ],
+      "readiness": {
+        "status": "ready",
+        "required_approval_types": [],
+        "approvals": [],
+        "failed_guards": []
+      },
+      "status": "ready",
+      "record_version": 1
+    },
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-336-02",
+      "initiative_id": "llm-client-runtime-substrate",
+      "goal_id": "llm-client-openrouter-route-policy-v1",
+      "design_revision": "plan-336-v1",
+      "spec_revision": "wu-336-02-v1",
+      "title": "Inside Success preprocessing consumer migration",
+      "class": "integration",
+      "objective": "Replace the preprocessing runner's raw provider dictionary with the accepted typed client policy and execute the existing bounded development call when its authorization permits.",
+      "profile": "controlled",
+      "control_approval_types": [
+        "security_compliance"
+      ],
+      "execution_class": "independently_executable",
+      "claimability": "blocked_dependencies",
+      "authorization_mode": "host_workspace",
+      "scope": {
+        "included": [
+          "Inside Success first-vertical route-policy construction",
+          "Consumer dependency pin",
+          "Focused preprocessing tests",
+          "Non-private consumer-environment probe",
+          "One already-authorized bounded private development call"
+        ],
+        "excluded": [
+          "Authorization broadening",
+          "Prompt, schema, model, partition, source, or evaluation changes",
+          "Held-out evaluation",
+          "Production deployment"
+        ]
+      },
+      "inputs": [
+        {
+          "kind": "WorkUnitOutput",
+          "id": "WU-336-01",
+          "revision": "accepted-revision-required"
+        },
+        {
+          "kind": "ConsumerExecutionContract",
+          "id": "document-preprocessing-execution-contract",
+          "revision": "2026-07-27"
+        },
+        {
+          "kind": "ProviderDataAuthorization",
+          "id": "private-operator-receipt",
+          "revision": "validated-at-execution"
+        }
+      ],
+      "outputs": [
+        "Inside Success typed route-policy integration",
+        "Pinned accepted llm_client revision",
+        "Focused consumer test evidence",
+        "Real development-call result or exact authorization blocker"
+      ],
+      "dependencies": [
+        {
+          "unit_id": "WU-336-01",
+          "type": "hard",
+          "gate": {
+            "type": "unit_status",
+            "required_status": "accepted"
+          },
+          "rationale": "The consumer must pin an accepted shared-client contract rather than duplicate candidate code."
+        }
+      ],
+      "conflict_surfaces": [
+        {
+          "kind": "repository_path",
+          "target": "inside_success/preprocessing/",
+          "repository": "inside-success",
+          "access": "exclusive",
+          "coordination_key": "inside-success-document-preprocessing-dp03-execution-contract-20260727"
+        },
+        {
+          "kind": "repository_path",
+          "target": "tests/preprocessing/",
+          "repository": "inside-success",
+          "access": "exclusive",
+          "coordination_key": "inside-success-document-preprocessing-dp03-execution-contract-20260727"
+        },
+        {
+          "kind": "data",
+          "target": "private Slack development partition",
+          "access": "read",
+          "coordination_key": "provider-data-authorization"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-336-02-code",
+          "criterion": "The consumer constructs OpenRouterRoutePolicyV1 and no longer constructs or projects the five raw provider controls for the covered call.",
+          "evidence_required": [
+            "Focused tests",
+            "Deterministic source inspection",
+            "Accepted dependency pin"
+          ],
+          "negative_control": "An invalid or incompatible authorization stops before private provider dispatch."
+        },
+        {
+          "id": "AC-336-02-runtime",
+          "criterion": "The existing bounded development preprocessing call succeeds without semantic-contract changes, or stops on the exact authorized-upstream incompatibility.",
+          "evidence_required": [
+            "Fresh trace ID",
+            "Validated provider authorization digest",
+            "Private readout path without private contents",
+            "Exact consumer and llm_client revisions"
+          ],
+          "negative_control": "No code path broadens the authorized provider set or relaxes ZDR/data-collection rules."
+        }
+      ],
+      "readiness": {
+        "status": "blocked",
+        "required_approval_types": [
+          "security_compliance"
+        ],
+        "approvals": [],
+        "failed_guards": [
+          "WU-336-01 is not accepted.",
+          "The Inside Success preprocessing paths have an active write claim.",
+          "The execution-time private provider authorization has not been validated against the requested upstream."
+        ]
+      },
+      "status": "blocked",
+      "record_version": 1
+    },
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-336-03",
+      "initiative_id": "llm-client-runtime-substrate",
+      "goal_id": "llm-client-openrouter-route-policy-v1",
+      "design_revision": "plan-336-v1",
+      "spec_revision": "wu-336-03-v1",
+      "title": "Covered-call parity and documentation cleanup",
+      "class": "verification",
+      "objective": "Prove text, tools, streaming, async, and batch-through-child-call parity without delaying the first consumer integration.",
+      "profile": "standard",
+      "execution_class": "independently_executable",
+      "claimability": "blocked_dependencies",
+      "authorization_mode": "host_workspace",
+      "scope": {
+        "included": [
+          "Text, tool, stream, async, and batch-through-child-call contract tests",
+          "Generated API documentation",
+          "Model capability versus route readiness guidance"
+        ],
+        "excluded": [
+          "Embeddings",
+          "Private data",
+          "Consumer migrations",
+          "Raw provider kwargs deprecation"
+        ]
+      },
+      "inputs": [
+        {
+          "kind": "WorkUnitOutput",
+          "id": "WU-336-01",
+          "revision": "accepted-revision-required"
+        }
+      ],
+      "outputs": [
+        "Covered-call parity evidence",
+        "Consistent generated API documentation",
+        "Explicit unsupported-surface documentation"
+      ],
+      "dependencies": [
+        {
+          "unit_id": "WU-336-01",
+          "type": "hard",
+          "gate": {
+            "type": "unit_status",
+            "required_status": "accepted"
+          },
+          "rationale": "Parity tests must target the accepted typed-policy implementation."
+        }
+      ],
+      "conflict_surfaces": [
+        {
+          "kind": "repository_path",
+          "target": "llm_client/core/client.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-336-parity"
+        },
+        {
+          "kind": "repository_path",
+          "target": "tests/",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-336-parity-tests"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-336-03-parity",
+          "criterion": "Every advertised covered call surface has a positive typed-policy test and non-OpenRouter negative.",
+          "evidence_required": [
+            "Focused parity tests",
+            "Generated API check",
+            "Full repository check"
+          ],
+          "negative_control": "Embeddings remain explicitly unsupported rather than silently dropping the policy."
+        }
+      ],
+      "readiness": {
+        "status": "blocked",
+        "required_approval_types": [],
+        "approvals": [],
+        "failed_guards": [
+          "WU-336-01 is not accepted."
+        ]
+      },
+      "status": "blocked",
+      "record_version": 1
+    },
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-336-04",
+      "initiative_id": "llm-client-runtime-substrate",
+      "goal_id": "llm-client-openrouter-route-policy-v1",
+      "design_revision": "plan-336-v1",
+      "spec_revision": "wu-336-04-v1",
+      "title": "Maintained-caller inventory and staged migration",
+      "class": "migration",
+      "objective": "Inventory and disposition maintained caller hand-rolling before any raw-provider-kwargs deprecation is proposed.",
+      "profile": "standard",
+      "execution_class": "deferred",
+      "claimability": "not_applicable",
+      "authorization_mode": "host_workspace",
+      "scope": {
+        "included": [
+          "Deterministic maintained-caller inventory",
+          "Per-occurrence migration or retention disposition",
+          "Separate repository claims for actual migrations"
+        ],
+        "excluded": [
+          "Big-bang cross-repository edits",
+          "Automatic authorization changes",
+          "Deletion of raw provider kwargs under Plan 336",
+          "Vendor, employer, archived, generated, or disposable code mutation"
+        ]
+      },
+      "inputs": [
+        {
+          "kind": "WorkUnitOutput",
+          "id": "WU-336-02",
+          "revision": "accepted-revision-required"
+        },
+        {
+          "kind": "WorkUnitOutput",
+          "id": "WU-336-03",
+          "revision": "accepted-revision-required"
+        }
+      ],
+      "outputs": [
+        "Maintained-caller routing inventory",
+        "Per-occurrence disposition ledger",
+        "Evidence-backed proposal for any later deprecation"
+      ],
+      "dependencies": [
+        {
+          "unit_id": "WU-336-02",
+          "type": "hard",
+          "gate": {
+            "type": "unit_status",
+            "required_status": "accepted"
+          },
+          "rationale": "Broad migration follows one accepted real consumer vertical."
+        },
+        {
+          "unit_id": "WU-336-03",
+          "type": "hard",
+          "gate": {
+            "type": "unit_status",
+            "required_status": "accepted"
+          },
+          "rationale": "The shared surface must have covered-call parity before broad adoption."
+        }
+      ],
+      "conflict_surfaces": [
+        {
+          "kind": "external_system",
+          "target": "maintained Brian-owned repository inventory",
+          "access": "read",
+          "coordination_key": "project-meta-project-graph"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-336-04-inventory",
+          "criterion": "Every maintained raw OpenRouter provider-routing occurrence has an evidence-backed migrate, retain, defer, or non-applicable disposition.",
+          "evidence_required": [
+            "Deterministic search command and revision",
+            "Project-governance classification",
+            "Per-occurrence disposition"
+          ],
+          "negative_control": "No repository is mutated merely because a matching string exists."
+        }
+      ],
+      "readiness": {
+        "status": "not_reviewed",
+        "required_approval_types": [],
+        "approvals": [],
+        "failed_guards": [
+          "WU-336-02 and WU-336-03 are not accepted.",
+          "The current maintained-caller inventory has not been generated."
+        ]
+      },
+      "status": "draft",
+      "record_version": 1
+    }
+  ]
+}

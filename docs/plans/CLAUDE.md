@@ -52,6 +52,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 336 | [Typed OpenRouter Route Policy and Consumer Migration](336_typed_openrouter_route_policy.md) | Critical | 📋 Planned | Inside Success DP-03 real messy-Slack preprocessing vertical |
 | 124 | [Logical Structured-Call Deadline](124_logical_structured_call_deadline.md) | Critical | 🧪 Implemented; downstream verification pending | Bounded retry-chain latency and Plan 021 terminal repair |
 | 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | 🧪 Implemented; downstream verification pending | Evidence-based failure localization and provider-attribution claims |
 | 120 | [Durable Cross-Project Call Lifecycle](120_durable_call_lifecycle.md) | Critical | ✅ Complete | Truthful localization of missing-terminal calls |

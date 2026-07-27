@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "record_type": "next_skill_handoff",
+  "handoff_id": "HANDOFF-plan-336-v1-to-development",
+  "producer_skill": "work-unit-graph",
+  "next_skill": "evidence-first-development",
+  "reason": "The typed OpenRouter route-policy boundary and first real structured-call vertical are fully specified for implementation.",
+  "source_records": [
+    {
+      "kind": "implementation_plan",
+      "id": "plan-336",
+      "schema_version": "1.0",
+      "revision": "plan-336-v1",
+      "digest": "sha256:1f2b95f545cdb3a7737498a42f2e9619bcd80ea43c9f7da1d3a464cfef55a47f"
+    },
+    {
+      "kind": "work_unit_graph",
+      "id": "plan-336-work-graph",
+      "schema_version": "1.0",
+      "revision": "plan-336-v1",
+      "digest": "sha256:d4b13f92fd69fdc3cafcee3326834a96598defe3a9ee5e36a4a1f637875c120f"
+    }
+  ],
+  "required_inputs": [
+    "WU-336-01",
+    "plan-336-v1",
+    "llm_client repository authority"
+  ],
+  "lifecycle_state": "proposed"
+}
