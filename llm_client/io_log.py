@@ -1170,8 +1170,95 @@ ON budget_reservations(status, expires_at);
 """
 
 
+def _migrate_observed_runs_status_constraint(conn: sqlite3.Connection) -> None:
+    """Replace the pre-release status CHECK while preserving every run row."""
+
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'observed_runs'"
+    ).fetchone()
+    table_sql = str(row[0]) if row and row[0] else ""
+    if not any(
+        legacy_status in table_sql
+        for legacy_status in ("'failed_before_call'", "'failed_during_call'")
+    ):
+        return
+    legacy_table = "observed_runs_legacy_status"
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (legacy_table,),
+    ).fetchone():
+        raise RuntimeError(
+            f"cannot migrate observed_runs while {legacy_table} already exists"
+        )
+    legacy_count = int(conn.execute("SELECT COUNT(*) FROM observed_runs").fetchone()[0])
+
+    conn.execute(
+        "ALTER TABLE observed_runs RENAME TO observed_runs_legacy_status"
+    )
+    conn.execute(
+        """
+        CREATE TABLE observed_runs (
+            run_id TEXT PRIMARY KEY,
+            root_trace_id TEXT NOT NULL,
+            project TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            executable TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'running', 'completed', 'failed_before_call_start',
+                    'failed_after_call_start', 'cancelled'
+                )
+            ),
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            runtime_revision TEXT,
+            config_sha256 TEXT,
+            requested_model TEXT,
+            reasoning_effort TEXT,
+            max_budget REAL,
+            error_type TEXT,
+            error_phase TEXT,
+            error_message TEXT,
+            linked_call_count INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO observed_runs (
+            run_id, root_trace_id, project, operation, executable, status,
+            started_at, ended_at, runtime_revision, config_sha256,
+            requested_model, reasoning_effort, max_budget, error_type,
+            error_phase, error_message, linked_call_count
+        )
+        SELECT
+            run_id, root_trace_id, project, operation, executable,
+            CASE status
+                WHEN 'failed_before_call' THEN 'failed_before_call_start'
+                WHEN 'failed_during_call' THEN 'failed_after_call_start'
+                ELSE status
+            END,
+            started_at, ended_at, runtime_revision, config_sha256,
+            requested_model, reasoning_effort, max_budget, error_type,
+            error_phase, error_message, linked_call_count
+        FROM observed_runs_legacy_status
+        """
+    )
+    migrated_count = int(
+        conn.execute("SELECT COUNT(*) FROM observed_runs").fetchone()[0]
+    )
+    if migrated_count != legacy_count:
+        raise RuntimeError(
+            "observed_runs migration row-count mismatch: "
+            f"expected {legacy_count}, copied {migrated_count}"
+        )
+    conn.execute("DROP TABLE observed_runs_legacy_status")
+
+
 def _migrate_db(conn: sqlite3.Connection) -> None:
     """Add missing columns (idempotent). For DBs created before these columns existed."""
+    _migrate_observed_runs_status_constraint(conn)
+
     for table in ("llm_calls", "embeddings"):
         cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if "trace_id" not in cols:
