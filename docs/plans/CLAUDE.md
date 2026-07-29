@@ -133,6 +133,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | 🧪 Implemented; downstream verification pending | Plan #121 merged diagnostics contract |
 | 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | 🧪 Implemented; downstream live trace pending | Plan #122 client deadline classification |
 | 335 | [Concurrent Root-Budget Reservations](335_concurrent-root-budget-reservations.md) | Critical | ✅ Complete | DIGIMON Plan #182 |
+| 337 | [Current Model Selection Evidence and GPT-5.5 Retirement](337_current-model-selection-evidence-and-gpt-5-5-retirement.md) | Critical | ✅ Complete | - |
 
 
 ## Status Key

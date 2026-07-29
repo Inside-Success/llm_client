@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from llm_client.model_policy_audit import scan_paths
 
 
@@ -93,6 +95,29 @@ def test_scan_paths_flags_banned_opus_even_with_override_acceptance(
     assert len(violations) == 1
     assert violations[0].kind == "banned_model_literal"
     assert violations[0].model == "claude-code/opus"
+
+
+@pytest.mark.parametrize("model", ["gpt-5.5", "openrouter/openai/gpt-5.5"])
+def test_scan_paths_flags_retired_gpt55_even_with_override_acceptance(
+    tmp_path: Path, model: str
+) -> None:
+    """A retired family is a policy denial, not a temporary override."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    config = project / "config.yaml"
+    config.write_text(
+        f'fallback_model: "{model}"\n'
+        "model_override_acceptance:\n"
+        "  accepted_by: brian\n"
+        '  reason: "historical default"\n',
+        encoding="utf-8",
+    )
+
+    violations = scan_paths([project])
+
+    assert len(violations) == 1
+    assert violations[0].kind == "banned_model_literal"
+    assert violations[0].model == model
 
 
 def test_scan_paths_allows_default_minimax_literal(tmp_path: Path) -> None:
