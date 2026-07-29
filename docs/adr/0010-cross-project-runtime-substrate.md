@@ -62,6 +62,15 @@ existing libraries already solve well.
    bespoke general-purpose workflow engine.
 8. Cross-project callers that require tool execution to be auditable use the
    shared strict tool-call API rather than implementing project-local sinks.
+9. LLM-capable application entry points use the shared `ObservedRun` contract
+   when pre-client validation, policy, or workflow can fail. The application
+   starts outer-run custody before fallible work, derives public-call trace IDs
+   from the root, and records one controlled terminal state. Public call
+   wrappers reject traces outside the active run lineage before dispatch. This
+   is generic run persistence, not workflow orchestration; applications retain
+   stage and success semantics. Migrated executables enable
+   `LLM_CLIENT_REQUIRE_OBSERVED_RUN=1`; the opt-in remains a compatibility
+   bridge until consumer entry points are audited.
 
 ## Consequences
 
@@ -94,8 +103,11 @@ Negative:
 5. Cross-project structured traces must prove every provider attempt begins at
    `started`, preserves pre-response failures, and records the retry kernel's
    actual disposition with logical-call-global ordinals.
+6. Downstream observed-run adoption must include pre-call failure, linked-call
+   success/failure, and cancellation controls plus one non-mocked root-to-child
+   lifecycle receipt before advertising complete integration.
 
-Last verified: 2026-07-14 (DIGIMON-bound Plan 97 transport failure).
+Last verified: 2026-07-28 (Plan 338 observed application-run lifecycle).
 
 The shared runtime now distinguishes provider recovery from local finalization:
 once native structured output validates, hook/cache/log failures fail loud
