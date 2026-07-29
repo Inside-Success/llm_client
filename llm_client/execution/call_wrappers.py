@@ -25,6 +25,9 @@ from llm_client.execution.call_contracts import (
     resolve_budget_scope as _resolve_budget_scope,
 )
 from llm_client.observability.budget_reservations import BudgetReservationLease
+from llm_client.observability.observed_runs import (
+    _require_active_observed_run_child_trace,
+)
 from llm_client.execution.call_lifecycle import (
     _AsyncLLMCallHeartbeatMonitor,
     _SyncLLMCallHeartbeatMonitor,
@@ -75,6 +78,7 @@ def _prepare_public_call_envelope(
         kwargs.get("max_budget"),
         caller=caller,
     )
+    _require_active_observed_run_child_trace(resolved_trace_id)
     reservation = kwargs.get("budget_reservation", 0.0)
     budget_scope_mode = kwargs.get("budget_scope_mode", "sequential")
     budget_scope_trace_id = _resolve_budget_scope(

@@ -1,6 +1,6 @@
 # Plan #338: Observed Application-Run Lifecycle
 
-**Status:** Planned
+**Status:** 🧪 Implemented; downstream verification pending
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -24,7 +24,7 @@ domain semantics; this package owns only generic run persistence and query.
 
 **Why:** Call-level observability cannot explain a program that never reaches a
 call. Every initiated LLM-capable run must remain distinguishable as completed,
-failed before a client call, failed during/after a client call, or cancelled.
+failed before a durable child call starts, failed after one starts, or cancelled.
 
 ---
 
@@ -76,7 +76,7 @@ flowchart LR
 | `run_id` | unique stable identity |
 | `root_trace_id` | non-empty root used to derive child traces |
 | `project`, `operation`, `executable` | non-empty ownership and entry-point identity |
-| `status` | `running`, `completed`, `failed_before_call`, `failed_during_call`, or `cancelled` |
+| `status` | `running`, `completed`, `failed_before_call_start`, `failed_after_call_start`, or `cancelled` |
 | `started_at`, `ended_at` | UTC lifecycle timestamps; terminal rows require `ended_at` |
 | `runtime_revision`, `config_sha256` | optional immutable provenance; no secrets or raw config required |
 | `requested_model`, `reasoning_effort`, `max_budget` | optional declared execution controls |
@@ -84,8 +84,11 @@ flowchart LR
 
 Child traces use `<root_trace_id>/<validated-segment>`. Every linked public LLM
 call is joined by exact root or slash-delimited descendant. A run with no linked
-call fails as `failed_before_call`; a run with any linked lifecycle row fails as
-`failed_during_call`. Explicit cancellation records `cancelled`. Success is an
+call fails as `failed_before_call_start`; a run with any linked lifecycle row
+fails as `failed_after_call_start`. This classifies lifecycle chronology without
+claiming whether application or client predispatch code caused the former, or
+attributing the latter to the provider. Explicit cancellation records
+`cancelled`. Success is an
 explicit application action or clean context exit, never inferred from a model
 response.
 
@@ -133,15 +136,15 @@ response.
 
 ## Acceptance Criteria
 
-- [ ] Start is durable before caller validation or stage execution.
-- [ ] Every normal, exceptional, and cancellation exit has exactly one terminal
+- [x] Start is durable before caller validation or stage execution.
+- [x] Every normal, exceptional, and cancellation exit has exactly one terminal
       state without suppressing the caller exception.
-- [ ] Pre-call and during-call failures are deterministically distinguishable.
-- [ ] Child traces are valid root descendants and linked calls are queryable.
-- [ ] Runtime/config/model controls are recorded without credentials or raw
+- [x] Pre-call and post-call-start failures are deterministically distinguishable.
+- [x] Child traces are valid root descendants and linked calls are queryable.
+- [x] Runtime/config/model controls are recorded without credentials or raw
       prompt/response content.
-- [ ] Persistence failure is visible; no best-effort success claim is possible.
-- [ ] Focused tests, lifecycle regressions, static checks, and API generation pass.
+- [x] Persistence failure is visible; no best-effort success claim is possible.
+- [x] Focused tests, lifecycle regressions, static checks, and API generation pass.
 - [ ] One downstream non-mocked consumer receipt proves the integrated boundary.
 
 ---
@@ -156,3 +159,24 @@ response.
 - Existing `ExperimentRun` remains compatible and is not silently reinterpreted.
 - A project is not “fully integrated” merely because imports or unit tests pass;
   the live root-to-child-to-terminal receipt is required.
+
+---
+
+## Implementation Progress
+
+2026-07-28:
+
+- Added the additive `observed_runs` ledger, typed query API, sync/async context,
+  strict child-trace derivation, sanitized failures, and exact terminal writes.
+- Public text and structured call wrappers reject unrelated traces while an
+  observed context is active, before budget reservation or provider dispatch.
+- Opt-in `LLM_CLIENT_REQUIRE_OBSERVED_RUN=1` rejects public calls with no active
+  outer run, providing a fail-loud migration and enforcement gate.
+- Query results compute current descendant-call counts, including while a run
+  is still active; terminal status `failed_after_call_start` deliberately avoids
+  attributing later application failures to the provider.
+- Deterministic verification covers start, success, both failure classes,
+  cancellation, nesting, malformed lineage, duplicate/terminal writes, sink
+  failure, redaction, public-wrapper joins, and rejected dispatch.
+- Remaining acceptance is the Process Tracing non-mocked receipt after the
+  released revision is pinned by its governed runtime.

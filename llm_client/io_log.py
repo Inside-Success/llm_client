@@ -900,6 +900,31 @@ CREATE TABLE IF NOT EXISTS experiment_runs (
     status TEXT DEFAULT 'running'
 );
 
+CREATE TABLE IF NOT EXISTS observed_runs (
+    run_id TEXT PRIMARY KEY,
+    root_trace_id TEXT NOT NULL,
+    project TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    executable TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'running', 'completed', 'failed_before_call_start',
+            'failed_after_call_start', 'cancelled'
+        )
+    ),
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    runtime_revision TEXT,
+    config_sha256 TEXT,
+    requested_model TEXT,
+    reasoning_effort TEXT,
+    max_budget REAL,
+    error_type TEXT,
+    error_phase TEXT,
+    error_message TEXT,
+    linked_call_count INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS experiment_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT NOT NULL,
@@ -1103,6 +1128,10 @@ CREATE INDEX IF NOT EXISTS idx_expr_seed ON experiment_runs(seed);
 CREATE INDEX IF NOT EXISTS idx_expr_scenario_id ON experiment_runs(scenario_id);
 CREATE INDEX IF NOT EXISTS idx_expr_phase ON experiment_runs(phase);
 CREATE INDEX IF NOT EXISTS idx_expr_condition_seed ON experiment_runs(condition_id, seed);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_project ON observed_runs(project);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_root_trace ON observed_runs(root_trace_id);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_status ON observed_runs(status);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_started ON observed_runs(started_at);
 CREATE INDEX IF NOT EXISTS idx_expri_run_id ON experiment_items(run_id);
 CREATE INDEX IF NOT EXISTS idx_expri_item_id ON experiment_items(item_id);
 CREATE INDEX IF NOT EXISTS idx_expri_trace_id ON experiment_items(trace_id);
