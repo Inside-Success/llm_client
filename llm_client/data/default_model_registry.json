@@ -88,7 +88,8 @@
         "manual-selection",
         "openrouter",
         "reasoning",
-        "structured-route-certified"
+        "structured-route-certified",
+        "tier-max-intelligence"
       ]
     },
     {
@@ -120,14 +121,14 @@
       "name": "gpt-5.6-luna-openrouter",
       "provider": "openrouter",
       "speed": 192,
-      "structured_output": false,
+      "structured_output": true,
       "tags": [
         "1m-context",
         "manual-selection",
         "openrouter",
         "planner-candidate",
         "reasoning",
-        "native-schema-route-unverified"
+        "structured-route-certified"
       ]
     },
     {
@@ -307,26 +308,6 @@
       ]
     },
     {
-      "api_key_env": "OPENROUTER_API_KEY",
-      "context": 1050000,
-      "cost": 4.35,
-      "intelligence": 55,
-      "litellm_id": "openrouter/openai/gpt-5.5",
-      "name": "gpt-5.5",
-      "provider": "openrouter",
-      "speed": 70,
-      "structured_output": true,
-      "tags": [
-        "1m-context",
-        "deep-review",
-        "frontier",
-        "long-thinking",
-        "manual-selection",
-        "reasoning",
-        "tier-max-intelligence"
-      ]
-    },
-    {
       "api_key_env": "OPENAI_API_KEY",
       "context": 128000,
       "cost": 94.5,
@@ -340,23 +321,6 @@
         "deep-review",
         "frontier",
         "long-thinking"
-      ]
-    },
-    {
-      "api_key_env": "OPENAI_API_KEY",
-      "context": 1050000,
-      "cost": 17.5,
-      "intelligence": 51,
-      "litellm_id": "gpt-5.5",
-      "name": "gpt-5.5-direct",
-      "provider": "openai",
-      "speed": 40,
-      "structured_output": true,
-      "tags": [
-        "deep-review",
-        "frontier",
-        "manual-selection",
-        "reasoning"
       ]
     },
     {
@@ -395,24 +359,6 @@
         "manual-selection",
         "reasoning",
         "structured-route-certified"
-      ]
-    },
-    {
-      "api_key_env": "OPENAI_API_KEY",
-      "context": 1050000,
-      "cost": 105.0,
-      "intelligence": 55,
-      "litellm_id": "gpt-5.5-pro",
-      "name": "gpt-5.5-pro",
-      "provider": "openai",
-      "speed": 3,
-      "structured_output": true,
-      "tags": [
-        "deep-review",
-        "frontier",
-        "long-thinking",
-        "manual-selection",
-        "quality-optimal-review"
       ]
     }
   ],

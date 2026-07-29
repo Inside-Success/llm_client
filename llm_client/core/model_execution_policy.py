@@ -36,7 +36,6 @@ ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "openrouter/openai/gpt-5",
         "openrouter/openai/gpt-5-nano",
         "openrouter/openai/gpt-5.4-nano",
-        "openrouter/openai/gpt-5.5",
         "openrouter/openai/gpt-5.6-luna",
         "openrouter/openai/gpt-5.6-sol",
         "openrouter/openai/gpt-5.6-terra",
@@ -47,8 +46,6 @@ ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "gemini/gemini-2.5-flash",
         "gemini/gemini-2.5-flash-lite",
         "gemini/gemini-3-flash-preview",
-        "gpt-5.5",
-        "gpt-5.5-pro",
         "gpt-5.6",
         "gpt-5.6-terra",
         "codex",
@@ -134,12 +131,6 @@ REASONING_CAPABILITIES: dict[str, ReasoningCapability] = {
         observed_default="medium",
         source=_OPENROUTER_MODELS_SOURCE,
     ),
-    "openrouter/openai/gpt-5.5": _reasoning_capability(
-        {"none", "low", "medium", "high", "xhigh"},
-        mandatory=False,
-        observed_default="medium",
-        source=_OPENROUTER_MODELS_SOURCE,
-    ),
     "openrouter/openai/gpt-5.6-luna": _reasoning_capability(
         {"none", "low", "medium", "high", "xhigh", "max"},
         mandatory=False,
@@ -193,18 +184,6 @@ REASONING_CAPABILITIES: dict[str, ReasoningCapability] = {
         mandatory=True,
         observed_default=None,
         source=_LITELLM_GEMINI_SOURCE,
-    ),
-    "gpt-5.5": _reasoning_capability(
-        {"none", "low", "medium", "high", "xhigh"},
-        mandatory=False,
-        observed_default="medium",
-        source=_OPENAI_MODELS_SOURCE,
-    ),
-    "gpt-5.5-pro": _reasoning_capability(
-        {"medium", "high", "xhigh"},
-        mandatory=True,
-        observed_default="high",
-        source=_OPENAI_MODELS_SOURCE,
     ),
     "gpt-5.6": _reasoning_capability(
         {"none", "low", "medium", "high", "xhigh", "max"},

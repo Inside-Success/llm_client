@@ -819,6 +819,11 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "gpt-5.5": (
+        "gpt-5.6 (Sol) OR gpt-5.6-terra",
+        "GPT-5.5 is retired from ecosystem routing. Use GPT-5.6 Sol for "
+        "maximum-quality work or GPT-5.6 Terra for an explicit lower-cost route.",
+    ),
     "openrouter/auto": (
         "an explicit, policy-approved model ID",
         "OpenRouter Auto Router selects the final model account-side, so "
@@ -836,7 +841,8 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
         "lane, including raw provider routes and claude-code aliases.",
     ),
     "fable": (
-        "openrouter/openai/gpt-5.5 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
+        "openrouter/openai/gpt-5.6-sol OR openrouter/x-ai/grok-4.5 OR "
+        "openrouter/z-ai/glm-5.2",
         "Fable-family models are banned by ecosystem policy. Do not use them for "
         "new calls, even with ordinary model_override_acceptance metadata.",
     ),

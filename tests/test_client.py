@@ -4654,6 +4654,22 @@ class TestModelDeprecation:
             call_llm("anthropic/claude-fable-5", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_fable", max_budget=0)
 
     @pytest.mark.parametrize(
+        "model", ["gpt-5.5", "gpt-5.5-pro", "openrouter/openai/gpt-5.5"]
+    )
+    def test_gpt55_raises(self, model: str):
+        """GPT-5.5 is retired across direct and OpenRouter aliases."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.5"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_depr_gpt55",
+                max_budget=0,
+            )
+
+    @pytest.mark.parametrize(
         "model",
         [
             "anthropic/claude-opus-4-8",

@@ -40,6 +40,13 @@ def _reset():
 
 
 class TestGetModel:
+    def test_retired_gpt55_models_are_absent_from_registry(self):
+        """Selectable registry must not advertise the hard-blocked family."""
+        identifiers = {
+            model["litellm_id"] for model in _load_packaged_default_config()["models"]
+        }
+        assert not any("gpt-5.5" in identifier for identifier in identifiers)
+
     def test_openrouter_gpt56_planner_routes_are_registered(self):
         """Current OpenRouter planner candidates expose their tested capabilities."""
 
@@ -49,7 +56,7 @@ class TestGetModel:
         ):
             assert supports_structured_output(model) is True
             assert supports_tool_calling(model) is True
-        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is True
 
     def test_extraction_returns_highest_intelligence_structured(self):
         # available_only=False so we don't need env vars set
@@ -155,7 +162,7 @@ class TestGetModel:
             "default_intelligent": "openrouter/minimax/minimax-m3",
             "fast_intelligent": "openrouter/z-ai/glm-5.2",
             "very_intelligent": "openrouter/x-ai/grok-4.5",
-            "max_intelligence": "openrouter/openai/gpt-5.5",
+            "max_intelligence": "openrouter/openai/gpt-5.6-sol",
         }
 
         for task, model_id in expected.items():

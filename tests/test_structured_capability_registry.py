@@ -71,12 +71,12 @@ class TestSupportsStructuredOutput:
         assert supports_structured_output("openrouter/deepseek/deepseek-v4-flash") is True
         assert supports_structured_output("openrouter/minimax/minimax-m3") is True
         assert supports_structured_output("openrouter/openai/gpt-5.6-sol") is True
-        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is True
 
-    def test_observed_direct_gpt_routes_advertise_native_schema_support(self):
-        """Responses API evidence overrides the failed OpenRouter proxy probe."""
-        assert supports_structured_output("gpt-5.5") is True
-        assert supports_structured_output("openrouter/openai/gpt-5.5") is True
+    def test_current_direct_gpt_routes_advertise_native_schema_support(self):
+        """Current direct routes retain observed native-schema capability."""
+        assert supports_structured_output("gpt-5.5") is None
+        assert supports_structured_output("openrouter/openai/gpt-5.5") is None
         assert supports_structured_output("gpt-5.6") is True
         assert supports_structured_output("gpt-5.6-terra") is True
 
@@ -85,7 +85,6 @@ class TestModelSupportsNativeSchema:
     def test_observed_direct_gpt_routes_use_registry_capability(self):
         """Known direct routes do not depend on LiteLLM's fallback capability map."""
         with patch("litellm.supports_response_schema") as litellm_map:
-            assert _model_supports_native_schema("gpt-5.5") is True
             assert _model_supports_native_schema("gpt-5.6") is True
             assert _model_supports_native_schema("gpt-5.6-terra") is True
             litellm_map.assert_not_called()
