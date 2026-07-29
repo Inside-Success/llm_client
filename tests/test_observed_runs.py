@@ -107,6 +107,63 @@ def test_clean_context_exit_completes_run() -> None:
     assert record.linked_call_count == 0
 
 
+def test_legacy_status_constraint_is_migrated_without_losing_rows() -> None:
+    with sqlite3.connect(io_log._db_path) as db:
+        db.executescript(
+            """
+            CREATE TABLE observed_runs (
+                run_id TEXT PRIMARY KEY,
+                root_trace_id TEXT NOT NULL,
+                project TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                executable TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'running', 'completed', 'failed_before_call',
+                        'failed_during_call', 'cancelled'
+                    )
+                ),
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                runtime_revision TEXT,
+                config_sha256 TEXT,
+                requested_model TEXT,
+                reasoning_effort TEXT,
+                max_budget REAL,
+                error_type TEXT,
+                error_phase TEXT,
+                error_message TEXT,
+                linked_call_count INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO observed_runs (
+                run_id, root_trace_id, project, operation, executable, status,
+                started_at, ended_at, linked_call_count
+            ) VALUES
+                ('legacy_before', 'legacy.before', 'p', 'o', 'x.py',
+                 'failed_before_call', '2026-07-28T00:00:00Z',
+                 '2026-07-28T00:01:00Z', 0),
+                ('legacy_during', 'legacy.during', 'p', 'o', 'x.py',
+                 'failed_during_call', '2026-07-28T00:00:00Z',
+                 '2026-07-28T00:01:00Z', 1);
+            """
+        )
+
+    with pytest.raises(ValueError, match="post-migration failure"):
+        with _run(run_id="new_run", root_trace_id="new.run") as run:
+            run.set_phase("validation")
+            raise ValueError("post-migration failure")
+
+    assert get_observed_run("legacy_before").status == "failed_before_call_start"
+    assert get_observed_run("legacy_during").status == "failed_after_call_start"
+    assert get_observed_run("new_run").status == "failed_before_call_start"
+    assert len(list_observed_runs()) == 3
+    table_sql = io_log._get_db().execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'observed_runs'"
+    ).fetchone()[0]
+    assert "'failed_before_call_start'" in table_sql
+    assert "'failed_before_call'" not in table_sql
+
+
 def test_early_context_completion_fails_instead_of_recording_false_success() -> None:
     with pytest.raises(RuntimeError, match="clean context exit"):
         with _run() as run:

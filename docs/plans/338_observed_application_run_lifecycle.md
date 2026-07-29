@@ -1,6 +1,6 @@
 # Plan #338: Observed Application-Run Lifecycle
 
-**Status:** 🧪 Implemented; downstream verification pending
+**Status:** 🧪 Implemented; legacy-schema repair verified, downstream rerun pending
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -180,3 +180,23 @@ response.
   failure, redaction, public-wrapper joins, and rejected dispatch.
 - Remaining acceptance is the Process Tracing non-mocked receipt after the
   released revision is pinned by its governed runtime.
+
+2026-07-28 downstream compatibility finding:
+
+- Process Tracing trace
+  `plan237-observed-run-luna-medium-20260728T212700Z` durably inserted the outer
+  `running` row and linked child lifecycle, but terminalization failed because
+  the existing shared SQLite table retained pre-release CHECK values
+  `failed_before_call` and `failed_during_call`.
+- Fresh-database tests did not represent that installed schema. The repair now
+  recreates only `observed_runs` transactionally, preserves every row, maps the
+  two legacy labels to `failed_before_call_start` and
+  `failed_after_call_start`, and fails loud if an ambiguous migration table is
+  already present.
+- A regression fixture starts from the exact legacy table definition and proves
+  both legacy-row preservation and a new post-migration terminal write. The
+  downstream non-mocked receipt remains pending until this repair is released
+  and Process Tracing repins it.
+- Focused observed-run and SQLite persistence verification passes 105 tests;
+  security lint passes, and the broad suite passes 1,956 tests with two
+  unrelated baseline/environment failures documented in the delivery review.
