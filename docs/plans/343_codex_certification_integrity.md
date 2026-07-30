@@ -1,6 +1,6 @@
 # Plan #343: Codex Certification Integrity
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -79,9 +79,26 @@ different code revision or malformed output as a successful exact-schema route.
 
 ## Acceptance Criteria
 
-- [ ] Incorrect configured revisions fail before route advertisement or certification.
-- [ ] Malformed or schema-invalid content cannot produce a certifying observation.
-- [ ] Valid exact-schema Codex evidence remains certifiable.
-- [ ] Focused shared-client and simulator tests pass.
-- [ ] Generated API documentation is current.
+- [x] Incorrect configured revisions fail before route advertisement or certification.
+- [x] Malformed or schema-invalid content cannot produce a certifying observation.
+- [x] Valid exact-schema Codex evidence remains certifiable.
+- [x] Focused shared-client and simulator tests pass.
+- [x] Generated API documentation is current.
 
+## Evidence
+
+- Eleven revision and Codex certification tests passed, including malformed
+  JSON, schema-invalid JSON, exact valid content, source-checkout identity,
+  package fallback, and configured-revision mismatch.
+- The broader shared-client certification and structured-output boundary passed
+  184 tests.
+- The complete downstream simulator gate passed static typing, all 185 tests,
+  the production frontend build, and deployment-launcher syntax. Its focused
+  configuration, authoring, and API boundary passed 58 tests.
+- The generated Markdown and HTML API references include the new installed and
+  validated revision functions and the response-model certification compiler.
+- The shared repository's full suite reached 2,023 passing tests. Its five
+  remaining failures are pre-existing environment/baseline issues: missing
+  `prompt_eval` dependencies (two), a missing `python` command in shell-hook
+  tests (two), and the already-stale public-export count (one). None intersects
+  the changed certification or revision paths.
