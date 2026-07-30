@@ -110,6 +110,11 @@ silent fallback or automatic model escalation.
   discriminated `oneOf` union. The Codex projector now performs the same
   provably-disjoint literal-union projection used by strict OpenAI-compatible
   routes; 441 focused client, structured-runtime, and agent tests pass.
+- The Qualitative Coding research-report schema exposed the same union with
+  defaulted discriminator fields. Strict normalization now runs before the
+  disjoint-union projection, so those discriminator fields participate in the
+  proof; the exact report schema projects to supported `anyOf` and a live Luna
+  call returned validated output.
 
 ## Non-Claims
 

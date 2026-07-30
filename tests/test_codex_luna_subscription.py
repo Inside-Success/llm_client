@@ -38,8 +38,36 @@ class _DiscriminatedDecision(BaseModel):
     ]
 
 
+class _DefaultedSendAction(BaseModel):
+    output_port_id: Literal["send"] = "send"
+    content: str
+
+
+class _DefaultedWaitAction(BaseModel):
+    output_port_id: Literal["wait"] = "wait"
+    reason: str
+
+
+class _DefaultedDiscriminatedDecision(BaseModel):
+    actions: list[
+        Annotated[
+            _DefaultedSendAction | _DefaultedWaitAction,
+            Field(discriminator="output_port_id"),
+        ]
+    ]
+
+
 def test_codex_schema_projects_disjoint_action_union_to_supported_any_of() -> None:
     schema = codex_native_provider_schema(_DiscriminatedDecision)
+    action_schema = schema["properties"]["actions"]["items"]
+
+    assert "oneOf" not in action_schema
+    assert "discriminator" not in action_schema
+    assert len(action_schema["anyOf"]) == 2
+
+
+def test_codex_schema_projects_defaulted_discriminator_after_strict_normalization() -> None:
+    schema = codex_native_provider_schema(_DefaultedDiscriminatedDecision)
     action_schema = schema["properties"]["actions"]["items"]
 
     assert "oneOf" not in action_schema

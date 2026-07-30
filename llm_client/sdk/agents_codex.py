@@ -57,10 +57,8 @@ def _strict_codex_output_schema(response_model: Any) -> dict[str, Any]:
     Pydantic schemas and the Codex SDK. Without it, calls fail with
     ``invalid_json_schema`` errors at the provider boundary.
     """
-    schema = _provider_compatible_discriminated_union_schema(
-        response_model.model_json_schema()
-    )
-    return _strict_json_schema(schema)
+    schema = _strict_json_schema(response_model.model_json_schema())
+    return _provider_compatible_discriminated_union_schema(schema)
 
 logger = logging.getLogger(__name__)
 
