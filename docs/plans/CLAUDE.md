@@ -54,6 +54,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 |---|------|----------|--------|--------|
 | 339 | [Structured Route Capability and Disconnect Retry](339_structured_route_capability_and_disconnect_retry.md) | Critical | 🚧 In Progress | Process Tracing Plan 020 terminal repair replay |
 | 340 | [Codex GPT-5.6 Luna Subscription Route](340_codex_luna_subscription_route.md) | High | ✅ Complete | Cybernetic Influence subscription-backed live simulation |
+| 343 | [Codex Certification Integrity](343_codex_certification_integrity.md) | Critical | 🚧 In Progress | Trustworthy downstream route advertisement |
 | 336 | [Typed OpenRouter Route Policy and Consumer Migration](336_typed_openrouter_route_policy.md) | Critical | 🚧 In Progress | Inside Success DP-03 real messy-Slack preprocessing vertical |
 | 124 | [Logical Structured-Call Deadline](124_logical_structured_call_deadline.md) | Critical | 🧪 Implemented; downstream verification pending | Bounded retry-chain latency and Plan 021 terminal repair |
 | 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | 🧪 Implemented; downstream verification pending | Evidence-based failure localization and provider-attribution claims |

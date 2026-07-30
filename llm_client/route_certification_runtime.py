@@ -61,8 +61,7 @@ def codex_native_provider_schema(
 def compile_codex_structured_success(
     *,
     result: LLMCallResult,
-    provider_schema: dict[str, Any],
-    schema_class: str,
+    response_model: type[BaseModel],
     trace_id: str,
     llm_client_revision: str,
     evidence_ref: str,
@@ -85,13 +84,15 @@ def compile_codex_structured_success(
         raise ValueError("Codex result lacks logical_call_id")
     if not result.content.strip():
         raise ValueError("Codex result lacks validated structured content")
+    response_model.model_validate_json(result.content)
+    provider_schema = codex_native_provider_schema(response_model)
     return RouteCertificationObservation.build(
         requested_model=requested_model,
         resolved_model=resolved_model,
         upstream_provider_name="OpenAI Codex subscription",
         upstream_provider_endpoint=transport,
         execution_mode="workspace_agent",
-        schema_class=schema_class,
+        schema_class=response_model.__name__,
         schema_sha256=route_schema_sha256(provider_schema),
         outcome="parseable",
         failure_stage="none",

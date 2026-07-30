@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import pytest
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from llm_client import LLMCallResult
 from llm_client.route_certification_runtime import (
     codex_native_provider_schema,
     compile_codex_structured_success,
+    route_schema_sha256,
 )
 from llm_client.sdk.agents import _build_codex_cli_command
 
@@ -92,8 +93,7 @@ def test_compile_codex_structured_success_certifies_exact_schema() -> None:
     schema = codex_native_provider_schema(_ProbeResult)
     observation = compile_codex_structured_success(
         result=_subscription_result(),
-        provider_schema=schema,
-        schema_class="tests._ProbeResult",
+        response_model=_ProbeResult,
         trace_id="tests/codex-luna/subscription",
         llm_client_revision="test-revision",
         evidence_ref="sqlite:///tmp/llm_observability.db#llmcall_test_codex_luna",
@@ -104,6 +104,8 @@ def test_compile_codex_structured_success_certifies_exact_schema() -> None:
     assert observation.upstream_provider_endpoint == "codex_cli"
     assert observation.transport_certifies is True
     assert observation.selected_attempt_receipt_digest is None
+    assert observation.schema_class == "_ProbeResult"
+    assert observation.schema_sha256 == route_schema_sha256(schema)
 
 
 def test_compile_codex_structured_success_rejects_api_billing() -> None:
@@ -113,9 +115,31 @@ def test_compile_codex_structured_success_rejects_api_billing() -> None:
     with pytest.raises(ValueError, match="subscription-backed"):
         compile_codex_structured_success(
             result=result,
-            provider_schema=codex_native_provider_schema(_ProbeResult),
-            schema_class="tests._ProbeResult",
+            response_model=_ProbeResult,
             trace_id="tests/codex-luna/api",
             llm_client_revision="test-revision",
             evidence_ref="sqlite:///tmp/llm_observability.db#api",
+        )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "not json",
+        '{"unexpected":true}',
+    ],
+)
+def test_compile_codex_structured_success_rejects_invalid_content(
+    content: str,
+) -> None:
+    result = _subscription_result()
+    result.content = content
+
+    with pytest.raises(ValidationError):
+        compile_codex_structured_success(
+            result=result,
+            response_model=_ProbeResult,
+            trace_id="tests/codex-luna/invalid-content",
+            llm_client_revision="test-revision",
+            evidence_ref="sqlite:///tmp/llm_observability.db#invalid-content",
         )

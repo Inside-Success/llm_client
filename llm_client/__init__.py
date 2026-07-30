@@ -235,6 +235,10 @@ from llm_client.route_certification_runtime import (
     openrouter_native_provider_schema,
     route_schema_sha256,
 )
+from llm_client.revision import (
+    installed_llm_client_revision,
+    validated_llm_client_revision,
+)
 from llm_client.prompt_assets import (
     PromptAssetManifest,
     PromptAssetRef,
