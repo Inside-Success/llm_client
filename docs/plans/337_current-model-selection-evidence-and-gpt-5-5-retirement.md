@@ -120,3 +120,14 @@ This is not a task-specific model bake-off. It resolves choices that follow
 from current policy and first principles. A Process Tracing comparison is only
 warranted later if two polished, route-certified candidates remain
 decision-equivalent.
+
+### Capability clarification (superseded by Plan 339)
+
+Plan 337 correctly retained Luna as a typed-output candidate, but it used the
+single `structured_output` field to express both model eligibility and native
+JSON-Schema transport. Fresh Process Tracing Luna/Sol probes showed that the
+current routes could lack an endpoint for a different structured parameter
+profile even though the named historical contracts had succeeded. Plan 339
+separates those claims: Luna and Sol remain structured candidates, while their
+OpenRouter auto-mode transport defaults to Instructor. The bounded historical
+certificates remain evidence only for their exact contracts.

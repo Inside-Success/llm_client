@@ -16,7 +16,11 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from llm_client.core.models import _reset_config, supports_structured_output
+from llm_client.core.models import (
+    _reset_config,
+    supports_native_structured_output,
+    supports_structured_output,
+)
 from llm_client.execution.structured_runtime import _model_supports_native_schema
 
 
@@ -80,6 +84,60 @@ class TestSupportsStructuredOutput:
         assert supports_structured_output("gpt-5.6") is True
         assert supports_structured_output("gpt-5.6-terra") is True
 
+    def test_native_transport_capability_is_independent(self, tmp_path):
+        """A typed-output candidate may deliberately use Instructor transport."""
+
+        cfg = _write_config(
+            tmp_path,
+            [
+                {
+                    **_BASE,
+                    "litellm_id": "openrouter/x/instructor-model",
+                    "structured_output": True,
+                    "native_structured_output": False,
+                }
+            ],
+        )
+        with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
+            assert supports_structured_output("openrouter/x/instructor-model") is True
+            assert (
+                supports_native_structured_output("openrouter/x/instructor-model")
+                is False
+            )
+
+    def test_legacy_registry_uses_structured_value_for_native_transport(self, tmp_path):
+        """Custom registries that omit the additive field preserve old behavior."""
+
+        cfg = _write_config(
+            tmp_path,
+            [{**_BASE, "litellm_id": "openrouter/x/legacy", "structured_output": True}],
+        )
+        with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
+            assert supports_native_structured_output("openrouter/x/legacy") is True
+
+    def test_malformed_native_transport_capability_fails_loud(self, tmp_path):
+        cfg = _write_config(
+            tmp_path,
+            [
+                {
+                    **_BASE,
+                    "litellm_id": "openrouter/x/malformed",
+                    "structured_output": True,
+                    "native_structured_output": ["not", "a", "boolean"],
+                }
+            ],
+        )
+        with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
+            with pytest.raises(RuntimeError, match="expected boolean or null"):
+                supports_native_structured_output("openrouter/x/malformed")
+
+    def test_openrouter_gpt56_native_transport_is_conservative(self):
+        """Fresh route evidence demotes native transport without model eligibility."""
+
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is False
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-sol") is False
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-terra") is True
+
 
 class TestModelSupportsNativeSchema:
     def test_observed_direct_gpt_routes_use_registry_capability(self):
@@ -100,6 +158,27 @@ class TestModelSupportsNativeSchema:
             patch("litellm.supports_response_schema") as litellm_map,
         ):
             assert _model_supports_native_schema("openrouter/x/new-model") is True
+            litellm_map.assert_not_called()
+
+    def test_explicit_native_false_selects_instructor_despite_structured_eligibility(
+        self, tmp_path
+    ):
+        cfg = _write_config(
+            tmp_path,
+            [
+                {
+                    **_BASE,
+                    "litellm_id": "openrouter/x/instructor-model",
+                    "structured_output": True,
+                    "native_structured_output": False,
+                }
+            ],
+        )
+        with (
+            patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}),
+            patch("litellm.supports_response_schema") as litellm_map,
+        ):
+            assert _model_supports_native_schema("openrouter/x/instructor-model") is False
             litellm_map.assert_not_called()
 
     def test_registry_false_blocks_native_path(self, tmp_path):

@@ -1,6 +1,6 @@
 # Plan #339: Structured Route Capability and Disconnect Retry
 
-**Status:** 📋 Planned
+**Status:** 🚧 In Progress
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -254,3 +254,27 @@ digest, frozen input digests, downstream trace/run IDs, actual provider attempt
 ordinals, cost, and final artifact disposition. Completion supports only the
 bounded capability and retry claims above, not semantic model superiority or
 universal route availability.
+
+### Implementation evidence (2026-07-30)
+
+- Capability, retry-classification, and real structured-runtime ledger tests:
+  `40 passed`.
+- Plan test harness across all five declared test modules: `112 passed`.
+- Broad suite excluding only the unavailable optional LangGraph module:
+  `1966 passed, 47 skipped, 12 deselected, 2 failed`. The same two failures
+  reproduce on unchanged `main`: the provider-limit subprocess invokes
+  `/usr/bin/python` without Pydantic, and the stale public-surface fixture
+  expects 138 exports while canonical `main` exposes 145.
+- Ruff passes on every changed Python file. The aggregate gate still reports
+  the documented 299-error repository baseline. MyPy reaches one unchanged
+  `llm_client/parsing_utils.py` `no-any-return` finding while checking the
+  changed dependency graph.
+- Markdown links, relationship validation, registry JSON parsing, generated
+  API reference generation, plan-status consistency, and `git diff --check`
+  pass. AGENTS rendering remains blocked by the canonical checkout's existing
+  `AGENTS.md -> CLAUDE.md` symlink guard; this plan does not mutate governance
+  generation.
+- The controlled exact OpenRouter disconnect produced dispatch ordinals `0`
+  and `1`; permanent quota and no-compatible-route controls remained terminal.
+- Shared-client publication and the unchanged non-mocked Process Tracing replay
+  remain required before this plan can advance beyond in progress.

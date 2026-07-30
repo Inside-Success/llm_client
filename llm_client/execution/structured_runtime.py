@@ -47,7 +47,9 @@ import time as _time
 import litellm
 import llm_client.io_log as _io_log
 
-from llm_client.core.models import supports_structured_output as _registry_supports_structured_output
+from llm_client.core.models import (
+    supports_native_structured_output as _registry_supports_native_structured_output,
+)
 from llm_client.execution.timeout_policy import _await_with_safety_ceiling
 from llm_client.parsing_utils import safe_json_loads as _safe_json_loads
 from llm_client.observability.raw_artifacts import (
@@ -126,7 +128,7 @@ def _model_supports_native_schema(model: str) -> bool:
     """
     import litellm
 
-    registry_capability = _registry_supports_structured_output(model)
+    registry_capability = _registry_supports_native_structured_output(model)
     if registry_capability is not None:
         return bool(registry_capability)
     return bool(litellm.supports_response_schema(model=model))
