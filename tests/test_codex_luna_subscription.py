@@ -2,9 +2,10 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated, Literal
 
 import pytest
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client import LLMCallResult
 from llm_client.route_certification_runtime import (
@@ -18,6 +19,31 @@ class _ProbeResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: str
+
+
+class _SendAction(BaseModel):
+    output_port_id: Literal["send"]
+    content: str
+
+
+class _WaitAction(BaseModel):
+    output_port_id: Literal["wait"]
+    reason: str
+
+
+class _DiscriminatedDecision(BaseModel):
+    actions: list[
+        Annotated[_SendAction | _WaitAction, Field(discriminator="output_port_id")]
+    ]
+
+
+def test_codex_schema_projects_disjoint_action_union_to_supported_any_of() -> None:
+    schema = codex_native_provider_schema(_DiscriminatedDecision)
+    action_schema = schema["properties"]["actions"]["items"]
+
+    assert "oneOf" not in action_schema
+    assert "discriminator" not in action_schema
+    assert len(action_schema["anyOf"]) == 2
 
 
 def test_build_codex_cli_command_selects_luna_at_medium_effort(

@@ -106,6 +106,10 @@ silent fallback or automatic model escalation.
   cost `$0`, 12,645 input tokens, and 19 output tokens.
 - The real call set `codex_transport="cli"`, medium reasoning, read-only
   sandboxing, an isolated MCP-free Codex home, and no fallback model.
+- A downstream Coordination schema exposed a provider rejection of Pydantic's
+  discriminated `oneOf` union. The Codex projector now performs the same
+  provably-disjoint literal-union projection used by strict OpenAI-compatible
+  routes; 441 focused client, structured-runtime, and agent tests pass.
 
 ## Non-Claims
 

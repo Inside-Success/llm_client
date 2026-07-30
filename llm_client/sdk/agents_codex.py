@@ -37,7 +37,10 @@ from llm_client.sdk.agents_codex_process import (
     _terminate_pid_tree,  # noqa: F401 - re-exported by agents.py
 )
 from llm_client.core.client import Hooks, LLMCallResult
-from llm_client.execution.responses_runtime import _strict_json_schema
+from llm_client.execution.responses_runtime import (
+    _provider_compatible_discriminated_union_schema,
+    _strict_json_schema,
+)
 from llm_client.execution.timeout_policy import normalize_timeout as _normalize_timeout
 
 
@@ -54,7 +57,10 @@ def _strict_codex_output_schema(response_model: Any) -> dict[str, Any]:
     Pydantic schemas and the Codex SDK. Without it, calls fail with
     ``invalid_json_schema`` errors at the provider boundary.
     """
-    return _strict_json_schema(response_model.model_json_schema())
+    schema = _provider_compatible_discriminated_union_schema(
+        response_model.model_json_schema()
+    )
+    return _strict_json_schema(schema)
 
 logger = logging.getLogger(__name__)
 
