@@ -82,6 +82,10 @@ result = call_llm(
   not default or coerce the requested effort.
 - `model_reasoning_effort` is an adapter transport detail; ordinary callers
   should use the public `reasoning_effort` control.
+- ChatGPT-authenticated callers may explicitly select
+  `codex/gpt-5.6-luna`. It is allowlisted for low, medium, and high effort but
+  is not a shared task-tier default. Use `codex_transport="cli"` when the
+  installed Python environment does not include the optional Codex SDK.
 
 ## Agent billing and retry
 

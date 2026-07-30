@@ -76,6 +76,23 @@ def test_openrouter_sol_requires_explicit_justification_and_reasoning() -> None:
     )
 
 
+def test_codex_luna_requires_justification_and_explicit_medium_reasoning() -> None:
+    model = "codex/gpt-5.6-luna"
+    decision = evaluate_model_execution_policy(
+        [model],
+        mode="enforce_allowlist",
+        justification="Use the operator-selected subscription-backed Luna route.",
+        reasoning_effort="medium",
+    )
+
+    assert model in ALLOWED_EXECUTION_MODELS
+    assert decision.uses_only_default is False
+    assert decision.reasoning_policy.effort == "medium"
+    assert REASONING_CAPABILITIES[model].supported_efforts == frozenset(
+        {"low", "medium", "high"}
+    )
+
+
 def test_allowed_alternate_without_justification_fails() -> None:
     with pytest.raises(LLMConfigurationError, match="require model_justification"):
         evaluate_model_execution_policy(
