@@ -1,8 +1,23 @@
 """Focused transport controls for subscription-backed Codex Luna."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+from pydantic import BaseModel, ConfigDict
+
+from llm_client import LLMCallResult
+from llm_client.route_certification_runtime import (
+    codex_native_provider_schema,
+    compile_codex_structured_success,
+)
 from llm_client.sdk.agents import _build_codex_cli_command
+
+
+class _ProbeResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
 
 
 def test_build_codex_cli_command_selects_luna_at_medium_effort(
@@ -29,3 +44,52 @@ def test_build_codex_cli_command_selects_luna_at_medium_effort(
     assert command[command.index("--output-schema") + 1] == str(
         tmp_path / "schema.json"
     )
+
+
+def _subscription_result() -> LLMCallResult:
+    return LLMCallResult(
+        content='{"status":"ok"}',
+        usage={"total_tokens": 12},
+        cost=0.0,
+        model="codex/gpt-5.6-luna",
+        requested_model="codex/gpt-5.6-luna",
+        resolved_model="codex/gpt-5.6-luna",
+        finish_reason="stop",
+        raw_response={"transport": "codex_cli"},
+        cost_source="subscription_included",
+        billing_mode="subscription_included",
+        logical_call_id="llmcall_test_codex_luna",
+    )
+
+
+def test_compile_codex_structured_success_certifies_exact_schema() -> None:
+    schema = codex_native_provider_schema(_ProbeResult)
+    observation = compile_codex_structured_success(
+        result=_subscription_result(),
+        provider_schema=schema,
+        schema_class="tests._ProbeResult",
+        trace_id="tests/codex-luna/subscription",
+        llm_client_revision="test-revision",
+        evidence_ref="sqlite:///tmp/llm_observability.db#llmcall_test_codex_luna",
+        observed_at=datetime(2026, 7, 29, tzinfo=UTC),
+    )
+
+    assert observation.execution_mode == "workspace_agent"
+    assert observation.upstream_provider_endpoint == "codex_cli"
+    assert observation.transport_certifies is True
+    assert observation.selected_attempt_receipt_digest is None
+
+
+def test_compile_codex_structured_success_rejects_api_billing() -> None:
+    result = _subscription_result()
+    result.billing_mode = "api"
+
+    with pytest.raises(ValueError, match="subscription-backed"):
+        compile_codex_structured_success(
+            result=result,
+            provider_schema=codex_native_provider_schema(_ProbeResult),
+            schema_class="tests._ProbeResult",
+            trace_id="tests/codex-luna/api",
+            llm_client_revision="test-revision",
+            evidence_ref="sqlite:///tmp/llm_observability.db#api",
+        )

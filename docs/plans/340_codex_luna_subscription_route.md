@@ -52,6 +52,9 @@ silent fallback or automatic model escalation.
 ## Files Affected
 
 - `llm_client/core/model_execution_policy.py`
+- `llm_client/route_certification.py`
+- `llm_client/route_certification_runtime.py`
+- `llm_client/__init__.py`
 - `tests/test_model_execution_policy.py`
 - `tests/test_codex_luna_subscription.py`
 - `docs/guides/codex-integration.md`
