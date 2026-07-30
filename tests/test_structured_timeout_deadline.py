@@ -90,9 +90,23 @@ async def test_async_deadline_preserves_fast_result_and_exception() -> None:
     [
         "peer closed connection without sending complete message body",
         "incomplete chunked read",
+        "APIError: OpenrouterException - Server disconnected without sending a response",
     ],
 )
 def test_incomplete_transport_response_is_retryable(message: str) -> None:
     """Abrupt provider response termination is a transient transport failure."""
 
     assert _is_retryable(Exception(message))
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "HTTP 404: no endpoints found that can handle the requested parameters",
+        "HTTP 429: insufficient_quota; check plan and billing details",
+    ],
+)
+def test_permanent_route_and_quota_failures_are_not_retryable(message: str) -> None:
+    """Capability and permanent quota failures require a new logical call."""
+
+    assert _is_retryable(Exception(message)) is False

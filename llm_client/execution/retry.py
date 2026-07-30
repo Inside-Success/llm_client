@@ -36,6 +36,7 @@ _RETRYABLE_PATTERNS = [
     "connection reset",
     "connection error",
     "peer closed connection",
+    "server disconnected without sending a response",
     "incomplete chunked read",
     "network error",
     "service unavailable",

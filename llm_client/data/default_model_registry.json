@@ -79,6 +79,7 @@
       "intelligence": 57,
       "litellm_id": "openrouter/openai/gpt-5.6-sol",
       "name": "gpt-5.6-sol-openrouter",
+      "native_structured_output": false,
       "provider": "openrouter",
       "speed": 40,
       "structured_output": true,
@@ -88,7 +89,7 @@
         "manual-selection",
         "openrouter",
         "reasoning",
-        "structured-route-certified",
+        "bounded-schema-evidence",
         "tier-max-intelligence"
       ]
     },
@@ -99,6 +100,7 @@
       "intelligence": 46,
       "litellm_id": "openrouter/openai/gpt-5.6-terra",
       "name": "gpt-5.6-terra-openrouter",
+      "native_structured_output": true,
       "provider": "openrouter",
       "speed": 121,
       "structured_output": true,
@@ -119,6 +121,7 @@
       "intelligence": 38,
       "litellm_id": "openrouter/openai/gpt-5.6-luna",
       "name": "gpt-5.6-luna-openrouter",
+      "native_structured_output": false,
       "provider": "openrouter",
       "speed": 192,
       "structured_output": true,
@@ -128,7 +131,7 @@
         "openrouter",
         "planner-candidate",
         "reasoning",
-        "structured-route-certified"
+        "bounded-schema-evidence"
       ]
     },
     {
