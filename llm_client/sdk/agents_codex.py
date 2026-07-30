@@ -39,7 +39,7 @@ from llm_client.sdk.agents_codex_process import (
 from llm_client.core.client import Hooks, LLMCallResult
 from llm_client.execution.responses_runtime import (
     _provider_compatible_discriminated_union_schema,
-    _strict_json_schema,
+    _strict_openai_response_model_schema,
 )
 from llm_client.execution.timeout_policy import normalize_timeout as _normalize_timeout
 
@@ -49,15 +49,15 @@ def _strict_codex_output_schema(response_model: Any) -> dict[str, Any]:
 
     OpenAI's structured outputs API (used by the Codex SDK) rejects schemas
     that lack ``additionalProperties: false`` on every object OR don't list
-    every property in ``required``. Pydantic v2's ``model_json_schema()``
-    omits both by default for fields with defaults. Wrapping with
-    ``_strict_json_schema()`` adds both recursively and inside ``$defs``.
+    every property in ``required`` and rejects sibling keywords beside a
+    ``$ref``. The OpenAI SDK normalizer supplies that exact strict shape while
+    preserving field descriptions.
 
     This is the single integration point between the duet/deliberation
     Pydantic schemas and the Codex SDK. Without it, calls fail with
     ``invalid_json_schema`` errors at the provider boundary.
     """
-    schema = _strict_json_schema(response_model.model_json_schema())
+    schema = _strict_openai_response_model_schema(response_model)
     return _provider_compatible_discriminated_union_schema(schema)
 
 logger = logging.getLogger(__name__)

@@ -57,6 +57,16 @@ class _DefaultedDiscriminatedDecision(BaseModel):
     ]
 
 
+class _DescribedNestedProfile(BaseModel):
+    value: str = Field(description="The nested value.")
+
+
+class _DescribedNestedEnvelope(BaseModel):
+    profile: _DescribedNestedProfile = Field(
+        description="The provider-visible profile description."
+    )
+
+
 def test_codex_schema_projects_disjoint_action_union_to_supported_any_of() -> None:
     schema = codex_native_provider_schema(_DiscriminatedDecision)
     action_schema = schema["properties"]["actions"]["items"]
@@ -73,6 +83,19 @@ def test_codex_schema_projects_defaulted_discriminator_after_strict_normalizatio
     assert "oneOf" not in action_schema
     assert "discriminator" not in action_schema
     assert len(action_schema["anyOf"]) == 2
+
+
+def test_codex_schema_resolves_described_nested_ref_for_provider() -> None:
+    schema = codex_native_provider_schema(_DescribedNestedEnvelope)
+    profile_schema = schema["properties"]["profile"]
+
+    assert "$ref" not in profile_schema
+    assert profile_schema["description"] == (
+        "The provider-visible profile description."
+    )
+    assert profile_schema["type"] == "object"
+    assert profile_schema["additionalProperties"] is False
+    assert profile_schema["required"] == ["value"]
 
 
 def test_build_codex_cli_command_selects_luna_at_medium_effort(
