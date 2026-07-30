@@ -52,6 +52,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 345 | [Metadata-Only Call Observability](345_metadata_only_call_observability.md) | Critical | 🚧 In Progress | Qualitative Coding public guest-analysis privacy repair |
 | 344 | [Codex GPT-5.6 Terra Subscription Route](344_codex_terra_subscription_route.md) | High | 🚧 In Progress | Cybernetic Influence Packet 21B2 pressure/stabilization canaries |
 | 339 | [Structured Route Capability and Disconnect Retry](339_structured_route_capability_and_disconnect_retry.md) | Critical | 🚧 In Progress | Process Tracing Plan 020 terminal repair replay |
 | 340 | [Codex GPT-5.6 Luna Subscription Route](340_codex_luna_subscription_route.md) | High | ✅ Complete | Cybernetic Influence subscription-backed live simulation |

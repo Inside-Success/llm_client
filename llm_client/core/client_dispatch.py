@@ -28,6 +28,7 @@ from pydantic import BaseModel
 import llm_client.io_log as _io_log
 from llm_client.execution.call_contracts import (
     ExecutionMode,
+    ObservabilityContentPolicy,
     _DEPRECATED_MODEL_EXCEPTIONS,
     _DEPRECATED_MODELS,
     _WARNED_MODELS,
@@ -449,6 +450,7 @@ def _log_call_event(
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
     logical_call_id: str | None = None,
+    observability_content_policy: ObservabilityContentPolicy | None = None,
 ) -> None:
     """Write one observability record for an LLM call."""
     from llm_client.observability.replay import snapshot_fingerprint as _snapshot_fingerprint
@@ -476,6 +478,11 @@ def _log_call_event(
         validation_errors=validation_errors,
         causal_parent_id=causal_parent_id,
         logical_call_id=logical_call_id,
+        content_persistence=(
+            observability_content_policy.mode
+            if observability_content_policy is not None
+            else "full"
+        ),
     )
 
 

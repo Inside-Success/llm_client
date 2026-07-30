@@ -88,6 +88,7 @@ import llm_client.utils.rate_limit as _rate_limit
 from llm_client.execution.call_contracts import (
     AGENT_RETRY_SAFE_ENV,
     ExecutionMode,
+    ObservabilityContentPolicy,
     OpenRouterRoutePolicyV1,
     StructuredOutputPolicy,
     _AGENT_ONLY_KWARGS,
@@ -613,6 +614,7 @@ def call_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    observability_content_policy: ObservabilityContentPolicy | None = None,
     openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
@@ -642,6 +644,9 @@ def call_llm_structured(
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        observability_content_policy: Durable call-content policy. Metadata-only
+            mode preserves bounded operational telemetry but omits prompts,
+            responses, replay snapshots, and dynamic diagnostic content.
         budget_scope_trace_id: Optional root trace whose settled cost is shared
             by this call and its slash-delimited descendants. It is never
             forwarded to the provider.
@@ -664,6 +669,12 @@ def call_llm_structured(
         resolved_timeout = _default_timeout_for_caller(caller="call_llm_structured")
     if openrouter_route_policy is not None:
         kwargs["openrouter_route_policy"] = openrouter_route_policy
+    if observability_content_policy is not None:
+        if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+            raise TypeError(
+                "observability_content_policy must be an ObservabilityContentPolicy"
+            )
+        kwargs["observability_content_policy"] = observability_content_policy
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     kwargs["budget_scope_mode"] = budget_scope_mode
@@ -933,6 +944,7 @@ async def acall_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    observability_content_policy: ObservabilityContentPolicy | None = None,
     openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
@@ -962,6 +974,9 @@ async def acall_llm_structured(
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        observability_content_policy: Durable call-content policy. Metadata-only
+            mode preserves bounded operational telemetry but omits prompts,
+            responses, replay snapshots, and dynamic diagnostic content.
         budget_scope_trace_id: Optional root trace whose settled cost is shared
             by this call and its slash-delimited descendants. It is never
             forwarded to the provider.
@@ -984,6 +999,12 @@ async def acall_llm_structured(
         resolved_timeout = _default_timeout_for_caller(caller="acall_llm_structured")
     if openrouter_route_policy is not None:
         kwargs["openrouter_route_policy"] = openrouter_route_policy
+    if observability_content_policy is not None:
+        if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+            raise TypeError(
+                "observability_content_policy must be an ObservabilityContentPolicy"
+            )
+        kwargs["observability_content_policy"] = observability_content_policy
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     kwargs["budget_scope_mode"] = budget_scope_mode

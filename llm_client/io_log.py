@@ -387,6 +387,7 @@ def log_call(
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
     logical_call_id: str | None = None,
+    content_persistence: Literal["full", "metadata_only"] = "full",
 ) -> None:
     """Append one call record with optional prompt asset identity.
 
@@ -395,6 +396,11 @@ def log_call(
     if not _logging_enabled():
         return
     try:
+        if content_persistence not in {"full", "metadata_only"}:
+            raise ValueError(
+                f"Unsupported call content-persistence mode: {content_persistence}"
+            )
+        metadata_only = content_persistence == "metadata_only"
         d = _log_dir()
         d.mkdir(parents=True, exist_ok=True)
 
@@ -453,12 +459,24 @@ def log_call(
                 n_tool_calls = len(tool_calls_raw)
 
         timestamp = datetime.now(timezone.utc).isoformat()
+        stored_messages = (
+            None if metadata_only else _copy_messages_for_storage(messages)
+        )
+        stored_response = None if metadata_only else response_content
+        stored_usage = (
+            _metadata_only_usage(usage) if metadata_only else usage
+        )
+        stored_error = None if metadata_only else (str(error) if error else None)
+        stored_warnings = None if metadata_only else warnings
+        stored_snapshot = None if metadata_only else call_snapshot
+        stored_fingerprint = None if metadata_only else call_fingerprint
+        stored_validation_errors = None if metadata_only else validation_errors
         record = {
             "timestamp": timestamp,
             "model": model,
-            "messages": _copy_messages_for_storage(messages),
-            "response": response_content,
-            "usage": usage,
+            "messages": stored_messages,
+            "response": stored_response,
+            "usage": stored_usage,
             "cost": cost,
             "cost_source": cost_source,
             "billing_mode": billing_mode,
@@ -466,23 +484,23 @@ def log_call(
             "cache_hit": cache_hit,
             "finish_reason": finish_reason,
             "latency_s": round(latency_s, 3) if latency_s is not None else None,
-            "error": str(error) if error else None,
-            "error_type": type(error).__name__ if error else None,
-            "warnings": warnings,
+            "error": stored_error,
+            "warnings": stored_warnings,
             "n_tool_calls": n_tool_calls,
             "caller": caller,
             "task": task,
             "trace_id": trace_id,
             "prompt_ref": prompt_ref,
-            "call_snapshot": call_snapshot,
-            "call_fingerprint": call_fingerprint,
+            "call_snapshot": stored_snapshot,
+            "call_fingerprint": stored_fingerprint,
             "error_type": error_type or (type(error).__name__ if error else None),
             "execution_path": execution_path,
             "retry_count": retry_count,
             "schema_hash": schema_hash,
             "response_format_type": response_format_type,
-            "validation_errors": validation_errors,
+            "validation_errors": stored_validation_errors,
             "logical_call_id": logical_call_id,
+            "content_persistence": content_persistence,
         }
         _append_jsonl(d, "calls", record)
 
@@ -490,9 +508,9 @@ def log_call(
         _write_call_to_db(
             timestamp=timestamp,
             model=model,
-            messages=_copy_messages_for_storage(messages),
-            response=response_content,
-            usage=usage,
+            messages=stored_messages,
+            response=stored_response,
+            usage=stored_usage,
             cost=cost,
             cost_source=cost_source,
             billing_mode=billing_mode,
@@ -500,21 +518,22 @@ def log_call(
             cache_hit=cache_hit,
             finish_reason=finish_reason,
             latency_s=round(latency_s, 3) if latency_s is not None else None,
-            error=str(error) if error else None,
+            error=stored_error,
             caller=caller,
             task=task,
             trace_id=trace_id,
             prompt_ref=prompt_ref,
-            call_snapshot=call_snapshot,
-            call_fingerprint=call_fingerprint,
+            call_snapshot=stored_snapshot,
+            call_fingerprint=stored_fingerprint,
             error_type=error_type or (type(error).__name__ if error else None),
             execution_path=execution_path,
             retry_count=retry_count,
             schema_hash=schema_hash,
             response_format_type=response_format_type,
-            validation_errors=validation_errors,
+            validation_errors=stored_validation_errors,
             causal_parent_id=causal_parent_id,
             logical_call_id=logical_call_id,
+            content_persistence=content_persistence,
         )
     except Exception:
         # Never break LLM calls for logging
@@ -782,7 +801,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     prompt_ref TEXT,
     call_fingerprint TEXT,
     call_snapshot TEXT,
-    logical_call_id TEXT
+    logical_call_id TEXT,
+    content_persistence TEXT NOT NULL DEFAULT 'full'
 );
 
 CREATE TABLE IF NOT EXISTS structured_attempt_events (
@@ -1312,6 +1332,11 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN cache_creation_tokens INTEGER")
     if "usage_details" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN usage_details TEXT")
+    if "content_persistence" not in llm_cols:
+        conn.execute(
+            "ALTER TABLE llm_calls ADD COLUMN "
+            "content_persistence TEXT NOT NULL DEFAULT 'full'"
+        )
 
     lifecycle_cols = {
         row[1] for row in conn.execute("PRAGMA table_info(call_lifecycle_events)")
@@ -1771,6 +1796,31 @@ def _bounded_usage_details(usage: dict[str, Any] | None) -> str | None:
     return json.dumps(result) if result else None
 
 
+def _metadata_only_usage(
+    usage: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Retain only bounded numeric token metadata from provider usage."""
+
+    if not isinstance(usage, dict):
+        return None
+    result: dict[str, Any] = {}
+    for field in (
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "reasoning_tokens",
+        "cached_tokens",
+        "cache_creation_tokens",
+    ):
+        value = _valid_token_count(usage.get(field))
+        if value is not None:
+            result[field] = value
+    details = _bounded_usage_details(usage)
+    if details is not None:
+        result.update(json.loads(details))
+    return result or None
+
+
 def _write_call_to_db(
     *,
     timestamp: str,
@@ -1800,6 +1850,7 @@ def _write_call_to_db(
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
     logical_call_id: str | None = None,
+    content_persistence: Literal["full", "metadata_only"] = "full",
 ) -> None:
     """Insert a call record into SQLite. Never raises."""
     try:
@@ -1833,8 +1884,8 @@ def _write_call_to_db(
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id, logical_call_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    causal_parent_id, logical_call_id, content_persistence)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, project, model,
                     json.dumps(messages, default=str) if messages else None,
@@ -1848,7 +1899,7 @@ def _write_call_to_db(
                     json.dumps(call_snapshot, default=str) if call_snapshot is not None else None,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id, logical_call_id,
+                    causal_parent_id, logical_call_id, content_persistence,
                 ),
             )
             if error is None and accounted:

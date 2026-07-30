@@ -340,7 +340,11 @@ from llm_client.core.client import (
     stream_llm_with_tools,
     strip_fences,
 )
-from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1, StructuredOutputPolicy
+from llm_client.execution.call_contracts import (
+    ObservabilityContentPolicy,
+    OpenRouterRoutePolicyV1,
+    StructuredOutputPolicy,
+)
 from llm_client.json_schema import (
     JsonScalar,
     JsonValue,
@@ -402,6 +406,7 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "resolve_call",
     "RetryPolicy",
     "StructuredOutputPolicy",
+    "ObservabilityContentPolicy",
     "OpenRouterRoutePolicyV1",
     "acall_llm",
     "acall_llm_batch",

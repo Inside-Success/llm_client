@@ -236,6 +236,94 @@ class TestLogCall:
         assert row[4] == 15
         db.close()
 
+    def test_metadata_only_retains_telemetry_without_content(self, tmp_path):
+        prompt_sentinel = "PRIVATE_SOURCE_SENTINEL_7fd3"
+        response_sentinel = "PRIVATE_RESPONSE_SENTINEL_61aa"
+        result = _mock_result(
+            content=response_sentinel,
+            usage={
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "provider_note": prompt_sentinel,
+            },
+            cost=0.002,
+        )
+        result.warnings = [prompt_sentinel]
+        io_log.log_call(
+            model="openrouter/test",
+            messages=[{"role": "user", "content": prompt_sentinel}],
+            result=result,
+            latency_s=2.0,
+            task="public.metadata-only",
+            trace_id="public/metadata-only",
+            call_snapshot={"request": {"messages": [prompt_sentinel]}},
+            call_fingerprint="content-derived-fingerprint",
+            validation_errors=prompt_sentinel,
+            content_persistence="metadata_only",
+        )
+
+        record = json.loads(_today_jsonl(tmp_path, "calls").read_text().strip())
+        assert record["content_persistence"] == "metadata_only"
+        assert record["messages"] is None
+        assert record["response"] is None
+        assert record["call_snapshot"] is None
+        assert record["call_fingerprint"] is None
+        assert record["warnings"] is None
+        assert record["validation_errors"] is None
+        assert record["usage"] == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+        }
+        serialized = json.dumps(record)
+        assert prompt_sentinel not in serialized
+        assert response_sentinel not in serialized
+
+        with sqlite3.connect(tmp_path / "test.db") as db:
+            row = db.execute(
+                """SELECT messages, response, prompt_tokens, completion_tokens,
+                          total_tokens, cost, task, trace_id, call_snapshot,
+                          call_fingerprint, validation_errors, content_persistence
+                   FROM llm_calls"""
+            ).fetchone()
+        assert row == (
+            None,
+            None,
+            10,
+            5,
+            15,
+            0.002,
+            "public.metadata-only",
+            "public/metadata-only",
+            None,
+            None,
+            None,
+            "metadata_only",
+        )
+
+    def test_metadata_only_failure_retains_class_not_dynamic_text(self, tmp_path):
+        sentinel = "PRIVATE_FAILURE_SENTINEL_4b2d"
+        io_log.log_call(
+            model="openrouter/test",
+            messages=[{"role": "user", "content": sentinel}],
+            error=RuntimeError(sentinel),
+            latency_s=0.5,
+            task="public.metadata-only.failure",
+            trace_id="public/metadata-only/failure",
+            content_persistence="metadata_only",
+        )
+
+        record = json.loads(_today_jsonl(tmp_path, "calls").read_text().strip())
+        assert record["error"] is None
+        assert record["error_type"] == "RuntimeError"
+        assert sentinel not in json.dumps(record)
+        with sqlite3.connect(tmp_path / "test.db") as db:
+            row = db.execute(
+                "SELECT error, error_type, content_persistence FROM llm_calls"
+            ).fetchone()
+        assert row == (None, "RuntimeError", "metadata_only")
+
     def test_writes_provider_usage_details_to_sqlite(self, tmp_path):
         result = _mock_result(
             usage={
@@ -875,6 +963,12 @@ class TestSQLiteDB:
         assert "cached_tokens" in llm_cols
         assert "cache_creation_tokens" in llm_cols
         assert "usage_details" in llm_cols
+        assert "content_persistence" in llm_cols
+        default = db.execute(
+            "SELECT dflt_value FROM pragma_table_info('llm_calls') "
+            "WHERE name = 'content_persistence'"
+        ).fetchone()
+        assert default == ("'full'",)
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         assert "structured_attempt_events" in tables
 

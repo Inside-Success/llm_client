@@ -86,6 +86,20 @@ class StructuredOutputPolicy(BaseModel):
     )
 
 
+class ObservabilityContentPolicy(BaseModel):
+    """Control durable content retention for one structured logical call."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: Literal["full", "metadata_only"] = Field(
+        default="full",
+        description=(
+            "Whether durable call observability may include prompt/response content "
+            "and replay snapshots. metadata_only retains bounded operational metadata."
+        ),
+    )
+
+
 class OpenRouterRoutePolicyV1(BaseModel):
     """Typed, provider-agnostic intent compiled into OpenRouter routing controls.
 

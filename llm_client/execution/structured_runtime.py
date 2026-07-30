@@ -31,7 +31,10 @@ from llm_client.core.errors import (
     LLMLogicalDeadlineError,
     _unwrap_instructor_retry,
 )
-from llm_client.execution.call_contracts import StructuredOutputPolicy
+from llm_client.execution.call_contracts import (
+    ObservabilityContentPolicy,
+    StructuredOutputPolicy,
+)
 from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 from pydantic import BaseModel, ValidationError
 
@@ -544,13 +547,18 @@ def _received_attempt_event(
     schema_hash: str,
     raw_content: str,
     execution_path: Literal["native_schema", "responses_api"] = "native_schema",
+    persist_raw_artifact: bool = True,
 ) -> StructuredAttemptEvent:
-    """Persist exact raw bytes first, then build their received metadata event."""
+    """Optionally persist raw bytes, then build their received metadata event."""
 
-    artifact = write_structured_raw_artifact(
-        logical_call_id,
-        attempt,
-        raw_content,
+    artifact = (
+        write_structured_raw_artifact(
+            logical_call_id,
+            attempt,
+            raw_content,
+        )
+        if persist_raw_artifact
+        else None
     )
     event = _attempt_event(
         logical_call_id=logical_call_id,
@@ -729,6 +737,7 @@ def _record_provider_schema_validation_failure(
     attempt: int,
     model: str,
     schema_hash: str,
+    persist_raw_artifact: bool = True,
 ) -> bool:
     """Persist a LiteLLM pre-return validation failure as a complete attempt."""
 
@@ -739,6 +748,7 @@ def _record_provider_schema_validation_failure(
         logical_call_id=logical_call_id, trace_id=trace_id, task=task,
         attempt=attempt, model=model, schema_hash=schema_hash,
         raw_content=raw_content,
+        persist_raw_artifact=persist_raw_artifact,
     ))
     record_structured_attempt_event(_attempt_event(
         logical_call_id=logical_call_id, trace_id=trace_id, task=task,
@@ -944,6 +954,14 @@ def _call_llm_structured_impl(
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
+    observability_content_policy = kwargs.pop(
+        "observability_content_policy", ObservabilityContentPolicy()
+    )
+    if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+        raise TypeError(
+            "observability_content_policy must be an ObservabilityContentPolicy"
+        )
+    persist_raw_artifacts = observability_content_policy.mode == "full"
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="call_llm_structured",
     )
@@ -953,7 +971,11 @@ def _call_llm_structured_impl(
         result = event.get("result")
         if isinstance(result, LLMCallResult):
             result.logical_call_id = _logical_call_id
-        _base_log_call_event(**event, logical_call_id=_logical_call_id)
+        _base_log_call_event(
+            **event,
+            logical_call_id=_logical_call_id,
+            observability_content_policy=observability_content_policy,
+        )
         _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
@@ -1169,7 +1191,8 @@ def _call_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _provider_compatible_discriminated_union_schema(
                 _strict_openai_response_model_schema(response_model)
             )
@@ -1298,6 +1321,7 @@ def _call_llm_structured_impl(
                             schema_hash=_responses_schema_hash,
                             raw_content=raw_content,
                             execution_path="responses_api",
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     )
                     attempt_received = True
@@ -1499,7 +1523,8 @@ def _call_llm_structured_impl(
                 "strict structured-output policy forbids Instructor fallback."
             )
         if supports_schema:
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _native_provider_schema(response_model, model=current_model)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -1612,6 +1637,7 @@ def _call_llm_structured_impl(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
                         raw_content=raw_content,
+                        persist_raw_artifact=persist_raw_artifacts,
                     ))
                     attempt_cost, attempt_cost_source = _parse_cost_result(
                         _compute_cost(response)
@@ -1712,6 +1738,7 @@ def _call_llm_structured_impl(
                             error=exc, logical_call_id=_logical_call_id,
                             trace_id=trace_id, task=task, attempt=logical_attempt,
                             model=current_model, schema_hash=_schema_hash,
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     except StructuredRawArtifactError as artifact_error:
                         raise _StructuredFinalizationFailure(artifact_error) from artifact_error
@@ -2030,6 +2057,14 @@ async def _acall_llm_structured_impl(
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
+    observability_content_policy = kwargs.pop(
+        "observability_content_policy", ObservabilityContentPolicy()
+    )
+    if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+        raise TypeError(
+            "observability_content_policy must be an ObservabilityContentPolicy"
+        )
+    persist_raw_artifacts = observability_content_policy.mode == "full"
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm_structured",
     )
@@ -2039,7 +2074,11 @@ async def _acall_llm_structured_impl(
         result = event.get("result")
         if isinstance(result, LLMCallResult):
             result.logical_call_id = _logical_call_id
-        _base_log_call_event(**event, logical_call_id=_logical_call_id)
+        _base_log_call_event(
+            **event,
+            logical_call_id=_logical_call_id,
+            observability_content_policy=observability_content_policy,
+        )
         _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
@@ -2255,7 +2294,8 @@ async def _acall_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _provider_compatible_discriminated_union_schema(
                 _strict_openai_response_model_schema(response_model)
             )
@@ -2388,6 +2428,7 @@ async def _acall_llm_structured_impl(
                             schema_hash=_responses_schema_hash_async,
                             raw_content=raw_content,
                             execution_path="responses_api",
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     )
                     attempt_received = True
@@ -2589,7 +2630,8 @@ async def _acall_llm_structured_impl(
                 "strict structured-output policy forbids Instructor fallback."
             )
         if supports_schema:
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _native_provider_schema(response_model, model=current_model)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -2705,6 +2747,7 @@ async def _acall_llm_structured_impl(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
                         raw_content=raw_content,
+                        persist_raw_artifact=persist_raw_artifacts,
                     ))
                     attempt_cost, attempt_cost_source = _parse_cost_result(
                         _compute_cost(response)
@@ -2805,6 +2848,7 @@ async def _acall_llm_structured_impl(
                             error=exc, logical_call_id=_logical_call_id,
                             trace_id=trace_id, task=task, attempt=logical_attempt,
                             model=current_model, schema_hash=_schema_hash_async,
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     except StructuredRawArtifactError as artifact_error:
                         raise _StructuredFinalizationFailure(artifact_error) from artifact_error

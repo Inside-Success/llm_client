@@ -16,6 +16,7 @@ from llm_client import (
     Hooks,
     LLMCallResult,
     LLMStream,
+    ObservabilityContentPolicy,
     OpenRouterRoutePolicyV1,
     LRUCache,
     RetryPolicy,
@@ -4171,6 +4172,64 @@ class TestGPT5StructuredOutput:
         assert "response_format" in call_kwargs
         assert call_kwargs["response_format"]["type"] == "json_schema"
         assert call_kwargs["response_format"]["json_schema"]["name"] == "Item"
+
+    @patch(
+        "llm_client.execution.structured_runtime.write_structured_raw_artifact"
+    )
+    @patch("llm_client.io_log.log_call")
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.completion")
+    def test_structured_metadata_only_policy_reaches_observability_not_provider(
+        self,
+        mock_completion: MagicMock,
+        mock_cost: MagicMock,
+        mock_log_call: MagicMock,
+        mock_raw_artifact: MagicMock,
+    ) -> None:
+        class Item(BaseModel):
+            name: str
+
+        mock_completion.return_value = _mock_response(content='{"name": "test"}')
+
+        result, _ = call_llm_structured(
+            "deepseek/deepseek-chat",
+            [{"role": "user", "content": "private source"}],
+            response_model=Item,
+            observability_content_policy=ObservabilityContentPolicy(
+                mode="metadata_only"
+            ),
+            task="test.metadata-only",
+            trace_id="test/metadata-only",
+            max_budget=0,
+        )
+
+        assert result.name == "test"
+        assert "observability_content_policy" not in mock_completion.call_args.kwargs
+        assert mock_log_call.call_args.kwargs["content_persistence"] == "metadata_only"
+        mock_raw_artifact.assert_not_called()
+
+    @patch("llm_client.core.client.litellm.completion")
+    def test_structured_rejects_untyped_observability_policy_before_dispatch(
+        self, mock_completion: MagicMock
+    ) -> None:
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(
+            TypeError,
+            match="must be an ObservabilityContentPolicy",
+        ):
+            call_llm_structured(
+                "deepseek/deepseek-chat",
+                [{"role": "user", "content": "private source"}],
+                response_model=Item,
+                observability_content_policy={"mode": "metadata_only"},  # type: ignore[arg-type]
+                task="test.metadata-only.invalid",
+                trace_id="test/metadata-only/invalid",
+                max_budget=0,
+            )
+
+        mock_completion.assert_not_called()
 
     @patch("llm_client.core.client.litellm.get_model_info", return_value={"max_output_tokens": 128000})
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
