@@ -49,6 +49,7 @@ _PROVIDER_UNSUPPORTED_VALUE_CONSTRAINTS = frozenset({
     "minimum",
     "multipleOf",
     "pattern",
+    "uniqueItems",
 })
 
 

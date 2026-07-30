@@ -45,6 +45,12 @@ class _BoundedCount(BaseModel):
     count: int = Field(ge=1, description="A strictly positive count.")
 
 
+class _UniqueTags(BaseModel):
+    """Schema whose uniqueness rule remains a caller-side invariant."""
+
+    tags: list[str] = Field(json_schema_extra={"uniqueItems": True})
+
+
 class _SearchDecision(BaseModel):
     action: Literal["search"]
     query: str
@@ -102,6 +108,18 @@ def test_openrouter_schema_projection_preserves_structural_contract_and_local_va
     assert "minimum" not in projected["properties"]["count"]
     with pytest.raises(ValidationError, match="greater than or equal to 1"):
         _BoundedCount.model_validate({"count": 0})
+
+
+def test_openrouter_schema_projection_removes_unsupported_unique_items() -> None:
+    """OpenRouter receives the array shape without its unsupported value keyword."""
+    schema = _strict_json_schema(_UniqueTags.model_json_schema())
+
+    projected = _openrouter_compatible_strict_json_schema(schema)
+
+    assert schema["properties"]["tags"]["uniqueItems"] is True
+    assert "uniqueItems" not in projected["properties"]["tags"]
+    assert projected["properties"]["tags"]["type"] == "array"
+    assert projected["properties"]["tags"]["items"] == {"type": "string"}
 
 
 def test_openrouter_schema_projection_rejects_unconstrained_schema() -> None:
