@@ -51,6 +51,7 @@ ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "codex",
         "codex/gpt-5.4",
         "codex/gpt-5.6-luna",
+        "codex/gpt-5.6-terra",
         "claude-code",
         "claude-code/sonnet",
     }
@@ -212,6 +213,12 @@ REASONING_CAPABILITIES: dict[str, ReasoningCapability] = {
     ),
     "codex/gpt-5.6-luna": _reasoning_capability(
         {"low", "medium", "high"},
+        mandatory=True,
+        observed_default=None,
+        source=_CODEX_SOURCE,
+    ),
+    "codex/gpt-5.6-terra": _reasoning_capability(
+        {"medium"},
         mandatory=True,
         observed_default=None,
         source=_CODEX_SOURCE,

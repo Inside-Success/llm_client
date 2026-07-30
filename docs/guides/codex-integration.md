@@ -86,6 +86,9 @@ result = call_llm(
   `codex/gpt-5.6-luna`. It is allowlisted for low, medium, and high effort but
   is not a shared task-tier default. Use `codex_transport="cli"` when the
   installed Python environment does not include the optional Codex SDK.
+- `codex/gpt-5.6-terra` is a separately selected subscription route. Only
+  medium reasoning is admitted until broader effort levels have direct
+  execution evidence. It does not replace Luna or create a fallback chain.
 
 ## Agent billing and retry
 
