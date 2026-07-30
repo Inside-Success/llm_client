@@ -59,7 +59,7 @@ silent fallback or automatic model escalation.
 - `tests/test_codex_luna_subscription.py`
 - `docs/guides/codex-integration.md`
 - `docs/plans/CLAUDE.md`
-- `docs/plans/339_codex_luna_subscription_route.md`
+- `docs/plans/340_codex_luna_subscription_route.md`
 
 ---
 
