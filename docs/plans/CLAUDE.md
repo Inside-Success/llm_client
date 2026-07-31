@@ -52,7 +52,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
-| 347 | [OpenRouter Response Cache Controls](347_openrouter_response_cache_controls.md) | Critical | 🚧 In Progress | cost-bounded Inside Success corpus preprocessing |
+| 347 | [OpenRouter Response Cache Controls](347_openrouter_response_cache_controls.md) | Critical | ✅ Complete | cost-bounded Inside Success corpus preprocessing |
 | 346 | [Production LLM Call Receipt](346_production_llm_call_receipt.md) | Critical | 🚧 In Progress | Team-Brains Hermes observability adapter |
 | 345 | [Metadata-Only Call Observability](345_metadata_only_call_observability.md) | Critical | ✅ Complete | Qualitative Coding public guest-analysis privacy repair |
 | 344 | [Codex GPT-5.6 Terra Subscription Route](344_codex_terra_subscription_route.md) | High | ✅ Complete | Cybernetic Influence Packet 21B2 pressure/stabilization canaries |

@@ -1,6 +1,6 @@
 # Plan #347: OpenRouter Response Cache Controls
 
-**Status:** In Progress
+**Status:** Complete (2026-07-31)
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -114,23 +114,41 @@ drift outside the durable call contract.
 
 ## Acceptance Criteria
 
-- [ ] Response caching remains off when not explicitly requested, and a typed
+- [x] Response caching remains off when not explicitly requested, and a typed
       disabled policy sends the provider's explicit opt-out header.
-- [ ] Enabled caching produces `X-OpenRouter-Cache: true`; an explicit TTL also
+- [x] Enabled caching produces `X-OpenRouter-Cache: true`; an explicit TTL also
       produces `X-OpenRouter-Cache-TTL`.
-- [ ] Refresh mode clears and replaces only the exact matching cache entry.
-- [ ] ZDR/cache, disabled/TTL, non-positive TTL, and typed/raw-header conflicts
+- [x] Refresh mode clears and replaces only the exact matching cache entry.
+- [x] ZDR/cache, disabled/TTL, non-positive TTL, and typed/raw-header conflicts
       fail before provider dispatch.
-- [ ] Completion and Responses request preparation preserve the same behavior.
-- [ ] Cache-enabled requests do not receive a per-call Broadcast trace in the
+- [x] Completion and Responses request preparation preserve the same behavior.
+- [x] Cache-enabled requests do not receive a per-call Broadcast trace in the
       provider request body, while local trace custody remains intact.
-- [ ] Cache policy serializes into call snapshots and changes fingerprints.
-- [ ] Provider `HIT` evidence sets `result.cache_hit`, zero marginal cost, and a
+- [x] Cache policy serializes into call snapshots and changes fingerprints.
+- [x] Provider `HIT` evidence sets `result.cache_hit`, zero marginal cost, and a
       durable routing-trace status without relying only on zero token counts.
-- [ ] Public documentation identifies response caching as provider-side exact
+- [x] Public documentation identifies response caching as provider-side exact
       reuse, distinct from prompt caching and consumer artifact caching.
-- [ ] Focused tests, generated API checks, relationship validation, changed-file
+- [x] Focused tests, generated API checks, relationship validation, changed-file
       lint/type checks, and the feasible full suite pass.
+
+## Verification Evidence
+
+- Focused route-policy, provider-kwargs, and result-finalization controls:
+  `44 passed`.
+- Broader full suite: `2052 passed, 3 skipped, 12 deselected`; one unrelated
+  metadata-only observability assertion fails on the same current baseline
+  because its mocked terminal log row lacks `content_persistence`.
+- Generated API reference, strict relationship validation, Ruff, and diff
+  hygiene pass. Repository strict mypy retains its documented broad baseline.
+- Live OpenRouter/Luna probe on revision `e4dbac5`: first miss returned
+  `CACHE_OK` in 1.036 seconds for $0.0000065; the identical follow-up returned
+  in 0.176 seconds with zero usage and zero cost. A revision-bound replay then
+  returned in 0.415 seconds with `cache_hit=true`, `cost_source=cache_hit`, zero
+  marginal cost, and `openrouter_response_cache_status=hit` in routing evidence.
+- The live calls used explicit `reasoning_effort=none`, a 16-token output cap,
+  a 600-second cache TTL, distinct local trace IDs, and no provider-body
+  Broadcast trace.
 
 ---
 
