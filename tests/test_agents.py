@@ -16,11 +16,11 @@ import sys
 import types
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import llm_client.sdk.agents as agents_mod
 import llm_client.sdk.agents_codex as agents_codex_mod
@@ -1557,6 +1557,34 @@ class TestCodexCall:
 
 
 class TestCodexStructured:
+    def test_output_schema_is_openai_compatible(self) -> None:
+        class Nested(BaseModel):
+            value: str
+
+        class Left(BaseModel):
+            kind: Literal["left"]
+            nested: Nested = Field(description="A described nested model.")
+
+        class Right(BaseModel):
+            kind: Literal["right"]
+            nested: Nested = Field(description="A described nested model.")
+
+        class Envelope(BaseModel):
+            item: Annotated[Left | Right, Field(discriminator="kind")]
+
+        schema = agents_codex_mod._strict_codex_output_schema(Envelope)
+        branches = schema["properties"]["item"]
+        left = schema["$defs"]["Left"]
+
+        assert "oneOf" not in branches
+        assert "discriminator" not in branches
+        assert len(branches["anyOf"]) == 2
+        assert "$ref" not in left["properties"]["nested"]
+        assert (
+            left["properties"]["nested"]["description"]
+            == "A described nested model."
+        )
+
     @pytest.fixture()
     def _mock_structured_codex(self, monkeypatch):
         """Install a Codex SDK that returns JSON."""

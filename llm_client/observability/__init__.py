@@ -57,7 +57,9 @@ from llm_client.observability.query import (
     get_trace_tree,
     import_jsonl,
     lookup_result,
+    get_llm_call_receipts,
 )
+from llm_client.observability.call_receipts import LLMCallReceiptV1
 from llm_client.observability.budget_reservations import (
     BudgetReservationLease,
     BudgetScopeMode,
@@ -121,6 +123,7 @@ __all__ = [
     "ActiveExperimentRun",
     "RuntimeSelectedAttemptReceipt",
     "RuntimeSelectedRawContent",
+    "LLMCallReceiptV1",
     "ExperimentRun",
     "ObservedRun",
     "ObservedRunRecord",
@@ -156,6 +159,7 @@ __all__ = [
     "get_call_snapshot",
     "get_completed_traces",
     "get_cost",
+    "get_llm_call_receipts",
     "get_experiment_aggregates",
     "get_observed_run",
     "list_observed_runs",

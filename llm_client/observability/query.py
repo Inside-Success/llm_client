@@ -14,6 +14,98 @@ from pathlib import Path
 from typing import Any
 
 import llm_client.io_log as _io_log
+from llm_client.observability.call_receipts import (
+    LLMCallReceiptV1,
+    derive_started_at,
+    sha256_text,
+)
+
+
+def get_llm_call_receipts(
+    *,
+    trace_id: str | None = None,
+    logical_call_id: str | None = None,
+) -> list[LLMCallReceiptV1]:
+    """Return canonical receipts for terminal calls matching one exact identity."""
+
+    if (trace_id is None) == (logical_call_id is None):
+        raise ValueError("Provide exactly one of trace_id or logical_call_id.")
+    db = _io_log._get_db()
+    if db is None:
+        return []
+    column, value = (
+        ("trace_id", trace_id) if trace_id is not None else ("logical_call_id", logical_call_id)
+    )
+    rows = db.execute(
+        f"""SELECT id, timestamp, model, prompt_tokens, completion_tokens,
+                   total_tokens, reasoning_tokens, cached_tokens,
+                   cache_creation_tokens, cost, cost_source, marginal_cost,
+                   cache_hit, finish_reason, latency_s, error, task, trace_id,
+                   call_fingerprint, logical_call_id, error_type, execution_path,
+                   retry_count, schema_hash, causal_parent_id, response
+            FROM llm_calls WHERE {column} = ? ORDER BY id""",  # noqa: S608
+        (value,),
+    ).fetchall()
+    receipts: list[LLMCallReceiptV1] = []
+    for row in rows:
+        completed_at = datetime.fromisoformat(row[1])
+        latency_s = row[14]
+        observed_cost = row[11] if row[11] is not None else row[9]
+        cost_source = row[10]
+        cost_status = "unavailable"
+        if observed_cost is not None and cost_source:
+            cost_status = "estimated" if "estimat" in cost_source.lower() else "observed"
+        unavailable: dict[str, str] = {}
+        if latency_s is None:
+            unavailable["latency_s"] = "The retained terminal row did not record latency."
+        if observed_cost is None or not cost_source:
+            unavailable["cost_usd"] = "The retained terminal row lacks priced cost evidence."
+            observed_cost = None
+        if row[18] is None:
+            unavailable["request_fingerprint"] = "No retained call fingerprint is available."
+        unavailable["prompt_sha256"] = (
+            "The terminal call row does not contain a standalone prompt hash."
+        )
+        unavailable["requested_model"] = (
+            "The terminal call row records the resolved model, not requested-model identity."
+        )
+        unavailable["provider"] = (
+            "Provider identity is not inferred from the model string."
+        )
+        receipts.append(
+            LLMCallReceiptV1(
+                receipt_id=f"llm-client-call-{row[0]}",
+                runtime="llm_client",
+                trace_id=row[17],
+                logical_call_id=row[19],
+                parent_call_id=row[24],
+                task=row[16],
+                resolved_model=row[2],
+                execution_path=row[21],
+                started_at=derive_started_at(completed_at, latency_s),
+                completed_at=completed_at,
+                latency_s=latency_s,
+                prompt_tokens=row[3],
+                completion_tokens=row[4],
+                total_tokens=row[5],
+                reasoning_tokens=row[6],
+                cached_tokens=row[7],
+                cache_creation_tokens=row[8],
+                cost_usd=observed_cost,
+                cost_status=cost_status,
+                cost_source=cost_source,
+                status="failed" if row[15] is not None else "succeeded",
+                finish_reason=row[13],
+                error_type=row[20],
+                retry_count=row[22],
+                cache_hit=bool(row[12]),
+                request_fingerprint=row[18],
+                schema_sha256=row[23],
+                response_sha256=sha256_text(row[25]),
+                unavailable_fields=unavailable,
+            )
+        )
+    return receipts
 
 
 def _trace_family_match(candidate: Any, trace_id: str) -> bool:
