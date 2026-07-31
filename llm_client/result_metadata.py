@@ -130,6 +130,18 @@ def warning_record_from_message(message: str) -> dict[str, Any] | None:
             category="UserWarning",
             message=text,
         )
+    if text.startswith("COERCE_PARAMS "):
+        removed_marker = " removed="
+        removed = ""
+        if removed_marker in text:
+            removed = text.split(removed_marker, 1)[1].split(" ", 1)[0]
+        return warning_record(
+            code="LLMC_WARN_PARAMETER_OMITTED",
+            category="UserWarning",
+            message=text,
+            field_path=removed or None,
+            remediation="Remove the unsupported parameter or use unsupported_param_policy='error'.",
+        )
     return None
 
 

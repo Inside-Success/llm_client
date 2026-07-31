@@ -478,12 +478,14 @@ _GPT5_REASONING_GATED_SAMPLING = {
 _LONG_THINKING_MODELS = {"gpt-5.2-pro", "gpt-5.5-pro"}
 _LONG_THINKING_REASONING_EFFORTS = {"high", "xhigh"}
 _GPT5_SAMPLING_PARAMS = ("temperature", "top_p", "logprobs", "top_logprobs")
+_OPENROUTER_LUNA_UNSUPPORTED_PARAMS = frozenset({"temperature"})
 _UNSUPPORTED_PARAM_POLICY_ENV = "LLM_CLIENT_UNSUPPORTED_PARAM_POLICY"
-_UNSUPPORTED_PARAM_POLICIES = frozenset({"coerce_and_warn", "coerce_silent", "error"})
+_UNSUPPORTED_PARAM_POLICIES = frozenset({"coerce_and_warn", "error"})
 _UNSUPPORTED_PARAM_POLICY_ALIASES = {
     "warn": "coerce_and_warn",
     "coerce": "coerce_and_warn",
-    "silent": "coerce_silent",
+    # Kept as a compatibility spelling. Parameter omission is never silent.
+    "silent": "coerce_and_warn",
     "strict": "error",
     "raise": "error",
     "error_only": "error",
@@ -522,6 +524,24 @@ def _strip_incompatible_sampling_params(model: str, call_kwargs: dict[str, Any])
     return removed
 
 
+def _strip_route_incompatible_params(model: str, call_kwargs: dict[str, Any]) -> tuple[list[str], str | None]:
+    """Remove parameters rejected by a known provider/model route.
+
+    Keep this evidence-specific: Luna's OpenRouter native-schema route is
+    known to reject an explicit temperature, but that does not establish that
+    other sampling controls are unsupported.
+    """
+    if model.strip().lower() != "openrouter/openai/gpt-5.6-luna":
+        return [], None
+
+    removed = sorted(
+        key for key in _OPENROUTER_LUNA_UNSUPPORTED_PARAMS if key in call_kwargs
+    )
+    for key in removed:
+        call_kwargs.pop(key, None)
+    return removed, "openrouter_luna_native_schema_compatibility"
+
+
 def _resolve_unsupported_param_policy(explicit_policy: Any) -> str:
     """Resolve the unsupported-param policy from explicit arg or env."""
     raw = explicit_policy
@@ -555,27 +575,29 @@ def _coerce_model_incompatible_params(
 
     # GPT-5 family sampling incompatibilities across providers/completions.
     removed.extend(_strip_incompatible_sampling_params(model, kwargs))
+    route_removed, route_rule = _strip_route_incompatible_params(model, kwargs)
+    removed.extend(route_removed)
 
     if not removed:
         return []
 
     removed_unique = sorted(set(removed))
+    rule = route_rule or "gpt5_sampling_compatibility"
     detail = (
         f"COERCE_PARAMS model={model} policy={policy} "
         f"removed={','.join(removed_unique)} "
-        f"rule=gpt5_sampling_compatibility"
+        f"rule={rule}"
     )
     if policy == "error":
         raise LLMCapabilityError(
             f"Unsupported params for model {model}: {', '.join(removed_unique)}. "
             "Use unsupported_param_policy='coerce_and_warn' to auto-coerce."
         )
-    if policy == "coerce_and_warn":
-        logger.warning(detail)
-        if warning_sink is not None:
-            warning_sink.append(detail)
-    else:
-        logger.info(detail)
+    # A caller-supplied parameter that does not reach the provider is always
+    # observable. The legacy "silent" spelling resolves to coerce_and_warn.
+    logger.warning(detail)
+    if warning_sink is not None:
+        warning_sink.append(detail)
     return removed_unique
 
 

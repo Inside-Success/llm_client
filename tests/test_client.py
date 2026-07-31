@@ -1624,6 +1624,41 @@ class TestGPT5TemperatureStripping:
         assert "top_p" not in call_kwargs
         assert any("COERCE_PARAMS" in w for w in result.warnings)
         assert any("gpt5_sampling_compatibility" in w for w in result.warnings)
+        assert any(
+            record["code"] == "LLMC_WARN_PARAMETER_OMITTED"
+            for record in result.warning_records
+        )
+
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_openrouter_luna_omits_temperature_with_durable_warning(
+        self,
+        mock_completion: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        """Known route-incompatible params must be omitted visibly by the client."""
+        mock_completion.return_value = _mock_response(content="ok")
+
+        result = call_llm(
+            "openrouter/openai/gpt-5.6-luna",
+            [{"role": "user", "content": "Hi"}],
+            temperature=0.3,
+            task="test",
+            trace_id="test_openrouter_luna_temperature_omitted",
+            max_budget=0,
+        )
+
+        assert "temperature" not in mock_completion.call_args.kwargs
+        assert any(
+            "removed=temperature" in warning
+            and "rule=openrouter_luna_native_schema_compatibility" in warning
+            for warning in result.warnings
+        )
+        assert any(
+            record["code"] == "LLMC_WARN_PARAMETER_OMITTED"
+            and "removed=temperature" in record["message"]
+            for record in result.warning_records
+        )
 
     def test_openrouter_gpt5_strict_policy_raises(self) -> None:
         """unsupported_param_policy=error should fail loud instead of coercing."""
