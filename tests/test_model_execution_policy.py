@@ -76,21 +76,46 @@ def test_openrouter_sol_requires_explicit_justification_and_reasoning() -> None:
     )
 
 
-def test_codex_luna_requires_justification_and_explicit_medium_reasoning() -> None:
-    model = "codex/gpt-5.6-luna"
+@pytest.mark.parametrize(
+    "model",
+    [
+        "codex/gpt-5.6-luna",
+        "codex/gpt-5.6-sol",
+        "codex/gpt-5.6-terra",
+    ],
+)
+def test_codex_gpt56_requires_justification_and_explicit_reasoning(
+    model: str,
+) -> None:
     decision = evaluate_model_execution_policy(
         [model],
         mode="enforce_allowlist",
-        justification="Use the operator-selected subscription-backed Luna route.",
-        reasoning_effort="medium",
+        justification="Use the operator-selected subscription-backed GPT-5.6 route.",
+        reasoning_effort="low",
     )
 
     assert model in ALLOWED_EXECUTION_MODELS
     assert decision.uses_only_default is False
-    assert decision.reasoning_policy.effort == "medium"
+    assert decision.reasoning_policy.effort == "low"
     assert REASONING_CAPABILITIES[model].supported_efforts == frozenset(
         {"low", "medium", "high"}
     )
+
+
+def test_all_supported_gpt56_family_routes_are_allowlisted() -> None:
+    expected = {
+        "openrouter/openai/gpt-5.6-luna",
+        "openrouter/openai/gpt-5.6-sol",
+        "openrouter/openai/gpt-5.6-terra",
+        "gpt-5.6",
+        "gpt-5.6-terra",
+        "codex/gpt-5.6-luna",
+        "codex/gpt-5.6-sol",
+        "codex/gpt-5.6-terra",
+    }
+
+    assert expected.issubset(ALLOWED_EXECUTION_MODELS)
+    assert expected.issubset(REASONING_CAPABILITIES)
 
 
 def test_allowed_alternate_without_justification_fails() -> None:
