@@ -1,6 +1,6 @@
 # Plan #345: Metadata-Only Call Observability
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -83,14 +83,29 @@ without silently extending their source-data retention period.
 
 ## Acceptance Criteria
 
-- [ ] Policy misuse fails before provider dispatch.
-- [ ] Metadata-only SQLite and JSONL rows contain no prompt, response, snapshot,
+- [x] Policy misuse fails before provider dispatch.
+- [x] Metadata-only SQLite and JSONL rows contain no prompt, response, snapshot,
       warning, validation, or dynamic error content.
-- [ ] Optional structured raw-response artifacts are not written.
-- [ ] Usage, cost, trace, task, model, latency, retry, execution path, schema,
+- [x] Optional structured raw-response artifacts are not written.
+- [x] Usage, cost, trace, task, model, latency, retry, execution path, schema,
       and error class remain queryable.
-- [ ] Existing calls remain full-fidelity by default.
-- [ ] Focused tests, generated API reference, lint, and diff checks pass.
+- [x] Existing calls remain full-fidelity by default.
+- [x] Focused tests, generated API reference, lint, and diff checks pass.
+
+## Completion Evidence
+
+- Implementation revision `ced398d` passed 459 tests, generated API-reference
+  verification, fatal Ruff checks, and diff checks.
+- Qualitative Coding revision `5af5091` consumes the typed policy across every
+  public guest-analysis call path and combines it with the typed OpenRouter
+  no-data-collection/ZDR route.
+- Deployed QC trace
+  `qualitative_coding/public-demo/guest-0335840faddc995bf3892bed/57ec2673ca0043698bea2a15e81f0793`
+  completed seven calls. SQLite and JSONL independently report
+  `content_persistence=metadata_only` for all seven while every prompt,
+  response, dynamic error, prompt reference, call fingerprint, call snapshot,
+  warning, and validation field is absent. Usage, tasks, trace identity, and
+  `$0.005989126` observed cost remain queryable.
 
 ## Non-Goals
 
