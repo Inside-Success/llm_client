@@ -40,6 +40,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 346 | [Production LLM Call Receipt](346_production_llm_call_receipt.md) | Critical | 🚧 In Progress | Team-Brains Hermes observability adapter |
 | 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | 🚧 In Progress (Slice 1 live-bound storage/query evidence) | Evidence-based failure localization and provider-attribution claims |
 | 120 | [Durable Cross-Project Call Lifecycle](120_durable_call_lifecycle.md) | Critical | 🚧 In Progress | Truthful localization of missing-terminal calls |
 | 119 | [Runtime Cost Governance](119_runtime_cost_governance.md) | Critical | 🚧 In Progress | Trustworthy real-time cost control and cross-provider spend analysis |
@@ -48,12 +49,12 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 116 | [Ecosystem Allowlist Cutover](116_ecosystem-allowlist-cutover.md) | Critical | ✅ Complete | Unconditional allowed-model enforcement |
 | 115 | [Allowed-Model Execution Policy](115_allowed-model-execution-policy.md) | Critical | ✅ Complete | Safe cross-project model-policy enforcement |
 | 114 | [JSON-Schema-Native Bridge](114_json-schema-native-bridge.md) | High | ✅ Complete | learning-environment migration away from direct provider transport |
-| 113 | [Responses Structured Custody Reconciliation](113_responses_structured_custody_reconciliation.md) | Critical | 🧪 Implemented; focused verified | onto-canon6 Plan 0145 reviewed preprocessing replay |
+| 113 | [Responses Structured Custody Reconciliation](113_responses_structured_custody_reconciliation.md) | Critical | ❓  | onto-canon6 Plan 0145 reviewed preprocessing replay |
 | 112 | [Provider Usage-Detail Observability](112_provider_usage_detail_observability.md) | High | ✅ Complete | Exact hidden-reasoning attribution in downstream cost experiments |
 | 111 | [All-Attempt Structured Cost Coverage](111_all_attempt_cost_coverage.md) | Critical | ✅ Complete | Honest recovered structured calls in strict-budget consumers |
 | 108 | [Agent-schema Responses compatibility](108_agent_schema_responses_compatibility.md) | High | ✅ Complete | Cybernetic simulator exact-schema route certification |
 | 107 | [Direct GPT-5.6 Route Registration](107_gpt56_direct_route_registration.md) | High | ✅ Complete | Direct GPT-5.6 Sol and Terra strict-schema routes explicitly selectable; no automatic tier-default change |
-| 106 | [Direct GPT-5.5 Structured Capability Truth](106_gpt55_structured_capability_truth.md) | High | ↩️ Superseded | Its alleged direct result was an OpenRouter-proxy route; corrected by Plan 107 |
+| 106 | [Direct GPT-5.5 Structured Capability Truth](106_gpt55_structured_capability_truth.md) | High | ❓  | Its alleged direct result was an OpenRouter-proxy route; corrected by Plan 107 |
 | 105 | [Personal and Inside Success Fork Reconciliation](105_inside_success_fork_reconciliation.md) | High | ✅ Complete | A single current `llm_client` line for personal and Inside Success consumers |
 | 102 | [Exact selected raw structured content](102_selected_raw_structured_content.md) | High | ✅ Complete | onto-canon6 Plan 0141 transport-receipt construction |
 | 100 | [Budget-complete call snapshot v3](100_budget_complete_call_snapshot_v3.md) | High | ✅ Complete | DoDAF fresh page-window diagnostic |
