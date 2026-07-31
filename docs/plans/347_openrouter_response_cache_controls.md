@@ -76,7 +76,8 @@ drift outside the durable call contract.
 1. Add failing policy-validation and request-preparation tests.
 2. Extend `OpenRouterRoutePolicyV1` with an explicit cache mode and optional TTL.
 3. Compile the policy into canonical OpenRouter headers after conflict checks.
-4. Prove the policy is present in snapshots and changes request identity.
+4. Preserve OpenRouter's response cache status in result accounting and routing
+   evidence; prove the policy is present in snapshots and changes identity.
 5. Document the privacy and consumer-ownership boundary and regenerate the
    public API reference.
 6. Run focused tests, strict relationship validation, generated-doc checks, and
@@ -107,6 +108,7 @@ drift outside the durable call contract.
 | completion and Responses preparation | both OpenRouter transports receive the same cache policy |
 | non-OpenRouter negative | typed OpenRouter policy remains invalid on direct routes |
 | replay/fingerprint | cache mode and TTL are durable request identity |
+| response evidence | OpenRouter `HIT`/`MISS` headers drive cache-hit accounting |
 
 ---
 
@@ -123,6 +125,8 @@ drift outside the durable call contract.
 - [ ] Cache-enabled requests do not receive a per-call Broadcast trace in the
       provider request body, while local trace custody remains intact.
 - [ ] Cache policy serializes into call snapshots and changes fingerprints.
+- [ ] Provider `HIT` evidence sets `result.cache_hit`, zero marginal cost, and a
+      durable routing-trace status without relying only on zero token counts.
 - [ ] Public documentation identifies response caching as provider-side exact
       reuse, distinct from prompt caching and consumer artifact caching.
 - [ ] Focused tests, generated API checks, relationship validation, changed-file

@@ -306,6 +306,27 @@ def _apply_openrouter_response_cache_headers(
         )
 
 
+def _openrouter_response_cache_status(raw_response: Any) -> str | None:
+    """Return ``hit``/``miss`` from LiteLLM-preserved OpenRouter headers."""
+
+    hidden = getattr(raw_response, "_hidden_params", None)
+    if not isinstance(hidden, Mapping):
+        return None
+    for container_name in ("headers", "additional_headers"):
+        headers = hidden.get(container_name)
+        if not isinstance(headers, Mapping):
+            continue
+        for name, value in headers.items():
+            normalized_name = str(name).casefold()
+            if normalized_name.startswith("llm_provider-"):
+                normalized_name = normalized_name.removeprefix("llm_provider-")
+            if normalized_name != "x-openrouter-cache-status":
+                continue
+            status = str(value).strip().casefold()
+            return status if status in {"hit", "miss"} else None
+    return None
+
+
 def _enable_openrouter_inline_metadata(
     model: str,
     call_kwargs: dict[str, Any],

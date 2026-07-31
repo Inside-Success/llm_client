@@ -5,9 +5,12 @@ from __future__ import annotations
 import pytest
 
 from llm_client.core.errors import LLMConfigurationError
+from llm_client.core.client_dispatch import _finalize_result
+from llm_client.core.data_types import LLMCallResult
 from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
 from llm_client.utils.openrouter import (
     _enable_openrouter_inline_metadata,
+    _openrouter_response_cache_status,
     compile_openrouter_route_policy,
 )
 from llm_client.observability.replay import build_call_snapshot, snapshot_fingerprint
@@ -292,3 +295,52 @@ def test_response_cache_policy_changes_snapshot_identity() -> None:
     )
 
     assert snapshot_fingerprint(disabled) != snapshot_fingerprint(enabled)
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        ({"x-openrouter-cache-status": "HIT"}, "hit"),
+        ({"llm_provider-x-openrouter-cache-status": "MISS"}, "miss"),
+        ({"x-openrouter-cache-status": "UNKNOWN"}, None),
+    ],
+)
+def test_reads_openrouter_response_cache_status(
+    headers: dict[str, str], expected: str | None
+) -> None:
+    raw_response = type(
+        "RawResponse",
+        (),
+        {"_hidden_params": {"additional_headers": headers}},
+    )()
+
+    assert _openrouter_response_cache_status(raw_response) == expected
+
+
+def test_provider_response_cache_hit_updates_result_accounting() -> None:
+    raw_response = type(
+        "RawResponse",
+        (),
+        {"_hidden_params": {"headers": {"x-openrouter-cache-status": "HIT"}}},
+    )()
+    result = LLMCallResult(
+        content="cached",
+        usage={"total_tokens": 0},
+        cost=0.0,
+        model="openrouter/openai/gpt-5.6-luna",
+        raw_response=raw_response,
+        cost_source="provider_reported",
+    )
+
+    finalized = _finalize_result(
+        result,
+        requested_model="openrouter/openai/gpt-5.6-luna",
+        resolved_model="openrouter/openai/gpt-5.6-luna",
+        routing_trace={"attempted_models": ["openrouter/openai/gpt-5.6-luna"]},
+    )
+
+    assert finalized.cache_hit is True
+    assert finalized.cost_source == "cache_hit"
+    assert finalized.marginal_cost == 0.0
+    assert finalized.routing_trace is not None
+    assert finalized.routing_trace["openrouter_response_cache_status"] == "hit"
