@@ -131,11 +131,11 @@ class TestSupportsStructuredOutput:
             with pytest.raises(RuntimeError, match="expected boolean or null"):
                 supports_native_structured_output("openrouter/x/malformed")
 
-    def test_openrouter_gpt56_native_transport_is_conservative(self):
-        """Fresh route evidence demotes native transport without model eligibility."""
+    def test_openrouter_gpt56_native_transport_matches_current_route_evidence(self):
+        """Only routes with current native-schema evidence select that transport."""
 
-        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is False
-        assert supports_native_structured_output("openrouter/openai/gpt-5.6-sol") is False
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is True
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-sol") is True
         assert supports_native_structured_output("openrouter/openai/gpt-5.6-terra") is True
 
 

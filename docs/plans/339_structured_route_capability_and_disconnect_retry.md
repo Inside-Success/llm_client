@@ -23,19 +23,22 @@ provider dispatch and terminal disposition truthfully.
 
 ## Gap
 
-**Current:** `ModelInfo.structured_output` simultaneously controls task-model
-eligibility and `_model_supports_native_schema()`. Fresh Process Tracing probes
-on 2026-07-29 found that OpenRouter Luna-medium and Sol-medium had endpoints but
-none accepted the requested native structured parameters, despite retained
-successful but schema-specific route evidence. Separately, OpenRouter wrapped
+**Current:** The 2026-07-29 Process Tracing probes found that OpenRouter
+Luna-medium and Sol-medium had endpoints but none accepted that large request's
+native structured parameter profile. A 2026-07-31 audit found the shared client
+had converted that bounded result into a general `native_structured_output=false`
+route setting, silently forcing both models through Instructor despite current
+OpenRouter structured-output metadata. Separately, OpenRouter wrapped
 `Server disconnected without sending a response` in a generic `APIError`; the
 retry classifier did not recognize that transport phrase, so
 `num_retries=2` produced only attempt ordinal `0` and a terminal
 `retry_exhausted` event.
 
-**Target:** Preserve Luna and Sol as explicit structured-work candidates while
-routing their current OpenRouter identities through the Instructor path unless
-fresh route-specific native-schema evidence promotes them. Classify the exact
+**Target:** Preserve Luna and Sol as explicit structured-work candidates and
+route their current OpenRouter identities through provider-native JSON Schema.
+The current claim is bounded to the 2026-07-31 strict one-integer contract;
+large Process Tracing schema compatibility remains a separate replay question.
+Classify the exact
 remote-disconnect envelope as transient. Preserve permanent capability, quota,
 authentication, and policy failures as single-dispatch terminals.
 
@@ -49,9 +52,8 @@ real resilience unless transient failures cause another observable dispatch.
 
 - Separate overall structured-output eligibility from native-schema transport
   preference in the typed registry contract.
-- Conservatively mark the current OpenRouter Luna and Sol routes as not
-  generally native-schema-capable while retaining their structured eligibility
-  and bounded historical certifications.
+- Restore native-schema routing for the current OpenRouter Luna and Sol routes
+  after fresh strict-contract evidence, without generalizing it to all schemas.
 - Recognize the observed remote-disconnect transport envelope as retryable.
 - Prove retry dispatches and durable attempt ordinals through the real
   structured runtime, then run one non-mocked downstream replay.
@@ -98,6 +100,10 @@ real resilience unless transient failures cause another observable dispatch.
   `process-tracing.sol-medium-capability-probe.20260730T000519Z`, and
   `plan020-terra-medium-repair-enabled-20260729T235130Z` - fresh route and
   retry evidence.
+- Native strict-contract traces
+  `llm-client-luna-native-schema-probe-20260731` and
+  `llm-client-sol-native-schema-probe-20260731` - current small-schema route
+  evidence for the two formerly conservative OpenRouter identities.
 
 ## Boundaries and Contracts
 
@@ -130,10 +136,10 @@ model records where route evidence requires an explicit distinction.
 | `native_structured_output` | Curated current route may receive provider-native `json_schema` for the general shared-client contract | None | `true` selects native; `false` selects Instructor; `null` preserves legacy behavior by falling back to `structured_output` |
 
 Compatibility is additive: existing external registry files that omit the new
-field continue to behave as before. Luna and Sol keep
-`structured_output=true`, receive `native_structured_output=false`, and lose
-the misleading `structured-route-certified` tag in favor of bounded-evidence
-wording. Terra remains native for the accepted Process Tracing route.
+field continue to behave as before. Luna, Sol, and Terra use native transport
+for their current OpenRouter identities. Their retained evidence remains
+bounded by contract and request shape; it is not a claim that every schema or
+upstream endpoint is compatible.
 
 ### Retry contract
 
@@ -179,9 +185,9 @@ their frozen boundaries.
 
 ### Slice 1: Capability separation (`fully_specifiable_now`)
 
-Add the optional native-transport field, route runtime dispatch through it,
-and set explicit Luna/Sol conservative values. Positive fixtures prove Luna
-and Sol remain structured-task candidates but select Instructor. A null-field
+Add the optional native-transport field and route runtime dispatch through it.
+Positive fixtures prove Luna and Sol remain structured-task candidates and
+select native transport. A null-field
 fixture proves old custom registries preserve behavior. Malformed non-boolean
 values fail Pydantic/registry validation.
 
@@ -205,7 +211,7 @@ downstream retry claim from deterministic tests alone.
 
 | Test file | Required proof |
 | --- | --- |
-| `tests/test_structured_capability_registry.py` | Overall and native capability fields are distinct; null preserves legacy registry behavior; Luna/Sol are conservative native negatives. |
+| `tests/test_structured_capability_registry.py` | Overall and native capability fields are distinct; null preserves legacy registry behavior; Luna/Sol select native transport. |
 | `tests/test_models.py` | Luna/Sol remain eligible/selectable for structured work; existing tiers do not silently change. |
 | `tests/test_structured_attempts.py` | Exact remote-disconnect envelope redispatches and produces unique durable ordinals; terminal negatives do not redispatch. |
 | `tests/test_structured_timeout_deadline.py` | Transport signature is retryable while quota/no-compatible-route signs remain non-retryable. |
@@ -214,8 +220,8 @@ downstream retry claim from deterministic tests alone.
 
 ## Acceptance and Disproof
 
-- [ ] Luna and Sol remain typed-output candidates but do not use native schema
-      by default on the current OpenRouter routes.
+- [x] Luna and Sol remain typed-output candidates and use native schema on the
+      current OpenRouter routes for the bounded strict-contract probes.
 - [ ] Terra and previously certified unaffected routes preserve native-schema
       execution.
 - [ ] The exact observed remote disconnect is classified transient without

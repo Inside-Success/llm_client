@@ -228,12 +228,12 @@ public benchmark.
 | `openrouter/deepseek/deepseek-v4-flash` | 40 / max | 116 tok/s | $0.14 / $0.28 | 1.05M | Declared; certified for one bounded extraction contract. Recent Process Tracing long strict-schema calls also produced validation and deadline failures, so do not generalize the certificate. |
 | `openrouter/inception/mercury-2` | 21 | 987 tok/s | $0.25 / $0.75 | 128K | Declared; no retained local contract certificate. Use only for low-judgment work. |
 | `openrouter/minimax/minimax-m3` | 44 | 91 tok/s | $0.30 / $1.20 | 1.05M | Declared; provider transport accepted one semantic-authoring schema, but local validation rejected the result. Not certified for that contract. |
-| `openrouter/openai/gpt-5.6-luna` | 51 / max | 188 tok/s | $0.50 / $3.00 | 1.05M | Eligible for typed output through Instructor. A retained DIGIMON native-schema contract passed, but a fresh Process Tracing native-schema probe found no endpoint accepting its requested parameter profile; native transport is therefore conservative by default. |
+| `openrouter/openai/gpt-5.6-luna` | 51 / max | 188 tok/s | $0.50 / $3.00 | 1.05M | Current strict native JSON-schema probe passed (`{"value": 1}`, 2026-07-31). The earlier large Process Tracing request remains a separate compatibility case, not a general route rejection. |
 | `openrouter/qwen/qwen3.7-max` | 46 | 202 tok/s | $1.25 / $3.75 | 1.0M | Declared; no retained local contract certificate. |
 | `openrouter/z-ai/glm-5.2` | 51 / max | 219 tok/s | $0.76 / $2.40 | 1.05M | Declared; no retained local contract certificate. Strong public value candidate, not yet a certified local default. |
 | `openrouter/x-ai/grok-4.5` | 54 / high | 58 tok/s | $2.00 / $6.00 | 500K | Declared; local native-schema attempt reached the route but was capacity-blocked. No semantic certificate. |
 | `openrouter/openai/gpt-5.6-terra` | 55 / max | 136 tok/s | $1.25 / $7.50 | 1.05M | Declared; certified for the retained DIGIMON planner contract. Independent comparison currently places Luna or Sol ahead of Terra on intelligence versus cost at every tested effort. |
-| `openrouter/openai/gpt-5.6-sol` | 59 / max | 66 tok/s | $5.00 / $30.00 | 1.05M | Eligible for typed output through Instructor and certified for one bounded native typed-authoring contract. A fresh Process Tracing native-schema probe found no endpoint for its requested parameter profile, so the retained certificate is not generalized. |
+| `openrouter/openai/gpt-5.6-sol` | 59 / max | 66 tok/s | $5.00 / $30.00 | 1.05M | Current strict native JSON-schema probe passed (`{"value": 1}`, 2026-07-31). The earlier large Process Tracing request remains a separate compatibility case, not a general route rejection. |
 
 Sources: [Artificial Analysis methodology and v4.1](https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-1),
 [DeepSeek V4 Flash](https://artificialanalysis.ai/models/deepseek-v4-flash),
