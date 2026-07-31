@@ -39,7 +39,10 @@ from llm_client.core.data_types import LLMCallResult
 from llm_client.core.model_detection import _resolve_api_base_for_model
 from llm_client.core.model_availability import filter_available_models
 from llm_client.core.model_execution_policy import evaluate_model_execution_policy
-from llm_client.utils.openrouter import _openrouter_routing_enabled
+from llm_client.utils.openrouter import (
+    _openrouter_response_cache_status,
+    _openrouter_routing_enabled,
+)
 from llm_client.result_finalization import finalize_result as _finalize_result_base
 from llm_client.result_metadata import (
     build_routing_trace as _build_routing_trace_base,
@@ -229,13 +232,20 @@ def _finalize_result(
     model_warning = _model_warning_record(requested_model)
     if model_warning is not None:
         extra_warning_records.append(model_warning)
+    provider_cache_status = _openrouter_response_cache_status(result.raw_response)
+    effective_cache_hit = cache_hit or provider_cache_status == "hit"
+    if routing_trace is not None and provider_cache_status is not None:
+        routing_trace = {
+            **routing_trace,
+            "openrouter_response_cache_status": provider_cache_status,
+        }
     return _finalize_result_base(
         result,
         requested_model=requested_model,
         resolved_model=resolved_model,
         routing_trace=routing_trace,
         warning_records=extra_warning_records or None,
-        cache_hit=cache_hit,
+        cache_hit=effective_cache_hit,
     )
 
 

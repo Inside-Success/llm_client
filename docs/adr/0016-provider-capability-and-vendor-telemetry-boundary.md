@@ -4,6 +4,37 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-07-31 Amendment: OpenRouter Exact-Response Cache Policy
+
+Plan #347 extends `OpenRouterRoutePolicyV1` with an explicit, default-off
+exact-response cache mode and an optional TTL. `enabled` compiles to
+`X-OpenRouter-Cache: true`; `refresh` additionally clears and replaces only the
+matching entry; `disabled` sends the explicit provider opt-out when a typed
+policy is present. TTLs fail locally outside OpenRouter's documented 1–86,400
+second range.
+
+Response caching retains generated content at OpenRouter's edge for the selected
+TTL, so enabled and refresh modes conflict locally with
+`zero_data_retention=True`. Raw response-cache headers also conflict with a
+typed policy: callers may use the broad raw-header escape hatch only when they
+do not claim typed cache governance.
+
+OpenRouter hashes the complete provider request body. Therefore a cache-enabled
+call retains `llm_client` task/trace custody locally but does not project its
+unique per-call identity into OpenRouter's request-body Broadcast `trace` field.
+An explicit caller-owned Broadcast trace is rejected for a cache-enabled call
+rather than silently defeating reuse. Attribution and route-metadata headers do
+not enter OpenRouter's cache key, although a cache hit does not return stale
+router metadata.
+
+This is distinct from provider prompt caching and from durable consumer stage
+artifacts. OpenRouter does not coalesce concurrent misses and may evict entries;
+consumers remain responsible for content-addressed resumability, single-flight,
+schema and algorithm invalidation, and source-custody rules. Local/provider
+usage telemetry remains evidence of billed versus cached tokens; one bounded
+live repeated-call probe is required before a consumer advertises the route as
+working.
+
 ## 2026-07-27 Amendment: Typed OpenRouter Route Policy
 
 Plan #336 adds `OpenRouterRoutePolicyV1` as the supported named public

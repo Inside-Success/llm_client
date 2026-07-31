@@ -34,6 +34,9 @@ OPENROUTER_API_BASE_ENV = "OPENROUTER_API_BASE"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_API_KEYS_ENV = "OPENROUTER_API_KEYS"
 OPENROUTER_METADATA_HEADER = "X-OpenRouter-Metadata"
+OPENROUTER_RESPONSE_CACHE_HEADER = "X-OpenRouter-Cache"
+OPENROUTER_RESPONSE_CACHE_TTL_HEADER = "X-OpenRouter-Cache-TTL"
+OPENROUTER_RESPONSE_CACHE_CLEAR_HEADER = "X-OpenRouter-Cache-Clear"
 _OPENROUTER_NORMALIZED_PASSTHROUGH_PARAMS = frozenset({"reasoning_effort"})
 
 # ---------------------------------------------------------------------------
@@ -273,6 +276,57 @@ def _validate_openrouter_route_policy_model(
         )
 
 
+def _apply_openrouter_response_cache_headers(
+    headers: dict[str, Any],
+    policy: OpenRouterRoutePolicyV1 | None,
+) -> None:
+    """Compile explicit typed cache intent or reject ambiguous raw controls."""
+
+    if policy is None:
+        return
+    cache_header_names = {
+        OPENROUTER_RESPONSE_CACHE_HEADER.casefold(),
+        OPENROUTER_RESPONSE_CACHE_TTL_HEADER.casefold(),
+        OPENROUTER_RESPONSE_CACHE_CLEAR_HEADER.casefold(),
+    }
+    if any(str(name).casefold() in cache_header_names for name in headers):
+        raise LLMConfigurationError(
+            "openrouter_route_policy cannot be combined with raw response-cache headers",
+            error_code="openrouter_route_policy_conflicts_with_cache_headers",
+        )
+    if policy.response_cache_mode == "disabled":
+        headers[OPENROUTER_RESPONSE_CACHE_HEADER] = "false"
+        return
+    headers[OPENROUTER_RESPONSE_CACHE_HEADER] = "true"
+    if policy.response_cache_mode == "refresh":
+        headers[OPENROUTER_RESPONSE_CACHE_CLEAR_HEADER] = "true"
+    if policy.response_cache_ttl_seconds is not None:
+        headers[OPENROUTER_RESPONSE_CACHE_TTL_HEADER] = str(
+            policy.response_cache_ttl_seconds
+        )
+
+
+def _openrouter_response_cache_status(raw_response: Any) -> str | None:
+    """Return ``hit``/``miss`` from LiteLLM-preserved OpenRouter headers."""
+
+    hidden = getattr(raw_response, "_hidden_params", None)
+    if not isinstance(hidden, Mapping):
+        return None
+    for container_name in ("headers", "additional_headers"):
+        headers = hidden.get(container_name)
+        if not isinstance(headers, Mapping):
+            continue
+        for name, value in headers.items():
+            normalized_name = str(name).casefold()
+            if normalized_name.startswith("llm_provider-"):
+                normalized_name = normalized_name.removeprefix("llm_provider-")
+            if normalized_name != "x-openrouter-cache-status":
+                continue
+            status = str(value).strip().casefold()
+            return status if status in {"hit", "miss"} else None
+    return None
+
+
 def _enable_openrouter_inline_metadata(
     model: str,
     call_kwargs: dict[str, Any],
@@ -344,12 +398,29 @@ def _enable_openrouter_inline_metadata(
         headers = dict(configured)
     else:
         raise TypeError("extra_headers must be a mapping")
+    _apply_openrouter_response_cache_headers(headers, policy_value)
     if not any(
         str(name).lower() == OPENROUTER_METADATA_HEADER.lower()
         for name in headers
     ):
         headers[OPENROUTER_METADATA_HEADER] = "enabled"
     call_kwargs["extra_headers"] = headers
+
+    if (
+        policy_value is not None
+        and policy_value.response_cache_mode in {"enabled", "refresh"}
+    ):
+        if call_kwargs.get("trace") is not None:
+            raise LLMConfigurationError(
+                "OpenRouter response caching cannot be combined with a request-body "
+                "Broadcast trace because the trace changes the exact-response cache key",
+                error_code="openrouter_response_cache_conflicts_with_trace_body",
+            )
+        # Local task/trace custody remains in metadata and llm_client's ledger.
+        # Do not copy per-call identity into OpenRouter's request body: OpenRouter
+        # hashes the full body, so doing so would turn every logical retry into a
+        # distinct cache entry.
+        return
 
     metadata = call_kwargs.get("metadata")
     if not isinstance(metadata, Mapping):
