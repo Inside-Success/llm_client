@@ -101,10 +101,12 @@ class ObservabilityContentPolicy(BaseModel):
 
 
 class OpenRouterRoutePolicyV1(BaseModel):
-    """Typed, provider-agnostic intent compiled into OpenRouter routing controls.
+    """Typed intent compiled into OpenRouter routing and cache controls.
 
-    This intentionally describes only caller-authorized route constraints. It
-    does not claim a local inventory of live providers or endpoints.
+    Route fields describe caller-authorized provider constraints. Response-cache
+    fields explicitly authorize OpenRouter to retain and reuse an exact response;
+    they are disabled by default and are incompatible with zero-data-retention.
+    This contract does not claim a local inventory of live providers or endpoints.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -115,6 +117,8 @@ class OpenRouterRoutePolicyV1(BaseModel):
     allow_provider_fallbacks: bool = True
     sort: Literal["price", "throughput", "latency"] | None = None
     require_parameters: Literal[True] = True
+    response_cache_mode: Literal["disabled", "enabled", "refresh"] = "disabled"
+    response_cache_ttl_seconds: int | None = Field(default=None, gt=0, le=86_400)
 
     @field_validator("allowed_providers")
     @classmethod
@@ -144,6 +148,18 @@ class OpenRouterRoutePolicyV1(BaseModel):
         if self.data_collection == "allow" and self.zero_data_retention is True:
             raise ValueError(
                 "data_collection='allow' conflicts with zero_data_retention=True"
+            )
+        if self.response_cache_mode in {"enabled", "refresh"} and self.zero_data_retention is True:
+            raise ValueError(
+                "response_cache_mode='enabled' conflicts with zero_data_retention=True"
+            )
+        if (
+            self.response_cache_ttl_seconds is not None
+            and self.response_cache_mode not in {"enabled", "refresh"}
+        ):
+            raise ValueError(
+                "response_cache_ttl_seconds requires response_cache_mode='enabled' "
+                "or 'refresh'"
             )
         return self
 
