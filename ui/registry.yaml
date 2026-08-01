@@ -1,0 +1,28 @@
+schema_version: ui-registry/v1
+project_id: llm_client
+ui_status: active
+surfaces:
+  - id: llm-client-observability-workbench
+    lifecycle: canonical
+    source_path: workbench/frontend
+    backend_path: workbench/backend
+    purpose: Inspect LLM call logs, provider health, costs, traces, and errors.
+    entrypoints:
+      frontend: http://127.0.0.1:5204
+      api: http://127.0.0.1:5203
+    run_commands:
+      backend: make workbench-backend
+      frontend: make workbench-frontend
+    data_boundary:
+      data: Reads configured locally retained observability data for inspection.
+      authority: Viewing it does not authorize LLM calls, credentials, or provider configuration changes.
+    capabilities:
+      - Inspect logged calls, cost, token, latency, and trace context.
+      - Inspect provider health and error breakdowns.
+      - Navigate retained observability records without replacing CLI or API authority.
+    verification_commands:
+      - make test-quick
+      - npm run --prefix workbench/frontend build
+    provenance:
+      - README.md
+      - Makefile
