@@ -35,6 +35,11 @@
             "type": "command",
             "command": "bash .claude/hooks/gate-edit.sh",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/prewrite-claim-gate.sh",
+            "timeout": 1
           }
         ]
       },
