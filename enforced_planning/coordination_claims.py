@@ -28,6 +28,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -65,6 +66,8 @@ CREATION_BLOCKING_HEALTH_ISSUES = {
     "missing_work_graph_sha256",
 }
 DEFAULT_HEARTBEAT_STALE_MINUTES = 120
+CLAIM_WRITE_STAGING_MAX_AGE_SECONDS = 300
+_LEGACY_CLAIM_TEMP_PATTERN = re.compile(r"^\..+\.ya?ml\.[A-Za-z0-9_-]+\.tmp$")
 SESSION_ENV_KEYS = {
     "codex": ("CODEX_THREAD_ID",),
     "claude-code": ("CLAUDE_SESSION_ID", "CLAUDE_CODE_SSE_PORT"),
@@ -88,21 +91,59 @@ def claim_registry_lock(claims_dir: Path | None = None) -> Iterator[None]:
         lock_path.chmod(0o600)
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
+            _prune_abandoned_claim_write_artifacts(resolved_claims_dir)
             yield
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _claim_write_staging_dir(claims_dir: Path) -> Path:
+    """Return same-filesystem staging outside the live claim registry."""
+
+    return claims_dir.parent / f".{claims_dir.name}-write-staging"
+
+
+def _prune_abandoned_claim_write_artifacts(
+    claims_dir: Path,
+    *,
+    minimum_age_seconds: int = CLAIM_WRITE_STAGING_MAX_AGE_SECONDS,
+) -> int:
+    """Remove only old atomic-write artifacts from sanctioned claim writers."""
+
+    now = time.time()
+    staging_dir = _claim_write_staging_dir(claims_dir)
+    candidates = [path for path in claims_dir.glob(".*.tmp") if _LEGACY_CLAIM_TEMP_PATTERN.fullmatch(path.name)]
+    if staging_dir.exists():
+        candidates.extend(staging_dir.glob("*.tmp"))
+    removed = 0
+    for candidate in candidates:
+        try:
+            age = now - candidate.lstat().st_mtime
+        except FileNotFoundError:
+            continue
+        if age < minimum_age_seconds:
+            continue
+        if not (candidate.is_file() or candidate.is_symlink()):
+            continue
+        candidate.unlink(missing_ok=True)
+        removed += 1
+    return removed
 
 
 def _atomic_write_claim(path: Path, payload: dict[str, Any]) -> None:
     """Replace one claim without exposing a truncated or partially written file."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = _claim_write_staging_dir(path.parent)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    staging_dir.chmod(0o700)
+    _prune_abandoned_claim_write_artifacts(path.parent)
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
             "w",
             encoding="utf-8",
-            dir=path.parent,
+            dir=staging_dir,
             prefix=f".{path.name}.",
             suffix=".tmp",
             delete=False,
@@ -168,9 +209,7 @@ def record_claim_mutation(
     registry_digest_after = _registry_digest(resolved_claims_dir)
     projection_current_after = projection_is_current(claims_dir=resolved_claims_dir)
     result: claim_mutation_receipts.MutationResult = (
-        "applied_projection_current"
-        if projection_current_after
-        else "applied_projection_stale"
+        "applied_projection_current" if projection_current_after else "applied_projection_stale"
     )
     # Capture provenance when this module is loaded. Session closeout may
     # intentionally remove the worktree containing this source file before the
@@ -298,11 +337,7 @@ class ClaimCheckResult:
         """
         conflicts = self.hard_conflicts
         blocked_paths = sorted(
-            {
-                overlap.split(" <-> ", 1)[0]
-                for conflict in conflicts
-                for overlap in conflict.overlapping_write_paths
-            }
+            {overlap.split(" <-> ", 1)[0] for conflict in conflicts for overlap in conflict.overlapping_write_paths}
         )
         writable_paths = sorted(
             {
@@ -311,12 +346,7 @@ class ClaimCheckResult:
                 if _normalize_repo_path(path) not in blocked_paths
             }
         )
-        integration_owners = sorted(
-            {
-                (conflict.other_agent, conflict.other_scope)
-                for conflict in conflicts
-            }
-        )
+        integration_owners = sorted({(conflict.other_agent, conflict.other_scope) for conflict in conflicts})
         if not conflicts:
             recommended_next_action = "Proceed with the candidate claim."
         elif writable_paths:
@@ -336,10 +366,7 @@ class ClaimCheckResult:
             "goal_blocked": False,
             "blocked_paths": blocked_paths,
             "writable_paths": writable_paths,
-            "integration_owners": [
-                {"agent": agent, "scope": scope}
-                for agent, scope in integration_owners
-            ],
+            "integration_owners": [{"agent": agent, "scope": scope} for agent, scope in integration_owners],
             "recommended_next_action": recommended_next_action,
         }
 
@@ -413,11 +440,7 @@ def normalize_plan_identity(plan_ref: str | None) -> str | None:
 def _same_claim(left: ClaimRecord, right: ClaimRecord) -> bool:
     """Return whether two records identify the same canonical claim slot."""
 
-    return (
-        left.agent == right.agent
-        and left.primary_project() == right.primary_project()
-        and left.scope == right.scope
-    )
+    return left.agent == right.agent and left.primary_project() == right.primary_project() and left.scope == right.scope
 
 
 def claim_hierarchy_issues(
@@ -478,11 +501,7 @@ def claim_hierarchy_issues(
     if len(cohort) < 2:
         return list(dict.fromkeys(issues))
 
-    roots = [
-        other
-        for other in cohort
-        if other.claim_type == "program" and not other.parent_scope
-    ]
+    roots = [other for other in cohort if other.claim_type == "program" and not other.parent_scope]
     if not roots:
         issues.append("missing_program_root")
     elif len(roots) > 1:
@@ -504,12 +523,7 @@ def coordination_health_issues(
 ) -> list[str]:
     """Return local metadata plus cross-claim hierarchy health issues."""
 
-    return list(
-        dict.fromkeys(
-            claim_health_issues(claim)
-            + claim_hierarchy_issues(claim, active_claims=active_claims)
-        )
-    )
+    return list(dict.fromkeys(claim_health_issues(claim) + claim_hierarchy_issues(claim, active_claims=active_claims)))
 
 
 def validate_claim_hierarchy_for_creation(
@@ -519,14 +533,11 @@ def validate_claim_hierarchy_for_creation(
 ) -> None:
     """Reject a new or refreshed session claim that would be hierarchically invalid."""
 
-    prospective = [
-        claim for claim in active_claims if not _same_claim(claim, candidate)
-    ] + [candidate]
+    prospective = [claim for claim in active_claims if not _same_claim(claim, candidate)] + [candidate]
     issues = claim_hierarchy_issues(candidate, active_claims=prospective)
     if issues:
         raise ValueError(
-            "Invalid plan claim hierarchy for "
-            f"{candidate.primary_project()}:{candidate.scope}: {', '.join(issues)}"
+            f"Invalid plan claim hierarchy for {candidate.primary_project()}:{candidate.scope}: {', '.join(issues)}"
         )
 
 
@@ -542,11 +553,7 @@ def session_root_conflicts(
     ``parent_scope`` is an ownership root for this lifecycle guard.
     """
 
-    if (
-        not claim.is_live()
-        or not claim.session_id
-        or claim.parent_scope
-    ):
+    if not claim.is_live() or not claim.session_id or claim.parent_scope:
         return []
     return sorted(
         (
@@ -571,9 +578,7 @@ def validate_session_root_for_creation(
     conflicts = session_root_conflicts(candidate, active_claims=active_claims)
     if not conflicts or candidate.parallel_root_authorized:
         return
-    identities = ", ".join(
-        f"{claim.primary_project()}:{claim.scope}" for claim in conflicts
-    )
+    identities = ", ".join(f"{claim.primary_project()}:{claim.scope}" for claim in conflicts)
     raise ValueError(
         "Runtime session already owns an unresolved root lane: "
         f"{identities}. Start a child with --parent-scope, close/transfer the "
@@ -596,18 +601,13 @@ def validate_no_preserved_lane_conflict(
             continue
         if candidate_project not in other.projects:
             continue
-        same_plan = bool(
-            candidate_plan
-            and normalize_plan_identity(other.plan_ref) == candidate_plan
-        )
+        same_plan = bool(candidate_plan and normalize_plan_identity(other.plan_ref) == candidate_plan)
         write_overlap = bool(_compute_overlapping_write_paths(candidate, other))
         if same_plan or write_overlap:
             conflicts.append(other)
     if not conflicts:
         return
-    identities = ", ".join(
-        f"{claim.primary_project()}:{claim.scope}" for claim in conflicts
-    )
+    identities = ", ".join(f"{claim.primary_project()}:{claim.scope}" for claim in conflicts)
     raise ValueError(
         "Preserved session-ended lane(s) still require disposition: "
         f"{identities}. Resume/take over the existing lane or close it through "
@@ -788,11 +788,7 @@ def claim_enforcement_issues(claim: ClaimRecord) -> list[dict[str, str]]:
 
 def validate_claim_for_creation(claim: ClaimRecord) -> None:
     """Reject new claims that omit required ownership metadata for live coordination."""
-    issues = [
-        issue
-        for issue in claim_health_issues(claim)
-        if issue in CREATION_BLOCKING_HEALTH_ISSUES
-    ]
+    issues = [issue for issue in claim_health_issues(claim) if issue in CREATION_BLOCKING_HEALTH_ISSUES]
     if not issues:
         return
     if not claim.is_live():
@@ -842,18 +838,14 @@ def resolve_canonical_work_unit_binding(
     if plan_number is None:
         raise ValueError(f"Unable to resolve numbered plan identity from {plan_ref!r}")
     if not Path(normalized_path).name.startswith(f"{plan_number}_"):
-        raise ValueError(
-            f"Work graph {normalized_path!r} does not match {plan_ref}; expected a {plan_number}_ prefix"
-        )
+        raise ValueError(f"Work graph {normalized_path!r} does not match {plan_ref}; expected a {plan_number}_ prefix")
     default_branch = _resolve_default_branch(root)
     if not default_branch:
         raise ValueError("Unable to resolve canonical default branch for work-unit validation")
     source_ref = _default_integration_ref(root, default_branch)
     rendered = _run_git(root, ["show", f"{source_ref}:{normalized_path}"])
     if rendered.returncode != 0:
-        raise ValueError(
-            f"Canonical work graph {normalized_path!r} is unavailable at {source_ref}"
-        )
+        raise ValueError(f"Canonical work graph {normalized_path!r} is unavailable at {source_ref}")
     try:
         payload = json.loads(rendered.stdout)
     except json.JSONDecodeError as exc:
@@ -872,8 +864,7 @@ def resolve_canonical_work_unit_binding(
     unit_status = unit.get("status")
     if unit_status != "ready" or readiness_status != "ready":
         raise ValueError(
-            f"Work unit {work_unit_id!r} is not claimable: status={unit_status!r}, "
-            f"readiness={readiness_status!r}"
+            f"Work unit {work_unit_id!r} is not claimable: status={unit_status!r}, readiness={readiness_status!r}"
         )
     control_types = unit.get("control_approval_types", [])
     readiness_types = readiness.get("required_approval_types", []) if isinstance(readiness, dict) else []
@@ -911,8 +902,7 @@ def resolve_canonical_work_unit_binding(
         ]
         if len(matching) != 1:
             raise ValueError(
-                f"Work unit {work_unit_id!r} requires exactly one {approval_type!r} approval; "
-                f"found {len(matching)}"
+                f"Work unit {work_unit_id!r} requires exactly one {approval_type!r} approval; found {len(matching)}"
             )
         approval_revisions.append(f"{approval_type}={matching[0]['approved_revision'].strip()}")
     graph_sha256 = hashlib.sha256(rendered.stdout.encode("utf-8")).hexdigest()
@@ -1000,11 +990,7 @@ def _paths_overlap(left: str, right: str) -> bool:
     """Return whether two normalized repo-relative paths overlap."""
     left_norm = _normalize_repo_path(left)
     right_norm = _normalize_repo_path(right)
-    return (
-        left_norm == right_norm
-        or left_norm.startswith(f"{right_norm}/")
-        or right_norm.startswith(f"{left_norm}/")
-    )
+    return left_norm == right_norm or left_norm.startswith(f"{right_norm}/") or right_norm.startswith(f"{left_norm}/")
 
 
 def _compute_overlapping_write_paths(candidate: ClaimRecord, other: ClaimRecord) -> list[str]:
@@ -1123,12 +1109,8 @@ def normalize_claim(data: dict[str, Any], *, source_file: str | None = None) -> 
         source_file=source_file,
         schema_version=schema_version,
         work_unit_id=data.get("work_unit_id") if isinstance(data.get("work_unit_id"), str) else None,
-        work_graph_path=(
-            data.get("work_graph_path") if isinstance(data.get("work_graph_path"), str) else None
-        ),
-        work_graph_sha256=(
-            data.get("work_graph_sha256") if isinstance(data.get("work_graph_sha256"), str) else None
-        ),
+        work_graph_path=(data.get("work_graph_path") if isinstance(data.get("work_graph_path"), str) else None),
+        work_graph_sha256=(data.get("work_graph_sha256") if isinstance(data.get("work_graph_sha256"), str) else None),
         approval_revisions=tuple(_safe_string_list(data.get("approval_revisions"))),
         parallel_root_authorized=data.get("parallel_root_authorized") is True,
     )
@@ -1171,14 +1153,13 @@ def unregistered_claim_files() -> list[str]:
     if not CLAIMS_DIR.exists():
         return []
     return sorted(
-        str(path)
-        for path in CLAIMS_DIR.iterdir()
-        if path.is_file() and path.suffix.lower() not in {".yaml", ".yml"}
+        str(path) for path in CLAIMS_DIR.iterdir() if path.is_file() and path.suffix.lower() not in {".yaml", ".yml"}
     )
 
 
 def _claim_filename(agent: str, project: str, scope: str) -> str:
     """Generate a deterministic filename for a claim."""
+
     def safe(value: str) -> str:
         return value.replace("/", "_").replace(" ", "_").strip("_")
 
@@ -1447,9 +1428,7 @@ def create_claim(
         if claim_path.exists():
             raw_existing = yaml.safe_load(claim_path.read_text(encoding="utf-8"))
             existing = (
-                normalize_claim(raw_existing, source_file=str(claim_path))
-                if isinstance(raw_existing, dict)
-                else None
+                normalize_claim(raw_existing, source_file=str(claim_path)) if isinstance(raw_existing, dict) else None
             )
             if existing and existing.status == SESSION_ENDED_STATUS:
                 raise ValueError(
@@ -1492,10 +1471,7 @@ def create_claim(
             session_id=candidate.session_id,
             projection_digest_after=projection_digest_after,
         )
-    return True, (
-        f"Claimed: {agent} → {project}:{scope} "
-        f"[{candidate.claim_type}] (expires in {ttl_hours}h)"
-    )
+    return True, (f"Claimed: {agent} → {project}:{scope} [{candidate.claim_type}] (expires in {ttl_hours}h)")
 
 
 def hydrate_missing_session_ids(
@@ -1654,12 +1630,7 @@ def end_session_claims(
             if not isinstance(data, dict):
                 continue
             claim = normalize_claim(data, source_file=str(claim_file))
-            if (
-                claim is None
-                or not claim.is_live()
-                or claim.agent != agent
-                or claim.session_id != resolved_session_id
-            ):
+            if claim is None or not claim.is_live() or claim.agent != agent or claim.session_id != resolved_session_id:
                 continue
             data["previous_status"] = claim.status
             data["status"] = SESSION_ENDED_STATUS
@@ -1823,9 +1794,7 @@ def prune_stale() -> tuple[int, list[str]]:
             if claim is None or not claim.is_live():
                 continue
             liveness_issues = claim_liveness_issues(claim)
-            proven_stale_liveness = [
-                issue for issue in liveness_issues if issue != "missing_session_heartbeat"
-            ]
+            proven_stale_liveness = [issue for issue in liveness_issues if issue != "missing_session_heartbeat"]
             if not (claim_lifecycle_issues(claim) or proven_stale_liveness):
                 continue
             claim_file.unlink()
@@ -1879,9 +1848,7 @@ def prune_completed() -> tuple[int, list[str]]:
                     cause=exc,
                 ) from exc
             if not isinstance(data, dict):
-                invalid_mapping = ValueError(
-                    "claim YAML must decode to a mapping"
-                )
+                invalid_mapping = ValueError("claim YAML must decode to a mapping")
                 raise CompletedClaimArchiveError(
                     error_code="invalid_completed_claim_source",
                     source_path=str(claim_file),
@@ -1889,9 +1856,7 @@ def prune_completed() -> tuple[int, list[str]]:
                 ) from invalid_mapping
             claim = normalize_claim(data, source_file=str(claim_file))
             if claim is None:
-                invalid_claim = ValueError(
-                    "claim YAML does not satisfy the claim identity contract"
-                )
+                invalid_claim = ValueError("claim YAML does not satisfy the claim identity contract")
                 raise CompletedClaimArchiveError(
                     error_code="invalid_completed_claim_source",
                     source_path=str(claim_file),
@@ -1900,13 +1865,11 @@ def prune_completed() -> tuple[int, list[str]]:
             if claim.status.strip().lower() not in COMPLETED_STATUSES:
                 continue
             try:
-                archive_receipt = (
-                    claim_mutation_receipts.build_completed_claim_archive_receipt(
-                        source_kind="live_prune",
-                        source_path=claim_file,
-                        source_bytes=source_bytes,
-                        writer=_LOADED_WRITER_IDENTITY,
-                    )
+                archive_receipt = claim_mutation_receipts.build_completed_claim_archive_receipt(
+                    source_kind="live_prune",
+                    source_path=claim_file,
+                    source_bytes=source_bytes,
+                    writer=_LOADED_WRITER_IDENTITY,
                 )
             except ValueError as exc:
                 raise CompletedClaimArchiveError(
@@ -1914,15 +1877,11 @@ def prune_completed() -> tuple[int, list[str]]:
                     source_path=str(claim_file),
                     cause=exc,
                 ) from exc
-            archive_candidates.append(
-                (claim_file, source_bytes, claim, archive_receipt)
-            )
+            archive_candidates.append((claim_file, source_bytes, claim, archive_receipt))
 
         for claim_file, _source_bytes, _claim, archive_receipt in archive_candidates:
             try:
-                claim_mutation_receipts.append_completed_claim_archive_receipt(
-                    archive_receipt
-                )
+                claim_mutation_receipts.append_completed_claim_archive_receipt(archive_receipt)
             except (OSError, ValueError) as exc:
                 raise CompletedClaimArchiveError(
                     error_code="completed_claim_archive_write_failed",
@@ -1940,9 +1899,7 @@ def prune_completed() -> tuple[int, list[str]]:
                     cause=exc,
                 ) from exc
             if current_bytes != source_bytes:
-                changed_source = ValueError(
-                    "claim source bytes changed after archive persistence and before prune"
-                )
+                changed_source = ValueError("claim source bytes changed after archive persistence and before prune")
                 raise CompletedClaimArchiveError(
                     error_code="completed_claim_source_changed_before_prune",
                     source_path=str(claim_file),
@@ -1952,9 +1909,7 @@ def prune_completed() -> tuple[int, list[str]]:
         for claim_file, source_bytes, claim, archive_receipt in archive_candidates:
             try:
                 if claim_file.read_bytes() != source_bytes:
-                    raise ValueError(
-                        "claim source bytes changed immediately before prune"
-                    )
+                    raise ValueError("claim source bytes changed immediately before prune")
             except (OSError, ValueError) as exc:
                 raise CompletedClaimArchiveError(
                     error_code="completed_claim_source_changed_before_prune",
@@ -1993,14 +1948,11 @@ def backfill_completed_claim_archive(
     observed_source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     if observed_source_sha256 != expected_source_sha256:
         raise ValueError(
-            "source SHA-256 mismatch: "
-            f"expected={expected_source_sha256} observed={observed_source_sha256}"
+            f"source SHA-256 mismatch: expected={expected_source_sha256} observed={observed_source_sha256}"
         )
 
     mutation_receipts = claim_mutation_receipts.load_receipts()
-    matching_events = [
-        event for event in mutation_receipts if event.event_id == prune_event_id
-    ]
+    matching_events = [event for event in mutation_receipts if event.event_id == prune_event_id]
     if len(matching_events) != 1:
         raise ValueError(
             "legacy completed-claim backfill requires exactly one historical prune "
@@ -2009,9 +1961,7 @@ def backfill_completed_claim_archive(
     prune_event = matching_events[0]
     if not prune_event.target_claim_path:
         raise ValueError("historical prune event is missing its target claim path")
-    historical_claim_path = Path(
-        prune_event.target_claim_path
-    ).expanduser().resolve()
+    historical_claim_path = Path(prune_event.target_claim_path).expanduser().resolve()
     receipt = claim_mutation_receipts.build_completed_claim_archive_receipt(
         source_kind="legacy_reconciliation",
         source_path=historical_claim_path,
@@ -2034,9 +1984,7 @@ def backfill_completed_claim_archive(
         receipt,
         mutation_receipts=mutation_receipts,
     )
-    _archive_path, appended = (
-        claim_mutation_receipts.append_completed_claim_archive_receipt(receipt)
-    )
+    _archive_path, appended = claim_mutation_receipts.append_completed_claim_archive_receipt(receipt)
     persisted = [
         candidate
         for candidate in claim_mutation_receipts.load_completed_claim_archive_receipts()
@@ -2044,8 +1992,7 @@ def backfill_completed_claim_archive(
     ]
     if len(persisted) != 1:
         raise ValueError(
-            "completed-claim archive did not retain exactly one validated receipt "
-            f"for archive_id={receipt.archive_id}"
+            f"completed-claim archive did not retain exactly one validated receipt for archive_id={receipt.archive_id}"
         )
     return persisted[0], appended
 
@@ -2143,11 +2090,7 @@ def _render_check_output(
     candidate: ClaimRecord | None,
 ) -> dict[str, Any]:
     """Build a structured report for list/check operations."""
-    enforcement_issues = [
-        issue
-        for claim in claims
-        for issue in claim_enforcement_issues(claim)
-    ]
+    enforcement_issues = [issue for claim in claims for issue in claim_enforcement_issues(claim)]
     payload: dict[str, Any] = {
         "project": project,
         "has_high_severity_issues": bool(enforcement_issues),
@@ -2172,9 +2115,7 @@ def _render_check_output(
         "unregistered_claim_files": unregistered_claim_files(),
     }
     if candidate is not None:
-        prospective_claims = [
-            claim for claim in claims if not _same_claim(claim, candidate)
-        ] + [candidate]
+        prospective_claims = [claim for claim in claims if not _same_claim(claim, candidate)] + [candidate]
         payload["check"] = {
             **evaluate_claim(candidate, active_claims=claims).to_dict(),
             "candidate_health_status": claim_runtime_status(
@@ -2249,10 +2190,7 @@ def main(argv: list[str] | None = None) -> int:
             print("No active claims.")
             return 0
         for claim in claims:
-            print(
-                f"  [{claim.agent}] {claim.primary_project()}:{claim.scope} "
-                f"[{claim.claim_type}] — {claim.intent}"
-            )
+            print(f"  [{claim.agent}] {claim.primary_project()}:{claim.scope} [{claim.claim_type}] — {claim.intent}")
             print(f"    expires: {claim.expires_at}")
             if claim.write_paths:
                 print(f"    write_paths: {', '.join(claim.write_paths)}")
@@ -2293,10 +2231,7 @@ def main(argv: list[str] | None = None) -> int:
             print("No active claims.")
             return 0
         for claim in claims:
-            print(
-                f"  [{claim.agent}] {claim.primary_project()}:{claim.scope} "
-                f"[{claim.claim_type}] — {claim.intent}"
-            )
+            print(f"  [{claim.agent}] {claim.primary_project()}:{claim.scope} [{claim.claim_type}] — {claim.intent}")
         return 0
 
     if args.claim:
@@ -2431,11 +2366,7 @@ def main(argv: list[str] | None = None) -> int:
             "ok": True,
             "archive_id": receipt.archive_id,
             "receipt_sha256": receipt.receipt_sha256,
-            "archive_path": str(
-                claim_mutation_receipts.DEFAULT_COMPLETED_CLAIM_ARCHIVE_PATH
-                .expanduser()
-                .resolve()
-            ),
+            "archive_path": str(claim_mutation_receipts.DEFAULT_COMPLETED_CLAIM_ARCHIVE_PATH.expanduser().resolve()),
             "appended": appended,
             "source_kind": receipt.source_kind,
             "prune_event_id": receipt.prune_binding.mutation_event_id,
@@ -2444,10 +2375,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             action = "appended" if appended else "already present"
-            print(
-                "Completed-claim archive receipt "
-                f"{receipt.archive_id} {action} at {payload['archive_path']}"
-            )
+            print(f"Completed-claim archive receipt {receipt.archive_id} {action} at {payload['archive_path']}")
         return 0
 
     if args.hydrate_session_ids:

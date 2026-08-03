@@ -17,6 +17,7 @@ import hashlib
 import inspect
 import json
 import os
+import shlex
 import sys
 import tempfile
 import uuid
@@ -150,6 +151,15 @@ class PollMessagesRequest(StrictContract):
     project: str | None = Field(default=None, min_length=1, description="Optional exact project filter.")
     include_expired: bool = Field(default=False, description="Whether expired messages remain in the returned view.")
     observe: bool = Field(default=False, description="Whether returned active messages emit observation receipts.")
+    delivery_event_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        description=(
+            "Optional adapter-derived identity for one native lifecycle event. "
+            "When present, the same message is visible at most once for that event."
+        ),
+    )
 
 
 class AcknowledgeMessageRequest(StrictContract):
@@ -238,7 +248,6 @@ class MessageReceipt(StrictContract):
         max_length=MAX_NOTE_LENGTH,
         description="Optional bounded recipient note.",
     )
-
     @model_validator(mode="after")
     def validate_acknowledgement_fields(self) -> MessageReceipt:
         """Prevent weaker receipt classes from carrying acknowledgement claims."""
@@ -284,6 +293,73 @@ class StoredReceiptRecord(StrictContract):
         return self
 
 
+class DeliveryEventRecord(StrictContract):
+    """Immutable duplicate-suppression marker for one displayed lifecycle event."""
+
+    schema_version: Literal["1.0"] = Field(description="Portable delivery-marker schema version.")
+    delivery_id: str = Field(pattern=r"^delivery_[0-9a-f]{32}$", description="Deterministic marker identity.")
+    delivery_event_id: str = Field(min_length=1, description="Adapter-derived native lifecycle-event identity.")
+    message_id: str = Field(pattern=r"^msg_[0-9a-f]{32}$", description="Message displayed for this event.")
+    recipient_session_id: str = Field(
+        min_length=1,
+        description="Exact session shown the message or sender-facing acknowledgement notification.",
+    )
+    recorded_at: AwareDatetime = Field(description="UTC marker publication time.")
+
+
+class StoredDeliveryEventRecord(StrictContract):
+    """Integrity envelope for one lifecycle duplicate-suppression marker."""
+
+    record_type: Literal["mailbox_delivery_event"] = Field(description="Discriminator for delivery-marker storage.")
+    payload: DeliveryEventRecord = Field(description="Strict immutable delivery-marker payload.")
+    payload_sha256: str = Field(pattern=r"^[0-9a-f]{64}$", description="Digest of canonical marker payload JSON.")
+
+    @model_validator(mode="after")
+    def validate_digest(self) -> StoredDeliveryEventRecord:
+        """Reject marker bytes whose payload no longer matches its digest."""
+
+        if self.payload_sha256 != _model_digest(self.payload):
+            raise ValueError("delivery marker payload_sha256 mismatch")
+        return self
+
+
+class BoundaryBlockRecord(StrictContract):
+    """Immutable evidence that active mailbox debt denied one lifecycle boundary."""
+
+    schema_version: Literal["1.0"] = Field(description="Portable boundary-record schema version.")
+    boundary_id: str = Field(pattern=r"^boundary_[0-9a-f]{32}$", description="Deterministic record identity.")
+    message_id: str = Field(pattern=r"^msg_[0-9a-f]{32}$", description="Active message causing the denial.")
+    recipient_session_id: str = Field(min_length=1, description="Exact session whose boundary was denied.")
+    hook_event_name: Literal["PreToolUse", "Stop"] = Field(description="Denied native lifecycle boundary.")
+    delivery_event_id: str = Field(min_length=1, max_length=500, description="Native callback identity.")
+    tool_name: str | None = Field(default=None, min_length=1, max_length=500)
+    recorded_at: AwareDatetime = Field(description="UTC time at which denial evidence was appended.")
+
+    @model_validator(mode="after")
+    def validate_tool_boundary(self) -> BoundaryBlockRecord:
+        """Only a tool boundary may retain a tool name."""
+
+        if self.hook_event_name == "Stop" and self.tool_name is not None:
+            raise ValueError("Stop boundary records cannot carry tool_name")
+        return self
+
+
+class StoredBoundaryBlockRecord(StrictContract):
+    """Integrity envelope for one immutable mailbox boundary denial."""
+
+    record_type: Literal["mailbox_boundary_block"] = Field(description="Boundary-record discriminator.")
+    payload: BoundaryBlockRecord
+    payload_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_digest(self) -> StoredBoundaryBlockRecord:
+        """Reject boundary bytes whose payload no longer matches its digest."""
+
+        if self.payload_sha256 != _model_digest(self.payload):
+            raise ValueError("boundary block payload_sha256 mismatch")
+        return self
+
+
 class MessageStatusView(StrictContract):
     """Derived lifecycle view computed from immutable message and receipts."""
 
@@ -325,6 +401,14 @@ class MessagePollResult(StrictContract):
     observation_receipt_paths: tuple[str, ...] = Field(
         description="Evidence paths aligned one-to-one with observation_receipts."
     )
+    delivery_event_id: str | None = Field(
+        default=None,
+        description="Lifecycle event identity used for duplicate suppression, when supplied by an adapter.",
+    )
+    suppressed_message_ids: tuple[str, ...] = Field(
+        default=(),
+        description="Messages withheld because another adapter already displayed them for this exact lifecycle event.",
+    )
 
 
 class AcknowledgementResult(StrictContract):
@@ -334,15 +418,28 @@ class AcknowledgementResult(StrictContract):
     receipt_path: str = Field(min_length=1, description="Evidence path to the canonical acknowledgement receipt.")
     status: MessageStatusView = Field(description="Status projected after appending the receipt.")
     idempotent_replay: bool = Field(description="Whether an identical receipt already existed.")
+    acknowledgement_latency_seconds: float = Field(
+        ge=0,
+        description="Elapsed time from message creation to the durable acknowledgement receipt.",
+    )
 
 
 class SessionInboxNotice(StrictContract):
     """Compact agent-facing projection of one lifecycle mailbox poll."""
 
     session_id: str = Field(min_length=1, description="Canonical session identity whose inbox was polled.")
-    project: str = Field(min_length=1, description="Project filter applied to the poll.")
+    project: str | None = Field(default=None, min_length=1, description="Optional exact project filter applied to the poll.")
     active_count: int = Field(ge=0, description="Number of non-expired messages visible to the session.")
     message_ids: tuple[str, ...] = Field(description="Canonical active message IDs in creation order.")
+    acknowledgement_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of newly surfaced acknowledgements for messages sent by this session.",
+    )
+    acknowledgement_message_ids: tuple[str, ...] = Field(
+        default=(),
+        description="Sent message IDs whose acknowledgements were newly surfaced.",
+    )
     summary: str = Field(description="Bounded text suitable for injection into an agent lifecycle response.")
 
 
@@ -396,6 +493,8 @@ class CoordinationMessageStore:
         self.claims_dir = claims_dir.expanduser().resolve()
         self.messages_dir = self.root / "messages"
         self.receipts_dir = self.root / "receipts"
+        self.deliveries_dir = self.root / "deliveries"
+        self.boundary_blocks_dir = self.root / "boundary-blocks"
         self.quarantine_dir = self.root / "quarantine"
 
     def _live_claims(self, project: str | None = None) -> list[coordination_claims.ClaimRecord]:
@@ -474,6 +573,15 @@ class CoordinationMessageStore:
             return self._quarantine(path, str(exc))
         return record.payload
 
+    def _read_delivery_path(self, path: Path) -> DeliveryEventRecord:
+        """Validate one marker before treating an event as already delivered."""
+
+        try:
+            record = StoredDeliveryEventRecord.model_validate_json(path.read_bytes())
+        except (OSError, ValidationError, ValueError) as exc:
+            return self._quarantine(path, str(exc))
+        return record.payload
+
     def _write_immutable(self, path: Path, payload: bytes) -> bool:
         """Atomically publish immutable bytes without overwriting an existing identifier."""
 
@@ -529,6 +637,98 @@ class CoordinationMessageStore:
         if comparable_existing != receipt:
             raise RecordCollisionError(f"Receipt ID {receipt.receipt_id} already contains different content")
         return path, True
+
+    def _claim_event_delivery(
+        self,
+        message: CoordinationMessage,
+        *,
+        display_session_id: str | None = None,
+        delivery_event_id: str,
+        now: datetime,
+    ) -> bool:
+        """Atomically reserve one agent-visible delivery for a native event.
+
+        This marker is intentionally weaker than an observation receipt: it
+        proves only that one adapter won the right to render the message for
+        this exact event. It never acknowledges work and a different event ID
+        may display the still-unacknowledged message again.
+        """
+
+        display_session = display_session_id or message.recipient_session_id
+        delivery_id = _stable_id("delivery", message.message_id, display_session, delivery_event_id)
+        marker = DeliveryEventRecord(
+            schema_version=SCHEMA_VERSION,
+            delivery_id=delivery_id,
+            delivery_event_id=delivery_event_id,
+            message_id=message.message_id,
+            recipient_session_id=display_session,
+            recorded_at=now,
+        )
+        path = self.deliveries_dir / f"{delivery_id}.json"
+        record = StoredDeliveryEventRecord(
+            record_type="mailbox_delivery_event",
+            payload=marker,
+            payload_sha256=_model_digest(marker),
+        )
+        encoded = _canonical_json(record.model_dump(mode="json")) + b"\n"
+        if self._write_immutable(path, encoded):
+            return True
+        existing = self._read_delivery_path(path)
+        comparable_existing = existing.model_copy(update={"recorded_at": marker.recorded_at})
+        if comparable_existing != marker:
+            raise RecordCollisionError(f"Delivery marker {delivery_id} already contains different content")
+        return False
+
+    def poll_sender_acknowledgements(
+        self,
+        *,
+        current_session_id: str,
+        project: str | None = None,
+        consume: bool = True,
+        limit: int = DEFAULT_NOTICE_MESSAGE_LIMIT,
+        now: datetime | None = None,
+    ) -> tuple[MessageStatusView, ...]:
+        """Return acknowledgements not yet surfaced to the exact sender session.
+
+        A sender notification is a derived view over the canonical acknowledgement
+        receipt.  Consuming it writes only an immutable delivery marker, so it
+        cannot create a reply message or an acknowledgement loop.
+        """
+
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        recorded_at = now or _utc_now()
+        pending: list[MessageStatusView] = []
+        for message, _path in self._all_messages():
+            if message.sender_session_id != current_session_id:
+                continue
+            if project is not None and message.project != project:
+                continue
+            status = self.status(MessageStatusRequest(message_id=message.message_id, as_of=recorded_at))
+            acknowledgements = [receipt for receipt in status.receipts if receipt.event == "acknowledged"]
+            if not acknowledgements:
+                continue
+            acknowledgement = acknowledgements[-1]
+            delivery_event_id = f"acknowledgement:{acknowledgement.receipt_id}"
+            if consume:
+                claimed = self._claim_event_delivery(
+                    message,
+                    display_session_id=current_session_id,
+                    delivery_event_id=delivery_event_id,
+                    now=recorded_at,
+                )
+                if not claimed:
+                    continue
+            else:
+                delivery_id = _stable_id("delivery", message.message_id, current_session_id, delivery_event_id)
+                marker_path = self.deliveries_dir / f"{delivery_id}.json"
+                if marker_path.is_file():
+                    self._read_delivery_path(marker_path)
+                    continue
+            pending.append(status)
+            if len(pending) >= limit:
+                break
+        return tuple(pending)
 
     def _message(self, message_id: str) -> tuple[CoordinationMessage, Path]:
         """Load one canonical message or fail when it is absent."""
@@ -632,6 +832,78 @@ class CoordinationMessageStore:
         path, idempotent = self._store_receipt(receipt)
         return (self._read_receipt_path(path) if idempotent else receipt), path
 
+    def record_boundary_block(
+        self,
+        *,
+        current_session_id: str,
+        message_ids: tuple[str, ...],
+        hook_event_name: Literal["PreToolUse", "Stop"],
+        delivery_event_id: str,
+        tool_name: str | None = None,
+        now: datetime | None = None,
+    ) -> tuple[BoundaryBlockRecord, ...]:
+        """Append idempotent evidence that active mailbox debt denied a boundary."""
+
+        recorded_at = now or _utc_now()
+        records: list[BoundaryBlockRecord] = []
+        for message_id in message_ids:
+            message, _path = self._message(message_id)
+            if message.recipient_session_id != current_session_id:
+                raise WrongRecipientError(
+                    f"Session {current_session_id!r} cannot record a boundary for {message.recipient_session_id!r}"
+                )
+            status = self.status(MessageStatusRequest(message_id=message_id, as_of=recorded_at))
+            if status.expired or status.acknowledged:
+                continue
+            boundary = BoundaryBlockRecord(
+                schema_version=SCHEMA_VERSION,
+                boundary_id=_stable_id(
+                    "boundary",
+                    message_id,
+                    current_session_id,
+                    hook_event_name,
+                    delivery_event_id,
+                ),
+                message_id=message_id,
+                recipient_session_id=current_session_id,
+                hook_event_name=hook_event_name,
+                delivery_event_id=delivery_event_id,
+                tool_name=tool_name,
+                recorded_at=recorded_at,
+            )
+            path = self.boundary_blocks_dir / f"{boundary.boundary_id}.json"
+            stored = StoredBoundaryBlockRecord(
+                record_type="mailbox_boundary_block",
+                payload=boundary,
+                payload_sha256=_model_digest(boundary),
+            )
+            encoded = _canonical_json(stored.model_dump(mode="json")) + b"\n"
+            if not self._write_immutable(path, encoded):
+                existing = StoredBoundaryBlockRecord.model_validate_json(path.read_bytes()).payload
+                comparable_existing = existing.model_copy(update={"recorded_at": recorded_at})
+                if comparable_existing != boundary:
+                    raise RecordCollisionError(
+                        f"Boundary record {boundary.boundary_id} already contains different content"
+                    )
+                boundary = existing
+            records.append(boundary)
+        return tuple(records)
+
+    def boundary_blocks(self, message_id: str) -> tuple[BoundaryBlockRecord, ...]:
+        """Return validated boundary-denial evidence for one message in time order."""
+
+        if not self.boundary_blocks_dir.exists():
+            return ()
+        records: list[BoundaryBlockRecord] = []
+        for path in sorted(self.boundary_blocks_dir.glob("*.json")):
+            try:
+                record = StoredBoundaryBlockRecord.model_validate_json(path.read_bytes()).payload
+            except (OSError, ValidationError, ValueError) as exc:
+                self._quarantine(path, str(exc))
+            if record.message_id == message_id:
+                records.append(record)
+        return tuple(sorted(records, key=lambda item: (item.recorded_at, item.boundary_id)))
+
     def status(self, request: MessageStatusRequest) -> MessageStatusView:
         """Derive lifecycle state from one immutable message and exact receipt set."""
 
@@ -700,10 +972,19 @@ class CoordinationMessageStore:
         observations: list[MessageReceipt] = []
         observation_paths: list[str] = []
         views: list[MessageStatusView] = []
+        suppressed_message_ids: list[str] = []
         for message in selected:
             before = self.status(MessageStatusRequest(message_id=message.message_id, as_of=as_of))
             if before.expired and not request.include_expired:
                 continue
+            if request.delivery_event_id is not None and not before.acknowledged:
+                if not self._claim_event_delivery(
+                    message,
+                    delivery_event_id=request.delivery_event_id,
+                    now=as_of,
+                ):
+                    suppressed_message_ids.append(message.message_id)
+                    continue
             if request.observe and not before.expired and not before.observed:
                 observation, observation_path = self._append_observation(message, now=as_of)
                 observations.append(observation)
@@ -714,6 +995,8 @@ class CoordinationMessageStore:
             messages=tuple(views),
             observation_receipts=tuple(observations),
             observation_receipt_paths=tuple(observation_paths),
+            delivery_event_id=request.delivery_event_id,
+            suppressed_message_ids=tuple(suppressed_message_ids),
         )
 
     def acknowledge(
@@ -757,6 +1040,10 @@ class CoordinationMessageStore:
             receipt_path=str(path),
             status=status,
             idempotent_replay=idempotent,
+            acknowledgement_latency_seconds=max(
+                0.0,
+                (receipt.recorded_at - message.created_at).total_seconds(),
+            ),
         )
 
 
@@ -769,21 +1056,25 @@ def default_message_root(claims_dir: Path | None = None) -> Path:
 def poll_session_inbox(
     *,
     agent: str,
-    project: str,
+    project: str | None,
     session_id: str | None = None,
     observe: bool = True,
     claims_dir: Path | None = None,
     root: Path | None = None,
     max_body_chars: int = DEFAULT_NOTICE_BODY_LENGTH,
     max_messages: int = DEFAULT_NOTICE_MESSAGE_LIMIT,
+    delivery_event_id: str | None = None,
     require_live_claim: bool = True,
 ) -> SessionInboxNotice:
-    """Resolve one live agent session and return an agent-visible mailbox notice.
+    """Resolve one native session and return an agent-visible mailbox notice.
 
     Native lifecycle adapters may set ``require_live_claim=False`` because the
-    client event supplies the exact current session identity. Observation
-    evidence still means the notice reached an agent-facing command result, not
-    merely that a background process scanned storage.
+    client event supplies the exact current session identity. They may also omit
+    ``project`` when a workspace-level current directory has no repository
+    context; the exact native session identity still confines the poll to that
+    session's inbox, including messages retained after a claim closes.
+    Observation evidence still means the notice reached an agent-facing command
+    result, not merely that a background process scanned storage.
     """
 
     if max_body_chars < 1 or max_messages < 1:
@@ -804,15 +1095,24 @@ def poll_session_inbox(
             current_session_id=resolved_session_id,
             project=project,
             observe=observe,
+            delivery_event_id=delivery_event_id,
         ),
         require_live_claim=require_live_claim,
     )
     active = tuple(
         view for view in result.messages if not view.expired and not view.acknowledged
     )
+    acknowledgements = store.poll_sender_acknowledgements(
+        current_session_id=resolved_session_id,
+        project=project,
+        consume=observe,
+        limit=max_messages,
+    )
+    summary_parts: list[str] = []
     if active:
         displayed = active[:max_messages]
         rendered_messages: list[str] = []
+        acknowledgement_commands: list[str] = []
         for view in displayed:
             content = view.message.body or f"content_ref={view.message.content_ref}"
             compact_content = " ".join(content.split())
@@ -822,17 +1122,61 @@ def poll_session_inbox(
                 f"{view.message.message_id} [{view.message.kind}] "
                 f"{view.message.subject}: {compact_content}"
             )
+            acknowledgement_request = json.dumps(
+                {
+                    "current_session_id": resolved_session_id,
+                    "message_id": view.message.message_id,
+                    "disposition": "<accepted|declined|deferred|information_only>",
+                    "note": "<what you did, why you deferred, or why no action is needed>",
+                },
+                separators=(",", ":"),
+            )
+            acknowledgement_commands.append(
+                "python scripts/meta/coordination_messages.py acknowledge "
+                f"--request-json {shlex.quote(acknowledgement_request)}"
+            )
         details = "; ".join(rendered_messages)
         remainder = len(active) - len(displayed)
         suffix = f"; {remainder} more not shown" if remainder else ""
-        summary = f"coordination mailbox: {len(active)} active message(s): {details}{suffix}"
+        summary_parts.extend(
+            (
+                "ACKNOWLEDGEMENT REQUIRED. DO NOT pass the next natural work "
+                "boundary until every displayed message has a truthful durable "
+                "disposition",
+                f"{len(active)} active message(s): {details}{suffix}",
+                "Acknowledge each displayed message by replacing the disposition "
+                "and note placeholders in its command: "
+                + " ; ".join(acknowledgement_commands),
+                "This notice will repeat until acknowledgement is recorded.",
+            )
+        )
     else:
-        summary = "coordination mailbox: no active messages"
+        summary_parts.append("no active messages")
+    if acknowledgements:
+        rendered_acknowledgements: list[str] = []
+        for view in acknowledgements:
+            acknowledgement = next(
+                receipt for receipt in reversed(view.receipts) if receipt.event == "acknowledged"
+            )
+            detail = acknowledgement.note or acknowledgement.response_ref or "no note"
+            compact_detail = " ".join(detail.split())
+            if len(compact_detail) > max_body_chars:
+                compact_detail = compact_detail[: max_body_chars - 1] + "…"
+            rendered_acknowledgements.append(
+                f"{view.message.message_id} [{acknowledgement.disposition}]: {compact_detail}"
+            )
+        summary_parts.append(
+            f"{len(acknowledgements)} new acknowledgement(s): "
+            + "; ".join(rendered_acknowledgements)
+        )
+    summary = "coordination mailbox: " + "; ".join(summary_parts)
     return SessionInboxNotice(
         session_id=resolved_session_id,
         project=project,
         active_count=len(active),
         message_ids=tuple(view.message.message_id for view in active[:max_messages]),
+        acknowledgement_count=len(acknowledgements),
+        acknowledgement_message_ids=tuple(view.message.message_id for view in acknowledgements),
         summary=summary,
     )
 

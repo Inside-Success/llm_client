@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -34,6 +35,40 @@ _bootstrap_package()
 from enforced_planning import session_lifecycle  # noqa: E402
 
 
+def _supported_start_kwargs(args: argparse.Namespace) -> dict[str, object]:
+    """Retain compatibility with a target's older local lifecycle contract."""
+
+    kwargs: dict[str, object] = {
+        "agent": args.agent,
+        "project": args.project,
+        "scope": args.scope,
+        "intent": args.intent,
+        "repo_root": args.repo_root,
+        "worktree_path": args.worktree_path,
+        "branch": args.branch,
+        "broader_goal": args.broader_goal,
+        "current_phase": args.current_phase,
+        "plan_ref": args.plan,
+        "allow_unplanned": args.allow_unplanned,
+        "allow_parallel": args.allow_parallel,
+        "session_id": args.session_id,
+        "session_name": args.session_name,
+        "claim_type": args.claim_type,
+        "parent_scope": args.parent_scope,
+        "write_paths": args.write_path or None,
+        "read_paths": args.read_path or None,
+        "work_graph_path": args.work_graph,
+        "work_unit_id": args.work_unit_id,
+        "intended_next_phases": args.next_phase,
+        "depends_on_repos": args.depends_on,
+        "requires_shared_infra_changes": args.requires_shared_infra_changes,
+        "stop_conditions": args.stop_condition,
+        "notes": args.notes,
+    }
+    supported = inspect.signature(session_lifecycle.start_session).parameters
+    return {name: value for name, value in kwargs.items() if name in supported}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse the complete session-start contract without hidden defaults."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -55,6 +90,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--parent-scope")
     parser.add_argument("--write-path", action="append", default=[])
     parser.add_argument("--read-path", action="append", default=[])
+    parser.add_argument("--work-graph")
+    parser.add_argument("--work-unit-id")
     parser.add_argument("--next-phase", action="append", default=[])
     parser.add_argument("--depends-on", action="append", default=[])
     parser.add_argument("--stop-condition", action="append", default=[])
@@ -67,31 +104,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """Start the session and expose its initial mailbox state."""
     args = parse_args(argv)
-    payload = session_lifecycle.start_session(
-        agent=args.agent,
-        project=args.project,
-        scope=args.scope,
-        intent=args.intent,
-        repo_root=args.repo_root,
-        worktree_path=args.worktree_path,
-        branch=args.branch,
-        broader_goal=args.broader_goal,
-        current_phase=args.current_phase,
-        plan_ref=args.plan,
-        allow_unplanned=args.allow_unplanned,
-        allow_parallel=args.allow_parallel,
-        session_id=args.session_id,
-        session_name=args.session_name,
-        claim_type=args.claim_type,
-        parent_scope=args.parent_scope,
-        write_paths=args.write_path or None,
-        read_paths=args.read_path or None,
-        intended_next_phases=args.next_phase,
-        depends_on_repos=args.depends_on,
-        requires_shared_infra_changes=args.requires_shared_infra_changes,
-        stop_conditions=args.stop_condition,
-        notes=args.notes,
-    )
+    payload = session_lifecycle.start_session(**_supported_start_kwargs(args))
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:

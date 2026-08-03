@@ -68,6 +68,12 @@ def build_candidate_claim(**kwargs: Any) -> ClaimRecord:
     return _impl.build_candidate_claim(**kwargs)
 
 
+def validate_native_session_binding(agent: str, session_id: str | None) -> None:
+    """Expose native runtime/session binding through the legacy facade."""
+
+    _impl.validate_native_session_binding(agent, session_id)
+
+
 def claim_health_issues(claim: ClaimRecord) -> list[str]:
     """Expose claim health diagnostics through the legacy script surface."""
     return _impl.claim_health_issues(claim)
@@ -106,6 +112,12 @@ def claim_runtime_status(
 ) -> str:
     """Expose combined stale/weak/healthy runtime classification."""
     return _impl.claim_runtime_status(claim, active_claims=active_claims)
+
+
+def claim_enforcement_issues(claim: ClaimRecord) -> list[dict[str, str]]:
+    """Expose blocking merged-ownership diagnostics through the legacy script surface."""
+
+    return _impl.claim_enforcement_issues(claim)
 
 
 def claim_liveness_issues(claim: ClaimRecord, *, now: Any | None = None) -> list[str]:
