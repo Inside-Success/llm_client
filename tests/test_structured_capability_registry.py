@@ -16,7 +16,11 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from llm_client.core.models import _reset_config, supports_structured_output
+from llm_client.core.models import (
+    _reset_config,
+    supports_native_structured_output,
+    supports_structured_output,
+)
 from llm_client.execution.structured_runtime import _model_supports_native_schema
 
 
@@ -70,21 +74,55 @@ class TestSupportsStructuredOutput:
         """The packaged registry declares the model litellm's map lags on."""
         assert supports_structured_output("openrouter/deepseek/deepseek-v4-flash") is True
         assert supports_structured_output("openrouter/minimax/minimax-m3") is True
-        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is True
 
     def test_observed_direct_gpt_routes_advertise_native_schema_support(self):
         """Responses API evidence overrides the failed OpenRouter proxy probe."""
-        assert supports_structured_output("gpt-5.5") is True
-        assert supports_structured_output("openrouter/openai/gpt-5.5") is True
         assert supports_structured_output("gpt-5.6") is True
         assert supports_structured_output("gpt-5.6-terra") is True
+
+
+class TestSupportsNativeStructuredOutput:
+    def test_explicit_native_capability_is_distinct_from_typed_output(self, tmp_path):
+        cfg = _write_config(
+            tmp_path,
+            [
+                {
+                    **_BASE,
+                    "litellm_id": "openrouter/x/native",
+                    "structured_output": True,
+                    "native_structured_output": True,
+                },
+                {
+                    **_BASE,
+                    "litellm_id": "openrouter/x/fallback-only",
+                    "structured_output": True,
+                    "native_structured_output": False,
+                },
+            ],
+        )
+        with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
+            assert supports_native_structured_output("openrouter/x/native") is True
+            assert supports_native_structured_output("openrouter/x/fallback-only") is False
+
+    def test_omitted_native_capability_inherits_structured_output(self, tmp_path):
+        cfg = _write_config(
+            tmp_path,
+            [{**_BASE, "litellm_id": "openrouter/x/legacy", "structured_output": True}],
+        )
+        with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
+            assert supports_native_structured_output("openrouter/x/legacy") is True
+
+    def test_packaged_luna_route_is_native(self):
+        assert supports_native_structured_output(
+            "openrouter/openai/gpt-5.6-luna"
+        ) is True
 
 
 class TestModelSupportsNativeSchema:
     def test_observed_direct_gpt_routes_use_registry_capability(self):
         """Known direct routes do not depend on LiteLLM's fallback capability map."""
         with patch("litellm.supports_response_schema") as litellm_map:
-            assert _model_supports_native_schema("gpt-5.5") is True
             assert _model_supports_native_schema("gpt-5.6") is True
             assert _model_supports_native_schema("gpt-5.6-terra") is True
             litellm_map.assert_not_called()
