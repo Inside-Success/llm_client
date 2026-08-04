@@ -12,6 +12,7 @@ import pytest
 
 from llm_client.core.client import _prepare_call_kwargs, _prepare_responses_kwargs
 from llm_client.core.errors import DeprecatedModelError
+from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
 
 
 def test_prepare_call_kwargs_strips_internal_runtime_objects() -> None:
@@ -334,6 +335,38 @@ def test_openrouter_responses_requests_inline_route_metadata() -> None:
     )
 
     assert call_kwargs["extra_headers"] == {"X-OpenRouter-Metadata": "enabled"}
+
+
+def test_openrouter_completion_and_responses_share_response_cache_policy() -> None:
+    policy = OpenRouterRoutePolicyV1(
+        response_cache_mode="enabled",
+        response_cache_ttl_seconds=600,
+    )
+    completion_kwargs = _prepare_call_kwargs(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={"openrouter_route_policy": policy},
+    )
+    responses_kwargs = _prepare_responses_kwargs(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={"openrouter_route_policy": policy},
+    )
+
+    expected = {
+        "X-OpenRouter-Cache": "true",
+        "X-OpenRouter-Cache-TTL": "600",
+        "X-OpenRouter-Metadata": "enabled",
+    }
+    assert completion_kwargs["extra_headers"] == expected
+    assert responses_kwargs["extra_headers"] == expected
 
 
 def test_direct_gpt56_terra_forwards_max_reasoning() -> None:

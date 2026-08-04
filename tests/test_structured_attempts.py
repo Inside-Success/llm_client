@@ -48,8 +48,7 @@ def _isolated_observability(tmp_path: Path):
     io_log._db_path = tmp_path / "attempts.db"
     io_log._db_conn = None
     yield
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     (
         io_log._enabled,
         io_log._data_root,
@@ -244,8 +243,7 @@ def test_old_attempt_table_migrates_additive_execution_error_column(
 ) -> None:
     """A Slice-1 database remains readable after the v2 lifecycle migration."""
 
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     old_db = tmp_path / "old-attempts.db"
     with sqlite3.connect(old_db) as db:
         db.execute(
@@ -346,6 +344,87 @@ def test_sync_timeout_attempt_is_visible_before_retry_success(
     assert result.cost == pytest.approx(0.002)
     assert result.marginal_cost == pytest.approx(0.002)
     assert result.cost_covers_all_attempts is False
+
+
+# mock-ok: exact provider failure envelope is controlled; retry and SQLite are real.
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.completion")
+def test_remote_disconnect_redispatches_with_distinct_attempt_ordinal(
+    mock_completion: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The observed OpenRouter disconnect consumes one bounded retry."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.side_effect = [
+        Exception(
+            "APIError: OpenrouterException - Server disconnected without sending a response"
+        ),
+        _native_response(
+            '{"action":"answer","rationale":"Retry completed."}',
+            provider_cost=0.002,
+        ),
+    ]
+
+    parsed, _result = call_llm_structured(
+        "deepseek/deepseek-chat",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-sync-remote-disconnect-retry",
+        max_budget=0,
+        num_retries=1,
+        base_delay=0,
+    )
+
+    assert parsed.rationale == "Retry completed."
+    assert mock_completion.call_count == 2
+    assert _history_for_trace("trace-sync-remote-disconnect-retry") == [
+        (0, "started"),
+        (0, "execution_failed"),
+        (0, "recovery_decided"),
+        (1, "started"),
+        (1, "received"),
+        (1, "validated"),
+    ]
+
+
+# mock-ok: permanent provider failure is controlled; terminal retry policy and SQLite are real.
+@patch("llm_client.core.client.litellm.completion")
+def test_permanent_quota_failure_does_not_redispatch(
+    mock_completion: MagicMock,
+) -> None:
+    """Permanent quota exhaustion remains a one-dispatch terminal."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    mock_completion.side_effect = Exception(
+        "HTTP 429: insufficient_quota; check plan and billing details"
+    )
+
+    with pytest.raises(LLMError, match="insufficient_quota"):
+        call_llm_structured(
+            "deepseek/deepseek-chat",
+            [{"role": "user", "content": "Choose"}],
+            response_model=Decision,
+            task="planner",
+            trace_id="trace-sync-permanent-quota",
+            max_budget=0,
+            num_retries=2,
+            base_delay=0,
+        )
+
+    assert mock_completion.call_count == 1
+    assert _history_for_trace("trace-sync-permanent-quota") == [
+        (0, "started"),
+        (0, "execution_failed"),
+        (0, "recovery_decided"),
+    ]
 
 
 # mock-ok: provider failures/responses are controlled; fallback policy and SQLite are real.

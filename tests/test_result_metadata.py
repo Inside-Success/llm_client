@@ -79,6 +79,19 @@ def test_merge_warning_records_deduplicates_warning_messages_and_extra_records()
     ]
 
 
+def test_warning_record_from_coerced_parameter_is_durable() -> None:
+    """A provider-parameter omission is visible to machine consumers."""
+    record = warning_record_from_message(
+        "COERCE_PARAMS model=openrouter/openai/gpt-5.6-luna "
+        "policy=coerce_and_warn removed=temperature "
+        "rule=openrouter_luna_native_schema_compatibility"
+    )
+
+    assert record is not None
+    assert record["code"] == "LLMC_WARN_PARAMETER_OMITTED"
+    assert record["field_path"] == "temperature"
+
+
 def test_annotate_result_identity_sets_identity_and_merges_warning_records() -> None:
     """Result identity stamping should preserve existing warnings and metadata."""
     result = LLMCallResult(

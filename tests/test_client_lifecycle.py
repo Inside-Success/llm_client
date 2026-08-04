@@ -22,7 +22,11 @@ import llm_client.io_log as io_log
 import llm_client.execution.timeout_policy as timeout_policy
 from llm_client.core.data_types import LLMCallResult
 from llm_client.core.errors import LLMBudgetExceededError, LLMTransientError
-from llm_client.observability import get_budget_scope_snapshot
+from llm_client.observability import (
+    ObservedRun,
+    get_budget_scope_snapshot,
+    get_observed_run,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -49,8 +53,7 @@ def _isolate_io_log(tmp_path: Path):
     io_log._data_root = old_root
     io_log._project = old_project
     io_log._db_path = old_db_path
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     io_log._db_conn = old_db_conn
     io_log._last_cleanup_date = old_last_cleanup
 
@@ -236,6 +239,7 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
         task="test.lifecycle",
         trace_id="trace.lifecycle.sync",
         max_budget=0.1,
+        logical_timeout=12,
         lifecycle_heartbeat_interval_s=0,
         lifecycle_stall_after_s=0,
     )
@@ -250,9 +254,200 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
         "completed",
     ]
     completed = rows[-1][1]["llm_call_lifecycle"]
+    assert rows[0][1]["llm_call_lifecycle"]["logical_timeout_s"] == 12
+    assert completed["logical_timeout_s"] == 12
     assert completed["progress_observable"] is True
     assert completed["progress_source"] == "unit_test"
     assert completed["progress_event_count"] == 1
+
+
+def test_public_structured_call_is_joinable_to_observed_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real public wrapper must leave a child lifecycle under its outer run."""
+
+    def _fake_impl(
+        model: str,
+        messages: list[dict[str, Any]],
+        response_model: type[BaseModel],
+        **kwargs: Any,
+    ) -> tuple[BaseModel, LLMCallResult]:
+        parsed = response_model(label="ok")
+        return parsed, LLMCallResult(
+            content=parsed.model_dump_json(),
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            cost=0.0,
+            model=model,
+            resolved_model=model,
+            finish_reason="stop",
+            raw_response={"ok": True},
+            warnings=[],
+            cost_source="computed",
+        )
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+
+    with ObservedRun(
+        project="test_project",
+        operation="structured_contract",
+        executable="tests/test_client_lifecycle.py",
+        run_id="run_public_join",
+        root_trace_id="trace.outer",
+        requested_model="gemini/gemini-2.5-flash",
+        max_budget=0.1,
+    ) as run:
+        client.call_llm_structured(
+            "gemini/gemini-2.5-flash",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.join",
+            trace_id=run.child_trace_id("structured"),
+            max_budget=0.1,
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    record = get_observed_run(run.run_id)
+    assert record.status == "completed"
+    assert record.linked_call_count == 1
+
+
+def test_public_call_rejects_trace_outside_active_observed_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An active outer run must mechanically own every public call trace."""
+
+    provider_called = False
+
+    def _fake_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        nonlocal provider_called
+        provider_called = True
+        raise AssertionError("provider dispatch must not occur")
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+
+    with pytest.raises(ValueError, match="run.child_trace_id"):
+        with ObservedRun(
+            project="test_project",
+            operation="lineage_contract",
+            executable="tests/test_client_lifecycle.py",
+            run_id="run_public_lineage_rejection",
+            root_trace_id="trace.outer.enforced",
+            requested_model="gemini/gemini-2.5-flash",
+            max_budget=0.1,
+        ):
+            client.call_llm_structured(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "hello"}],
+                _ResponseModel,
+                task="test.lifecycle.lineage",
+                trace_id="unrelated.trace",
+                max_budget=0.1,
+                lifecycle_heartbeat_interval_s=0,
+            )
+
+    assert provider_called is False
+    record = get_observed_run("run_public_lineage_rejection")
+    assert record.status == "failed_before_call_start"
+    assert record.linked_call_count == 0
+
+
+def test_strict_mode_rejects_public_call_without_observed_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A migrated executable can require outer custody before any dispatch."""
+
+    provider_called = False
+
+    def _fake_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        nonlocal provider_called
+        provider_called = True
+        raise AssertionError("provider dispatch must not occur")
+
+    monkeypatch.setenv("LLM_CLIENT_REQUIRE_OBSERVED_RUN", "1")
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+
+    with pytest.raises(RuntimeError, match="create an ObservedRun"):
+        client.call_llm_structured(
+            "gemini/gemini-2.5-flash",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.strict",
+            trace_id="strict.trace",
+            max_budget=0.1,
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    assert provider_called is False
+
+
+def test_strict_mode_rejects_invalid_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_CLIENT_REQUIRE_OBSERVED_RUN", "sometimes")
+
+    with pytest.raises(RuntimeError, match="must be a boolean"):
+        client.call_llm_structured(
+            "gemini/gemini-2.5-flash",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.strict.invalid",
+            trace_id="strict.invalid.trace",
+            max_budget=0.1,
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+
+def test_public_call_rejects_terminal_active_observed_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A manually terminated context cannot accept later call lifecycle events."""
+
+    provider_called = False
+
+    def _fake_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        nonlocal provider_called
+        provider_called = True
+        raise AssertionError("provider dispatch must not occur")
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+
+    with ObservedRun(
+        project="test_project",
+        operation="terminal_lineage_contract",
+        executable="tests/test_client_lifecycle.py",
+        run_id="run_public_terminal_rejection",
+        root_trace_id="trace.outer.terminal",
+        requested_model="gemini/gemini-2.5-flash",
+        max_budget=0.1,
+    ) as run:
+        run.cancel(reason="operator stopped")
+        with pytest.raises(RuntimeError, match="terminal observed run"):
+            client.call_llm_structured(
+                "gemini/gemini-2.5-flash",
+                [{"role": "user", "content": "hello"}],
+                _ResponseModel,
+                task="test.lifecycle.terminal",
+                trace_id=run.child_trace_id("too_late"),
+                max_budget=0.1,
+                lifecycle_heartbeat_interval_s=0,
+            )
+
+    assert provider_called is False
+    record = get_observed_run("run_public_terminal_rejection")
+    assert record.status == "cancelled"
+    assert record.linked_call_count == 0
 
 
 def test_call_llm_structured_uses_shared_default_timeout_when_omitted(

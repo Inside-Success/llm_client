@@ -303,11 +303,23 @@ def configure(
     if project is not None:
         _project = project
     if db_path is not None:
+        close()
         with _db_lock:
-            if _db_conn is not None:
-                _db_conn.close()
-                _db_conn = None
             _db_path = Path(db_path)
+
+
+def close() -> None:
+    """Close the shared SQLite connection after in-flight writes finish."""
+
+    global _db_conn
+    # Match the _run_db_write -> _get_db lock order so shutdown cannot close
+    # the singleton connection while a lifecycle writer is using it.
+    with _db_write_lock:
+        with _db_lock:
+            connection = _db_conn
+            _db_conn = None
+            if connection is not None:
+                connection.close()
 
 
 def _start_run_timer(run_id: str) -> None:
@@ -375,6 +387,7 @@ def log_call(
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
     logical_call_id: str | None = None,
+    content_persistence: Literal["full", "metadata_only"] = "full",
 ) -> None:
     """Append one call record with optional prompt asset identity.
 
@@ -383,6 +396,11 @@ def log_call(
     if not _logging_enabled():
         return
     try:
+        if content_persistence not in {"full", "metadata_only"}:
+            raise ValueError(
+                f"Unsupported call content-persistence mode: {content_persistence}"
+            )
+        metadata_only = content_persistence == "metadata_only"
         d = _log_dir()
         d.mkdir(parents=True, exist_ok=True)
 
@@ -441,12 +459,24 @@ def log_call(
                 n_tool_calls = len(tool_calls_raw)
 
         timestamp = datetime.now(timezone.utc).isoformat()
+        stored_messages = (
+            None if metadata_only else _copy_messages_for_storage(messages)
+        )
+        stored_response = None if metadata_only else response_content
+        stored_usage = (
+            _metadata_only_usage(usage) if metadata_only else usage
+        )
+        stored_error = None if metadata_only else (str(error) if error else None)
+        stored_warnings = None if metadata_only else warnings
+        stored_snapshot = None if metadata_only else call_snapshot
+        stored_fingerprint = None if metadata_only else call_fingerprint
+        stored_validation_errors = None if metadata_only else validation_errors
         record = {
             "timestamp": timestamp,
             "model": model,
-            "messages": _copy_messages_for_storage(messages),
-            "response": response_content,
-            "usage": usage,
+            "messages": stored_messages,
+            "response": stored_response,
+            "usage": stored_usage,
             "cost": cost,
             "cost_source": cost_source,
             "billing_mode": billing_mode,
@@ -454,23 +484,23 @@ def log_call(
             "cache_hit": cache_hit,
             "finish_reason": finish_reason,
             "latency_s": round(latency_s, 3) if latency_s is not None else None,
-            "error": str(error) if error else None,
-            "error_type": type(error).__name__ if error else None,
-            "warnings": warnings,
+            "error": stored_error,
+            "warnings": stored_warnings,
             "n_tool_calls": n_tool_calls,
             "caller": caller,
             "task": task,
             "trace_id": trace_id,
             "prompt_ref": prompt_ref,
-            "call_snapshot": call_snapshot,
-            "call_fingerprint": call_fingerprint,
+            "call_snapshot": stored_snapshot,
+            "call_fingerprint": stored_fingerprint,
             "error_type": error_type or (type(error).__name__ if error else None),
             "execution_path": execution_path,
             "retry_count": retry_count,
             "schema_hash": schema_hash,
             "response_format_type": response_format_type,
-            "validation_errors": validation_errors,
+            "validation_errors": stored_validation_errors,
             "logical_call_id": logical_call_id,
+            "content_persistence": content_persistence,
         }
         _append_jsonl(d, "calls", record)
 
@@ -478,9 +508,9 @@ def log_call(
         _write_call_to_db(
             timestamp=timestamp,
             model=model,
-            messages=_copy_messages_for_storage(messages),
-            response=response_content,
-            usage=usage,
+            messages=stored_messages,
+            response=stored_response,
+            usage=stored_usage,
             cost=cost,
             cost_source=cost_source,
             billing_mode=billing_mode,
@@ -488,21 +518,22 @@ def log_call(
             cache_hit=cache_hit,
             finish_reason=finish_reason,
             latency_s=round(latency_s, 3) if latency_s is not None else None,
-            error=str(error) if error else None,
+            error=stored_error,
             caller=caller,
             task=task,
             trace_id=trace_id,
             prompt_ref=prompt_ref,
-            call_snapshot=call_snapshot,
-            call_fingerprint=call_fingerprint,
+            call_snapshot=stored_snapshot,
+            call_fingerprint=stored_fingerprint,
             error_type=error_type or (type(error).__name__ if error else None),
             execution_path=execution_path,
             retry_count=retry_count,
             schema_hash=schema_hash,
             response_format_type=response_format_type,
-            validation_errors=validation_errors,
+            validation_errors=stored_validation_errors,
             causal_parent_id=causal_parent_id,
             logical_call_id=logical_call_id,
+            content_persistence=content_persistence,
         )
     except Exception:
         # Never break LLM calls for logging
@@ -770,7 +801,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     prompt_ref TEXT,
     call_fingerprint TEXT,
     call_snapshot TEXT,
-    logical_call_id TEXT
+    logical_call_id TEXT,
+    content_persistence TEXT NOT NULL DEFAULT 'full'
 );
 
 CREATE TABLE IF NOT EXISTS structured_attempt_events (
@@ -886,6 +918,31 @@ CREATE TABLE IF NOT EXISTS experiment_runs (
     cpu_system_s REAL,
     git_commit TEXT,
     status TEXT DEFAULT 'running'
+);
+
+CREATE TABLE IF NOT EXISTS observed_runs (
+    run_id TEXT PRIMARY KEY,
+    root_trace_id TEXT NOT NULL,
+    project TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    executable TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'running', 'completed', 'failed_before_call_start',
+            'failed_after_call_start', 'cancelled'
+        )
+    ),
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    runtime_revision TEXT,
+    config_sha256 TEXT,
+    requested_model TEXT,
+    reasoning_effort TEXT,
+    max_budget REAL,
+    error_type TEXT,
+    error_phase TEXT,
+    error_message TEXT,
+    linked_call_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS experiment_items (
@@ -1091,6 +1148,10 @@ CREATE INDEX IF NOT EXISTS idx_expr_seed ON experiment_runs(seed);
 CREATE INDEX IF NOT EXISTS idx_expr_scenario_id ON experiment_runs(scenario_id);
 CREATE INDEX IF NOT EXISTS idx_expr_phase ON experiment_runs(phase);
 CREATE INDEX IF NOT EXISTS idx_expr_condition_seed ON experiment_runs(condition_id, seed);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_project ON observed_runs(project);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_root_trace ON observed_runs(root_trace_id);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_status ON observed_runs(status);
+CREATE INDEX IF NOT EXISTS idx_observed_runs_started ON observed_runs(started_at);
 CREATE INDEX IF NOT EXISTS idx_expri_run_id ON experiment_items(run_id);
 CREATE INDEX IF NOT EXISTS idx_expri_item_id ON experiment_items(item_id);
 CREATE INDEX IF NOT EXISTS idx_expri_trace_id ON experiment_items(trace_id);
@@ -1129,8 +1190,95 @@ ON budget_reservations(status, expires_at);
 """
 
 
+def _migrate_observed_runs_status_constraint(conn: sqlite3.Connection) -> None:
+    """Replace the pre-release status CHECK while preserving every run row."""
+
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'observed_runs'"
+    ).fetchone()
+    table_sql = str(row[0]) if row and row[0] else ""
+    if not any(
+        legacy_status in table_sql
+        for legacy_status in ("'failed_before_call'", "'failed_during_call'")
+    ):
+        return
+    legacy_table = "observed_runs_legacy_status"
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (legacy_table,),
+    ).fetchone():
+        raise RuntimeError(
+            f"cannot migrate observed_runs while {legacy_table} already exists"
+        )
+    legacy_count = int(conn.execute("SELECT COUNT(*) FROM observed_runs").fetchone()[0])
+
+    conn.execute(
+        "ALTER TABLE observed_runs RENAME TO observed_runs_legacy_status"
+    )
+    conn.execute(
+        """
+        CREATE TABLE observed_runs (
+            run_id TEXT PRIMARY KEY,
+            root_trace_id TEXT NOT NULL,
+            project TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            executable TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'running', 'completed', 'failed_before_call_start',
+                    'failed_after_call_start', 'cancelled'
+                )
+            ),
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            runtime_revision TEXT,
+            config_sha256 TEXT,
+            requested_model TEXT,
+            reasoning_effort TEXT,
+            max_budget REAL,
+            error_type TEXT,
+            error_phase TEXT,
+            error_message TEXT,
+            linked_call_count INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO observed_runs (
+            run_id, root_trace_id, project, operation, executable, status,
+            started_at, ended_at, runtime_revision, config_sha256,
+            requested_model, reasoning_effort, max_budget, error_type,
+            error_phase, error_message, linked_call_count
+        )
+        SELECT
+            run_id, root_trace_id, project, operation, executable,
+            CASE status
+                WHEN 'failed_before_call' THEN 'failed_before_call_start'
+                WHEN 'failed_during_call' THEN 'failed_after_call_start'
+                ELSE status
+            END,
+            started_at, ended_at, runtime_revision, config_sha256,
+            requested_model, reasoning_effort, max_budget, error_type,
+            error_phase, error_message, linked_call_count
+        FROM observed_runs_legacy_status
+        """
+    )
+    migrated_count = int(
+        conn.execute("SELECT COUNT(*) FROM observed_runs").fetchone()[0]
+    )
+    if migrated_count != legacy_count:
+        raise RuntimeError(
+            "observed_runs migration row-count mismatch: "
+            f"expected {legacy_count}, copied {migrated_count}"
+        )
+    conn.execute("DROP TABLE observed_runs_legacy_status")
+
+
 def _migrate_db(conn: sqlite3.Connection) -> None:
     """Add missing columns (idempotent). For DBs created before these columns existed."""
+    _migrate_observed_runs_status_constraint(conn)
+
     for table in ("llm_calls", "embeddings"):
         cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if "trace_id" not in cols:
@@ -1184,6 +1332,11 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN cache_creation_tokens INTEGER")
     if "usage_details" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN usage_details TEXT")
+    if "content_persistence" not in llm_cols:
+        conn.execute(
+            "ALTER TABLE llm_calls ADD COLUMN "
+            "content_persistence TEXT NOT NULL DEFAULT 'full'"
+        )
 
     lifecycle_cols = {
         row[1] for row in conn.execute("PRAGMA table_info(call_lifecycle_events)")
@@ -1643,6 +1796,31 @@ def _bounded_usage_details(usage: dict[str, Any] | None) -> str | None:
     return json.dumps(result) if result else None
 
 
+def _metadata_only_usage(
+    usage: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Retain only bounded numeric token metadata from provider usage."""
+
+    if not isinstance(usage, dict):
+        return None
+    result: dict[str, Any] = {}
+    for field in (
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "reasoning_tokens",
+        "cached_tokens",
+        "cache_creation_tokens",
+    ):
+        value = _valid_token_count(usage.get(field))
+        if value is not None:
+            result[field] = value
+    details = _bounded_usage_details(usage)
+    if details is not None:
+        result.update(json.loads(details))
+    return result or None
+
+
 def _write_call_to_db(
     *,
     timestamp: str,
@@ -1672,6 +1850,7 @@ def _write_call_to_db(
     validation_errors: str | None = None,
     causal_parent_id: str | None = None,
     logical_call_id: str | None = None,
+    content_persistence: Literal["full", "metadata_only"] = "full",
 ) -> None:
     """Insert a call record into SQLite. Never raises."""
     try:
@@ -1705,8 +1884,8 @@ def _write_call_to_db(
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id, logical_call_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    causal_parent_id, logical_call_id, content_persistence)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, project, model,
                     json.dumps(messages, default=str) if messages else None,
@@ -1720,7 +1899,7 @@ def _write_call_to_db(
                     json.dumps(call_snapshot, default=str) if call_snapshot is not None else None,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
-                    causal_parent_id, logical_call_id,
+                    causal_parent_id, logical_call_id, content_persistence,
                 ),
             )
             if error is None and accounted:

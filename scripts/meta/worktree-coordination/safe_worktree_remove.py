@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import os
+import stat
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -23,7 +24,17 @@ from typing import Any
 import yaml
 
 
-SCRIPT_ROOT = Path(__file__).resolve().parents[2]
+def _find_framework_root() -> Path:
+    """Find the repository root from either supported script layout."""
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "enforced_planning").is_dir():
+            return parent
+    raise RuntimeError("Unable to locate repository root containing enforced_planning/")
+
+
+SCRIPT_ROOT = _find_framework_root()
 if str(SCRIPT_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPT_ROOT))
 
@@ -45,7 +56,8 @@ def run_cmd(cmd: list[str], cwd: str | None = None) -> tuple[bool, str]:
             cwd=cwd,
             env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1"},
         )
-        return result.returncode == 0, result.stdout.strip()
+        output = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)
+        return result.returncode == 0, output
     except Exception as e:
         return False, str(e)
 
@@ -96,6 +108,49 @@ def get_main_repo_root() -> Path:
         return git_dir.parent
     except (subprocess.CalledProcessError, FileNotFoundError):
         return Path.cwd()
+
+
+def get_target_repo_root(worktree_path: str) -> tuple[Path | None, str]:
+    """Resolve the common Git repository for a registered target worktree."""
+    success, output = run_cmd(
+        ["git", "-C", worktree_path, "rev-parse", "--git-common-dir"]
+    )
+    if not success:
+        return None, output
+    common_dir = Path(output).expanduser().resolve()
+    if common_dir.name != ".git":
+        return None, f"unexpected Git common directory: {common_dir}"
+    return common_dir.parent, ""
+
+
+def make_tree_deletable(path: Path) -> tuple[bool, list[tuple[Path, int]], str]:
+    """Add owner write/search bits to directories so clean-tree removal can finish."""
+    changed: list[tuple[Path, int]] = []
+    try:
+        for root, _, _ in os.walk(path):
+            directory = Path(root)
+            mode = stat.S_IMODE(directory.stat().st_mode)
+            desired_mode = mode | stat.S_IWUSR | stat.S_IXUSR
+            if desired_mode != mode:
+                directory.chmod(desired_mode)
+                changed.append((directory, mode))
+    except OSError as exc:
+        restore_tree_modes(changed)
+        return False, [], str(exc)
+    return True, changed, ""
+
+
+def restore_tree_modes(changed: list[tuple[Path, int]]) -> None:
+    """Restore modes changed solely to prepare a failed worktree removal."""
+    for directory, mode in reversed(changed):
+        if directory.exists():
+            try:
+                directory.chmod(mode)
+            except OSError as exc:
+                print(
+                    f"WARNING: could not restore permissions for {directory}: {exc}",
+                    file=sys.stderr,
+                )
 
 
 def get_current_cc_identity() -> dict[str, Any]:
@@ -408,8 +463,18 @@ def remove_worktree(worktree_path: str, force: bool = False) -> bool:
         print(f"   3. Force remove (LOSES CHANGES): python scripts/safe_worktree_remove.py --force {worktree_path}")
         return False
 
-    # Remove the worktree
-    success, output = run_cmd(["git", "worktree", "remove", worktree_path])
+    repo_root, repo_error = get_target_repo_root(worktree_path)
+    if repo_root is None:
+        print(f"❌ BLOCKED: Cannot resolve target Git repository: {repo_error}")
+        return False
+
+    prepared, changed_modes, preparation_error = make_tree_deletable(path)
+    if not prepared:
+        print(f"❌ BLOCKED: Cannot prepare clean worktree for removal: {preparation_error}")
+        return False
+
+    # Git must run from the target repository, never from the tool's own checkout.
+    success, output = run_cmd(["git", "worktree", "remove", worktree_path], cwd=str(repo_root))
 
     if success:
         print(f"✅ Worktree removed: {worktree_path}")
@@ -417,11 +482,14 @@ def remove_worktree(worktree_path: str, force: bool = False) -> bool:
     else:
         # Try with --force if regular remove failed (e.g., untracked files)
         if force:
-            success, output = run_cmd(["git", "worktree", "remove", "--force", worktree_path])
+            success, output = run_cmd(
+                ["git", "worktree", "remove", "--force", worktree_path], cwd=str(repo_root)
+            )
             if success:
                 print(f"✅ Worktree force-removed: {worktree_path}")
                 return True
 
+        restore_tree_modes(changed_modes)
         print(f"❌ Failed to remove worktree: {output}")
         return False
 

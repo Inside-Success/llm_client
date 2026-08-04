@@ -11,6 +11,7 @@ from llm_client.core.errors import (
     LLMContentFilterError,
     LLMError,
     LLMModelNotFoundError,
+    LLMNoCompatibleRouteError,
     LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMTransientError,
@@ -44,6 +45,14 @@ class TestClassifyLitellmTypes:
             message="Model not found", model="gpt-99", llm_provider="openai"
         )
         assert classify_error(err) is LLMModelNotFoundError
+
+    def test_openrouter_no_compatible_endpoint_is_not_model_missing(self):
+        err = litellm.NotFoundError(
+            message="No endpoints found that can handle the requested parameters",
+            model="deepseek/deepseek-v4-flash",
+            llm_provider="openrouter",
+        )
+        assert classify_error(err) is LLMNoCompatibleRouteError
 
     def test_content_policy(self):
         err = litellm.ContentPolicyViolationError(
@@ -91,6 +100,15 @@ class TestClassifyLitellmTypes:
         )
         assert classify_error(err) is LLMTransientError
 
+    def test_schema_validation_with_403_inside_hash_is_not_auth(self):
+        err = litellm.JSONSchemaValidationError(
+            model="deepseek/deepseek-chat",
+            llm_provider="openrouter",
+            raw_response='```json\n{"action": "structured.cypher"}\n```',
+            schema='{"digest": "54bb265ec4033b8b1542f10d3cf5ba7a"}',
+        )
+        assert classify_error(err) is LLMError
+
 
 # ---------------------------------------------------------------------------
 # classify_error — string fallback
@@ -109,6 +127,14 @@ class TestClassifyStringFallback:
     def test_auth_401(self):
         err = Exception("Error 401: unauthorized")
         assert classify_error(err) is LLMAuthError
+
+    def test_auth_403(self):
+        err = Exception("HTTP 403")
+        assert classify_error(err) is LLMAuthError
+
+    def test_embedded_403_digits_are_not_auth(self):
+        err = Exception("schema digest 54bb265ec4033b8b1542f10d3cf5ba7a")
+        assert classify_error(err) is LLMError
 
     def test_not_found_404(self):
         err = Exception("Error 404: model does not exist")
@@ -195,6 +221,7 @@ class TestErrorHierarchy:
             LLMContentFilterError,
             LLMTransientError,
             LLMModelNotFoundError,
+            LLMNoCompatibleRouteError,
             LLMConfigurationError,
         ]:
             assert issubclass(cls, LLMError)

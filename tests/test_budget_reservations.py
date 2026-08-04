@@ -35,15 +35,13 @@ def reservation_db(tmp_path: Path) -> Path:
     original_path = io_log._db_path
     original_connection = io_log._db_conn
     if original_connection is not None:
-        original_connection.close()
-    io_log._db_conn = None
+        io_log.close()
     db_path = tmp_path / "reservations.sqlite"
     io_log.configure(enabled=True, db_path=db_path)
     try:
         yield db_path
     finally:
-        if io_log._db_conn is not None:
-            io_log._db_conn.close()
+        io_log.close()
         # The prior singleton was closed to isolate this real SQLite file; do
         # not restore a closed connection for subsequent tests.
         io_log._db_conn = None

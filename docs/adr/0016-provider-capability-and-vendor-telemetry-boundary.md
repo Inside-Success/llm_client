@@ -4,6 +4,69 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-08-04 Amendment: GPT-5.4 Ban and Luna Default
+
+Plan #348 hard-blocks every GPT-5.4-family route before dispatch, including
+raw, OpenRouter, Mini/Nano, fallback, and Codex aliases. GPT-5.4 is removed
+from the exact execution allowlist, capability table, packaged registry, and
+maintained workflow defaults. GPT-5.6 Luna becomes the shared execution default
+and replaces GPT-5.4 on maintained Codex workflow surfaces. When Luna cannot
+satisfy a required execution contract, callers must select and justify an
+explicit non-GPT-5.4 route; they may not silently revive GPT-5.4.
+
+## 2026-07-31 Amendment: OpenRouter Exact-Response Cache Policy
+
+Plan #347 extends `OpenRouterRoutePolicyV1` with an explicit, default-off
+exact-response cache mode and an optional TTL. `enabled` compiles to
+`X-OpenRouter-Cache: true`; `refresh` additionally clears and replaces only the
+matching entry; `disabled` sends the explicit provider opt-out when a typed
+policy is present. TTLs fail locally outside OpenRouter's documented 1–86,400
+second range.
+
+Response caching retains generated content at OpenRouter's edge for the selected
+TTL, so enabled and refresh modes conflict locally with
+`zero_data_retention=True`. Raw response-cache headers also conflict with a
+typed policy: callers may use the broad raw-header escape hatch only when they
+do not claim typed cache governance.
+
+OpenRouter hashes the complete provider request body. Therefore a cache-enabled
+call retains `llm_client` task/trace custody locally but does not project its
+unique per-call identity into OpenRouter's request-body Broadcast `trace` field.
+An explicit caller-owned Broadcast trace is rejected for a cache-enabled call
+rather than silently defeating reuse. Attribution and route-metadata headers do
+not enter OpenRouter's cache key, although a cache hit does not return stale
+router metadata.
+
+This is distinct from provider prompt caching and from durable consumer stage
+artifacts. OpenRouter does not coalesce concurrent misses and may evict entries;
+consumers remain responsible for content-addressed resumability, single-flight,
+schema and algorithm invalidation, and source-custody rules. Local/provider
+usage telemetry remains evidence of billed versus cached tokens; one bounded
+live repeated-call probe is required before a consumer advertises the route as
+working.
+
+## 2026-07-27 Amendment: Typed OpenRouter Route Policy
+
+Plan #336 adds `OpenRouterRoutePolicyV1` as the supported named public
+contract for stable OpenRouter provider-routing requirements: provider
+allowlists, data-collection mode, zero-data-retention, same-model provider
+fallback permission, sorting, and `require_parameters=true`. `llm_client`
+compiles this object into OpenRouter's native `provider` payload, retains the
+canonical policy in call snapshots, and rejects ambiguous raw `provider` kwargs
+when the typed policy is present.
+
+This amendment does not create a local endpoint inventory or preflight call.
+OpenRouter remains the runtime authority on whether a current endpoint satisfies
+the fixed model and requested constraints. An OpenRouter response that no
+endpoint can satisfy those constraints is a non-retryable
+`LLMNoCompatibleRouteError`, not evidence that the model is absent.
+
+The policy constrains routing only. It does not authorize a provider to receive
+private source fields; callers remain responsible for an authorization covering
+every allowed upstream processor. Every resolved primary/fallback model leg
+must be an OpenRouter route when this policy is used, and embeddings remain
+outside the typed-policy surface.
+
 ## 2026-07-23 Amendment: Explicit Reasoning Policy
 
 Plan #117 makes reasoning selection an explicit pre-dispatch policy for exact

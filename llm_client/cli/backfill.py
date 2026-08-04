@@ -15,14 +15,10 @@ def cmd_backfill(args: argparse.Namespace) -> None:
 
     if args.clear and db_path.exists():
         print(f"Clearing existing database at {db_path}")
-        if io_log._db_conn is not None:
-            io_log._db_conn.close()
-            io_log._db_conn = None
+        io_log.close()
         db_path.unlink()
 
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
-        io_log._db_conn = None
+    io_log.close()
 
     data_root = io_log._data_root
     print(f"Scanning {data_root} for JSONL files...")

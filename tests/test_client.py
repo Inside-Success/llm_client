@@ -4,6 +4,7 @@ import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import litellm
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -15,6 +16,8 @@ from llm_client import (
     Hooks,
     LLMCallResult,
     LLMStream,
+    ObservabilityContentPolicy,
+    OpenRouterRoutePolicyV1,
     LRUCache,
     RetryPolicy,
     StructuredOutputPolicy,
@@ -44,6 +47,7 @@ from llm_client.core.errors import (
     LLMContentFilterError,
     LLMError,
     LLMModelNotFoundError,
+    LLMNoCompatibleRouteError,
     LLMQuotaExhaustedError,
 )
 from llm_client.core.model_availability import clear_model_unavailability
@@ -112,6 +116,76 @@ def _mock_response(
 
 class TestCallLLM:
     """Tests for call_llm."""
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.0)
+    def test_typed_openrouter_route_policy_reaches_provider_payload(
+        self, mock_cost: MagicMock, mock_completion: AsyncMock
+    ) -> None:
+        mock_completion.return_value = _mock_response()
+
+        call_llm(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "hello"}],
+            openrouter_route_policy=OpenRouterRoutePolicyV1(
+                allowed_providers=("Morph",),
+                zero_data_retention=True,
+                allow_provider_fallbacks=False,
+            ),
+            task="test.openrouter.route_policy",
+            trace_id="test/openrouter/route-policy",
+            max_budget=1.0,
+        )
+
+        payload = mock_completion.call_args.kwargs
+        assert payload["provider"] == {
+            "require_parameters": True,
+            "only": ["Morph"],
+            "zdr": True,
+            "allow_fallbacks": False,
+        }
+        assert "openrouter_route_policy" not in payload
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_typed_policy_rejects_non_openrouter_fallback_before_dispatch(
+        self, mock_completion: AsyncMock
+    ) -> None:
+        with pytest.raises(LLMConfigurationError) as raised:
+            call_llm(
+                "openrouter/deepseek/deepseek-v4-flash",
+                [{"role": "user", "content": "hello"}],
+                fallback_models=["openai/gpt-4o"],
+                openrouter_route_policy=OpenRouterRoutePolicyV1(),
+                task="test.openrouter.route_policy_fallback",
+                trace_id="test/openrouter/route-policy-fallback",
+                max_budget=1.0,
+            )
+
+        assert raised.value.error_code == "openrouter_route_policy_on_non_openrouter_route"
+        mock_completion.assert_not_awaited()
+
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_no_compatible_route_has_no_internal_retry(
+        self, mock_completion: AsyncMock
+    ) -> None:
+        mock_completion.side_effect = litellm.NotFoundError(
+            message="No endpoints found that can handle the requested parameters",
+            model="deepseek/deepseek-v4-flash",
+            llm_provider="openrouter",
+        )
+
+        with pytest.raises(LLMNoCompatibleRouteError):
+            call_llm(
+                "openrouter/deepseek/deepseek-v4-flash",
+                [{"role": "user", "content": "hello"}],
+                openrouter_route_policy=OpenRouterRoutePolicyV1(zero_data_retention=True),
+                num_retries=3,
+                task="test.openrouter.no_compatible_route",
+                trace_id="test/openrouter/no-compatible-route",
+                max_budget=1.0,
+            )
+
+        assert mock_completion.await_count == 1
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
@@ -1550,6 +1624,41 @@ class TestGPT5TemperatureStripping:
         assert "top_p" not in call_kwargs
         assert any("COERCE_PARAMS" in w for w in result.warnings)
         assert any("gpt5_sampling_compatibility" in w for w in result.warnings)
+        assert any(
+            record["code"] == "LLMC_WARN_PARAMETER_OMITTED"
+            for record in result.warning_records
+        )
+
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+    def test_openrouter_luna_omits_temperature_with_durable_warning(
+        self,
+        mock_completion: MagicMock,
+        mock_cost: MagicMock,
+    ) -> None:
+        """Known route-incompatible params must be omitted visibly by the client."""
+        mock_completion.return_value = _mock_response(content="ok")
+
+        result = call_llm(
+            "openrouter/openai/gpt-5.6-luna",
+            [{"role": "user", "content": "Hi"}],
+            temperature=0.3,
+            task="test",
+            trace_id="test_openrouter_luna_temperature_omitted",
+            max_budget=0,
+        )
+
+        assert "temperature" not in mock_completion.call_args.kwargs
+        assert any(
+            "removed=temperature" in warning
+            and "rule=openrouter_luna_native_schema_compatibility" in warning
+            for warning in result.warnings
+        )
+        assert any(
+            record["code"] == "LLMC_WARN_PARAMETER_OMITTED"
+            and "removed=temperature" in record["message"]
+            for record in result.warning_records
+        )
 
     def test_openrouter_gpt5_strict_policy_raises(self) -> None:
         """unsupported_param_policy=error should fail loud instead of coercing."""
@@ -4099,6 +4208,64 @@ class TestGPT5StructuredOutput:
         assert call_kwargs["response_format"]["type"] == "json_schema"
         assert call_kwargs["response_format"]["json_schema"]["name"] == "Item"
 
+    @patch(
+        "llm_client.execution.structured_runtime.write_structured_raw_artifact"
+    )
+    @patch("llm_client.io_log.log_call")
+    @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+    @patch("llm_client.core.client.litellm.completion")
+    def test_structured_metadata_only_policy_reaches_observability_not_provider(
+        self,
+        mock_completion: MagicMock,
+        mock_cost: MagicMock,
+        mock_log_call: MagicMock,
+        mock_raw_artifact: MagicMock,
+    ) -> None:
+        class Item(BaseModel):
+            name: str
+
+        mock_completion.return_value = _mock_response(content='{"name": "test"}')
+
+        result, _ = call_llm_structured(
+            "deepseek/deepseek-chat",
+            [{"role": "user", "content": "private source"}],
+            response_model=Item,
+            observability_content_policy=ObservabilityContentPolicy(
+                mode="metadata_only"
+            ),
+            task="test.metadata-only",
+            trace_id="test/metadata-only",
+            max_budget=0,
+        )
+
+        assert result.name == "test"
+        assert "observability_content_policy" not in mock_completion.call_args.kwargs
+        assert mock_log_call.call_args.kwargs["content_persistence"] == "metadata_only"
+        mock_raw_artifact.assert_not_called()
+
+    @patch("llm_client.core.client.litellm.completion")
+    def test_structured_rejects_untyped_observability_policy_before_dispatch(
+        self, mock_completion: MagicMock
+    ) -> None:
+        class Item(BaseModel):
+            name: str
+
+        with pytest.raises(
+            TypeError,
+            match="must be an ObservabilityContentPolicy",
+        ):
+            call_llm_structured(
+                "deepseek/deepseek-chat",
+                [{"role": "user", "content": "private source"}],
+                response_model=Item,
+                observability_content_policy={"mode": "metadata_only"},  # type: ignore[arg-type]
+                task="test.metadata-only.invalid",
+                trace_id="test/metadata-only/invalid",
+                max_budget=0,
+            )
+
+        mock_completion.assert_not_called()
+
     @patch("llm_client.core.client.litellm.get_model_info", return_value={"max_output_tokens": 128000})
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("llm_client.core.client.litellm.completion")
@@ -4579,6 +4746,62 @@ class TestModelDeprecation:
         from llm_client.core.errors import DeprecatedModelError
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*fable"):
             call_llm("anthropic/claude-fable-5", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_fable", max_budget=0)
+
+    @pytest.mark.parametrize(
+        "model", ["gpt-5.5", "gpt-5.5-pro", "openrouter/openai/gpt-5.5"]
+    )
+    def test_gpt55_raises(self, model: str):
+        """GPT-5.5 is retired across direct and OpenRouter aliases."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.5"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_depr_gpt55",
+                max_budget=0,
+            )
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.4-nano",
+            "openrouter/openai/gpt-5.4",
+            "codex/gpt-5.4",
+        ],
+    )
+    def test_gpt54_family_raises_before_any_execution_lane(self, model: str):
+        """GPT-5.4 is banned across raw, OpenRouter, and Codex routes."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.4"):
+            call_llm(
+                model,
+                [{"role": "user", "content": "hi"}],
+                task="test",
+                trace_id="test_depr_gpt54",
+                max_budget=0,
+            )
+
+    def test_gpt54_fallback_raises_before_primary_execution(self):
+        """A banned GPT-5.4 fallback prevents the whole chain from dispatching."""
+        from llm_client.core.errors import DeprecatedModelError
+
+        with patch("litellm.completion") as mock_completion:
+            with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.4"):
+                call_llm(
+                    "openrouter/openai/gpt-5.6-luna",
+                    [{"role": "user", "content": "hi"}],
+                    fallback_models=["openrouter/openai/gpt-5.4-mini"],
+                    task="test",
+                    trace_id="test_gpt54_fallback",
+                    max_budget=0,
+                    reasoning_effort="none",
+                )
+        mock_completion.assert_not_called()
 
     @pytest.mark.parametrize(
         "model",

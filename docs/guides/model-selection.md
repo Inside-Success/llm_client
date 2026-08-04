@@ -29,6 +29,9 @@ cannot authorize a route absent from the allowlist. GPT-5 Mini, GPT-5.1 Mini,
 GPT-5.4 Mini, and Codex Mini routes are intentionally absent and therefore fail
 before provider dispatch.
 
+GPT-5.5 is retired: direct, Pro, and OpenRouter aliases are absent from the
+allowlist and registry and are hard-blocked before provider dispatch.
+
 Enforcement is unconditional. `model_policy="enforce_allowlist"` remains an
 accepted explicit value for replay clarity, but omitting it has the same
 fail-closed behavior. The former `compatibility` value is rejected.
@@ -100,6 +103,42 @@ An account-level default model does not replace an explicit model in a normal
 `llm_client` call. Keep explicit model selection in code/config and use
 OpenRouter provider routing only to choose a compatible endpoint.
 
+For stable OpenRouter route constraints, use the typed policy instead of
+constructing a raw `provider={...}` payload:
+
+```python
+from llm_client import OpenRouterRoutePolicyV1, call_llm_structured
+
+result, call = call_llm_structured(
+    "openrouter/deepseek/deepseek-v4-flash",
+    messages,
+    response_model=Decision,
+    openrouter_route_policy=OpenRouterRoutePolicyV1(
+        allowed_providers=("authorized-upstream",),
+        data_collection="deny",
+        zero_data_retention=True,
+        allow_provider_fallbacks=False,
+    ),
+    reasoning_effort="none",
+    task="bounded_decision",
+    trace_id=trace_id,
+    max_budget=0.05,
+)
+```
+
+The policy is validated locally, compiled once into OpenRouter's provider
+controls, and retained in replay identity. It cannot be combined with raw
+`provider` kwargs, and every resolved fallback leg must remain on OpenRouter.
+`LLMNoCompatibleRouteError` means the fixed model has no current endpoint that
+satisfies the requested policy; it is not a model-not-found error and is not
+retried within the same call.
+
+This object does not grant permission to transmit private data. A caller that
+uses `allowed_providers` must still have an explicit authorization for every
+listed upstream processor and source field. The client does not query a live
+endpoint registry before a call, so model-level structured capability remains
+separate from policy-constrained route availability.
+
 ## Local and Vendor Observability
 
 OpenRouter can log inputs/outputs and [Broadcast traces to existing
@@ -128,7 +167,7 @@ be allowed, and every non-default route requires `model_justification`:
 | `default_intelligent` | MiniMax-M3 | normal project default | workspace side effects |
 | `fast_intelligent` | GLM 5.2 | stronger reasoning without huge latency | final “best possible” escalation |
 | `very_intelligent` | Grok 4.5 | difficult semantic judgment, coreference, ontology authoring, and deep review | automatic bulk pipelines |
-| `max_intelligence` | GPT-5.5 through OpenRouter | explicit max-quality escalation | default routing |
+| `max_intelligence` | GPT-5.6 Sol through OpenRouter | explicit max-quality escalation | default routing |
 
 Compatibility selectors such as `extraction`, `judging`, `synthesis`, and
 `bulk_cheap` remain available so existing projects do not break. New code
@@ -152,11 +191,98 @@ explicitly in project configuration, and the selected route must be visible in
 the call trace. A provider outage or route rejection is a failure to surface,
 not permission to substitute a weaker semantic actor.
 
+## Model Decision Card
+
+Use six primary fields. Do not turn model selection into a large, weakly
+weighted scorecard:
+
+1. **Intelligence** — independent general-capability evidence at the exact
+   reasoning effort, supplemented by task-specific evidence when it exists.
+2. **Speed** — output tokens per second, plus end-to-end task latency when
+   reasoning time is material.
+3. **Cost** — current input/output price for the exact route and observed cost
+   per completed task. Per-token price alone can hide reasoning verbosity.
+4. **Structured output** — provider declaration plus local certification for
+   the exact route and schema class. Declaration is not certification.
+5. **Context window** — combined input/output limit for the exact route.
+6. **Reliability** — retained local completion evidence for the exact route,
+   task shape, and schema. Public uptime is useful context, not a substitute.
+
+Everything else, including modalities, tool support, openness, cache policy,
+and knowledge cutoff, is optional **miscellaneous** metadata unless the task
+makes it a hard requirement. Every external value must retain its source,
+reasoning effort, and observation date because model behavior and pricing move
+quickly.
+
+### Current reasoning-heavy shortlist
+
+Observed 2026-07-28. Intelligence and speed are Artificial Analysis
+Intelligence Index v4.1 and first-party/median-provider output speed at the
+listed effort. Cost is the OpenRouter route's current USD input/output price
+per million tokens. Context and declared structured capability come from the
+OpenRouter models API. The final column is our retained local evidence, not a
+public benchmark.
+
+| Exact OpenRouter route | Intelligence / effort | Speed | Cost in/out | Context | Structured output and local reliability |
+|---|---:|---:|---:|---:|---|
+| `openrouter/deepseek/deepseek-v4-flash` | 40 / max | 116 tok/s | $0.14 / $0.28 | 1.05M | Declared; certified for one bounded extraction contract. Recent Process Tracing long strict-schema calls also produced validation and deadline failures, so do not generalize the certificate. |
+| `openrouter/inception/mercury-2` | 21 | 987 tok/s | $0.25 / $0.75 | 128K | Declared; no retained local contract certificate. Use only for low-judgment work. |
+| `openrouter/minimax/minimax-m3` | 44 | 91 tok/s | $0.30 / $1.20 | 1.05M | Declared; provider transport accepted one semantic-authoring schema, but local validation rejected the result. Not certified for that contract. |
+| `openrouter/openai/gpt-5.6-luna` | 51 / max | 188 tok/s | $0.50 / $3.00 | 1.05M | Current strict native JSON-schema probe passed (`{"value": 1}`, 2026-07-31). The earlier large Process Tracing request remains a separate compatibility case, not a general route rejection. |
+| `openrouter/qwen/qwen3.7-max` | 46 | 202 tok/s | $1.25 / $3.75 | 1.0M | Declared; no retained local contract certificate. |
+| `openrouter/z-ai/glm-5.2` | 51 / max | 219 tok/s | $0.76 / $2.40 | 1.05M | Declared; no retained local contract certificate. Strong public value candidate, not yet a certified local default. |
+| `openrouter/x-ai/grok-4.5` | 54 / high | 58 tok/s | $2.00 / $6.00 | 500K | Declared; local native-schema attempt reached the route but was capacity-blocked. No semantic certificate. |
+| `openrouter/openai/gpt-5.6-terra` | 55 / max | 136 tok/s | $1.25 / $7.50 | 1.05M | Declared; certified for the retained DIGIMON planner contract. Independent comparison currently places Luna or Sol ahead of Terra on intelligence versus cost at every tested effort. |
+| `openrouter/openai/gpt-5.6-sol` | 59 / max | 66 tok/s | $5.00 / $30.00 | 1.05M | Current strict native JSON-schema probe passed (`{"value": 1}`, 2026-07-31). The earlier large Process Tracing request remains a separate compatibility case, not a general route rejection. |
+
+Sources: [Artificial Analysis methodology and v4.1](https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-1),
+[DeepSeek V4 Flash](https://artificialanalysis.ai/models/deepseek-v4-flash),
+[Mercury 2](https://artificialanalysis.ai/models/mercury-2),
+[MiniMax M3](https://artificialanalysis.ai/models/minimax-m3),
+[GPT-5.6 family](https://artificialanalysis.ai/articles/gpt-5-6-has-landed),
+[Qwen3.7 Max](https://artificialanalysis.ai/models/qwen3-7-max),
+[GLM-5.2](https://artificialanalysis.ai/models/glm-5-2),
+[Grok 4.5](https://artificialanalysis.ai/models/grok-4-5), and the
+[OpenRouter models API](https://openrouter.ai/api/v1/models). Provider pages
+linked in the route-evidence records below supply capability context. Prices
+are snapshots, not durable constants.
+
+### Selection guidance for research pipelines
+
+- **High-volume bounded extraction:** DeepSeek V4 Flash at a reviewed effort
+  when its exact route is completing the target schema; Luna is the next
+  candidate after it is certified on that exact extraction contract.
+- **Ordinary structured reasoning:** compare Luna and GLM 5.2 on the actual
+  schema before changing a shared default. Public metrics make both plausible;
+  they do not certify either route locally.
+- **Consequential discriminator, mechanism, and final-critic judgments:** use
+  GPT-5.6 Sol at high or max effort when the quality gain justifies latency and
+  cost. Keep the number of such calls small rather than weakening the judgment.
+- **Terra:** retain as an explicit certified route, but do not make it a default
+  without task-specific evidence that overcomes its current public Pareto
+  disadvantage.
+- **Mercury 2:** speed-specialist only. Its public intelligence score does not
+  support use for substantive causal interpretation or final review.
+
+These are first-principles defaults informed by current public and route
+evidence, not a claim that general leaderboards settle Process Tracing quality.
+Task-specific comparisons become necessary only when two polished candidates
+remain decision-equivalent after applying these constraints.
+
 ## Declared Capability vs. Certified Route
 
-`structured_output: true` in the model registry means the route is **declared**
-as intended to support native JSON-schema output. It is not proof that the
-current provider route accepts this repository's strict schema at runtime.
+`structured_output: true` in the model registry means the model remains
+eligible for maintained typed-output work through a governed client path. It
+does not choose provider-native JSON Schema. The separate
+`native_structured_output` value chooses transport for a curated route:
+`true` permits native `json_schema`, `false` selects Instructor, and an omitted
+value preserves legacy registry behavior by inheriting `structured_output`.
+
+Neither field certifies every schema or parameter profile. A bounded retained
+native success and a later no-compatible-endpoint result can both be true when
+the contract or provider inventory differs. The conservative runtime default
+must follow current general evidence without deleting the narrower historical
+certificate.
 
 Before a profile is advertised as runnable for a structured task, maintain a
 route-certification record for the exact:
@@ -194,12 +320,12 @@ task shape.
 | `openrouter/minimax/minimax-m3` | `default_intelligent` | **Transport reached; output contract not certified** | Plan 0141's provider accepted the structural schema and returned content, but local Pydantic/business validation rejected the monolithic response. This does not prove poor extraction quality, but it does mean MiniMax is not certified for that semantic-authoring schema. Use only after the selected task's smaller contract has a retained passing trace. Evidence: `onto-canon6/docs/runs/2026-07-14_plan0141_minimax_discovery_probe.md`. |
 | `openrouter/x-ai/grok-4.5` | `very_intelligent` | **Native route reached; capacity blocked** | The Jane/Bob coreference request reached the native-schema route but OpenRouter returned HTTP 402 while reserving its default output allowance. This is neither a semantic failure nor a certification. Retry only after the task-profile output ceiling is wired. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
 | `gemini/gemini-2.5-flash` | explicit route | **Unavailable in observed environment** | The Plan 0147 retry received a daily-quota exhaustion response. It produced no accepted semantic output and no capability conclusion. |
-| `openrouter/openai/gpt-5.5` | historical proxy route | **Rejected before dispatch by local capability map** | The former Plan 106 result was an OpenRouter-proxy result, not a direct OpenAI result. It is not evidence about direct GPT-5.5 or later GPT-5.6 models. |
-| direct `gpt-5.5` | historical only | **Certified for one bounded strict-schema contract** | Direct OpenAI Responses API returned parseable typed content when routing was explicit. This corrects Plan 106's false direct-route disposition, but GPT-5.5 is superseded for new selection by the GPT-5.6 family. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
-| direct `gpt-5.6` (Sol) | explicit manual selection | **Certified for one bounded strict-schema contract** | Direct OpenAI Responses API returned schema-valid typed content. The provider-policy exact alias preserves this direct route even while normal routing prefers OpenRouter. It is not yet an automatic tier default or semantic-quality certification. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
+| GPT-5.5, direct or OpenRouter | historical only | **Hard-blocked before dispatch** | The retained direct strict-schema receipt remains historical transport evidence. New calls use the GPT-5.6 family. |
+| direct `gpt-5.6` (Sol) | `max_intelligence` direct counterpart | **Certified for one bounded strict-schema contract** | Direct OpenAI Responses API returned schema-valid typed content. The provider-policy exact alias preserves this direct route even while the tier selector uses OpenRouter. This is route evidence, not semantic-quality certification. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
 | direct `gpt-5.6-terra` | explicit manual selection | **Certified for one bounded strict-schema contract** | Same contract-tested direct Responses API route as Sol, retained as an explicit choice rather than a default. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
+| `openrouter/openai/gpt-5.6-sol` (medium) | explicit manual selection | **Instructor default; bounded native certificate retained** | The OpenRouter native-`json_schema` route returned a validated Cybernetic Influence `resource_request_v1`, but the 2026-07-29 Process Tracing probe found no endpoint accepting its requested structured parameter profile. Shared auto mode now uses Instructor; the older certificate remains valid only for its named contract. Evidence: `docs/runs/2026-07-25_openrouter_gpt56_sol_authoring_schema_certification.md` and trace `process-tracing.sol-medium-capability-probe.20260730T000519Z`. |
 | `openrouter/openai/gpt-5.6-terra` (medium) | explicit planner candidate | **Certified for the retained DIGIMON planner contract with the disjoint-union projection** | The endpoint rejected Pydantic's original `oneOf`; the provider-safe `anyOf` projection returned a sensible decision that validated against the unchanged local schema. Preferred current candidate for the main graph-planning decision, not a shared tier default. Evidence: `docs/runs/2026-07-21_openrouter_gpt56_planner_schema_compatibility.md`. |
-| `openrouter/openai/gpt-5.6-luna` (medium) | explicit low-latency planner candidate | **Certified for the retained DIGIMON planner contract with the disjoint-union projection** | The same real contract passed in 4.321 seconds and validated locally. Use for simpler bounded decisions only after task-specific trace evidence; do not infer Terra-equivalent judgment quality from transport compatibility. Evidence: `docs/runs/2026-07-21_openrouter_gpt56_planner_schema_compatibility.md`. |
+| `openrouter/openai/gpt-5.6-luna` (medium) | explicit low-latency planner candidate | **Instructor default; bounded native certificate retained** | The DIGIMON planner contract passed in 4.321 seconds, but the 2026-07-29 Process Tracing probe found no endpoint accepting its requested structured parameter profile. Shared auto mode now uses Instructor; do not transfer either result across schemas. Evidence: `docs/runs/2026-07-21_openrouter_gpt56_planner_schema_compatibility.md` and trace `process-tracing.luna-medium-capability-probe.20260729T222353Z`. |
 
 When a route changes status, update this table together with the retained run
 record. A route may move from declared to certified only after a real call
@@ -209,12 +335,12 @@ provider capacity/quota, or during local contract validation; never label all
 of these simply “model failure.”
 
 Provider documentation is useful for deciding which route to register and
-probe, but it does not certify a local route. GPT-5.6 Sol and Terra now have
-bounded direct-route evidence; Luna remains a provider-declared capability,
-not a `llm_client` selection default or an observed result.
+probe, but it does not certify a local route. GPT-5.6 Sol and Terra have
+bounded direct-route evidence; Luna has one retained OpenRouter planner result.
+None of those narrow contracts proves general task quality.
 
 The enforced allowlist supersedes family-by-family bans for all callers.
-Fable, Opus, GPT Mini, Codex Mini, unknown models, and opaque account-side
+Fable, Opus, GPT-5.5, GPT Mini, Codex Mini, unknown models, and opaque account-side
 selectors are all unavailable because they are not exact allowlist entries.
 Neither `model_justification` nor generic `model_override_acceptance` can
 authorize an unlisted route.

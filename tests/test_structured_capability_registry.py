@@ -74,38 +74,40 @@ class TestSupportsStructuredOutput:
         """The packaged registry declares the model litellm's map lags on."""
         assert supports_structured_output("openrouter/deepseek/deepseek-v4-flash") is True
         assert supports_structured_output("openrouter/minimax/minimax-m3") is True
+        assert supports_structured_output("openrouter/openai/gpt-5.6-sol") is True
         assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is True
 
-    def test_observed_direct_gpt_routes_advertise_native_schema_support(self):
-        """Responses API evidence overrides the failed OpenRouter proxy probe."""
+    def test_current_direct_gpt_routes_advertise_native_schema_support(self):
+        """Current direct routes retain observed native-schema capability."""
+        assert supports_structured_output("gpt-5.5") is None
+        assert supports_structured_output("openrouter/openai/gpt-5.5") is None
         assert supports_structured_output("gpt-5.6") is True
         assert supports_structured_output("gpt-5.6-terra") is True
 
+    def test_native_transport_capability_is_independent(self, tmp_path):
+        """A typed-output candidate may deliberately use Instructor transport."""
 
-class TestSupportsNativeStructuredOutput:
-    def test_explicit_native_capability_is_distinct_from_typed_output(self, tmp_path):
         cfg = _write_config(
             tmp_path,
             [
                 {
                     **_BASE,
-                    "litellm_id": "openrouter/x/native",
-                    "structured_output": True,
-                    "native_structured_output": True,
-                },
-                {
-                    **_BASE,
-                    "litellm_id": "openrouter/x/fallback-only",
+                    "litellm_id": "openrouter/x/instructor-model",
                     "structured_output": True,
                     "native_structured_output": False,
-                },
+                }
             ],
         )
         with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
-            assert supports_native_structured_output("openrouter/x/native") is True
-            assert supports_native_structured_output("openrouter/x/fallback-only") is False
+            assert supports_structured_output("openrouter/x/instructor-model") is True
+            assert (
+                supports_native_structured_output("openrouter/x/instructor-model")
+                is False
+            )
 
-    def test_omitted_native_capability_inherits_structured_output(self, tmp_path):
+    def test_legacy_registry_uses_structured_value_for_native_transport(self, tmp_path):
+        """Custom registries that omit the additive field preserve old behavior."""
+
         cfg = _write_config(
             tmp_path,
             [{**_BASE, "litellm_id": "openrouter/x/legacy", "structured_output": True}],
@@ -113,10 +115,28 @@ class TestSupportsNativeStructuredOutput:
         with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
             assert supports_native_structured_output("openrouter/x/legacy") is True
 
-    def test_packaged_luna_route_is_native(self):
-        assert supports_native_structured_output(
-            "openrouter/openai/gpt-5.6-luna"
-        ) is True
+    def test_malformed_native_transport_capability_fails_loud(self, tmp_path):
+        cfg = _write_config(
+            tmp_path,
+            [
+                {
+                    **_BASE,
+                    "litellm_id": "openrouter/x/malformed",
+                    "structured_output": True,
+                    "native_structured_output": ["not", "a", "boolean"],
+                }
+            ],
+        )
+        with patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}):
+            with pytest.raises(RuntimeError, match="expected boolean or null"):
+                supports_native_structured_output("openrouter/x/malformed")
+
+    def test_openrouter_gpt56_native_transport_matches_current_route_evidence(self):
+        """Only routes with current native-schema evidence select that transport."""
+
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is True
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-sol") is True
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-terra") is True
 
 
 class TestModelSupportsNativeSchema:
@@ -138,6 +158,27 @@ class TestModelSupportsNativeSchema:
             patch("litellm.supports_response_schema") as litellm_map,
         ):
             assert _model_supports_native_schema("openrouter/x/new-model") is True
+            litellm_map.assert_not_called()
+
+    def test_explicit_native_false_selects_instructor_despite_structured_eligibility(
+        self, tmp_path
+    ):
+        cfg = _write_config(
+            tmp_path,
+            [
+                {
+                    **_BASE,
+                    "litellm_id": "openrouter/x/instructor-model",
+                    "structured_output": True,
+                    "native_structured_output": False,
+                }
+            ],
+        )
+        with (
+            patch.dict(os.environ, {"LLM_CLIENT_MODELS_CONFIG": cfg}),
+            patch("litellm.supports_response_schema") as litellm_map,
+        ):
+            assert _model_supports_native_schema("openrouter/x/instructor-model") is False
             litellm_map.assert_not_called()
 
     def test_registry_false_blocks_native_path(self, tmp_path):

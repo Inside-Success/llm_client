@@ -18,6 +18,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from llm_client.core.errors import LLMConfigurationError
+from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
 from llm_client.execution.retry import _error_status_code
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,9 @@ OPENROUTER_API_BASE_ENV = "OPENROUTER_API_BASE"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_API_KEYS_ENV = "OPENROUTER_API_KEYS"
 OPENROUTER_METADATA_HEADER = "X-OpenRouter-Metadata"
+OPENROUTER_RESPONSE_CACHE_HEADER = "X-OpenRouter-Cache"
+OPENROUTER_RESPONSE_CACHE_TTL_HEADER = "X-OpenRouter-Cache-TTL"
+OPENROUTER_RESPONSE_CACHE_CLEAR_HEADER = "X-OpenRouter-Cache-Clear"
 _OPENROUTER_NORMALIZED_PASSTHROUGH_PARAMS = frozenset({"reasoning_effort"})
 
 # ---------------------------------------------------------------------------
@@ -214,6 +219,114 @@ def _reject_unsafe_openrouter_model_selection(call_kwargs: Mapping[str, Any]) ->
             _check_model_deprecation(model_id)
 
 
+def compile_openrouter_route_policy(policy: OpenRouterRoutePolicyV1) -> dict[str, Any]:
+    """Compile the stable public policy into OpenRouter's provider payload."""
+
+    provider: dict[str, Any] = {"require_parameters": True}
+    if policy.allowed_providers is not None:
+        provider["only"] = list(policy.allowed_providers)
+    if policy.data_collection is not None:
+        provider["data_collection"] = policy.data_collection
+    if policy.zero_data_retention is not None:
+        provider["zdr"] = policy.zero_data_retention
+    if not policy.allow_provider_fallbacks:
+        provider["allow_fallbacks"] = False
+    if policy.sort is not None:
+        provider["sort"] = policy.sort
+    return provider
+
+
+def _apply_openrouter_route_policy(
+    model: str,
+    call_kwargs: dict[str, Any],
+    policy: OpenRouterRoutePolicyV1 | None,
+) -> None:
+    """Apply a typed route policy or reject ambiguous/raw route controls locally."""
+
+    raw_provider = call_kwargs.get("provider")
+    api_base = call_kwargs.get("api_base")
+    _validate_openrouter_route_policy_model(
+        model,
+        str(api_base) if api_base is not None else None,
+        policy,
+    )
+    if policy is None:
+        return
+    if raw_provider is not None:
+        raise LLMConfigurationError(
+            "openrouter_route_policy cannot be combined with raw provider kwargs",
+            error_code="openrouter_route_policy_conflicts_with_provider_kwargs",
+        )
+    call_kwargs["provider"] = compile_openrouter_route_policy(policy)
+
+
+def _validate_openrouter_route_policy_model(
+    model: str,
+    api_base: str | None,
+    policy: OpenRouterRoutePolicyV1 | None,
+) -> None:
+    """Reject a typed policy on a resolved route outside OpenRouter."""
+
+    if policy is None:
+        return
+    if not _is_openrouter_call(model, api_base):
+        raise LLMConfigurationError(
+            "openrouter_route_policy requires every resolved model leg to use OpenRouter",
+            error_code="openrouter_route_policy_on_non_openrouter_route",
+        )
+
+
+def _apply_openrouter_response_cache_headers(
+    headers: dict[str, Any],
+    policy: OpenRouterRoutePolicyV1 | None,
+) -> None:
+    """Compile explicit typed cache intent or reject ambiguous raw controls."""
+
+    if policy is None:
+        return
+    cache_header_names = {
+        OPENROUTER_RESPONSE_CACHE_HEADER.casefold(),
+        OPENROUTER_RESPONSE_CACHE_TTL_HEADER.casefold(),
+        OPENROUTER_RESPONSE_CACHE_CLEAR_HEADER.casefold(),
+    }
+    if any(str(name).casefold() in cache_header_names for name in headers):
+        raise LLMConfigurationError(
+            "openrouter_route_policy cannot be combined with raw response-cache headers",
+            error_code="openrouter_route_policy_conflicts_with_cache_headers",
+        )
+    if policy.response_cache_mode == "disabled":
+        headers[OPENROUTER_RESPONSE_CACHE_HEADER] = "false"
+        return
+    headers[OPENROUTER_RESPONSE_CACHE_HEADER] = "true"
+    if policy.response_cache_mode == "refresh":
+        headers[OPENROUTER_RESPONSE_CACHE_CLEAR_HEADER] = "true"
+    if policy.response_cache_ttl_seconds is not None:
+        headers[OPENROUTER_RESPONSE_CACHE_TTL_HEADER] = str(
+            policy.response_cache_ttl_seconds
+        )
+
+
+def _openrouter_response_cache_status(raw_response: Any) -> str | None:
+    """Return ``hit``/``miss`` from LiteLLM-preserved OpenRouter headers."""
+
+    hidden = getattr(raw_response, "_hidden_params", None)
+    if not isinstance(hidden, Mapping):
+        return None
+    for container_name in ("headers", "additional_headers"):
+        headers = hidden.get(container_name)
+        if not isinstance(headers, Mapping):
+            continue
+        for name, value in headers.items():
+            normalized_name = str(name).casefold()
+            if normalized_name.startswith("llm_provider-"):
+                normalized_name = normalized_name.removeprefix("llm_provider-")
+            if normalized_name != "x-openrouter-cache-status":
+                continue
+            status = str(value).strip().casefold()
+            return status if status in {"hit", "miss"} else None
+    return None
+
+
 def _enable_openrouter_inline_metadata(
     model: str,
     call_kwargs: dict[str, Any],
@@ -231,6 +344,13 @@ def _enable_openrouter_inline_metadata(
     destinations can join their traces to local evidence. Explicit caller
     trace hierarchy and custom fields always win.
     """
+
+    policy_value = call_kwargs.pop("openrouter_route_policy", None)
+    if isinstance(policy_value, Mapping):
+        policy_value = OpenRouterRoutePolicyV1.model_validate(policy_value)
+    if policy_value is not None and not isinstance(policy_value, OpenRouterRoutePolicyV1):
+        raise TypeError("openrouter_route_policy must be an OpenRouterRoutePolicyV1")
+    _apply_openrouter_route_policy(model, call_kwargs, policy_value)
 
     api_base = call_kwargs.get("api_base")
     if not _is_openrouter_call(
@@ -278,12 +398,29 @@ def _enable_openrouter_inline_metadata(
         headers = dict(configured)
     else:
         raise TypeError("extra_headers must be a mapping")
+    _apply_openrouter_response_cache_headers(headers, policy_value)
     if not any(
         str(name).lower() == OPENROUTER_METADATA_HEADER.lower()
         for name in headers
     ):
         headers[OPENROUTER_METADATA_HEADER] = "enabled"
     call_kwargs["extra_headers"] = headers
+
+    if (
+        policy_value is not None
+        and policy_value.response_cache_mode in {"enabled", "refresh"}
+    ):
+        if call_kwargs.get("trace") is not None:
+            raise LLMConfigurationError(
+                "OpenRouter response caching cannot be combined with a request-body "
+                "Broadcast trace because the trace changes the exact-response cache key",
+                error_code="openrouter_response_cache_conflicts_with_trace_body",
+            )
+        # Local task/trace custody remains in metadata and llm_client's ledger.
+        # Do not copy per-call identity into OpenRouter's request body: OpenRouter
+        # hashes the full body, so doing so would turn every logical retry into a
+        # distinct cache entry.
+        return
 
     metadata = call_kwargs.get("metadata")
     if not isinstance(metadata, Mapping):

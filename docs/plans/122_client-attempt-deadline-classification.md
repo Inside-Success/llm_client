@@ -1,6 +1,6 @@
 # Plan #122: Client Attempt Deadline Classification
 
-**Status:** In Progress
+**Status:** Implemented on main; downstream Process Tracing verification pending
 **Type:** implementation
 **Priority:** High
 **Blocked By:** Plan #121 merged diagnostics contract
@@ -100,10 +100,10 @@ missing provider evidence before changing a model, retry policy, or timeout.
 
 ## Acceptance Criteria
 
-- [ ] Stable deadline produces `client_attempt_deadline`.
-- [ ] Unrecognized timeout remains `unknown`.
-- [ ] No prompt, response, credential, or provider-body content is added.
-- [ ] Focused tests, lint, and type checks pass; known unrelated broad-suite
+- [x] Stable deadline produces `client_attempt_deadline`.
+- [x] Unrecognized timeout remains `unknown`.
+- [x] No prompt, response, credential, or provider-body content is added.
+- [x] Focused tests, lint, and type checks pass; known unrelated broad-suite
   debt is reported rather than hidden.
 
 ---

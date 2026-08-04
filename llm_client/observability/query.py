@@ -900,6 +900,7 @@ def get_call_lifecycle(*, logical_call_id: str | None = None, trace_id: str | No
                 "provider_timeout_s": row[11],
                 "prompt_sha256": row[12],
                 "requested_timeout_s": row[13],
+                "logical_timeout_s": payload.get("logical_timeout_s"),
                 "transport_timeout_status": row[14],
                 "timeout_policy": row[15],
                 "schema_hash": payload.get("schema_hash"),

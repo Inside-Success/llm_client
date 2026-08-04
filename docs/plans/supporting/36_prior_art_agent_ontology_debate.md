@@ -1,4 +1,4 @@
-# Plan #36 Prior Art: `agent_ontology/agents/debate_agent.py`
+# Supporting Prior Art for Plan #36: `agent_ontology/agents/debate_agent.py`
 
 This note records the useful ideas extracted from
 `~/projects/agent_ontology/agents/debate_agent.py` before archive or tombstone
@@ -43,4 +43,3 @@ adjudication, Plan #35 barrier/anonymization, `review-cycle` artifacts, and
 legacy infrastructure and should be tombstoned in the sibling repo or moved to
 `~/projects/PROJECTS_DEFERRED/intermodel-dialogue-legacy/` only after sibling
 repo safety checks.
-

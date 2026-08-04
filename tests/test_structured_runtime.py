@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from types import SimpleNamespace
 from typing import Annotated, Literal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,7 +17,7 @@ import pytest
 from pydantic import BaseModel, Field, ValidationError
 
 from llm_client import LRUCache
-from llm_client.core.errors import LLMCapabilityError
+from llm_client.core.errors import LLMCapabilityError, LLMLogicalDeadlineError
 from llm_client.execution.responses_runtime import (
     _openrouter_compatible_strict_json_schema,
     _provider_compatible_discriminated_union_schema,
@@ -41,6 +43,12 @@ class _BoundedCount(BaseModel):
     """Response model that distinguishes provider and local validation."""
 
     count: int = Field(ge=1, description="A strictly positive count.")
+
+
+class _UniqueTags(BaseModel):
+    """Schema whose uniqueness rule remains a caller-side invariant."""
+
+    tags: list[str] = Field(json_schema_extra={"uniqueItems": True})
 
 
 class _SearchDecision(BaseModel):
@@ -100,6 +108,18 @@ def test_openrouter_schema_projection_preserves_structural_contract_and_local_va
     assert "minimum" not in projected["properties"]["count"]
     with pytest.raises(ValidationError, match="greater than or equal to 1"):
         _BoundedCount.model_validate({"count": 0})
+
+
+def test_openrouter_schema_projection_removes_unsupported_unique_items() -> None:
+    """OpenRouter receives the array shape without its unsupported value keyword."""
+    schema = _strict_json_schema(_UniqueTags.model_json_schema())
+
+    projected = _openrouter_compatible_strict_json_schema(schema)
+
+    assert schema["properties"]["tags"]["uniqueItems"] is True
+    assert "uniqueItems" not in projected["properties"]["tags"]
+    assert projected["properties"]["tags"]["type"] == "array"
+    assert projected["properties"]["tags"]["items"] == {"type": "string"}
 
 
 def test_openrouter_schema_projection_rejects_unconstrained_schema() -> None:
@@ -166,6 +186,81 @@ def test_openrouter_structured_call_sends_provider_compatible_schema(
     assert sent_schema["additionalProperties"] is False
 
 
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_sync_logical_timeout_caps_provider_attempt_and_stops_chain(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+) -> None:
+    """One hung sync attempt exhausts the total budget without retry/fallback."""
+
+    def _slow_completion(**_: object) -> object:
+        time.sleep(0.1)
+        return _mock_structured_response('{"count":1}')
+
+    mock_comp.side_effect = _slow_completion
+    started = time.monotonic()
+
+    with pytest.raises(
+        LLMLogicalDeadlineError,
+        match="structured logical call deadline elapsed",
+    ):
+        _call_llm_structured_impl(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "Return one."}],
+            _BoundedCount,
+            timeout=60,
+            logical_timeout=0.02,
+            num_retries=3,
+            fallback_models=["openrouter/deepseek/deepseek-v4-flash"],
+            task="test",
+            trace_id="structured.runtime.logical_deadline.sync",
+            max_budget=0,
+        )
+
+    assert time.monotonic() - started < 0.09
+    assert mock_comp.call_count == 1
+    assert 0 < mock_comp.call_args.kwargs["timeout"] <= 0.02
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_async_logical_timeout_caps_provider_attempt_and_stops_chain(
+    mock_acompletion: AsyncMock,
+    _mock_supports_schema: MagicMock,
+) -> None:
+    """The async provider path enforces the same total structured-call budget."""
+
+    async def _slow_completion(**_: object) -> object:
+        await asyncio.sleep(0.1)
+        return _mock_structured_response('{"count":1}')
+
+    mock_acompletion.side_effect = _slow_completion
+    started = time.monotonic()
+
+    with pytest.raises(
+        LLMLogicalDeadlineError,
+        match="structured logical call deadline elapsed",
+    ):
+        await _acall_llm_structured_impl(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "Return one."}],
+            _BoundedCount,
+            timeout=60,
+            logical_timeout=0.02,
+            num_retries=3,
+            fallback_models=["openrouter/deepseek/deepseek-v4-flash"],
+            task="test",
+            trace_id="structured.runtime.logical_deadline.async",
+            max_budget=0,
+        )
+
+    assert time.monotonic() - started < 0.09
+    assert mock_acompletion.await_count == 1
+    assert 0 < mock_acompletion.call_args.kwargs["timeout"] <= 0.02
+
+
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.completion")
@@ -180,7 +275,7 @@ def test_openrouter_native_schema_inlines_nested_ref_siblings(
     )
 
     parsed, _meta = _call_llm_structured_impl(
-        "openrouter/openai/gpt-5.6-luna",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Stop."}],
         _StopEnvelope,
         task="test",
@@ -212,7 +307,7 @@ async def test_openrouter_async_native_schema_inlines_nested_ref_siblings(
     )
 
     parsed, _meta = await _acall_llm_structured_impl(
-        "openrouter/openai/gpt-5.6-luna",
+        "openrouter/deepseek/deepseek-v4-flash",
         [{"role": "user", "content": "Stop."}],
         _StopEnvelope,
         task="test",
@@ -370,6 +465,7 @@ def _mock_structured_response(content: str = '{"name":"Tokyo"}') -> MagicMock:
     mock = MagicMock()
     mock.choices = [MagicMock()]
     mock.choices[0].message.content = content
+    mock.choices[0].message.refusal = None
     mock.choices[0].finish_reason = "stop"
     mock.usage.prompt_tokens = 10
     mock.usage.completion_tokens = 5
@@ -382,6 +478,129 @@ def _explicit_test_runtime_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep runtime-split tests independent from ambient process policy."""
     monkeypatch.setenv("LLM_CLIENT_OPENROUTER_ROUTING", "off")
     monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_sync_timeout_ban_preserves_provider_safety_ceiling(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A disabled caller timeout must not become HTTPX's nonblocking timeout=0."""
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    mock_comp.return_value = _mock_structured_response()
+
+    _call_llm_structured_impl(
+        "gpt-4",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.sync.timeout-ban",
+        max_budget=0,
+    )
+
+    assert mock_comp.call_args.kwargs["timeout"] == 300
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+@pytest.mark.asyncio
+async def test_async_timeout_ban_preserves_provider_safety_ceiling(
+    mock_comp: AsyncMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The async native-schema path preserves the same safety timeout."""
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    mock_comp.return_value = _mock_structured_response()
+
+    await _acall_llm_structured_impl(
+        "gpt-4",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.async.timeout-ban",
+        max_budget=0,
+    )
+
+    assert mock_comp.call_args.kwargs["timeout"] == 300
+
+
+@patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+def test_sync_instructor_fallback_timeout_ban_preserves_provider_safety_ceiling(
+    _mock_cost: MagicMock,
+    _mock_supports_schema: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Instructor fallback must retain the provider safety ceiling, never timeout=0."""
+
+    import instructor
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create_with_completion.return_value = (
+        _City(name="Tokyo"),
+        _mock_structured_response(),
+    )
+    monkeypatch.setattr(instructor, "from_litellm", lambda _completion: fake_client)
+
+    _call_llm_structured_impl(
+        "openrouter/test-instructor-fallback",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.sync.instructor.timeout-ban",
+        max_budget=0,
+    )
+
+    assert fake_client.chat.completions.create_with_completion.call_args.kwargs["timeout"] == 300
+
+
+@pytest.mark.asyncio
+@patch("llm_client.execution.structured_runtime._model_supports_native_schema", return_value=False)
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+async def test_async_instructor_fallback_timeout_ban_preserves_provider_safety_ceiling(
+    _mock_cost: MagicMock,
+    _mock_supports_schema: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Async Instructor fallback must retain the provider safety ceiling too."""
+
+    import instructor
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create_with_completion = AsyncMock(
+        return_value=(_City(name="Tokyo"), _mock_structured_response())
+    )
+    monkeypatch.setattr(instructor, "from_litellm", lambda _completion: fake_client)
+
+    await _acall_llm_structured_impl(
+        "openrouter/test-instructor-fallback",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        timeout=60,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.async.instructor.timeout-ban",
+        max_budget=0,
+    )
+
+    assert fake_client.chat.completions.create_with_completion.call_args.kwargs["timeout"] == 300
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)

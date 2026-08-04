@@ -279,3 +279,9 @@ from llm_client import call_llm
 - [Capability decomposition](docs/ops/CAPABILITY_DECOMPOSITION.md) — repo-local ownership and boundary source of record
 - [API reference](docs/API_REFERENCE.md) — full generated reference
 - [Architecture decisions](docs/adr/) — ADRs for routing, identity, observability boundaries
+
+## Repository navigation
+
+The concern front doors route without relocating existing authorities:
+[`docs/`](docs/), [`roadmap/`](roadmap/), [`src/`](src/), [`tests/`](tests/),
+[`ui/`](ui/), [`generated/`](generated/), and [`misc/`](misc/).

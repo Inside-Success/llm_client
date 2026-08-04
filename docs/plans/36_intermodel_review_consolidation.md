@@ -74,7 +74,7 @@ the existing typed review contract and observability discipline.
   anonymization, and model-pairing risk check.
 - `llm_client/cli/review_artifact.py` - standalone `AdversarialReview` schema
   and prompt currently live inside the CLI module.
-- `docs/plans/36_dogfood_review_summary.md` - redacted summary of the
+- `docs/plans/supporting/36_dogfood_review_summary.md` - redacted summary of the
   dogfood reviews that produced this plan's blocker/defect list.
 - GitHub issue #30 - closed on 2026-06-22 by private-only acceptance; reopen
   only if making the existing repository public again.
@@ -102,11 +102,11 @@ the existing typed review contract and observability discipline.
 - `tests/test_workflow_review_cycle.py` (created; Plan #37 follow-up added runtime-cache contract coverage) - loop convergence, budget,
   artifact persistence, high-confidence apply gating, and artifact edit guards.
 - `tests/test_cli_review_cycle.py` (created) - CLI parsing and builder threading.
-- `docs/plans/36_dogfood_review_summary.md` (create) - tracked,
+- `docs/plans/supporting/36_dogfood_review_summary.md` (create) - tracked,
   redacted evidence note for the reviews that shaped this plan.
-- `docs/plans/36_prior_art_consensus_system.md` (create) - extracted
+- `docs/plans/supporting/36_prior_art_consensus_system.md` (create) - extracted
   concepts from legacy consensus-system code before archive.
-- `docs/plans/36_prior_art_agent_ontology_debate.md` (create) - extracted
+- `docs/plans/supporting/36_prior_art_agent_ontology_debate.md` (create) - extracted
   concepts from generated debate-agent code before archive.
 - `docs/plans/CLAUDE.md` (modify) - keep Plan #36 indexed.
 

@@ -37,6 +37,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--notes")
     parser.add_argument("--scope")
     parser.add_argument("--session-id")
+    parser.add_argument("--session-name", required=True)
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
 
@@ -55,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         notes=args.notes,
         scope=args.scope,
         session_id=args.session_id,
+        session_name=args.session_name,
     )
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))

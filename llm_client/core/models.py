@@ -515,9 +515,10 @@ def supports_structured_output(litellm_id: str) -> bool | None:
 def supports_native_structured_output(litellm_id: str) -> bool | None:
     """Return the curated route's native ``json_schema`` capability.
 
-    The additive field separates native transport from overall typed-output
-    eligibility. Registries that omit it inherit ``structured_output``;
-    unknown models return ``None`` so the runtime can consult LiteLLM.
+    The additive ``native_structured_output`` field separates transport choice
+    from overall typed-output eligibility. Existing external registries that
+    omit it preserve the previous behavior by inheriting ``structured_output``.
+    Unknown models return ``None`` so the runtime can consult LiteLLM.
     """
 
     config = _load_config()

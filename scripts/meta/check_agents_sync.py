@@ -25,15 +25,18 @@ REPO_ROOT = _detect_repo_root(SCRIPT_PATH)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from enforced_planning.agents_rendering import build_renderer
+from enforced_planning.agents_rendering import build_renderer  # noqa: E402
 
 
 def _renderer_entrypoint(repo_root: Path) -> Path:
     """Return the truthful render entrypoint path for this repo layout."""
 
+    source_renderer = repo_root / "scripts" / "render_agents_md.py"
+    installed_renderer = repo_root / "scripts" / "meta" / "render_agents_md.py"
     candidates = (
-        repo_root / "scripts" / "meta" / "render_agents_md.py",
-        repo_root / "scripts" / "render_agents_md.py",
+        (source_renderer, installed_renderer)
+        if SCRIPT_PATH.parent.name == "scripts"
+        else (installed_renderer, source_renderer)
     )
     for candidate in candidates:
         if candidate.exists():

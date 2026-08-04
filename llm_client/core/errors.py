@@ -48,6 +48,10 @@ class LLMTransientError(LLMError):
     """Server error (500/502/503), timeout, connection — retry."""
 
 
+class LLMLogicalDeadlineError(LLMTransientError, TimeoutError):
+    """The caller-visible retry/fallback chain exhausted its total deadline."""
+
+
 class LLMEmptyResponseError(LLMError):
     """Model returned no text/tool output; retryability depends on classification."""
 
@@ -109,6 +113,10 @@ class LLMBudgetReservationStoreError(LLMError):
 
 class LLMCapabilityError(LLMError):
     """Requested execution mode/capabilities are incompatible with model/kwargs."""
+
+
+class LLMNoCompatibleRouteError(LLMCapabilityError):
+    """OpenRouter has no endpoint satisfying the requested route constraints."""
 
 
 class LLMConfigurationError(LLMError):
@@ -207,6 +215,8 @@ def classify_error(error: Exception) -> type[LLMError]:
     """
     # Unwrap instructor retry wrapper to get the actual provider error
     error = _unwrap_instructor_retry(error)
+    if "no endpoints found that can handle the requested parameters" in _error_message(error).lower():
+        return LLMNoCompatibleRouteError
     try:
         import litellm as _lt
 
@@ -225,6 +235,10 @@ def classify_error(error: Exception) -> type[LLMError]:
         budget_types = _litellm_error_types(_lt, ("BudgetExceededError",))
         if budget_types and isinstance(error, budget_types):
             return LLMQuotaExhaustedError
+
+        schema_validation_types = _litellm_error_types(_lt, ("JSONSchemaValidationError",))
+        if schema_validation_types and isinstance(error, schema_validation_types):
+            return LLMError
 
         rate_types = _litellm_error_types(_lt, ("RateLimitError",))
         if rate_types and isinstance(error, rate_types):
@@ -252,9 +266,11 @@ def classify_error(error: Exception) -> type[LLMError]:
 
     if any(p in error_str for p in _QUOTA_PATTERNS):
         return LLMQuotaExhaustedError
-    if "401" in error_str or "authentication" in error_str or "unauthorized" in error_str:
+    has_401_status = bool(re.search(r"(?:^|\D)401(?:\D|$)", error_str))
+    if has_401_status or "authentication" in error_str or "unauthorized" in error_str:
         return LLMAuthError
-    if "403" in error_str or "forbidden" in error_str or "permission" in error_str:
+    has_403_status = bool(re.search(r"(?:^|\D)403(?:\D|$)", error_str))
+    if has_403_status or "forbidden" in error_str or "permission" in error_str:
         return LLMAuthError
     has_404_status = bool(re.search(r"(?:^|\\D)404(?:\\D|$)", error_str))
     if has_404_status or "not found" in error_str or "does not exist" in error_str:

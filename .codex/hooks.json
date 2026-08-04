@@ -1,0 +1,80 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/prewrite-claim-gate.sh\"",
+            "timeout": 1,
+            "statusMessage": "Checking write ownership"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/notify-coordination-messages.sh\"",
+            "timeout": 3,
+            "statusMessage": "Checking coordination requests"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/notify-coordination-messages.sh\"",
+            "timeout": 3,
+            "statusMessage": "Checking coordination requests"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/notify-coordination-messages.sh\"",
+            "timeout": 3,
+            "statusMessage": "Checking coordination requests"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/notify-coordination-messages.sh\"",
+            "timeout": 3,
+            "statusMessage": "Checking coordination requests"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/notify-coordination-messages.sh\"",
+            "timeout": 3,
+            "statusMessage": "Checking coordination requests"
+          }
+        ]
+      }
+    ]
+  }
+}

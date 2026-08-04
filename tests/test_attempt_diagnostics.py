@@ -178,8 +178,7 @@ def test_old_database_migrates_additive_diagnostic_table(tmp_path) -> None:
             for row in io_log._get_db().execute("PRAGMA table_info(attempt_diagnostics)")
         }
     finally:
-        if io_log._db_conn is not None:
-            io_log._db_conn.close()
+        io_log.close()
         io_log._db_path, io_log._db_conn = previous_path, previous_conn
 
     assert {"diagnostic_id", "attempt_event_id", "sanitized_summary"} <= columns

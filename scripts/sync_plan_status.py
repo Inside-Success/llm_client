@@ -92,38 +92,88 @@ def parse_plan_status(plan_path: Path) -> dict | None:
     }
 
 
+def _split_table_cells(line: str) -> list[str]:
+    """Split a simple Markdown table row into trimmed cells."""
+    return [cell.strip() for cell in line.split("|")[1:-1]]
+
+
+def _is_separator_row(line: str) -> bool:
+    """Return true when a Markdown table row is only separator syntax."""
+    cells = _split_table_cells(line)
+    if not cells:
+        return False
+    return all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells)
+
+
+def _find_plan_index_table_rows(content: str) -> tuple[list[str], dict[str, int]]:
+    """Find the plan index table by header cells, not by surrounding heading."""
+    lines = content.splitlines()
+
+    for index, line in enumerate(lines):
+        if not line.lstrip().startswith("|"):
+            continue
+
+        headers = _split_table_cells(line)
+        normalized = [header.strip().lower() for header in headers]
+        if "#" not in normalized or "status" not in normalized:
+            continue
+        if index + 1 >= len(lines) or not _is_separator_row(lines[index + 1]):
+            continue
+
+        column_indexes = {
+            "number": normalized.index("#"),
+            "status": normalized.index("status"),
+        }
+        for optional in ("gap", "name", "priority", "blocks"):
+            if optional in normalized:
+                column_indexes[optional] = normalized.index(optional)
+
+        rows: list[str] = []
+        for row in lines[index + 2:]:
+            if not row.lstrip().startswith("|"):
+                break
+            if _is_separator_row(row):
+                continue
+            rows.append(row)
+
+        return rows, column_indexes
+
+    return [], {}
+
+
 def parse_index_table(index_path: Path) -> dict[int, dict]:
-    """Parse the gap summary table from index file."""
+    """Parse the plan status table from index file."""
     if not index_path.exists():
         return {}
 
     content = index_path.read_text()
 
-    # Find the Gap Summary table
-    table_match = re.search(
-        r"## Gap Summary\s+\|[^\n]+\n\|[-\s|]+\n((?:\|[^\n]+\n)*)",
-        content
-    )
-
-    if not table_match:
+    rows, column_indexes = _find_plan_index_table_rows(content)
+    if not rows:
         return {}
 
     plans = {}
-    for line in table_match.group(1).strip().split("\n"):
+    number_index = column_indexes["number"]
+    status_index = column_indexes["status"]
+    title_index = column_indexes.get("gap", column_indexes.get("name", 1))
+    priority_index = column_indexes.get("priority")
+    blocks_index = column_indexes.get("blocks")
+
+    for line in rows:
         if not line.strip():
             continue
 
-        cells = [c.strip() for c in line.split("|")[1:-1]]
-        if len(cells) < 4:
+        cells = _split_table_cells(line)
+        if len(cells) <= max(number_index, status_index):
             continue
 
         try:
-            plan_num = int(cells[0])
+            plan_num = int(cells[number_index])
         except ValueError:
             continue
 
         # Extract status emoji
-        status_cell = cells[3]
+        status_cell = cells[status_index]
         status_emoji = None
         for emoji in STATUS_MAP.keys():
             if emoji in status_cell:
@@ -132,11 +182,19 @@ def parse_index_table(index_path: Path) -> dict[int, dict]:
 
         plans[plan_num] = {
             "number": plan_num,
-            "title_cell": cells[1],
-            "priority": cells[2],
+            "title_cell": cells[title_index] if title_index < len(cells) else "",
+            "priority": (
+                cells[priority_index]
+                if priority_index is not None and priority_index < len(cells)
+                else ""
+            ),
             "status_cell": status_cell,
             "status_emoji": status_emoji or "❓",
-            "blocks": cells[4] if len(cells) > 4 else "",
+            "blocks": (
+                cells[blocks_index]
+                if blocks_index is not None and blocks_index < len(cells)
+                else ""
+            ),
         }
 
     return plans

@@ -10,14 +10,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
-import tempfile
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_core import to_jsonable_python
-
 
 RouteOutcome = Literal[
     "parseable",
@@ -28,7 +27,12 @@ RouteOutcome = Literal[
     "local_contract_rejected",
     "semantic_review_rejected",
 ]
-ExecutionMode = Literal["native_json_schema", "instructor", "text"]
+ExecutionMode = Literal[
+    "native_json_schema",
+    "workspace_agent",
+    "instructor",
+    "text",
+]
 FailureStage = Literal[
     "none",
     "pre_dispatch",
@@ -110,7 +114,7 @@ class RouteCertificationObservation(BaseModel):
         llm_client_revision: str,
         selected_attempt_receipt_digest: str | None,
         evidence_ref: str,
-    ) -> "RouteCertificationObservation":
+    ) -> RouteCertificationObservation:
         """Build deterministic identity and digest from trusted observation fields."""
 
         payload = {
@@ -142,7 +146,7 @@ class RouteCertificationObservation(BaseModel):
         )
 
     @model_validator(mode="after")
-    def _replay_and_validate(self) -> "RouteCertificationObservation":
+    def _replay_and_validate(self) -> RouteCertificationObservation:
         """Reject corruption and inconsistent outcome/failure classification."""
 
         payload = self.model_dump(
@@ -174,13 +178,23 @@ class RouteCertificationObservation(BaseModel):
 
     @property
     def transport_certifies(self) -> bool:
-        """Return whether this observation proves the exact native route worked."""
+        """Return whether this observation proves the exact structured route worked."""
 
         return (
             self.outcome == "parseable"
-            and self.execution_mode == "native_json_schema"
             and self.upstream_provider_endpoint is not None
-            and self.selected_attempt_receipt_digest is not None
+            and (
+                (
+                    self.execution_mode == "native_json_schema"
+                    and self.selected_attempt_receipt_digest is not None
+                )
+                or (
+                    self.execution_mode == "workspace_agent"
+                    and self.upstream_provider_endpoint
+                    in {"codex_cli", "codex_sdk"}
+                    and self.selected_attempt_receipt_digest is None
+                )
+            )
         )
 
 
@@ -307,10 +321,10 @@ class RouteCertificationStore:
 
 
 __all__ = [
+    "ExecutionMode",
+    "FailureStage",
     "RouteCertificationObservation",
     "RouteCertificationStore",
     "RouteCertificationView",
-    "ExecutionMode",
-    "FailureStage",
     "RouteOutcome",
 ]

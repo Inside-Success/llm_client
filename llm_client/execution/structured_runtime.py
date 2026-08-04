@@ -28,18 +28,24 @@ from llm_client.core.config import ClientConfig
 from llm_client.core.errors import (
     LLMCapabilityError,
     LLMConfigurationError,
+    LLMLogicalDeadlineError,
     _unwrap_instructor_retry,
 )
-from llm_client.execution.call_contracts import StructuredOutputPolicy
+from llm_client.execution.call_contracts import (
+    ObservabilityContentPolicy,
+    StructuredOutputPolicy,
+)
 from llm_client.langfuse_callbacks import inject_metadata as _inject_langfuse_metadata
 from pydantic import BaseModel, ValidationError
 
 import hashlib as _hashlib
 import json as _json
 import logging as _logging
+import math as _math
 import os as _os
 import re as _re
 import threading as _threading
+import time as _time
 
 import litellm
 import llm_client.io_log as _io_log
@@ -64,6 +70,7 @@ from llm_client.observability.structured_attempts import (
 )
 from llm_client.observability.attempt_diagnostics import (
     AttemptDiagnosticEnvelope,
+    TimeoutKind,
     exception_fingerprint,
     record_attempt_diagnostic,
 )
@@ -207,7 +214,52 @@ def _deadline_message(timeout: float) -> str:
     return f"structured provider attempt exceeded {timeout:g}s client deadline"
 
 
-def _run_sync_with_deadline(invoke: Callable[[], R], *, timeout: float) -> R:
+def _normalize_logical_timeout(value: float | None) -> float | None:
+    """Validate the optional caller-visible total structured-call budget."""
+
+    if value is None:
+        return None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not _math.isfinite(value)
+        or value <= 0
+    ):
+        raise LLMConfigurationError(
+            "logical_timeout must be a finite number greater than zero",
+            error_code="invalid_logical_timeout",
+        )
+    return float(value)
+
+
+def _logical_deadline_at(logical_timeout: float | None) -> float | None:
+    normalized = _normalize_logical_timeout(logical_timeout)
+    return None if normalized is None else _time.monotonic() + normalized
+
+
+def _effective_attempt_timeout(
+    timeout: float,
+    *,
+    deadline_at: float | None,
+) -> tuple[float, bool]:
+    """Cap one provider attempt by the remaining logical-call budget."""
+
+    if deadline_at is None:
+        return timeout, False
+    remaining = deadline_at - _time.monotonic()
+    if remaining <= 0:
+        raise LLMLogicalDeadlineError("structured logical call deadline elapsed")
+    if timeout <= 0 or remaining < timeout:
+        return remaining, True
+    return timeout, False
+
+
+def _run_sync_with_deadline(
+    invoke: Callable[[], R],
+    *,
+    timeout: float,
+    logical_cap: bool = False,
+) -> R:
     """Run one sync provider attempt behind a caller-visible hard deadline.
 
     Python cannot terminate a thread blocked in a third-party HTTP stack. A
@@ -235,6 +287,11 @@ def _run_sync_with_deadline(invoke: Callable[[], R], *, timeout: float) -> R:
     try:
         succeeded, outcome = outcomes.get(timeout=timeout)
     except queue.Empty as error:
+        if logical_cap:
+            raise LLMLogicalDeadlineError(
+                "structured logical call deadline elapsed",
+                original=error,
+            ) from error
         raise TimeoutError(_deadline_message(timeout)) from error
     if succeeded:
         return cast(R, outcome)
@@ -245,6 +302,7 @@ async def _run_async_with_deadline(
     invoke: Callable[[], Awaitable[R]],
     *,
     timeout: float,
+    logical_cap: bool = False,
 ) -> R:
     """Await one async provider attempt behind a cancellation deadline."""
 
@@ -253,6 +311,11 @@ async def _run_async_with_deadline(
     try:
         return await asyncio.wait_for(invoke(), timeout=timeout)
     except TimeoutError as error:
+        if logical_cap:
+            raise LLMLogicalDeadlineError(
+                "structured logical call deadline elapsed",
+                original=error,
+            ) from error
         raise TimeoutError(_deadline_message(timeout)) from error
 
 
@@ -484,13 +547,18 @@ def _received_attempt_event(
     schema_hash: str,
     raw_content: str,
     execution_path: Literal["native_schema", "responses_api"] = "native_schema",
+    persist_raw_artifact: bool = True,
 ) -> StructuredAttemptEvent:
-    """Persist exact raw bytes first, then build their received metadata event."""
+    """Optionally persist raw bytes, then build their received metadata event."""
 
-    artifact = write_structured_raw_artifact(
-        logical_call_id,
-        attempt,
-        raw_content,
+    artifact = (
+        write_structured_raw_artifact(
+            logical_call_id,
+            attempt,
+            raw_content,
+        )
+        if persist_raw_artifact
+        else None
     )
     event = _attempt_event(
         logical_call_id=logical_call_id,
@@ -565,13 +633,17 @@ def _record_execution_failure(
         for value in (status, provider_error_code, provider_request_id, gateway_request_id)
     )
     timeout_message = str(error).lower()
-    timeout_kind = (
-        "client_attempt_deadline"
-        if isinstance(error, TimeoutError) and "client deadline" in timeout_message
+    timeout_kind: TimeoutKind | None = (
+        "client_logical_deadline"
+        if isinstance(error, LLMLogicalDeadlineError)
         else (
-            "client_attempt_safety"
-            if isinstance(error, TimeoutError) and "safety deadline" in timeout_message
-            else ("unknown" if isinstance(error, TimeoutError) else None)
+            "client_attempt_deadline"
+            if isinstance(error, TimeoutError) and "client deadline" in timeout_message
+            else (
+                "client_attempt_safety"
+                if isinstance(error, TimeoutError) and "safety deadline" in timeout_message
+                else ("unknown" if isinstance(error, TimeoutError) else None)
+            )
         )
     )
     if not _io_log._logging_enabled():
@@ -665,6 +737,7 @@ def _record_provider_schema_validation_failure(
     attempt: int,
     model: str,
     schema_hash: str,
+    persist_raw_artifact: bool = True,
 ) -> bool:
     """Persist a LiteLLM pre-return validation failure as a complete attempt."""
 
@@ -675,6 +748,7 @@ def _record_provider_schema_validation_failure(
         logical_call_id=logical_call_id, trace_id=trace_id, task=task,
         attempt=attempt, model=model, schema_hash=schema_hash,
         raw_content=raw_content,
+        persist_raw_artifact=persist_raw_artifact,
     ))
     record_structured_attempt_event(_attempt_event(
         logical_call_id=logical_call_id, trace_id=trace_id, task=task,
@@ -800,6 +874,7 @@ def _call_llm_structured_impl(
     response_model: type[T],
     *,
     timeout: int = 60,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -879,6 +954,14 @@ def _call_llm_structured_impl(
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
+    observability_content_policy = kwargs.pop(
+        "observability_content_policy", ObservabilityContentPolicy()
+    )
+    if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+        raise TypeError(
+            "observability_content_policy must be an ObservabilityContentPolicy"
+        )
+    persist_raw_artifacts = observability_content_policy.mode == "full"
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="call_llm_structured",
     )
@@ -888,7 +971,11 @@ def _call_llm_structured_impl(
         result = event.get("result")
         if isinstance(result, LLMCallResult):
             result.logical_call_id = _logical_call_id
-        _base_log_call_event(**event, logical_call_id=_logical_call_id)
+        _base_log_call_event(
+            **event,
+            logical_call_id=_logical_call_id,
+            observability_content_policy=observability_content_policy,
+        )
         _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
@@ -897,6 +984,12 @@ def _call_llm_structured_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
+    logical_timeout = _normalize_logical_timeout(logical_timeout)
+    deadline_at = _logical_deadline_at(logical_timeout)
+
+    def _attempt_timeout() -> tuple[float, bool]:
+        return _effective_attempt_timeout(timeout, deadline_at=deadline_at)
+
     _check_budget(
         trace_id,
         max_budget,
@@ -906,6 +999,8 @@ def _call_llm_structured_impl(
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy
+    if logical_timeout is not None:
+        snapshot_public_kwargs["logical_timeout"] = logical_timeout
     if model_justification is not None:
         snapshot_public_kwargs["model_justification"] = model_justification
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
@@ -943,6 +1038,13 @@ def _call_llm_structured_impl(
         reasoning_effort=reasoning_effort,
     )
     models = plan.models
+    route_policy = kwargs.get("openrouter_route_policy")
+    for resolved_model in models:
+        _client._validate_openrouter_route_policy_model(
+            resolved_model,
+            _resolve_api_base_for_model(resolved_model, api_base, cfg),
+            route_policy,
+        )
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
     model_policy_trace = plan.routing_trace.get("model_policy")
     if plan.primary_model.startswith("codex"):
@@ -979,8 +1081,19 @@ def _call_llm_structured_impl(
 
         if hooks and hooks.before_call:
             hooks.before_call(model, messages, public_kwargs)
-        parsed, llm_result = _route_call_structured(
-            model, messages, response_model, timeout=timeout, **public_kwargs,
+        attempt_timeout, logical_cap = _attempt_timeout()
+        parsed, llm_result = _run_sync_with_deadline(
+            lambda: _route_call_structured(
+                model,
+                messages,
+                response_model,
+                # The legacy SDK annotation is integral, but its runtime accepts
+                # fractional seconds and the precise remaining cap must not round up.
+                timeout=cast(int, attempt_timeout),
+                **public_kwargs,
+            ),
+            timeout=attempt_timeout,
+            logical_cap=logical_cap,
         )
         llm_result = _finalize_result(
             llm_result,
@@ -1078,7 +1191,8 @@ def _call_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _provider_compatible_discriminated_union_schema(
                 _strict_openai_response_model_schema(response_model)
             )
@@ -1184,7 +1298,14 @@ def _call_llm_structured_impl(
                         return litellm.responses(**call_kwargs)
 
                 try:
-                    response = _run_sync_with_deadline(provider_call, timeout=timeout)
+                    attempt_timeout, logical_cap = _attempt_timeout()
+                    if attempt_timeout > 0:
+                        call_kwargs["timeout"] = attempt_timeout
+                    response = _run_sync_with_deadline(
+                        provider_call,
+                        timeout=attempt_timeout,
+                        logical_cap=logical_cap,
+                    )
                     raw_content = getattr(response, "output_text", None) or ""
                     if not raw_content.strip():
                         raise _EmptyStructuredContentError(
@@ -1200,6 +1321,7 @@ def _call_llm_structured_impl(
                             schema_hash=_responses_schema_hash,
                             raw_content=raw_content,
                             execution_path="responses_api",
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     )
                     attempt_received = True
@@ -1375,6 +1497,7 @@ def _call_llm_structured_impl(
                 on_error=_on_responses_error,
                 on_retry=r.on_retry,
                 on_decision=_record_responses_recovery,
+                deadline_at=deadline_at,
                 maybe_retry_hook=lambda exc, attempt, max_retries: (
                     False
                     if isinstance(exc, _StructuredFinalizationFailure)
@@ -1400,7 +1523,8 @@ def _call_llm_structured_impl(
                 "strict structured-output policy forbids Instructor fallback."
             )
         if supports_schema:
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _native_provider_schema(response_model, model=current_model)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -1493,7 +1617,14 @@ def _call_llm_structured_impl(
                         return litellm.completion(**base_kwargs)
 
                 try:
-                    response = _run_sync_with_deadline(provider_call, timeout=timeout)
+                    attempt_timeout, logical_cap = _attempt_timeout()
+                    if attempt_timeout > 0:
+                        base_kwargs["timeout"] = attempt_timeout
+                    response = _run_sync_with_deadline(
+                        provider_call,
+                        timeout=attempt_timeout,
+                        logical_cap=logical_cap,
+                    )
                     first_choice = _first_choice_or_empty_error(
                         response,
                         model=current_model,
@@ -1506,6 +1637,7 @@ def _call_llm_structured_impl(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash,
                         raw_content=raw_content,
+                        persist_raw_artifact=persist_raw_artifacts,
                     ))
                     attempt_cost, attempt_cost_source = _parse_cost_result(
                         _compute_cost(response)
@@ -1606,6 +1738,7 @@ def _call_llm_structured_impl(
                             error=exc, logical_call_id=_logical_call_id,
                             trace_id=trace_id, task=task, attempt=logical_attempt,
                             model=current_model, schema_hash=_schema_hash,
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     except StructuredRawArtifactError as artifact_error:
                         raise _StructuredFinalizationFailure(artifact_error) from artifact_error
@@ -1668,6 +1801,7 @@ def _call_llm_structured_impl(
                     on_error=_on_native_schema_error,
                     on_retry=r.on_retry,
                     on_decision=_record_native_recovery,
+                    deadline_at=deadline_at,
                     maybe_retry_hook=lambda exc, attempt, max_retries: (
                         False if isinstance(exc, (_NativeSchemaFallback, _StructuredFinalizationFailure)) else _maybe_retry_with_openrouter_key_rotation(
                             error=exc,
@@ -1714,9 +1848,13 @@ def _call_llm_structured_impl(
             ).hexdigest()[:16]
 
             def _invoke_instructor_attempt(attempt: int) -> tuple[T, LLMCallResult]:
+                attempt_timeout, logical_cap = _attempt_timeout()
+                if attempt_timeout > 0:
+                    call_kwargs["timeout"] = attempt_timeout
                 parsed, completion_response = _run_sync_with_deadline(
                     lambda: client.chat.completions.create_with_completion(**call_kwargs),
-                    timeout=timeout,
+                    timeout=attempt_timeout,
+                    logical_cap=logical_cap,
                 )
 
                 usage = _extract_usage(completion_response)
@@ -1786,6 +1924,7 @@ def _call_llm_structured_impl(
                 logger=logger,
                 on_error=(hooks.on_error if hooks and hooks.on_error else None),
                 on_retry=r.on_retry,
+                deadline_at=deadline_at,
                 maybe_retry_hook=lambda exc, attempt, max_retries: _maybe_retry_with_openrouter_key_rotation(
                     error=exc,
                     attempt=attempt,
@@ -1811,6 +1950,7 @@ def _call_llm_structured_impl(
             on_fallback=on_fallback,
             warning_sink=_warnings,
             logger=logger,
+            deadline_at=deadline_at,
         ))
     except Exception as e:
         terminal_error = _unwrap_structured_finalization_failure(e)
@@ -1835,6 +1975,7 @@ async def _acall_llm_structured_impl(
     response_model: type[T],
     *,
     timeout: int = 60,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -1916,6 +2057,14 @@ async def _acall_llm_structured_impl(
     prompt_ref = _normalize_prompt_ref(kwargs.pop("prompt_ref", None))
     model_policy = str(kwargs.pop("model_policy", "enforce_allowlist"))
     model_justification = kwargs.pop("model_justification", None)
+    observability_content_policy = kwargs.pop(
+        "observability_content_policy", ObservabilityContentPolicy()
+    )
+    if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+        raise TypeError(
+            "observability_content_policy must be an ObservabilityContentPolicy"
+        )
+    persist_raw_artifacts = observability_content_policy.mode == "full"
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm_structured",
     )
@@ -1925,7 +2074,11 @@ async def _acall_llm_structured_impl(
         result = event.get("result")
         if isinstance(result, LLMCallResult):
             result.logical_call_id = _logical_call_id
-        _base_log_call_event(**event, logical_call_id=_logical_call_id)
+        _base_log_call_event(
+            **event,
+            logical_call_id=_logical_call_id,
+            observability_content_policy=observability_content_policy,
+        )
         _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
@@ -1934,6 +2087,12 @@ async def _acall_llm_structured_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
+    logical_timeout = _normalize_logical_timeout(logical_timeout)
+    deadline_at = _logical_deadline_at(logical_timeout)
+
+    def _attempt_timeout() -> tuple[float, bool]:
+        return _effective_attempt_timeout(timeout, deadline_at=deadline_at)
+
     _check_budget(
         trace_id,
         max_budget,
@@ -1943,6 +2102,8 @@ async def _acall_llm_structured_impl(
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy
+    if logical_timeout is not None:
+        snapshot_public_kwargs["logical_timeout"] = logical_timeout
     if model_justification is not None:
         snapshot_public_kwargs["model_justification"] = model_justification
     _inject_langfuse_metadata(kwargs, task=task, trace_id=trace_id)
@@ -1980,6 +2141,13 @@ async def _acall_llm_structured_impl(
         reasoning_effort=reasoning_effort,
     )
     models = plan.models
+    route_policy = kwargs.get("openrouter_route_policy")
+    for resolved_model in models:
+        _client._validate_openrouter_route_policy_model(
+            resolved_model,
+            _resolve_api_base_for_model(resolved_model, api_base, cfg),
+            route_policy,
+        )
     routing_policy = str(plan.routing_trace.get("routing_policy", _routing_policy_label(cfg)))
     model_policy_trace = plan.routing_trace.get("model_policy")
     if plan.primary_model.startswith("codex"):
@@ -2016,8 +2184,19 @@ async def _acall_llm_structured_impl(
 
         if hooks and hooks.before_call:
             hooks.before_call(model, messages, public_kwargs)
-        parsed, llm_result = await _route_acall_structured(
-            model, messages, response_model, timeout=timeout, **public_kwargs,
+        attempt_timeout, logical_cap = _attempt_timeout()
+        parsed, llm_result = await _run_async_with_deadline(
+            lambda: _route_acall_structured(
+                model,
+                messages,
+                response_model,
+                # Preserve the precise remaining cap across the legacy integral
+                # SDK annotation; runtime timeout consumers accept fractional values.
+                timeout=cast(int, attempt_timeout),
+                **public_kwargs,
+            ),
+            timeout=attempt_timeout,
+            logical_cap=logical_cap,
         )
         llm_result = _finalize_result(
             llm_result,
@@ -2115,7 +2294,8 @@ async def _acall_llm_structured_impl(
         backoff_fn = r.backoff or exponential_backoff
 
         if _is_responses_api_model(current_model):
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _provider_compatible_discriminated_union_schema(
                 _strict_openai_response_model_schema(response_model)
             )
@@ -2225,7 +2405,14 @@ async def _acall_llm_structured_impl(
                         )
 
                 try:
-                    response = await _run_async_with_deadline(provider_call, timeout=timeout)
+                    attempt_timeout, logical_cap = _attempt_timeout()
+                    if attempt_timeout > 0:
+                        call_kwargs["timeout"] = attempt_timeout
+                    response = await _run_async_with_deadline(
+                        provider_call,
+                        timeout=attempt_timeout,
+                        logical_cap=logical_cap,
+                    )
                     raw_content = getattr(response, "output_text", None) or ""
                     if not raw_content.strip():
                         raise _EmptyStructuredContentError(
@@ -2241,6 +2428,7 @@ async def _acall_llm_structured_impl(
                             schema_hash=_responses_schema_hash_async,
                             raw_content=raw_content,
                             execution_path="responses_api",
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     )
                     attempt_received = True
@@ -2416,6 +2604,7 @@ async def _acall_llm_structured_impl(
                 on_error=_on_responses_error_async,
                 on_retry=r.on_retry,
                 on_decision=_record_responses_recovery_async,
+                deadline_at=deadline_at,
                 maybe_retry_hook=lambda exc, attempt, max_retries: (
                     False
                     if isinstance(exc, _StructuredFinalizationFailure)
@@ -2441,7 +2630,8 @@ async def _acall_llm_structured_impl(
                 "strict structured-output policy forbids Instructor fallback."
             )
         if supports_schema:
-            _prepare_raw_artifact_store_for_runtime()
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             schema = _native_provider_schema(response_model, model=current_model)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -2537,7 +2727,14 @@ async def _acall_llm_structured_impl(
                         )
 
                 try:
-                    response = await _run_async_with_deadline(provider_call, timeout=timeout)
+                    attempt_timeout, logical_cap = _attempt_timeout()
+                    if attempt_timeout > 0:
+                        base_kwargs["timeout"] = attempt_timeout
+                    response = await _run_async_with_deadline(
+                        provider_call,
+                        timeout=attempt_timeout,
+                        logical_cap=logical_cap,
+                    )
                     first_choice = _first_choice_or_empty_error(
                         response,
                         model=current_model,
@@ -2550,6 +2747,7 @@ async def _acall_llm_structured_impl(
                         logical_call_id=_logical_call_id, trace_id=trace_id, task=task,
                         attempt=logical_attempt, model=current_model, schema_hash=_schema_hash_async,
                         raw_content=raw_content,
+                        persist_raw_artifact=persist_raw_artifacts,
                     ))
                     attempt_cost, attempt_cost_source = _parse_cost_result(
                         _compute_cost(response)
@@ -2650,6 +2848,7 @@ async def _acall_llm_structured_impl(
                             error=exc, logical_call_id=_logical_call_id,
                             trace_id=trace_id, task=task, attempt=logical_attempt,
                             model=current_model, schema_hash=_schema_hash_async,
+                            persist_raw_artifact=persist_raw_artifacts,
                         )
                     except StructuredRawArtifactError as artifact_error:
                         raise _StructuredFinalizationFailure(artifact_error) from artifact_error
@@ -2712,6 +2911,7 @@ async def _acall_llm_structured_impl(
                     on_error=_on_native_schema_error,
                     on_retry=r.on_retry,
                     on_decision=_record_native_recovery_async,
+                    deadline_at=deadline_at,
                     maybe_retry_hook=lambda exc, attempt, max_retries: (
                         False if isinstance(exc, (_NativeSchemaFallback, _StructuredFinalizationFailure)) else _maybe_retry_with_openrouter_key_rotation(
                             error=exc,
@@ -2765,9 +2965,13 @@ async def _acall_llm_structured_impl(
                         model=current_model,
                     )
 
+                attempt_timeout, logical_cap = _attempt_timeout()
+                if attempt_timeout > 0:
+                    call_kwargs["timeout"] = attempt_timeout
                 parsed, completion_response = await _run_async_with_deadline(
                     instructor_call,
-                    timeout=timeout,
+                    timeout=attempt_timeout,
+                    logical_cap=logical_cap,
                 )
 
                 usage = _extract_usage(completion_response)
@@ -2837,6 +3041,7 @@ async def _acall_llm_structured_impl(
                 logger=logger,
                 on_error=(hooks.on_error if hooks and hooks.on_error else None),
                 on_retry=r.on_retry,
+                deadline_at=deadline_at,
                 maybe_retry_hook=lambda exc, attempt, max_retries: _maybe_retry_with_openrouter_key_rotation(
                     error=exc,
                     attempt=attempt,
@@ -2862,6 +3067,7 @@ async def _acall_llm_structured_impl(
             on_fallback=on_fallback,
             warning_sink=_warnings,
             logger=logger,
+            deadline_at=deadline_at,
         ))
     except Exception as e:
         terminal_error = _unwrap_structured_finalization_failure(e)

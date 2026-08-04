@@ -88,6 +88,8 @@ import llm_client.utils.rate_limit as _rate_limit
 from llm_client.execution.call_contracts import (
     AGENT_RETRY_SAFE_ENV,
     ExecutionMode,
+    ObservabilityContentPolicy,
+    OpenRouterRoutePolicyV1,
     StructuredOutputPolicy,
     _AGENT_ONLY_KWARGS,
     _CODEX_AGENT_ALIASES,
@@ -304,6 +306,7 @@ from llm_client.utils.openrouter import (  # noqa: F811
     OPENROUTER_API_KEYS_ENV,
     OPENROUTER_DEFAULT_API_BASE,
     OPENROUTER_ROUTING_ENV,
+    _validate_openrouter_route_policy_model,
 )
 
 
@@ -467,6 +470,7 @@ def call_llm(
     hooks: Hooks | None = None,
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     parent_trace_id: str | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
@@ -537,6 +541,8 @@ def call_llm(
     """
     from llm_client.execution.text_runtime import _call_llm_impl
 
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
     if budget_scope_trace_id is not None:
@@ -593,6 +599,7 @@ def call_llm_structured(
     response_model: type[T],
     *,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -607,6 +614,8 @@ def call_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    observability_content_policy: ObservabilityContentPolicy | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -624,6 +633,8 @@ def call_llm_structured(
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
             runtime policy supplies a finite default.
+        logical_timeout: Optional total seconds for the complete structured
+            retry/fallback chain. Omission preserves per-attempt-only behavior.
         num_retries: Number of retries on failure
         reasoning_effort: Explicit reasoning effort; required for registered
             configurable-reasoning routes.
@@ -633,6 +644,9 @@ def call_llm_structured(
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        observability_content_policy: Durable call-content policy. Metadata-only
+            mode preserves bounded operational telemetry but omits prompts,
+            responses, replay snapshots, and dynamic diagnostic content.
         budget_scope_trace_id: Optional root trace whose settled cost is shared
             by this call and its slash-delimited descendants. It is never
             forwarded to the provider.
@@ -653,6 +667,14 @@ def call_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="call_llm_structured")
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
+    if observability_content_policy is not None:
+        if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+            raise TypeError(
+                "observability_content_policy must be an ObservabilityContentPolicy"
+            )
+        kwargs["observability_content_policy"] = observability_content_policy
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     kwargs["budget_scope_mode"] = budget_scope_mode
@@ -662,6 +684,7 @@ def call_llm_structured(
         timeout=resolved_timeout,
         kwargs=kwargs,
         messages=messages,
+        logical_timeout=logical_timeout,
     )
     return _run_sync_public_call(
         model=model,
@@ -674,6 +697,7 @@ def call_llm_structured(
             messages,
             response_model,
             timeout=resolved_timeout,
+            logical_timeout=logical_timeout,
             num_retries=num_retries,
             reasoning_effort=reasoning_effort,
             api_base=api_base,
@@ -802,6 +826,7 @@ async def acall_llm(
     hooks: Hooks | None = None,
     execution_mode: ExecutionMode = "text",
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     parent_trace_id: str | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
@@ -846,6 +871,8 @@ async def acall_llm(
     """
     from llm_client.execution.text_runtime import _acall_llm_impl
 
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
     if parent_trace_id is not None:
         kwargs["parent_trace_id"] = parent_trace_id
     if budget_scope_trace_id is not None:
@@ -902,6 +929,7 @@ async def acall_llm_structured(
     response_model: type[T],
     *,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -916,6 +944,8 @@ async def acall_llm_structured(
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
     structured_output_policy: StructuredOutputPolicy | None = None,
+    observability_content_policy: ObservabilityContentPolicy | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -933,6 +963,8 @@ async def acall_llm_structured(
         response_model: Pydantic model class to extract
         timeout: Request timeout in seconds. When omitted, shared structured-call
             runtime policy supplies a finite default.
+        logical_timeout: Optional total seconds for the complete structured
+            retry/fallback chain. Omission preserves per-attempt-only behavior.
         num_retries: Number of retries on failure
         reasoning_effort: Explicit reasoning effort; required for registered
             configurable-reasoning routes.
@@ -942,6 +974,9 @@ async def acall_llm_structured(
         hooks: Observability hooks (before_call, after_call, on_error)
         structured_output_policy: Execution-path policy. Strict native-schema
             mode fails instead of switching to Agent SDK or Instructor.
+        observability_content_policy: Durable call-content policy. Metadata-only
+            mode preserves bounded operational telemetry but omits prompts,
+            responses, replay snapshots, and dynamic diagnostic content.
         budget_scope_trace_id: Optional root trace whose settled cost is shared
             by this call and its slash-delimited descendants. It is never
             forwarded to the provider.
@@ -962,6 +997,14 @@ async def acall_llm_structured(
     resolved_timeout = timeout
     if resolved_timeout is None:
         resolved_timeout = _default_timeout_for_caller(caller="acall_llm_structured")
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
+    if observability_content_policy is not None:
+        if not isinstance(observability_content_policy, ObservabilityContentPolicy):
+            raise TypeError(
+                "observability_content_policy must be an ObservabilityContentPolicy"
+            )
+        kwargs["observability_content_policy"] = observability_content_policy
     if budget_scope_trace_id is not None:
         kwargs["budget_scope_trace_id"] = budget_scope_trace_id
     kwargs["budget_scope_mode"] = budget_scope_mode
@@ -971,6 +1014,7 @@ async def acall_llm_structured(
         timeout=resolved_timeout,
         kwargs=kwargs,
         messages=messages,
+        logical_timeout=logical_timeout,
     )
     return await _run_async_public_call(
         model=model,
@@ -983,6 +1027,7 @@ async def acall_llm_structured(
             messages,
             response_model,
             timeout=resolved_timeout,
+            logical_timeout=logical_timeout,
             num_retries=num_retries,
             reasoning_effort=reasoning_effort,
             api_base=api_base,
@@ -1223,6 +1268,7 @@ async def acall_llm_structured_batch(
     on_item_complete: Callable[[int, tuple[T, LLMCallResult]], None] | None = None,
     on_item_error: Callable[[int, Exception], None] | None = None,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -1258,6 +1304,7 @@ async def acall_llm_structured_batch(
         on_item_complete=on_item_complete,
         on_item_error=on_item_error,
         timeout=timeout,
+        logical_timeout=logical_timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,
         api_base=api_base,
@@ -1285,6 +1332,7 @@ def call_llm_structured_batch(
     on_item_complete: Callable[[int, tuple[T, LLMCallResult]], None] | None = None,
     on_item_error: Callable[[int, Exception], None] | None = None,
     timeout: int | None = None,
+    logical_timeout: float | None = None,
     num_retries: int = 2,
     reasoning_effort: str | None = None,
     api_base: str | None = None,
@@ -1315,6 +1363,7 @@ def call_llm_structured_batch(
         on_item_complete=on_item_complete,
         on_item_error=on_item_error,
         timeout=timeout,
+        logical_timeout=logical_timeout,
         num_retries=num_retries,
         reasoning_effort=reasoning_effort,
         api_base=api_base,
@@ -1354,6 +1403,7 @@ def stream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -1397,6 +1447,8 @@ def stream_llm(
         LLMStream that yields text chunks and exposes ``.result``
     """
     from llm_client.execution.stream_runtime import stream_llm_impl
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
 
     return stream_llm_impl(
         model,
@@ -1438,6 +1490,7 @@ async def astream_llm(
     on_fallback: Callable[[str, Exception, str], None] | None = None,
     hooks: Hooks | None = None,
     config: ClientConfig | None = None,
+    openrouter_route_policy: OpenRouterRoutePolicyV1 | None = None,
     budget_scope_trace_id: str | None = None,
     budget_scope_mode: Literal["sequential", "reserved_concurrent"] = "sequential",
     budget_reservation: float = 0.0,
@@ -1451,6 +1504,8 @@ async def astream_llm(
         AsyncLLMStream that yields text chunks and exposes ``.result``
     """
     from llm_client.execution.stream_runtime import astream_llm_impl
+    if openrouter_route_policy is not None:
+        kwargs["openrouter_route_policy"] = openrouter_route_policy
 
     return await astream_llm_impl(
         model,
@@ -1598,6 +1653,7 @@ def embed(
     api_key: str | None = None,
     task: str | None = None,
     trace_id: str | None = None,
+    max_budget: float | None = None,
     **kwargs: Any,
 ) -> EmbeddingResult:
     """Generate embeddings for text input(s).
@@ -1616,6 +1672,8 @@ def embed(
         api_base: Optional API base URL
         api_key: Optional API key override
         task: Optional task tag for io_log tracking
+        trace_id: Optional trace identifier for observability and budget checks
+        max_budget: Maximum cumulative trace cost in USD; 0 means unlimited
         **kwargs: Additional params passed to litellm.embedding
 
     Returns:
@@ -1632,6 +1690,7 @@ def embed(
         api_key=api_key,
         task=task,
         trace_id=trace_id,
+        max_budget=max_budget,
         **kwargs,
     )
 
@@ -1646,6 +1705,7 @@ async def aembed(
     api_key: str | None = None,
     task: str | None = None,
     trace_id: str | None = None,
+    max_budget: float | None = None,
     **kwargs: Any,
 ) -> EmbeddingResult:
     """Async version of embed(). See embed() for full docs."""
@@ -1660,6 +1720,7 @@ async def aembed(
         api_key=api_key,
         task=task,
         trace_id=trace_id,
+        max_budget=max_budget,
         **kwargs,
     )
 

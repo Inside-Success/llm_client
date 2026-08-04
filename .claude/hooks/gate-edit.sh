@@ -95,6 +95,61 @@ format_gate_context() {
     trim_for_limit "$context" "$max_bytes"
 }
 
+build_relationship_context() {
+    local packet_output
+    local packet_exit
+    local -a command
+
+    if [[ ! -f "$CONTEXT_PACKET_SCRIPT" ]]; then
+        printf '%s' "RELATIONSHIP CONTEXT UNAVAILABLE: missing ${CONTEXT_PACKET_SCRIPT#$REPO_ROOT/}"
+        return 0
+    fi
+    command=(
+        "$RELATIONSHIP_CONTEXT_PYTHON" "$CONTEXT_PACKET_SCRIPT" "$REL_PATH"
+        --repo-root "$REPO_ROOT"
+        --config "$RELATIONSHIP_CONTEXT_CONFIG"
+        --max-items "$RELATIONSHIP_CONTEXT_MAX_ITEMS"
+        --max-chars "$RELATIONSHIP_CONTEXT_MAX_CHARS"
+        --allow-untracked-target
+        --pretty
+    )
+    set +e
+    packet_output="$(cd "$REPO_ROOT" && "${command[@]}" 2>&1)"
+    packet_exit=$?
+    set -e
+    if [[ $packet_exit -ne 0 ]]; then
+        printf 'RELATIONSHIP CONTEXT ERROR (report-only; edit allowed):\n%s' "$packet_output"
+        return 0
+    fi
+    printf 'RELATIONSHIP CONTEXT PACKET (source-derived; report-only):\n%s' "$packet_output"
+}
+
+emit_allow_context() {
+    local gate_summary="$1"
+    local reason="$2"
+    local relationship_context
+    local context_payload
+    local context_bytes
+    local escaped
+
+    relationship_context="$(build_relationship_context)"
+    context_payload="$relationship_context"
+    if [[ -n "$gate_summary" ]]; then
+        context_payload="$gate_summary"$'\n\n'"$relationship_context"
+    fi
+    context_bytes="$(printf '%s' "$context_payload" | wc -c | tr -d '[:space:]')"
+    escaped="$(printf '%s' "$context_payload" | jq -Rs .)"
+    log_gate_decision "allow" "$reason" "1" "$context_bytes"
+    cat << EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "additionalContext": $escaped
+  }
+}
+EOF
+}
+
 resolve_repo_root() {
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,6 +159,10 @@ resolve_repo_root() {
 normalize_repo_path() {
     local raw_path="$1"
     local rel_path="$raw_path"
+    if [[ "$raw_path" == /* && "$raw_path" != "$REPO_ROOT/"* ]]; then
+        printf '%s' ""
+        return 0
+    fi
     if [[ "$raw_path" == "$REPO_ROOT/"* ]]; then
         rel_path="${raw_path#$REPO_ROOT/}"
     fi
@@ -168,7 +227,17 @@ READS_FILE="$(resolve_data_path "${CLAUDE_SESSION_READS_FILE:-/tmp/.claude_sessi
 LOG_FILE="$(resolve_data_path "${CLAUDE_HOOK_LOG_FILE:-.claude/hook_log.jsonl}")"
 HOOK_LOG_SCRIPT="$REPO_ROOT/scripts/meta/hook_log.py"
 CHECK_SCRIPT="$REPO_ROOT/scripts/check_required_reading.py"
+CONTEXT_PACKET_SCRIPT="$REPO_ROOT/scripts/meta/context_packet.py"
 CHECK_CONFIG="${CLAUDE_CHECK_REQUIRED_READING_CONFIG:-}"
+RELATIONSHIP_CONTEXT_CONFIG="${RELATIONSHIP_CONTEXT_CONFIG:-scripts/relationships.yaml}"
+RELATIONSHIP_CONTEXT_MAX_ITEMS="${RELATIONSHIP_CONTEXT_MAX_ITEMS:-20}"
+RELATIONSHIP_CONTEXT_MAX_CHARS="${RELATIONSHIP_CONTEXT_MAX_CHARS:-8000}"
+if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+    RELATIONSHIP_CONTEXT_DEFAULT_PYTHON="$REPO_ROOT/.venv/bin/python"
+else
+    RELATIONSHIP_CONTEXT_DEFAULT_PYTHON="python3"
+fi
+RELATIONSHIP_CONTEXT_PYTHON="${RELATIONSHIP_CONTEXT_PYTHON:-$RELATIONSHIP_CONTEXT_DEFAULT_PYTHON}"
 REL_PATH="$(normalize_repo_path "$FILE_PATH")"
 HOOK_EXPERIMENT_ID="${CLAUDE_HOOK_EXPERIMENT_ID:-}"
 HOOK_VARIANT_ID="${CLAUDE_HOOK_VARIANT_ID:-}"
@@ -181,6 +250,11 @@ fi
 
 if [[ -z "$FILE_PATH" ]]; then
     log_gate_decision "skip" "missing file path" "0" "0"
+    exit 0
+fi
+
+if [[ -z "$REL_PATH" ]]; then
+    log_gate_decision "skip" "file path is outside repository" "0" "0"
     exit 0
 fi
 
@@ -225,34 +299,11 @@ fi
 if [[ -n "$RESULT" ]]; then
     WARNINGS="$(extract_section_items "$RESULT" "^  scope warnings:")"
     if [[ -n "$WARNINGS" ]]; then
-        CONTEXT_BYTES="$(printf '%s' "$RESULT" | wc -c | tr -d '[:space:]')"
-        RESULT_ESCAPED="$(echo "$RESULT" | jq -Rs .)"
-        log_gate_decision "allow" "scope warnings present" "1" "$CONTEXT_BYTES"
-        cat << EOF
-{
-  "reason": $RESULT_ESCAPED,
-  "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "additionalContext": $RESULT_ESCAPED
-  }
-}
-EOF
+        emit_allow_context "$RESULT" "scope warnings present; relationship context injected"
         exit 0
     fi
-
-    CONTEXT_BYTES="$(printf '%s' "$RESULT" | wc -c | tr -d '[:space:]')"
-    log_gate_decision "allow" "required reading satisfied" "1" "$CONTEXT_BYTES"
-    RESULT_ESCAPED="$(echo "$RESULT" | jq -Rs .)"
-    cat << EOF
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "additionalContext": $RESULT_ESCAPED
-  }
-}
-EOF
-else
-    log_gate_decision "allow" "required reading satisfied" "0" "0"
 fi
+
+emit_allow_context "$RESULT" "required reading satisfied; relationship context injected"
 
 exit 0
