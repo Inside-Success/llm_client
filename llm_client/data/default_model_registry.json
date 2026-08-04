@@ -131,7 +131,8 @@
         "openrouter",
         "planner-candidate",
         "reasoning",
-        "bounded-schema-evidence"
+        "bounded-schema-evidence",
+        "tier-fast-mid"
       ]
     },
     {
@@ -224,37 +225,6 @@
         "cheapest-openai",
         "low-intelligence",
         "tier-ultra-cheap-low-intel"
-      ]
-    },
-    {
-      "api_key_env": "OPENROUTER_API_KEY",
-      "context": 400000,
-      "cost": 0.65,
-      "intelligence": 40,
-      "litellm_id": "openrouter/openai/gpt-5.4-mini",
-      "name": "gpt-5.4-mini",
-      "provider": "openrouter",
-      "speed": 161,
-      "structured_output": true,
-      "tags": [
-        "reliable-structured",
-        "strong-tool-calling"
-      ]
-    },
-    {
-      "api_key_env": "OPENROUTER_API_KEY",
-      "context": 400000,
-      "cost": 0.18,
-      "intelligence": 38,
-      "litellm_id": "openrouter/openai/gpt-5.4-nano",
-      "name": "gpt-5.4-nano",
-      "provider": "openrouter",
-      "speed": 163,
-      "structured_output": true,
-      "tags": [
-        "cheap",
-        "strong-tool-calling",
-        "tier-fast-mid"
       ]
     },
     {

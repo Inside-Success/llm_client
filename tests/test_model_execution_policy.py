@@ -132,6 +132,9 @@ def test_allowed_alternate_without_justification_fails() -> None:
     [
         "openrouter/openai/gpt-5-mini",
         "openrouter/openai/gpt-5.1-mini",
+        "openrouter/openai/gpt-5.4",
+        "openrouter/openai/gpt-5.4-mini",
+        "codex/gpt-5.4",
         "openrouter/openai/gpt-5.5",
         "gpt-5.5",
         "gpt-5.5-pro",
@@ -198,7 +201,7 @@ def test_model_rejects_unsupported_effort_before_provider_remapping() -> None:
     with pytest.raises(LLMConfigurationError, match="unsupported.*allowed"):
         evaluate_reasoning_policy(
             [DEFAULT_EXECUTION_MODEL],
-            reasoning_effort="medium",
+            reasoning_effort="minimal",
         )
 
 
@@ -221,6 +224,12 @@ def test_gpt55_family_is_absent_from_execution_policy() -> None:
     """Retired GPT-5.5 aliases cannot remain selectable or configurable."""
     assert not any("gpt-5.5" in model for model in ALLOWED_EXECUTION_MODELS)
     assert not any("gpt-5.5" in model for model in REASONING_CAPABILITIES)
+
+
+def test_gpt54_family_is_absent_from_execution_policy() -> None:
+    """Banned GPT-5.4 aliases cannot remain selectable or configurable."""
+    assert not any("gpt-5.4" in model for model in ALLOWED_EXECUTION_MODELS)
+    assert not any("gpt-5.4" in model for model in REASONING_CAPABILITIES)
 
 
 def test_reasoning_effort_changes_cache_identity() -> None:

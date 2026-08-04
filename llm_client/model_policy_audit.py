@@ -55,7 +55,7 @@ MODEL_OVERRIDE_FIELD_RE = re.compile(
     r"\b(?:override_model|fallback_model|fallback_models|benchmark_model)\b"
 )
 
-BANNED_MODEL_PATTERNS = frozenset({"fable", "gpt-5.5", "opus"})
+BANNED_MODEL_PATTERNS = frozenset({"fable", "gpt-5.4", "gpt-5.5", "opus"})
 
 DIRECT_PROVIDER_IMPORT_RE = re.compile(
     r"^\s*(?:"

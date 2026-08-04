@@ -677,7 +677,7 @@ def _apply_max_tokens(model: str, call_kwargs: dict[str, Any]) -> None:
 # Agent model detection and execution-mode contracts
 # ---------------------------------------------------------------------------
 
-_CODEX_AGENT_ALIASES: frozenset[str] = frozenset({"codex-mini-latest", "gpt-5.4"})
+_CODEX_AGENT_ALIASES: frozenset[str] = frozenset({"codex-mini-latest"})
 
 # Matches bare model names that belong to the Codex family but don't start
 # with the "codex/" prefix — e.g. "gpt-5.3-codex", "gpt-5.1-codex-mini".
@@ -871,6 +871,12 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "gpt-5.4": (
+        "gpt-5.6-luna (preferred) OR an explicit non-GPT-5.4 route when Luna "
+        "cannot satisfy the required execution contract",
+        "GPT-5.4-family models are banned by ecosystem policy in every execution "
+        "lane, including raw provider routes, Mini/Nano variants, and Codex aliases.",
+    ),
     "gpt-5.5": (
         "gpt-5.6 (Sol) OR gpt-5.6-terra",
         "GPT-5.5 is retired from ecosystem routing. Use GPT-5.6 Sol for "
@@ -907,7 +913,7 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
         "GPT-5 Mini is prohibited by the shared model-execution policy.",
     ),
     "codex-mini": (
-        "codex/gpt-5.4",
+        "codex/gpt-5.6-luna",
         "Codex Mini routes are prohibited by the shared model-execution policy.",
     ),
     "gpt-4o-mini": (

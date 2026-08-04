@@ -41,7 +41,7 @@ the workflow needs workspace side effects:
 
 ```python
 result = call_llm(
-    "codex/gpt-5.4",
+    "codex/gpt-5.6-luna",
     messages,
     execution_mode="workspace_agent",
     reasoning_effort="medium",
