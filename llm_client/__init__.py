@@ -144,6 +144,8 @@ from llm_client.core.errors import (
     LLMContentFilterError,
     LLMError,
     LLMModelNotFoundError,
+    LLMNoCompatibleRouteError,
+    LLMLogicalDeadlineError,
     LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMTransientError,
@@ -160,6 +162,9 @@ from llm_client.observability import (
     RuntimeSelectedRawContent,
     LLMCallReceiptV1,
     ExperimentRun,
+    ObservedRun,
+    ObservedRunRecord,
+    ObservedRunStatus,
     SelectedAttemptReceiptError,
     StructuredRawArtifactError,
     ToolCallResult,
@@ -190,6 +195,8 @@ from llm_client.observability import (
     get_runtime_selected_raw_content,
     diagnose_runtime_selected_attempt_receipt_for_trace,
     get_experiment_aggregates,
+    get_observed_run,
+    list_observed_runs,
     get_run,
     get_run_items,
     get_runs,
@@ -225,8 +232,14 @@ from llm_client.core.model_execution_policy import (
     evaluate_model_execution_policy,
 )
 from llm_client.route_certification_runtime import (
+    codex_native_provider_schema,
+    compile_codex_structured_success,
     openrouter_native_provider_schema,
     route_schema_sha256,
+)
+from llm_client.revision import (
+    installed_llm_client_revision,
+    validated_llm_client_revision,
 )
 from llm_client.prompt_assets import (
     PromptAssetManifest,
@@ -329,7 +342,11 @@ from llm_client.core.client import (
     stream_llm_with_tools,
     strip_fences,
 )
-from llm_client.execution.call_contracts import StructuredOutputPolicy
+from llm_client.execution.call_contracts import (
+    ObservabilityContentPolicy,
+    OpenRouterRoutePolicyV1,
+    StructuredOutputPolicy,
+)
 from llm_client.json_schema import (
     JsonScalar,
     JsonValue,
@@ -366,6 +383,8 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "LLMContentFilterError",
     "LLMError",
     "LLMModelNotFoundError",
+    "LLMNoCompatibleRouteError",
+    "LLMLogicalDeadlineError",
     "LLMQuotaExhaustedError",
     "LLMRateLimitError",
     "LLMTransientError",
@@ -389,6 +408,8 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "resolve_call",
     "RetryPolicy",
     "StructuredOutputPolicy",
+    "ObservabilityContentPolicy",
+    "OpenRouterRoutePolicyV1",
     "acall_llm",
     "acall_llm_batch",
     "acall_llm_structured",
@@ -413,6 +434,9 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "RuntimeSelectedAttemptReceipt",
     "RuntimeSelectedRawContent",
     "LLMCallReceiptV1",
+    "ObservedRun",
+    "ObservedRunRecord",
+    "ObservedRunStatus",
     "SelectedAttemptReceiptError",
     "StructuredRawArtifactError",
     "configure_logging",
@@ -429,6 +453,8 @@ _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
     "lookup_result",
     "replay_call_snapshot",
     "get_cost",
+    "get_observed_run",
+    "list_observed_runs",
     "start_run",
     "log_item",
     "finish_run",

@@ -19,6 +19,8 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
+from enforced_planning import doc_authority
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = Path("scripts/relationships.yaml")
@@ -296,6 +298,11 @@ class FileContext:
     target_arch_docs: list[str]
     gap_docs: list[str]
     plan_refs: list[str]
+    doc_spine_primary_spec: str | None
+    doc_spine_ancestor_chain: list[str]
+    doc_spine_governed_by: list[str]
+    doc_spine_required_context: list[dict[str, Any]]
+    doc_spine_reads: list[str]
 
     @property
     def required_reads(self) -> list[str]:
@@ -307,6 +314,7 @@ class FileContext:
             + self.target_arch_docs
             + self.gap_docs
             + self.plan_refs
+            + self.doc_spine_reads
         ):
             normalized = _normalize(doc)
             if normalized not in seen:
@@ -333,14 +341,40 @@ class FileContext:
                 "gaps": self.gap_docs,
                 "plan_refs": self.plan_refs,
             },
+            "doc_spine": {
+                "primary_spec": self.doc_spine_primary_spec,
+                "ancestor_chain": self.doc_spine_ancestor_chain,
+                "governed_by": self.doc_spine_governed_by,
+                "required_context": self.doc_spine_required_context,
+                "required_reads": self.doc_spine_reads,
+            },
             "required_reads": self.required_reads,
         }
+
+
+def _resolve_authority_config_path(
+    repo_root: Path,
+    authority_config_path: str | Path | None,
+) -> Path | None:
+    """Return the effective doc-authority config path if one exists."""
+
+    if authority_config_path is None:
+        candidate = repo_root / doc_authority.DEFAULT_DOC_AUTHORITY_CONFIG
+    else:
+        candidate = Path(authority_config_path)
+        if not candidate.is_absolute():
+            candidate = repo_root / candidate
+    return candidate if candidate.exists() else None
 
 
 def collect_context(
     file_path: str,
     relationships: dict[str, Any],
+    *,
+    repo_root: Path | None = None,
+    authority_config_path: str | Path | None = None,
 ) -> FileContext:
+    active_repo_root = (repo_root or REPO_ROOT).resolve()
     governance_cfg = relationships.get("governance", []) or []
     coupling_cfg = relationships.get("couplings", []) or []
     architecture_cfg = relationships.get("architecture", []) or []
@@ -403,6 +437,17 @@ def collect_context(
         arch_gaps.extend(_to_list(rule.get("gap_docs") or rule.get("gaps")))
         arch_plan_refs.extend(_to_list(rule.get("plan_refs")))
 
+    authority_path = _resolve_authority_config_path(active_repo_root, authority_config_path)
+    spine_context = None
+    if authority_path is not None:
+        spine_context = doc_authority.get_doc_spine_context(
+            active_repo_root,
+            file_path,
+            config_path=authority_path,
+        )
+        if spine_context is not None:
+            explicitly_registered = True
+
     def dedupe(values: list[str]) -> list[str]:
         seen: set[str] = set()
         out: list[str] = []
@@ -423,6 +468,17 @@ def collect_context(
         target_arch_docs=dedupe(arch_target),
         gap_docs=dedupe(arch_gaps),
         plan_refs=dedupe(arch_plan_refs),
+        doc_spine_primary_spec=(spine_context.primary_spec if spine_context is not None else None),
+        doc_spine_ancestor_chain=(list(spine_context.ancestor_chain) if spine_context is not None else []),
+        doc_spine_governed_by=(list(spine_context.governed_by) if spine_context is not None else []),
+        doc_spine_required_context=(
+            [
+                {"path": entry.path, "reason": entry.reason, "when": entry.when}
+                for entry in spine_context.required_context
+            ]
+            if spine_context is not None else []
+        ),
+        doc_spine_reads=(list(spine_context.required_reads) if spine_context is not None else []),
     )
 
 

@@ -79,6 +79,23 @@ def resolve_workspace_path(raw_path: str, *, workspace_root: Path | None = None)
     return (base_root / raw_path).resolve()
 
 
+def resolve_registered_path(
+    raw_path: str,
+    *,
+    workspace_root: Path,
+    repo_root: Path,
+) -> Path:
+    """Resolve a registry path that may be workspace-relative or repo-relative."""
+
+    workspace_candidate = (workspace_root / raw_path).resolve()
+    if workspace_candidate.exists():
+        return workspace_candidate
+    repo_candidate = (repo_root / raw_path).resolve()
+    if repo_candidate.exists():
+        return repo_candidate
+    return workspace_candidate
+
+
 def load_notebook(path: Path) -> dict[str, Any]:
     """Load and validate notebook JSON structure from disk."""
     with path.open(encoding="utf-8") as handle:
@@ -138,10 +155,15 @@ def _validate_file_list(
     journey_id: str,
     result: NotebookRegistryValidationResult,
     workspace_root: Path,
+    repo_root: Path,
 ) -> None:
     """Validate that each workspace-relative file path in a list exists."""
     for value in values:
-        resolved = resolve_workspace_path(value, workspace_root=workspace_root)
+        resolved = resolve_registered_path(
+            value,
+            workspace_root=workspace_root,
+            repo_root=repo_root,
+        )
         if not resolved.exists():
             result.errors.append(
                 f"{journey_id}: {label} path does not exist: {value}"
@@ -278,6 +300,7 @@ def _validate_phase_entries(
     journey_id: str,
     result: NotebookRegistryValidationResult,
     workspace_root: Path,
+    repo_root: Path,
 ) -> list[str]:
     """Validate phase entry shape and return phase IDs in declared order."""
     if not phases:
@@ -322,6 +345,7 @@ def _validate_phase_entries(
                 journey_id=journey_id,
                 result=result,
                 workspace_root=workspace_root,
+                repo_root=repo_root,
             )
 
     return phase_ids
@@ -336,6 +360,7 @@ def validate_notebook_registry(
 ) -> NotebookRegistryValidationResult:
     """Validate the notebook registry and all selected journey entries."""
     base_workspace_root = workspace_root or WORKSPACE_ROOT
+    base_repo_root = registry_path.parent.parent.resolve()
     result = NotebookRegistryValidationResult(registry_path=str(registry_path))
     journeys = _validate_registry_top_level(registry, result)
     if result.errors:
@@ -375,9 +400,10 @@ def validate_notebook_registry(
             continue
         seen_notebooks.add(notebook_rel)
 
-        notebook_path = resolve_workspace_path(
+        notebook_path = resolve_registered_path(
             notebook_rel,
             workspace_root=base_workspace_root,
+            repo_root=base_repo_root,
         )
         if not notebook_path.exists():
             result.errors.append(f"{current_journey_id}: notebook path does not exist: {notebook_rel}")
@@ -396,6 +422,7 @@ def validate_notebook_registry(
                 journey_id=current_journey_id,
                 result=result,
                 workspace_root=base_workspace_root,
+                repo_root=base_repo_root,
             )
 
         phases = [entry for entry in journey.get("phases", []) if isinstance(entry, dict)]
@@ -404,6 +431,7 @@ def validate_notebook_registry(
             journey_id=current_journey_id,
             result=result,
             workspace_root=base_workspace_root,
+            repo_root=base_repo_root,
         )
 
         try:
@@ -423,9 +451,10 @@ def validate_notebook_registry(
         _validate_proof_mode(journey=journey, phases=phases, result=result)
 
         for deep_dive in _to_list(journey.get("deep_dive_notebooks")):
-            deep_dive_path = resolve_workspace_path(
+            deep_dive_path = resolve_registered_path(
                 deep_dive,
                 workspace_root=base_workspace_root,
+                repo_root=base_repo_root,
             )
             try:
                 load_notebook(deep_dive_path)

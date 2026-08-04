@@ -2,24 +2,21 @@
 
 These helpers make review intent visible in the claim registry and route
 concerns to the most durable surface available: PR comments once a branch is
-published, otherwise the local inbox channel.
+published, otherwise the canonical coordination mailbox.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
 import subprocess
 import tempfile
 from dataclasses import asdict
 from dataclasses import dataclass
-from datetime import datetime
-from datetime import timezone
 from pathlib import Path
 from typing import Any
 
 from enforced_planning import coordination_claims
+from enforced_planning import coordination_messages
 from enforced_planning import push_safety
 
 
@@ -31,6 +28,8 @@ class ConcernRoute:
     destination: str
     target_branch: str
     recipient: str
+    evidence_state: str
+    message_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation for CLI use."""
@@ -81,13 +80,12 @@ def create_review_claim(
     notes: str | None = None,
     scope: str | None = None,
     session_id: str | None = None,
+    session_name: str | None = None,
 ) -> dict[str, Any]:
     """Create a review claim that makes cross-lane inspection visible."""
 
     resolved_repo_root = push_safety.resolve_repo_root(repo_root)
     normalized_write_paths = _split_path_values(write_paths)
-    if not normalized_write_paths:
-        raise ValueError("Review claims require at least one write path.")
     current_branch = _current_branch(resolved_repo_root)
     resolved_scope = scope or _candidate_review_scope(target_branch)
     ok, message = coordination_claims.create_claim(
@@ -103,6 +101,7 @@ def create_review_claim(
         worktree_path=str(resolved_repo_root),
         parent_scope=target_branch,
         session_id=session_id,
+        session_name=session_name,
         notes=notes,
     )
     if not ok:
@@ -146,7 +145,7 @@ def _open_pr_for_branch(repo_root: Path, branch: str) -> dict[str, Any] | None:
 
 
 def _best_recipient(project: str, target_branch: str, explicit_recipient: str | None) -> str:
-    """Choose the local inbox recipient for a concern that has no PR yet."""
+    """Resolve exactly one canonical recipient session for an unpublished lane."""
 
     if explicit_recipient:
         return explicit_recipient
@@ -155,68 +154,16 @@ def _best_recipient(project: str, target_branch: str, explicit_recipient: str | 
         for claim in coordination_claims.check_claims(project)
         if claim.branch == target_branch
     ]
-    for claim in matching_claims:
-        if claim.session_name:
-            return claim.session_name
-    for claim in matching_claims:
-        if claim.scope:
-            return claim.scope
-    return target_branch
-
-
-def _message_sender(repo_root: Path, agent: str) -> str:
-    """Derive a stable sender label for local inbox messages."""
-
-    return _current_branch(repo_root) or coordination_claims.resolve_session_id(agent) or agent
-
-
-def _message_id(sender: str, timestamp: datetime) -> str:
-    """Return a compact unique message identifier."""
-
-    payload = f"{sender}-{timestamp.isoformat()}-{os.urandom(4).hex()}"
-    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
-    return f"msg-{timestamp.strftime('%Y%m%d-%H%M%S')}-{digest}"
-
-
-def _write_local_message(
-    *,
-    repo_root: Path,
-    sender: str,
-    recipient: str,
-    subject: str,
-    content: str,
-) -> Path:
-    """Persist a concern to the repo-local inbox using the existing message format."""
-
-    timestamp = datetime.now(timezone.utc)
-    inbox_dir = repo_root / ".claude" / "messages" / "inbox" / recipient
-    inbox_dir.mkdir(parents=True, exist_ok=True)
-    path = inbox_dir / f"{timestamp.strftime('%Y%m%d_%H%M%S')}_from-{sender}_suggestion.md"
-    message = "\n".join(
-        [
-            "---",
-            f"id: {_message_id(sender, timestamp)}",
-            f"from: {sender}",
-            f"to: {recipient}",
-            f"timestamp: {timestamp.isoformat().replace('+00:00', 'Z')}",
-            "type: suggestion",
-            f"subject: {subject}",
-            "status: unread",
-            "---",
-            "",
-            "## Content",
-            "",
-            content,
-            "",
-            "## Requested Action",
-            "",
-            "- [ ] Review the concern",
-            "- [ ] Reply or update the lane state if it changes direction",
-            "",
-        ]
-    )
-    path.write_text(message, encoding="utf-8")
-    return path
+    sessions = sorted({claim.session_id for claim in matching_claims if claim.session_id})
+    if not sessions:
+        raise coordination_messages.UnknownSessionError(
+            f"No live session owns target branch {target_branch!r} in project {project!r}"
+        )
+    if len(sessions) > 1:
+        raise coordination_messages.AmbiguousRecipientError(
+            f"Target branch {target_branch!r} resolves to multiple sessions: {', '.join(sessions)}"
+        )
+    return sessions[0]
 
 
 def route_concern(
@@ -230,7 +177,7 @@ def route_concern(
     recipient: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Route a concern to PR comment when published, otherwise to local inbox."""
+    """Route a concern to a PR or persist it in the canonical mailbox."""
 
     resolved_repo_root = push_safety.resolve_repo_root(repo_root)
     pr = _open_pr_for_branch(resolved_repo_root, target_branch)
@@ -246,6 +193,7 @@ def route_concern(
                 destination=pr_url,
                 target_branch=target_branch,
                 recipient=str(pr_number),
+                evidence_state="planned",
             )
             return {"ok": True, **route.to_dict()}
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
@@ -262,30 +210,50 @@ def route_concern(
             destination=pr_url,
             target_branch=target_branch,
             recipient=str(pr_number),
+            evidence_state="fallback_published",
         )
         return {"ok": True, **route.to_dict()}
 
     resolved_recipient = _best_recipient(project, target_branch, recipient)
-    sender = _message_sender(resolved_repo_root, agent)
+    sender = coordination_claims.resolve_session_id(agent)
+    if not sender:
+        raise coordination_messages.UnknownSessionError(
+            f"Unable to resolve canonical sender session for agent {agent!r}"
+        )
     if dry_run:
         route = ConcernRoute(
-            route="local_message",
-            destination=str(resolved_repo_root / ".claude" / "messages" / "inbox" / resolved_recipient),
+            route="coordination_mailbox",
+            destination=str(coordination_messages.default_message_root()),
             target_branch=target_branch,
             recipient=resolved_recipient,
+            evidence_state="planned",
         )
         return {"ok": True, **route.to_dict()}
-    message_path = _write_local_message(
-        repo_root=resolved_repo_root,
-        sender=sender,
-        recipient=resolved_recipient,
-        subject=subject,
-        content=content,
+    store = coordination_messages.CoordinationMessageStore(
+        root=coordination_messages.default_message_root(),
+        claims_dir=coordination_claims.CLAIMS_DIR,
+    )
+    persisted = store.send(
+        coordination_messages.SendMessageRequest(
+            caller_session_id=sender,
+            sender_session_id=sender,
+            recipient=coordination_messages.ExactSessionSelector(
+                kind="session",
+                session_id=resolved_recipient,
+            ),
+            project=project,
+            kind="review_request",
+            subject=subject,
+            body=content,
+            claim_ref=target_branch,
+        )
     )
     route = ConcernRoute(
-        route="local_message",
-        destination=str(message_path),
+        route="coordination_mailbox",
+        destination=persisted.message_path,
         target_branch=target_branch,
         recipient=resolved_recipient,
+        evidence_state="persisted",
+        message_id=persisted.message.message_id,
     )
     return {"ok": True, **route.to_dict()}

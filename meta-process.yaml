@@ -9,6 +9,7 @@ meta_process:
     plans_dir: docs/plans
   claims:
     enabled: true
+    prewrite_mode: enforce
   worktrees:
     enabled: true
   capability_ownership:

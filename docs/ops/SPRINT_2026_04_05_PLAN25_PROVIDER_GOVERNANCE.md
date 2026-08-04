@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Owner:** codex
-**Plan:** [../plans/25_provider-governance-and-shared-coordination.md](../plans/25_provider-governance-and-shared-coordination.md)
+**Historical proposal:** [../plans/40_provider-governance-and-shared-coordination.md](../plans/40_provider-governance-and-shared-coordination.md)
 **Mission:** move recent anomaly-driven provider fixes out of tactical routing/rate-limit patches and into a durable shared provider-governance subsystem in `llm_client`.
 
 ## Operating Rules

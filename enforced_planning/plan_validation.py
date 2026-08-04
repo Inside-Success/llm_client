@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.parse import urlparse
 
 import yaml  # type: ignore[import-untyped]
 
@@ -35,6 +36,17 @@ def _detect_repo_root(script_path: Path) -> Path:
 ROOT = _detect_repo_root(Path(__file__).resolve())
 PLANS_DIR = ROOT / "docs" / "plans"
 PATH_CLEAN_RE = re.compile(r"[,;:.()]$")
+RESEARCH_CITATION_RE = re.compile(r"^agent_memory:[A-Za-z0-9._-]+$")
+LANDSCAPE_DISPOSITIONS = frozenset({"linked", "inline", "exempt-trivial"})
+CRITICAL_PATH_CLASSES = frozenset({"vertical", "direct_blocker", "enabler", "hardening"})
+LANDSCAPE_URL_RE = re.compile(r"https?://[^\s)`>]+")
+RESEARCH_PROVENANCE_HINTS = (
+    re.compile(r"memory context\s*:\s*`?agent-memory recall", re.IGNORECASE),
+    re.compile(r"agent-memory recall.+\bfindings\b", re.IGNORECASE | re.DOTALL),
+    re.compile(r"direct db query", re.IGNORECASE),
+    re.compile(r"prior session", re.IGNORECASE),
+    re.compile(r"agent_memory:", re.IGNORECASE),
+)
 
 
 def normalize(path: str) -> str:
@@ -237,8 +249,16 @@ def parse_data_flow(content: str) -> list[dict[str, str]]:
 def parse_plan_status(content: str) -> tuple[str, str]:
     """Extract the markdown title and bolded Status line."""
     status = "Unknown"
-    if m := re.search(r"\*{1,2}Status:?\*?\s*:?\s*([^\n]+)", content, re.IGNORECASE):
-        status = m.group(1).strip()
+    status_patterns = (
+        r"^\*\*Status:\*\*[ \t]*(.+?)[ \t]*$",
+        r"^\*\*Status\*\*:[ \t]*(.+?)[ \t]*$",
+        r"^\*Status:\*[ \t]*(.+?)[ \t]*$",
+        r"^Status:[ \t]*(.+?)[ \t]*$",
+    )
+    for pattern in status_patterns:
+        if match := re.search(pattern, content, re.IGNORECASE | re.MULTILINE):
+            status = match.group(1)
+            break
     title = "Plan"
     if first := re.search(r"^#\s*([^\n]+)", content, re.MULTILINE):
         title = first.group(1).strip()
@@ -254,6 +274,161 @@ def parse_mentioned_adrs(content: str) -> set[int]:
         except ValueError:
             continue
     return result
+
+
+def _extract_metadata_value(content: str, field_name: str) -> str | None:
+    """Extract one bolded metadata field value from the plan header."""
+    match = re.search(
+        rf"^\*\*{re.escape(field_name)}:\*\*[ \t]*(.*?)[ \t]*$",
+        content,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if not match:
+        return None
+    value = re.sub(r"<!--.*?-->", "", match.group(1)).strip()
+    return value or None
+
+
+def _parse_research_citations(content: str) -> tuple[list[str], list[dict[str, str]]]:
+    """Parse and validate the optional research_citations metadata field."""
+    raw_value = _extract_metadata_value(content, "research_citations")
+    if raw_value is None:
+        return [], []
+
+    try:
+        loaded = yaml.safe_load(raw_value)
+    except yaml.YAMLError:
+        return [], [{
+            "code": "invalid_research_citations",
+            "message": "`research_citations` must parse as a YAML/JSON list of strings.",
+        }]
+
+    if loaded in (None, ""):
+        return [], []
+    if not isinstance(loaded, list):
+        return [], [{
+            "code": "invalid_research_citations",
+            "message": "`research_citations` must be a list of `agent_memory:<entry_id>` strings.",
+        }]
+
+    warnings: list[dict[str, str]] = []
+    citations: list[str] = []
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+
+    for item in loaded:
+        value = str(item).strip()
+        if not value:
+            warnings.append({
+                "code": "invalid_research_citations",
+                "message": "`research_citations` contains an empty value.",
+            })
+            continue
+        citations.append(value)
+        if value in seen:
+            duplicates.add(value)
+        else:
+            seen.add(value)
+        if not RESEARCH_CITATION_RE.match(value):
+            warnings.append({
+                "code": "invalid_research_citation_entry",
+                "message": (
+                    f"`research_citations` entry `{value}` must match "
+                    "`agent_memory:<entry_id>`."
+                ),
+            })
+
+    for duplicate in sorted(duplicates):
+        warnings.append({
+            "code": "duplicate_research_citation",
+            "message": f"`research_citations` contains duplicate entry `{duplicate}`.",
+        })
+
+    return citations, warnings
+
+
+def _parse_landscape_contract(
+    content: str,
+) -> tuple[str | None, list[str], list[dict[str, str]]]:
+    """Parse the report-only landscape disposition and its structural evidence."""
+    raw_disposition = _extract_metadata_value(content, "Landscape disposition")
+    disposition = raw_disposition.lower() if raw_disposition else None
+    section = extract_section(content, "Landscape And Prior Art")
+    references = extract_paths(section)
+    urls = [url.rstrip(".,;:") for url in LANDSCAPE_URL_RE.findall(section)]
+    url_hosts = {urlparse(url).netloc for url in urls}
+    references = [reference for reference in references if reference not in url_hosts]
+    for clean_url in urls:
+        if clean_url not in references:
+            references.append(clean_url)
+
+    warnings: list[dict[str, str]] = []
+    if disposition is None:
+        warnings.append({
+            "code": "missing_landscape_disposition",
+            "message": (
+                "Declare `Landscape disposition` as `linked`, `inline`, or "
+                "`exempt-trivial`; this is report-only during rollout."
+            ),
+        })
+        return None, references, warnings
+
+    if disposition not in LANDSCAPE_DISPOSITIONS:
+        warnings.append({
+            "code": "invalid_landscape_disposition",
+            "message": (
+                f"Unknown landscape disposition `{raw_disposition}`; expected "
+                "`linked`, `inline`, or `exempt-trivial`."
+            ),
+        })
+        return disposition, references, warnings
+
+    if not section:
+        warnings.append({
+            "code": "missing_landscape_section",
+            "message": "The declared landscape disposition requires a `Landscape And Prior Art` section.",
+        })
+        return disposition, references, warnings
+
+    lowered_section = section.lower()
+    if disposition == "linked" and not references:
+        warnings.append({
+            "code": "missing_landscape_reference",
+            "message": "A `linked` landscape must retain at least one repo-relative path or HTTP(S) source.",
+        })
+    elif disposition == "inline":
+        missing_labels = [
+            label
+            for label in ("alternatives", "project implications")
+            if label not in lowered_section
+        ]
+        if missing_labels:
+            warnings.append({
+                "code": "incomplete_inline_landscape",
+                "message": (
+                    "An `inline` landscape must include explicit `Alternatives` and "
+                    f"`Project implications`; missing: {', '.join(missing_labels)}."
+                ),
+            })
+    elif disposition == "exempt-trivial" and "reason" not in lowered_section:
+        warnings.append({
+            "code": "weak_landscape_exemption",
+            "message": "An `exempt-trivial` landscape must include an explicit `Reason`.",
+        })
+
+    return disposition, references, warnings
+
+
+def _research_provenance_hint_present(content: str) -> bool:
+    """Heuristically detect plan text that cites prior-session provenance."""
+    sections = [
+        extract_section(content, "References Reviewed"),
+        extract_section(content, "Research Basis For This Slice"),
+    ]
+    searchable = "\n".join(section for section in sections if section)
+    if not searchable:
+        return False
+    return any(pattern.search(searchable) for pattern in RESEARCH_PROVENANCE_HINTS)
 
 
 def get_plan_file(
@@ -288,6 +463,9 @@ def get_plan_file(
 def collect_plan_requirements(
     file_paths: list[str],
     relationships: dict[str, Any],
+    *,
+    repo_root: Path = ROOT,
+    authority_config_path: Path | None = None,
 ) -> tuple[set[str], set[str], set[int], list[tuple[str, int, str]]]:
     """Collect required docs and ADRs implied by affected files."""
     required_docs_strict: set[str] = set()
@@ -296,8 +474,18 @@ def collect_plan_requirements(
     governance: list[tuple[str, int, str]] = []
 
     for file_path in file_paths:
-        ctx = collect_context(file_path, relationships)
-        if not ctx.governance and not ctx.current_arch_docs and not ctx.coupled_docs:
+        ctx = collect_context(
+            file_path,
+            relationships,
+            repo_root=repo_root,
+            authority_config_path=authority_config_path,
+        )
+        if (
+            not ctx.governance
+            and not ctx.current_arch_docs
+            and not ctx.coupled_docs
+            and not ctx.doc_spine_reads
+        ):
             continue
 
         for adr in ctx.governance:
@@ -308,6 +496,7 @@ def collect_plan_requirements(
         required_docs_strict.update(ctx.target_arch_docs)
         required_docs_strict.update(ctx.gap_docs)
         required_docs_strict.update(ctx.plan_refs)
+        required_docs_strict.update(ctx.doc_spine_reads)
 
         for coupling in ctx.coupled_docs:
             target = normalize(coupling["path"])
@@ -345,6 +534,9 @@ class ValidationResult:
     status: str
     affected_files: list[str]
     references_reviewed: list[str]
+    research_citations: list[str]
+    landscape_disposition: str | None
+    landscape_references: list[str]
     uncertainties: list[str]
     required_docs_strict: set[str]
     required_docs_soft: set[str]
@@ -356,6 +548,7 @@ class ValidationResult:
     data_flow: list[dict[str, str]]
     contracts_used: list[str]
     tools_used: list[str]
+    warnings: list[dict[str, str]]
 
     def to_payload(self) -> dict[str, Any]:
         """Return a JSON-serializable summary payload."""
@@ -366,6 +559,11 @@ class ValidationResult:
             "status": self.status,
             "affected_files": self.affected_files,
             "references_reviewed": self.references_reviewed,
+            "research_citations": self.research_citations,
+            "landscape": {
+                "disposition": self.landscape_disposition,
+                "references": self.landscape_references,
+            },
             "uncertainties_count": len(self.uncertainties),
             "required_docs": {
                 "strict": sorted(self.required_docs_strict),
@@ -388,10 +586,18 @@ class ValidationResult:
                 {"section": name, "reason": reason}
                 for name, reason in self.missing_sections
             ],
+            "warnings": self.warnings,
         }
 
 
-def validate_plan(plan_file: Path, plan_number: int | None, relationships: dict[str, Any]) -> ValidationResult:
+def validate_plan(
+    plan_file: Path,
+    plan_number: int | None,
+    relationships: dict[str, Any],
+    *,
+    repo_root: Path = ROOT,
+    authority_config_path: Path | None = None,
+) -> ValidationResult:
     """Validate one plan file against required docs, ADRs, and section rules."""
     content = read_text(plan_file)
     title, status = parse_plan_status(content)
@@ -400,12 +606,55 @@ def validate_plan(plan_file: Path, plan_number: int | None, relationships: dict[
         affected = extract_paths(extract_section(content, "Task Pack"))
 
     references = parse_references_reviewed(content)
+    research_citations, warnings = _parse_research_citations(content)
+    landscape_disposition, landscape_references, landscape_warnings = (
+        _parse_landscape_contract(content)
+    )
+    warnings.extend(landscape_warnings)
+    plan_type = (_extract_metadata_value(content, "Type") or "implementation").lower()
+    if plan_type.startswith("implementation") and landscape_disposition != "exempt-trivial":
+        user_outcome = extract_section(content, "User Outcome")
+        if len(user_outcome.strip()) < 10:
+            warnings.append({
+                "code": "missing_user_outcome",
+                "message": (
+                    "Non-trivial implementation plans should preserve a plain-language "
+                    "`User Outcome`; supporting infrastructure is not the outcome."
+                ),
+            })
+
+        canonical_example = extract_section(content, "Canonical Behavioral Example")
+        if len(canonical_example.strip()) < 10:
+            warnings.append({
+                "code": "missing_canonical_behavioral_example",
+                "message": (
+                    "Non-trivial implementation plans should preserve the smallest "
+                    "representative input, action, and observable result."
+                ),
+            })
+
+        plan_section = extract_section(content, "Plan").lower()
+        if not any(re.search(rf"\b{re.escape(name)}\b", plan_section) for name in CRITICAL_PATH_CLASSES):
+            warnings.append({
+                "code": "missing_critical_path_classification",
+                "message": (
+                    "Classify planned increments as `vertical`, `direct_blocker`, "
+                    "`enabler`, or `hardening` so substrate work cannot silently "
+                    "advance product status."
+                ),
+            })
     uncertainties = parse_uncertainty_register(content)
     covered = {normalize(p) for p in set(affected) | set(references)}
+    try:
+        covered.add(normalize(str(plan_file.relative_to(repo_root))))
+    except ValueError:
+        pass
 
     required_strict, required_soft, adr_nums, governance = collect_plan_requirements(
         affected,
         relationships,
+        repo_root=repo_root,
+        authority_config_path=authority_config_path,
     )
     required_strict_norm = {normalize(p) for p in required_strict}
     required_soft_norm = {normalize(p) for p in required_soft}
@@ -444,6 +693,15 @@ def validate_plan(plan_file: Path, plan_number: int | None, relationships: dict[
         if not found:
             missing_sections.append((section_name, reason))
 
+    if not research_citations and _research_provenance_hint_present(content):
+        warnings.append({
+            "code": "missing_research_citations",
+            "message": (
+                "Plan text suggests prior agent-session findings informed this slice, "
+                "but `research_citations` is empty."
+            ),
+        })
+
     return ValidationResult(
         plan_number=plan_number,
         plan_file=plan_file,
@@ -451,6 +709,9 @@ def validate_plan(plan_file: Path, plan_number: int | None, relationships: dict[
         status=status,
         affected_files=sorted(affected),
         references_reviewed=sorted(references),
+        research_citations=research_citations,
+        landscape_disposition=landscape_disposition,
+        landscape_references=landscape_references,
         uncertainties=uncertainties,
         required_docs_strict=required_strict_norm,
         required_docs_soft=required_soft_norm,
@@ -462,6 +723,7 @@ def validate_plan(plan_file: Path, plan_number: int | None, relationships: dict[
         data_flow=data_flow,
         contracts_used=contracts_used,
         tools_used=tools_used,
+        warnings=warnings,
     )
 
 
@@ -477,6 +739,14 @@ def print_summary(result: ValidationResult) -> None:
         print("  (no affected files discovered)")
     for path in result.affected_files:
         print(f"    - {path}")
+
+    print(f"\nResearch citations: {len(result.research_citations)}")
+    for citation in result.research_citations:
+        print(f"  - {citation}")
+
+    print(f"\nLandscape disposition: {result.landscape_disposition or '(missing)'}")
+    for reference in result.landscape_references:
+        print(f"  - {reference}")
 
     print("\nGOVERNANCE:")
     if result.governance:
@@ -541,6 +811,11 @@ def print_summary(result: ValidationResult) -> None:
         print("\nMISSING PLAN SECTIONS (design sequence enforcement):")
         for section_name, reason in result.missing_sections:
             print(f"  - {section_name}: {reason}")
+
+    if result.warnings:
+        print("\nWARNINGS (non-blocking):")
+        for warning in result.warnings:
+            print(f"  - {warning['code']}: {warning['message']}")
 
     if result.uncertainties:
         print(f"\nUncertainty register entries: {len(result.uncertainties)} (not a blocker)")
@@ -691,7 +966,12 @@ def main(
         repo_root=base_repo_root,
         config_path=args.config,
     )
-    result = validate_plan(plan_path, plan_number, relationships)
+    result = validate_plan(
+        plan_path,
+        plan_number,
+        relationships,
+        repo_root=base_repo_root,
+    )
     acknowledged = _apply_acknowledgments(result, ack_file=args.ack_file)
 
     if args.json:

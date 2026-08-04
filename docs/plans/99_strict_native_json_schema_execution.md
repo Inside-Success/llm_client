@@ -1,7 +1,14 @@
 # Plan #99: Strict Native JSON-Schema Execution
 
-**Status:** 🚧 In Progress — current-main integration independently accepted;
-downstream Plan 0141 binding verification pending
+**Status:** Complete — current-main integration and downstream Plan 0141 binding
+independently accepted
+
+**Completion reconciliation (2026-07-25):** OntoCanon Plan 0141 subsequently
+bound the accepted Plan 99 implementation and review evidence, verified the
+merged dependency revision and public contracts from a clean detached checkout,
+and independently replayed the dependency boundary. This closes the downstream
+binding condition below. It does not grant semantic-quality, provider,
+promotion, or production-readiness claims to OntoCanon.
 
 **Reopened:** 2026-07-13 after onto-canon6 Plan 0141 independently rejected merge
 `84253ed`. Strict native-schema routing is implemented and remains green, but the

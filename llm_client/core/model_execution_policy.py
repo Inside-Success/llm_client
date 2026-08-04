@@ -89,6 +89,9 @@ def _reasoning_capability(
 _OPENROUTER_MODELS_SOURCE = (
     "OpenRouter GET /api/v1/models observed 2026-07-23"
 )
+_OPENROUTER_GPT56_SOL_SOURCE = (
+    "OpenRouter GET /api/v1/models observed 2026-07-25"
+)
 _OPENAI_MODELS_SOURCE = "OpenAI model documentation observed 2026-07-23"
 _LITELLM_GEMINI_SOURCE = (
     "installed LiteLLM provider-free Gemini normalization observed 2026-07-23"
@@ -129,6 +132,12 @@ REASONING_CAPABILITIES: dict[str, ReasoningCapability] = {
         mandatory=False,
         observed_default="medium",
         source=_OPENROUTER_MODELS_SOURCE,
+    ),
+    "openrouter/openai/gpt-5.6-sol": _reasoning_capability(
+        {"none", "low", "medium", "high", "xhigh", "max"},
+        mandatory=False,
+        observed_default="medium",
+        source=_OPENROUTER_GPT56_SOL_SOURCE,
     ),
     "openrouter/openai/gpt-5.6-terra": _reasoning_capability(
         {"none", "low", "medium", "high", "xhigh", "max"},

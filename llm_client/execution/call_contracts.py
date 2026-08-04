@@ -28,7 +28,7 @@ import uuid
 from typing import Any, Literal, NoReturn
 
 import litellm
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import llm_client.io_log as _io_log
 from llm_client.core.errors import (
@@ -84,6 +84,84 @@ class StructuredOutputPolicy(BaseModel):
         default="auto",
         description="Allowed structured-output execution paths for this logical call.",
     )
+
+
+class ObservabilityContentPolicy(BaseModel):
+    """Control durable content retention for one structured logical call."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mode: Literal["full", "metadata_only"] = Field(
+        default="full",
+        description=(
+            "Whether durable call observability may include prompt/response content "
+            "and replay snapshots. metadata_only retains bounded operational metadata."
+        ),
+    )
+
+
+class OpenRouterRoutePolicyV1(BaseModel):
+    """Typed intent compiled into OpenRouter routing and cache controls.
+
+    Route fields describe caller-authorized provider constraints. Response-cache
+    fields explicitly authorize OpenRouter to retain and reuse an exact response;
+    they are disabled by default and are incompatible with zero-data-retention.
+    This contract does not claim a local inventory of live providers or endpoints.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    allowed_providers: tuple[str, ...] | None = None
+    data_collection: Literal["allow", "deny"] | None = None
+    zero_data_retention: bool | None = None
+    allow_provider_fallbacks: bool = True
+    sort: Literal["price", "throughput", "latency"] | None = None
+    require_parameters: Literal[True] = True
+    response_cache_mode: Literal["disabled", "enabled", "refresh"] = "disabled"
+    response_cache_ttl_seconds: int | None = Field(default=None, gt=0, le=86_400)
+
+    @field_validator("allowed_providers")
+    @classmethod
+    def normalize_allowed_providers(
+        cls, value: tuple[str, ...] | None
+    ) -> tuple[str, ...] | None:
+        if value is None:
+            return None
+        return tuple(
+            provider.strip() if isinstance(provider, str) else provider
+            for provider in value
+        )
+
+    @model_validator(mode="after")
+    def validate_constraints(self) -> "OpenRouterRoutePolicyV1":
+        if self.allowed_providers is not None:
+            if not self.allowed_providers:
+                raise ValueError("allowed_providers must not be empty when provided")
+            normalized: set[str] = set()
+            for provider in self.allowed_providers:
+                if not isinstance(provider, str) or not provider.strip():
+                    raise ValueError("allowed_providers entries must be non-empty strings")
+                key = provider.casefold()
+                if key in normalized:
+                    raise ValueError("allowed_providers must not contain duplicates")
+                normalized.add(key)
+        if self.data_collection == "allow" and self.zero_data_retention is True:
+            raise ValueError(
+                "data_collection='allow' conflicts with zero_data_retention=True"
+            )
+        if self.response_cache_mode in {"enabled", "refresh"} and self.zero_data_retention is True:
+            raise ValueError(
+                "response_cache_mode='enabled' conflicts with zero_data_retention=True"
+            )
+        if (
+            self.response_cache_ttl_seconds is not None
+            and self.response_cache_mode not in {"enabled", "refresh"}
+        ):
+            raise ValueError(
+                "response_cache_ttl_seconds requires response_cache_mode='enabled' "
+                "or 'refresh'"
+            )
+        return self
 
 
 def truthy_env(value: Any) -> bool:
@@ -416,12 +494,14 @@ _GPT5_REASONING_GATED_SAMPLING = {
 _LONG_THINKING_MODELS = {"gpt-5.2-pro", "gpt-5.5-pro"}
 _LONG_THINKING_REASONING_EFFORTS = {"high", "xhigh"}
 _GPT5_SAMPLING_PARAMS = ("temperature", "top_p", "logprobs", "top_logprobs")
+_OPENROUTER_LUNA_UNSUPPORTED_PARAMS = frozenset({"temperature"})
 _UNSUPPORTED_PARAM_POLICY_ENV = "LLM_CLIENT_UNSUPPORTED_PARAM_POLICY"
-_UNSUPPORTED_PARAM_POLICIES = frozenset({"coerce_and_warn", "coerce_silent", "error"})
+_UNSUPPORTED_PARAM_POLICIES = frozenset({"coerce_and_warn", "error"})
 _UNSUPPORTED_PARAM_POLICY_ALIASES = {
     "warn": "coerce_and_warn",
     "coerce": "coerce_and_warn",
-    "silent": "coerce_silent",
+    # Kept as a compatibility spelling. Parameter omission is never silent.
+    "silent": "coerce_and_warn",
     "strict": "error",
     "raise": "error",
     "error_only": "error",
@@ -460,6 +540,24 @@ def _strip_incompatible_sampling_params(model: str, call_kwargs: dict[str, Any])
     return removed
 
 
+def _strip_route_incompatible_params(model: str, call_kwargs: dict[str, Any]) -> tuple[list[str], str | None]:
+    """Remove parameters rejected by a known provider/model route.
+
+    Keep this evidence-specific: Luna's OpenRouter native-schema route is
+    known to reject an explicit temperature, but that does not establish that
+    other sampling controls are unsupported.
+    """
+    if model.strip().lower() != "openrouter/openai/gpt-5.6-luna":
+        return [], None
+
+    removed = sorted(
+        key for key in _OPENROUTER_LUNA_UNSUPPORTED_PARAMS if key in call_kwargs
+    )
+    for key in removed:
+        call_kwargs.pop(key, None)
+    return removed, "openrouter_luna_native_schema_compatibility"
+
+
 def _resolve_unsupported_param_policy(explicit_policy: Any) -> str:
     """Resolve the unsupported-param policy from explicit arg or env."""
     raw = explicit_policy
@@ -493,27 +591,29 @@ def _coerce_model_incompatible_params(
 
     # GPT-5 family sampling incompatibilities across providers/completions.
     removed.extend(_strip_incompatible_sampling_params(model, kwargs))
+    route_removed, route_rule = _strip_route_incompatible_params(model, kwargs)
+    removed.extend(route_removed)
 
     if not removed:
         return []
 
     removed_unique = sorted(set(removed))
+    rule = route_rule or "gpt5_sampling_compatibility"
     detail = (
         f"COERCE_PARAMS model={model} policy={policy} "
         f"removed={','.join(removed_unique)} "
-        f"rule=gpt5_sampling_compatibility"
+        f"rule={rule}"
     )
     if policy == "error":
         raise LLMCapabilityError(
             f"Unsupported params for model {model}: {', '.join(removed_unique)}. "
             "Use unsupported_param_policy='coerce_and_warn' to auto-coerce."
         )
-    if policy == "coerce_and_warn":
-        logger.warning(detail)
-        if warning_sink is not None:
-            warning_sink.append(detail)
-    else:
-        logger.info(detail)
+    # A caller-supplied parameter that does not reach the provider is always
+    # observable. The legacy "silent" spelling resolves to coerce_and_warn.
+    logger.warning(detail)
+    if warning_sink is not None:
+        warning_sink.append(detail)
     return removed_unique
 
 
@@ -577,7 +677,7 @@ def _apply_max_tokens(model: str, call_kwargs: dict[str, Any]) -> None:
 # Agent model detection and execution-mode contracts
 # ---------------------------------------------------------------------------
 
-_CODEX_AGENT_ALIASES: frozenset[str] = frozenset({"codex-mini-latest", "gpt-5.4"})
+_CODEX_AGENT_ALIASES: frozenset[str] = frozenset({"codex-mini-latest"})
 
 # Matches bare model names that belong to the Codex family but don't start
 # with the "codex/" prefix — e.g. "gpt-5.3-codex", "gpt-5.1-codex-mini".
@@ -799,7 +899,8 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
         "lane, including raw provider routes and claude-code aliases.",
     ),
     "fable": (
-        "openrouter/openai/gpt-5.5 OR openrouter/x-ai/grok-4.5 OR openrouter/z-ai/glm-5.2",
+        "openrouter/openai/gpt-5.6-sol OR openrouter/x-ai/grok-4.5 OR "
+        "openrouter/z-ai/glm-5.2",
         "Fable-family models are banned by ecosystem policy. Do not use them for "
         "new calls, even with ordinary model_override_acceptance metadata.",
     ),
@@ -812,7 +913,7 @@ _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
         "GPT-5 Mini is prohibited by the shared model-execution policy.",
     ),
     "codex-mini": (
-        "codex/gpt-5.4",
+        "codex/gpt-5.6-luna",
         "Codex Mini routes are prohibited by the shared model-execution policy.",
     ),
     "gpt-4o-mini": (

@@ -48,8 +48,7 @@ def _isolate_io_log(tmp_path: Path):
     io_log._data_root = old_root
     io_log._project = old_project
     io_log._db_path = old_db_path
-    if io_log._db_conn is not None:
-        io_log._db_conn.close()
+    io_log.close()
     io_log._db_conn = old_db_conn
     io_log._last_cleanup_date = old_last_cleanup
 
@@ -395,6 +394,41 @@ def test_snapshot_marks_non_json_kwargs_as_replay_unsupported() -> None:
     replay = snapshot["replay"]
     assert isinstance(replay, dict)
     assert replay["unsupported_keys"] == ["non_json"]
+
+
+def test_snapshot_redacts_mcp_environment_secrets() -> None:
+    secret = "snapshot-must-not-retain-this-value"
+    snapshot = replay_module.build_call_snapshot(
+        public_api="call_llm_structured",
+        call_kind="structured",
+        requested_model="codex",
+        messages=[{"role": "user", "content": "Find candidates."}],
+        prompt_ref=None,
+        max_budget=0.0,
+        timeout=60,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        base_delay=1.0,
+        max_delay=30.0,
+        retry_on=None,
+        fallback_models=None,
+        public_kwargs={
+            "mcp_servers": {
+                "twitter": {
+                    "command": "python",
+                    "args": ["server.py"],
+                    "env": {"TWITTER_API_KEY": secret},
+                }
+            }
+        },
+    )
+
+    serialized = json.dumps(snapshot, sort_keys=True)
+    assert secret not in serialized
+    assert "TWITTER_API_KEY" in serialized
+    assert "__llm_client_secret_redacted__" in serialized
+    assert snapshot["replay"]["unsupported_keys"] == ["mcp_servers"]
 
 
 # mock-ok: dispatch is replaced to prove diagnostic message content fails before I/O.

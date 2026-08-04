@@ -38,6 +38,13 @@ from llm_client.observability.experiments import (
     get_run_items,
     get_experiment_aggregates,
 )
+from llm_client.observability.observed_runs import (
+    ObservedRun,
+    ObservedRunRecord,
+    ObservedRunStatus,
+    get_observed_run,
+    list_observed_runs,
+)
 from llm_client.observability.query import (
     get_active_llm_calls,
     get_call_lifecycle,
@@ -118,6 +125,9 @@ __all__ = [
     "RuntimeSelectedRawContent",
     "LLMCallReceiptV1",
     "ExperimentRun",
+    "ObservedRun",
+    "ObservedRunRecord",
+    "ObservedRunStatus",
     "activate_experiment_run",
     "acquire_budget_reservation",
     "activate_feature_profile",
@@ -151,6 +161,8 @@ __all__ = [
     "get_cost",
     "get_llm_call_receipts",
     "get_experiment_aggregates",
+    "get_observed_run",
+    "list_observed_runs",
     "get_run",
     "get_run_items",
     "get_runs",

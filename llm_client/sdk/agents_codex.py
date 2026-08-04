@@ -16,31 +16,31 @@ import logging
 import multiprocessing as _mp
 import os
 import queue
-import re
 import shutil
 import subprocess
 import tempfile
 import threading
 import time
-import traceback
 from pathlib import Path
 from typing import Any, Callable, cast
 
 from pydantic import BaseModel
 
 from llm_client.sdk.agents_codex_process import (
-    _collect_process_tree_snapshot,
-    _codex_exec_diagnostics,
+    _collect_process_tree_snapshot,  # noqa: F401 - re-exported by agents.py
+    _codex_exec_diagnostics,  # noqa: F401 - re-exported by agents.py
     _codex_timeout_message,
     _compact_json,
-    _process_exists,
+    _process_exists,  # noqa: F401 - re-exported by agents.py
     _safe_error_text,
     _safe_line_preview,
-    _terminate_pid_tree,
+    _terminate_pid_tree,  # noqa: F401 - re-exported by agents.py
 )
 from llm_client.core.client import Hooks, LLMCallResult
-from llm_client.core.data_types import TurnEvent
-from llm_client.execution.responses_runtime import _strict_json_schema
+from llm_client.execution.responses_runtime import (
+    _provider_compatible_discriminated_union_schema,
+    _strict_openai_response_model_schema,
+)
 from llm_client.execution.timeout_policy import normalize_timeout as _normalize_timeout
 
 
@@ -49,15 +49,16 @@ def _strict_codex_output_schema(response_model: Any) -> dict[str, Any]:
 
     OpenAI's structured outputs API (used by the Codex SDK) rejects schemas
     that lack ``additionalProperties: false`` on every object OR don't list
-    every property in ``required``. Pydantic v2's ``model_json_schema()``
-    omits both by default for fields with defaults. Wrapping with
-    ``_strict_json_schema()`` adds both recursively and inside ``$defs``.
+    every property in ``required`` and rejects sibling keywords beside a
+    ``$ref``. The OpenAI SDK normalizer supplies that exact strict shape while
+    preserving field descriptions.
 
     This is the single integration point between the duet/deliberation
     Pydantic schemas and the Codex SDK. Without it, calls fail with
     ``invalid_json_schema`` errors at the provider boundary.
     """
-    return _strict_json_schema(response_model.model_json_schema())
+    schema = _strict_openai_response_model_schema(response_model)
+    return _provider_compatible_discriminated_union_schema(schema)
 
 logger = logging.getLogger(__name__)
 
@@ -140,11 +141,34 @@ def _agent_hard_timeout(kwargs: dict[str, Any], default_timeout: int) -> int:
 
 
 
-def _create_codex_home(mcp_servers: dict[str, Any]) -> str:
-    """Create a temp directory with .codex/config.toml containing only specified MCP servers.
+def _config_without_mcp_servers(config_path: Path) -> list[str]:
+    """Retain Codex provider settings while dropping every ambient MCP table."""
 
-    Symlinks auth.json and other credential files from the real ~/.codex/ so
-    authentication continues to work.
+    if not config_path.is_file():
+        return []
+    retained: list[str] = []
+    skipping_mcp_table = False
+    for line in config_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            table_name = stripped.lstrip("[").rstrip("]").strip()
+            skipping_mcp_table = (
+                table_name == "mcp_servers"
+                or table_name.startswith("mcp_servers.")
+            )
+        if not skipping_mcp_table:
+            retained.append(line)
+    while retained and not retained[-1].strip():
+        retained.pop()
+    return retained
+
+
+def _create_codex_home(mcp_servers: dict[str, Any]) -> str:
+    """Create an isolated Codex home with only the specified MCP servers.
+
+    Provider/model configuration and credential files come from ``CODEX_HOME``
+    when set, otherwise ``~/.codex``. Ambient MCP tables are deliberately
+    removed before the requested servers are added.
 
     Args:
         mcp_servers: Dict of server_name -> {command, args?, cwd?, env?}.
@@ -156,28 +180,47 @@ def _create_codex_home(mcp_servers: dict[str, Any]) -> str:
     config_dir = Path(tmp_dir) / ".codex"
     config_dir.mkdir()
 
-    # Symlink auth and other essential files from real .codex dir
-    real_codex = Path.home() / ".codex"
+    # Symlink auth and other essential files from the configured Codex home.
+    real_codex = Path(
+        os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))
+    ).expanduser()
     if real_codex.is_dir():
         for fname in ("auth.json", "version.json", ".personality_migration"):
             src = real_codex / fname
             if src.exists():
                 (config_dir / fname).symlink_to(src)
 
-    # Write minimal config.toml with only specified MCP servers
-    lines: list[str] = []
+    # Preserve model-provider configuration without inheriting ambient tools.
+    lines = _config_without_mcp_servers(real_codex / "config.toml")
+    if lines:
+        lines.append("")
     for name, cfg in mcp_servers.items():
-        lines.append(f'[mcp_servers."{name}"]')
-        lines.append(f'command = "{cfg["command"]}"')
+        lines.append(f"[mcp_servers.{_json.dumps(str(name), ensure_ascii=False)}]")
+        lines.append(
+            f"command = {_json.dumps(str(cfg['command']), ensure_ascii=False)}"
+        )
+        lines.append(
+            f"required = {'true' if cfg.get('required', True) else 'false'}"
+        )
         if "args" in cfg:
-            args_str = ", ".join(f'"{a}"' for a in cfg["args"])
+            args_str = ", ".join(
+                _json.dumps(str(arg), ensure_ascii=False) for arg in cfg["args"]
+            )
             lines.append(f"args = [{args_str}]")
         if "cwd" in cfg:
-            lines.append(f'cwd = "{cfg["cwd"]}"')
+            lines.append(f"cwd = {_json.dumps(str(cfg['cwd']), ensure_ascii=False)}")
+        for numeric_key in ("startup_timeout_sec", "tool_timeout_sec"):
+            if numeric_key in cfg:
+                lines.append(f"{numeric_key} = {float(cfg[numeric_key])}")
         if "env" in cfg:
-            lines.append(f'[mcp_servers."{name}".env]')
+            lines.append(
+                f"[mcp_servers.{_json.dumps(str(name), ensure_ascii=False)}.env]"
+            )
             for k, v in cfg["env"].items():
-                lines.append(f'{k} = "{v}"')
+                lines.append(
+                    f"{_json.dumps(str(k), ensure_ascii=False)} = "
+                    f"{_json.dumps(str(v), ensure_ascii=False)}"
+                )
         lines.append("")
 
     (config_dir / "config.toml").write_text("\n".join(lines))
@@ -352,7 +395,7 @@ def _build_codex_options(
     """
     _, underlying_model = _agents_mod()._parse_agent_model(model)
     sdk = _import_codex_sdk()
-    Codex, CodexOptions, ThreadOptions, TurnOptions = sdk[0], sdk[1], sdk[2], sdk[3]
+    _, CodexOptions, ThreadOptions, TurnOptions = sdk[0], sdk[1], sdk[2], sdk[3]
 
     prompt, system_prompt = _agents_mod()._messages_to_agent_prompt(messages)
 
@@ -376,9 +419,10 @@ def _build_codex_options(
     if "base_url" in agent_kw:
         codex_kw["base_url"] = agent_kw["base_url"]
     if "codex_home" in agent_kw:
-        # Override HOME so Codex CLI reads config from codex_home/.codex/config.toml
+        # Point Codex at the isolated config without changing the subprocess's
+        # OS home (Python MCP servers may depend on user-site packages there).
         env_dict = dict(os.environ)
-        env_dict["HOME"] = str(agent_kw["codex_home"])
+        env_dict["CODEX_HOME"] = str(Path(agent_kw["codex_home"]) / ".codex")
         codex_kw["env"] = env_dict
     codex_opts = CodexOptions(**codex_kw) if codex_kw else None
 
@@ -596,6 +640,7 @@ def _build_codex_cli_command(
     command = [
         cli_path,
         "exec",
+        "--json",
         "--color",
         "never",
         "-C",
@@ -626,7 +671,7 @@ def _build_codex_cli_command(
     env = dict(os.environ)
     codex_home = kwargs.get("codex_home")
     if codex_home:
-        env["HOME"] = str(codex_home)
+        env["CODEX_HOME"] = str(Path(codex_home) / ".codex")
     return command, env, prompt
 
 
@@ -635,17 +680,30 @@ def _result_from_codex_cli(
     final_response: str,
     *,
     transport: str,
+    session: dict[str, Any] | None = None,
+    tool_calls: list[dict[str, Any]] | None = None,
     warning: str | None = None,
 ) -> LLMCallResult:
     """Build an `LLMCallResult` from direct Codex CLI output."""
 
+    session = session or {}
+    usage = {
+        key: session[key]
+        for key in ("input_tokens", "output_tokens", "total_tokens")
+        if isinstance(session.get(key), int)
+    }
     result = LLMCallResult(
         content=final_response,
-        usage={},
+        usage=usage,
         cost=0.0,
         model=model,
+        tool_calls=tool_calls or [],
         finish_reason="stop",
-        raw_response={"transport": transport},
+        raw_response={
+            "transport": transport,
+            "session_id": session.get("session_id"),
+            "n_turns": session.get("n_turns", 0),
+        },
         cost_source="subscription_included",
         billing_mode="subscription_included",
     )
@@ -669,73 +727,82 @@ def _call_codex_via_cli(
     if system_prompt:
         prompt = f"{system_prompt}\n\n{prompt}"
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
-    with tempfile.TemporaryDirectory(prefix="llm_client_codex_cli_") as tmp_dir:
-        output_path = str(Path(tmp_dir) / "last_message.txt")
-        schema_path: str | None = None
-        if output_schema is not None:
-            schema_path = str(Path(tmp_dir) / "output_schema.json")
-            Path(schema_path).write_text(_json.dumps(output_schema))
-        command, env, stdin_payload = _build_codex_cli_command(
-            model,
-            prompt,
-            output_schema=output_schema,
-            kwargs=kwargs,
-            output_path=output_path,
-            schema_path=schema_path,
-        )
-        try:
-            completed = subprocess.run(
-                command,
-                input=stdin_payload,
-                text=True,
-                capture_output=True,
-                check=False,
-                timeout=(float(hard_timeout) if hard_timeout > 0 else None),
-                env=env,
+    prepared_kwargs, codex_home_tmp = _prepare_codex_mcp(dict(kwargs))
+    try:
+        with tempfile.TemporaryDirectory(prefix="llm_client_codex_cli_") as tmp_dir:
+            output_path = str(Path(tmp_dir) / "last_message.txt")
+            schema_path: str | None = None
+            if output_schema is not None:
+                schema_path = str(Path(tmp_dir) / "output_schema.json")
+                Path(schema_path).write_text(_json.dumps(output_schema))
+            command, env, stdin_payload = _build_codex_cli_command(
+                model,
+                prompt,
+                output_schema=output_schema,
+                kwargs=prepared_kwargs,
+                output_path=output_path,
+                schema_path=schema_path,
             )
-        except subprocess.TimeoutExpired as exc:
-            diagnostics = {
-                "phase": "codex_cli_exec",
-                "command": command[:10],
-                "timeout_s": hard_timeout,
-                "stdout_tail": _safe_line_preview(exc.stdout, max_chars=400),
-                "stderr_tail": _safe_line_preview(exc.stderr, max_chars=400),
-            }
-            raise TimeoutError(
-                _codex_timeout_message(
-                    model=model,
-                    timeout_s=max(hard_timeout, 0),
-                    working_directory=kwargs.get("working_directory"),
-                    sandbox_mode=kwargs.get("sandbox_mode"),
-                    approval_policy=kwargs.get("approval_policy"),
-                    diagnostics=diagnostics,
-                    structured=output_schema is not None,
+            try:
+                completed = subprocess.run(
+                    command,
+                    input=stdin_payload,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    timeout=(float(hard_timeout) if hard_timeout > 0 else None),
+                    env=env,
                 )
-            ) from exc
+            except subprocess.TimeoutExpired as exc:
+                diagnostics = {
+                    "phase": "codex_cli_exec",
+                    "command": command[:10],
+                    "timeout_s": hard_timeout,
+                    "stdout_tail": _safe_line_preview(exc.stdout, max_chars=400),
+                    "stderr_tail": _safe_line_preview(exc.stderr, max_chars=400),
+                }
+                raise TimeoutError(
+                    _codex_timeout_message(
+                        model=model,
+                        timeout_s=max(hard_timeout, 0),
+                        working_directory=prepared_kwargs.get("working_directory"),
+                        sandbox_mode=prepared_kwargs.get("sandbox_mode"),
+                        approval_policy=prepared_kwargs.get("approval_policy"),
+                        diagnostics=diagnostics,
+                        structured=output_schema is not None,
+                    )
+                ) from exc
 
-        if completed.returncode != 0:
-            diagnostics = {
-                "phase": "codex_cli_exec",
-                "returncode": completed.returncode,
-                "stdout_tail": _safe_line_preview(completed.stdout, max_chars=500),
-                "stderr_tail": _safe_line_preview(completed.stderr, max_chars=500),
-            }
-            raise RuntimeError(
-                "CODEX_CLI_ERROR "
-                f"(model={model}, returncode={completed.returncode}) "
-                f"diagnostics={_compact_json(diagnostics)}"
+            if completed.returncode != 0:
+                diagnostics = {
+                    "phase": "codex_cli_exec",
+                    "returncode": completed.returncode,
+                    "stdout_tail": _safe_line_preview(completed.stdout, max_chars=500),
+                    "stderr_tail": _safe_line_preview(completed.stderr, max_chars=500),
+                }
+                raise RuntimeError(
+                    "CODEX_CLI_ERROR "
+                    f"(model={model}, returncode={completed.returncode}) "
+                    f"diagnostics={_compact_json(diagnostics)}"
+                )
+
+            final_response = (
+                Path(output_path).read_text() if Path(output_path).exists() else ""
             )
-
-        final_response = Path(output_path).read_text() if Path(output_path).exists() else ""
-        final_response = final_response.strip()
-        if not final_response:
-            raise ValueError("Empty response from Codex CLI")
-        return _result_from_codex_cli(
-            model,
-            final_response,
-            transport="codex_cli",
-            warning=fallback_warning,
-        )
+            final_response = final_response.strip()
+            if not final_response:
+                raise ValueError("Empty response from Codex CLI")
+            session = parse_codex_exec_events(completed.stdout, completed.stderr)
+            return _result_from_codex_cli(
+                model,
+                final_response,
+                transport="codex_cli",
+                session=session,
+                tool_calls=_extract_codex_cli_tool_calls(completed.stdout),
+                warning=fallback_warning,
+            )
+    finally:
+        _cleanup_tmp(codex_home_tmp)
 
 
 async def _acall_codex_via_cli(
@@ -1355,6 +1422,51 @@ def _stream_codex(
 # ---------------------------------------------------------------------------
 # Public: Codex exec session observability
 # ---------------------------------------------------------------------------
+
+def _extract_codex_cli_tool_calls(stdout_jsonl: str) -> list[dict[str, Any]]:
+    """Extract completed MCP calls from ``codex exec --json`` events."""
+
+    tool_calls: list[dict[str, Any]] = []
+    for line in stdout_jsonl.splitlines():
+        try:
+            event = _json.loads(line)
+        except _json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "item.completed":
+            continue
+        item = event.get("item")
+        if not isinstance(item, dict) or item.get("type") != "mcp_tool_call":
+            continue
+        tool_name = str(item.get("tool") or "")
+        if not tool_name:
+            continue
+        arguments = item.get("arguments")
+        if not isinstance(arguments, dict):
+            arguments = {}
+        status = str(item.get("status") or "completed")
+        error = item.get("error")
+        result_obj = item.get("result")
+        tool_calls.append(
+            {
+                "id": str(item.get("id") or ""),
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "arguments": arguments,
+                },
+                "server": str(item.get("server") or ""),
+                "status": status,
+                "result_preview": (
+                    _safe_line_preview(result_obj, max_chars=500)
+                    if result_obj is not None
+                    else ""
+                ),
+                "is_error": bool(error) or status.lower() in {"failed", "error"},
+                "error": _safe_line_preview(error, max_chars=300) if error else "",
+            }
+        )
+    return tool_calls
+
 
 def parse_codex_exec_events(stdout_jsonl: str, stderr: str) -> dict[str, Any]:
     """Parse a Codex exec session into structured observability data.

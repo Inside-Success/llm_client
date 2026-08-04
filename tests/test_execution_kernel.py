@@ -97,6 +97,63 @@ def test_non_retryable_failure_reports_exhausted_decision() -> None:
     assert decisions == [(0, "exhausted")]
 
 
+def test_sync_retry_does_not_start_after_logical_deadline() -> None:
+    """A total deadline stops the retry chain before its next provider attempt."""
+
+    attempts: list[int] = []
+    now = [10.0]
+
+    def invoke(attempt: int) -> str:
+        attempts.append(attempt)
+        now[0] = 11.0
+        raise ValueError("transient")
+
+    with pytest.raises(TimeoutError, match="structured logical call deadline elapsed"):
+        run_sync_with_retry(
+            caller="test",
+            model="m",
+            max_retries=1,
+            invoke=invoke,
+            should_retry=lambda _exc: True,
+            compute_delay=lambda _attempt, _exc: (1.0, "none"),
+            warning_sink=[],
+            logger=logging.getLogger("test_execution_kernel"),
+            deadline_at=12.0,
+            clock=lambda: now[0],
+        )
+
+    assert attempts == [0]
+
+
+@pytest.mark.asyncio
+async def test_async_retry_does_not_start_after_logical_deadline() -> None:
+    """Async retry shares the same total-deadline boundary."""
+
+    attempts: list[int] = []
+    now = [10.0]
+
+    async def invoke(attempt: int) -> str:
+        attempts.append(attempt)
+        now[0] = 11.0
+        raise ValueError("transient")
+
+    with pytest.raises(TimeoutError, match="structured logical call deadline elapsed"):
+        await run_async_with_retry(
+            caller="test",
+            model="m",
+            max_retries=1,
+            invoke=invoke,
+            should_retry=lambda _exc: True,
+            compute_delay=lambda _attempt, _exc: (1.0, "none"),
+            warning_sink=[],
+            logger=logging.getLogger("test_execution_kernel"),
+            deadline_at=12.0,
+            clock=lambda: now[0],
+        )
+
+    assert attempts == [0]
+
+
 @pytest.mark.asyncio
 async def test_run_async_with_retry_retries_and_succeeds() -> None:
     attempts: list[int] = []
