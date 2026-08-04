@@ -72,14 +72,20 @@ def test_resolve_call_plan_skips_temporarily_unavailable_models() -> None:
 
     plan = _resolve_call_plan(
         model="gemini/gemini-2.5-flash",
-        fallback_models=["gemini/gemini-2.5-flash-lite", "openrouter/openai/gpt-5.4-mini"],
+        fallback_models=[
+            "gemini/gemini-2.5-flash-lite",
+            "openrouter/deepseek/deepseek-chat",
+        ],
         api_base=None,
         config=cfg,
     )
     clear_model_unavailability()
 
     assert plan.primary_model == "gemini/gemini-2.5-flash-lite"
-    assert plan.models == ["gemini/gemini-2.5-flash-lite", "openrouter/openai/gpt-5.4-mini"]
+    assert plan.models == [
+        "gemini/gemini-2.5-flash-lite",
+        "openrouter/deepseek/deepseek-chat",
+    ]
     suppressed = plan.routing_trace["suppressed_models"]
     assert suppressed[0]["model"] == "gemini/gemini-2.5-flash"
     assert suppressed[0]["reason"] == "provider_daily_quota_exhausted"
@@ -105,24 +111,13 @@ def test_record_model_unavailability_uses_provider_retry_hint_for_daily_quota() 
     assert record["cooldown_s"] == 34820.0
 
 
-def test_resolve_call_gpt54_canonicalizes_to_codex_under_openrouter_policy() -> None:
+def test_resolve_call_gpt54_preserves_banned_identity_under_openrouter_policy() -> None:
     cfg = ClientConfig(routing_policy="openrouter")
     plan = resolve_call(CallRequest(model="gpt-5.4"), cfg)
 
-    assert plan.primary_model == "codex/gpt-5.4"
-    assert plan.models == ["codex/gpt-5.4"]
-    assert plan.routing_trace["normalized_from"] == "gpt-5.4"
-    assert plan.routing_trace["normalized_to"] == "codex/gpt-5.4"
-    assert plan.routing_trace["provider_governance_events"] == [
-        {
-            "event": "model_canonicalized",
-            "reason": "Exact gpt-5.4 aliases must use the Codex SDK lane.",
-            "route_class": "agent_sdk",
-            "canonical_model": "codex/gpt-5.4",
-            "from": "gpt-5.4",
-            "to": "codex/gpt-5.4",
-        }
-    ]
+    assert plan.primary_model == "gpt-5.4"
+    assert plan.models == ["gpt-5.4"]
+    assert "normalized_from" not in plan.routing_trace
 
 
 def test_resolve_call_gpt56_preserves_certified_direct_route_under_openrouter_policy() -> None:
@@ -147,23 +142,22 @@ def test_resolve_call_gpt56_terra_preserves_certified_direct_route_under_openrou
     assert plan.models == ["gpt-5.6-terra"]
 
 
-def test_resolve_call_gpt54_canonicalizes_to_codex_under_direct_policy() -> None:
+def test_resolve_call_gpt54_preserves_banned_identity_under_direct_policy() -> None:
     cfg = ClientConfig(routing_policy="direct")
     plan = resolve_call(CallRequest(model="gpt-5.4"), cfg)
 
-    assert plan.primary_model == "codex/gpt-5.4"
-    assert plan.models == ["codex/gpt-5.4"]
+    assert plan.primary_model == "gpt-5.4"
+    assert plan.models == ["gpt-5.4"]
     assert plan.routing_trace["routing_policy"] == "openrouter_off"
 
 
-def test_resolve_call_prefixed_gpt54_canonicalizes_to_codex() -> None:
+def test_resolve_call_prefixed_gpt54_preserves_banned_identity() -> None:
     cfg = ClientConfig(routing_policy="openrouter")
     plan = resolve_call(CallRequest(model="openrouter/openai/gpt-5.4"), cfg)
 
-    assert plan.primary_model == "codex/gpt-5.4"
-    assert plan.models == ["codex/gpt-5.4"]
-    assert plan.routing_trace["normalized_from"] == "openrouter/openai/gpt-5.4"
-    assert plan.routing_trace["normalized_to"] == "codex/gpt-5.4"
+    assert plan.primary_model == "openrouter/openai/gpt-5.4"
+    assert plan.models == ["openrouter/openai/gpt-5.4"]
+    assert "normalized_from" not in plan.routing_trace
 
 
 def test_resolve_call_normalizes_google_gemini_alias_to_openrouter() -> None:

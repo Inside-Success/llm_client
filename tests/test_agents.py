@@ -121,8 +121,8 @@ class TestIsAgentModel:
     def test_codex_family_older_version(self) -> None:
         assert _is_agent_model("gpt-5.2-codex") is True
 
-    def test_gpt54_alias_routes_to_codex_sdk(self) -> None:
-        assert _is_agent_model("gpt-5.4") is True
+    def test_gpt54_alias_is_not_a_codex_sdk_shortcut(self) -> None:
+        assert _is_agent_model("gpt-5.4") is False
 
     def test_codex_family_case_insensitive(self) -> None:
         assert _is_agent_model("GPT-5.3-CODEX") is True
@@ -133,9 +133,9 @@ class TestIsAgentModel:
         assert _is_agent_model("openai/gpt-5.3-codex") is True
         assert _is_agent_model("openrouter/openai/gpt-5.3-codex") is True
 
-    def test_gpt54_alias_with_provider_prefix_routes_to_codex_sdk(self) -> None:
-        assert _is_agent_model("openai/gpt-5.4") is True
-        assert _is_agent_model("openrouter/openai/gpt-5.4") is True
+    def test_gpt54_alias_with_provider_prefix_is_not_a_codex_sdk_shortcut(self) -> None:
+        assert _is_agent_model("openai/gpt-5.4") is False
+        assert _is_agent_model("openrouter/openai/gpt-5.4") is False
 
     def test_non_codex_gpt_models(self) -> None:
         """Regular GPT models should NOT match Codex-family pattern."""
@@ -234,7 +234,7 @@ class TestWorkspaceKwargAliasing:
 
         monkeypatch.setattr(agents_mod, "_call_codex", fake_call_codex)
         agents_mod._route_call(
-            "codex/gpt-5.4",
+            "codex/gpt-5.6-luna",
             [{"role": "user", "content": "hi"}],
             cwd="/abs/workspace",
         )
@@ -285,8 +285,8 @@ class TestCodexReasoningEffortNormalization:
     def test_codex_alias(self) -> None:
         assert _parse_agent_model("codex-mini-latest") == ("codex", "codex-mini-latest")
 
-    def test_gpt54_alias(self) -> None:
-        assert _parse_agent_model("gpt-5.4") == ("codex", "gpt-5.4")
+    def test_gpt54_alias_is_not_parsed_as_codex(self) -> None:
+        assert _parse_agent_model("gpt-5.4") == ("gpt-5.4", None)
 
     def test_codex_family_bare(self) -> None:
         """Codex-family models parse as (codex, <full-model-name>)."""
@@ -296,8 +296,11 @@ class TestCodexReasoningEffortNormalization:
         assert _parse_agent_model("gpt-5.1-codex-mini") == ("codex", "gpt-5.1-codex-mini")
         assert _parse_agent_model("gpt-5.1-codex-max") == ("codex", "gpt-5.1-codex-max")
 
-    def test_provider_prefixed_gpt54_alias(self) -> None:
-        assert _parse_agent_model("openrouter/openai/gpt-5.4") == ("codex", "gpt-5.4")
+    def test_provider_prefixed_gpt54_alias_is_not_parsed_as_codex(self) -> None:
+        assert _parse_agent_model("openrouter/openai/gpt-5.4") == (
+            "openrouter",
+            "openai/gpt-5.4",
+        )
 
 
 # ---------------------------------------------------------------------------

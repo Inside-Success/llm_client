@@ -44,7 +44,7 @@ def _is_openai_reasoning_model(model: str) -> bool:
     """Check if model is an OpenAI reasoning model that accepts reasoning_effort.
 
     Covers the o-series (o1, o3, o4, o5...) and gpt-5.x reasoning variants.
-    Provider-prefixed forms (openrouter/openai/gpt-5.4-mini) are also matched
+    Provider-prefixed forms (openrouter/openai/gpt-5.6-luna) are also matched
     via the base name extracted after the last '/'.
     """
     import re

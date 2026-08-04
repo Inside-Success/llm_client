@@ -13,7 +13,7 @@ pip install -e ".[workflow,structured,agents,codex]"
 ```
 
 Use the same auth that the agent SDKs expect for the selected models. The
-examples below assume `codex/gpt-5.4` and `claude-code/sonnet` are available in
+examples below assume `codex/gpt-5.6-luna` and `claude-code/sonnet` are available in
 your local agent environment.
 
 ## Choose The Workflow
@@ -100,7 +100,7 @@ python -m llm_client deliberate-task \
   --task-file task.json \
   --workspace "$PWD" \
   --out runs/my-deliberation \
-  --agents agent_a:codex/gpt-5.4,agent_b:claude-code/sonnet \
+  --agents agent_a:codex/gpt-5.6-luna,agent_b:claude-code/sonnet \
   --max-rounds 3 \
   --synthesis-model claude-code/sonnet
 ```

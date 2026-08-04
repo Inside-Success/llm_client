@@ -64,7 +64,7 @@ ClaimSeverity = Literal["info", "warn", "high"]
 # Operators with strong opinions about model choice override via ``agents=``
 # at builder time or ``--agents`` at the CLI.
 DEFAULT_AGENT_PAIR: tuple[tuple[str, str], tuple[str, str]] = (
-    ("agent_a", "codex/gpt-5.4"),
+    ("agent_a", "codex/gpt-5.6-luna"),
     ("agent_b", "claude-code/sonnet"),
 )
 
@@ -343,7 +343,7 @@ def _anonymize_peer_for_prompt(peer_latest: dict[str, Any]) -> dict[str, Any]:
     Replaces the peer's ``agent_name`` (e.g. ``"agent_a"``) with the neutral
     label ``"peer"`` and clears ``reviewer_model`` (which would otherwise leak
     the underlying model identity like ``"claude-code/sonnet"`` /
-    ``"codex/gpt-5.4"``). The arXiv:2510.07517 result (Identity Bias in
+    ``"codex/gpt-5.6-luna"``). The arXiv:2510.07517 result (Identity Bias in
     Multi-Agent Debate, 2025) shows prompt-level anonymization drops the
     conformity-obstinacy gap from 0.608 to 0.024 on MMLU; this is the cheapest
     bias-reduction intervention available.
@@ -740,7 +740,7 @@ def build_deliberation_workflow(
         trace_id: Shared trace_id across all LLM calls in the run.
         max_budget: USD budget for the entire run.
         agents: List of ``(name, model)`` pairs. Defaults to the
-            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.4 + claude-code/sonnet).
+            ``DEFAULT_AGENT_PAIR`` (codex/gpt-5.6-luna + claude-code/sonnet).
             Two-agent only in v1; N-agent is a future extension.
         max_rounds: Cap on cycle count. Hitting this with residual
             disagreement promotes the verdict to ``productive_disagreement``.

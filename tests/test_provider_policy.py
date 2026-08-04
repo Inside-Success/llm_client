@@ -13,8 +13,6 @@ from llm_client.core.provider_policy import (
 
 
 def test_canonicalizes_exact_aliases_before_route_selection() -> None:
-    assert canonicalize_model_for_policy("gpt-5.4", "openrouter") == "codex/gpt-5.4"
-    assert canonicalize_model_for_policy("openrouter/openai/gpt-5.4", "openrouter") == "codex/gpt-5.4"
     assert canonicalize_model_for_policy("gpt-5.6", "openrouter") == "gpt-5.6"
     assert canonicalize_model_for_policy("gpt-5.6-terra", "openrouter") == "gpt-5.6-terra"
 
@@ -22,7 +20,9 @@ def test_canonicalizes_exact_aliases_before_route_selection() -> None:
 def test_policy_declares_forced_reroute_and_block_rules() -> None:
     policy = get_provider_governance_policy()
 
-    assert policy.exact_aliases["gpt-5.4"].canonical_model == "codex/gpt-5.4"
+    assert blocked_model_reason("gpt-5.4") is not None
+    assert blocked_model_reason("codex/gpt-5.4") is not None
+    assert blocked_model_reason("openrouter/openai/gpt-5.4-mini") is not None
     assert policy.exact_aliases["gpt-5.6"].route_class == "direct_provider"
     assert get_provider_runtime_policy("google").shared_limit == 4
     assert get_provider_runtime_policy("google").cooldown_floor_s == 15.0

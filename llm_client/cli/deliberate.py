@@ -11,7 +11,7 @@ Usage::
         --task-file question.json \\
         --workspace /abs/path/to/repo \\
         --out runs/my-debate \\
-        --agents agent_a:codex/gpt-5.4,agent_b:claude-code/sonnet \\
+        --agents agent_a:codex/gpt-5.6-luna,agent_b:claude-code/sonnet \\
         --max-rounds 3 \\
         --synthesis-model claude-code/sonnet
 
@@ -128,7 +128,7 @@ def cmd_deliberate_task(args: argparse.Namespace) -> None:
         f"=== deliberate-task ({task_data.get('task_id', '?')}) ===",
         flush=True,
     )
-    print(f"  agents: {agents or 'default(codex/gpt-5.4,claude-code/sonnet)'}")
+    print(f"  agents: {agents or 'default(codex/gpt-5.6-luna,claude-code/sonnet)'}")
     print(f"  max_rounds: {args.max_rounds}")
     print(f"  synthesis_model: {args.synthesis_model or 'claude-code/sonnet (default)'}")
     print()
@@ -177,7 +177,7 @@ def register_parser(subparsers: Any) -> None:
         "--agents",
         help=(
             "Comma-separated agent assignments 'name1:model1,name2:model2'. "
-            "Default: agent_a:codex/gpt-5.4,agent_b:claude-code/sonnet"
+            "Default: agent_a:codex/gpt-5.6-luna,agent_b:claude-code/sonnet"
         ),
     )
     p.add_argument(

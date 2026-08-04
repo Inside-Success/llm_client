@@ -104,8 +104,8 @@ def test_agent_models_available_unless_policy_banned():
     assert _is_model_available("codex/gpt-5.3-codex") is True
     assert _is_model_available("claude-code/sonnet") is True
     assert _is_model_available("claude-code/opus") is False
-    assert _is_model_available("gpt-5.4") is True
-    assert _is_model_available("openrouter/openai/gpt-5.4") is True
+    assert _is_model_available("gpt-5.4") is False
+    assert _is_model_available("openrouter/openai/gpt-5.4") is False
     # Codex-family models (bare, without codex/ prefix) should also be available
     assert _is_model_available("gpt-5.3-codex") is True
     assert _is_model_available("gpt-5.1-codex-mini") is False

@@ -328,7 +328,7 @@ def test_stalled_when_both_agents_emit_empty_positions(
 def test_two_agent_default_uses_codex_and_claude_code(
     harness: _DeliberationHarness, tmp_path: Path
 ) -> None:
-    """When agents=None, defaults to codex/gpt-5.4 + claude-code/sonnet."""
+    """When agents=None, defaults to codex/gpt-5.6-luna + claude-code/sonnet."""
     run_dir = tmp_path / "run"
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -361,7 +361,7 @@ def test_two_agent_default_uses_codex_and_claude_code(
     _run(app, init, "t-default-agents")
 
     models_seen = {model for _, model in harness.call_log}
-    assert "codex/gpt-5.4" in models_seen
+    assert "codex/gpt-5.6-luna" in models_seen
     assert "claude-code/sonnet" in models_seen
 
 
@@ -537,7 +537,7 @@ def test_wrong_agent_count_raises_at_build_time(tmp_path: Path) -> None:
             task=_task(workspace),
             trace_id="t-bad",
             max_budget=1.0,
-            agents=[("only_one", "codex/gpt-5.4")],
+            agents=[("only_one", "codex/gpt-5.6-luna")],
         )
 
     with pytest.raises(ValueError, match="exactly 2 agents"):
@@ -547,9 +547,9 @@ def test_wrong_agent_count_raises_at_build_time(tmp_path: Path) -> None:
             trace_id="t-bad-3",
             max_budget=1.0,
             agents=[
-                ("a", "codex/gpt-5.4"),
+                ("a", "codex/gpt-5.6-luna"),
                 ("b", "claude-code/sonnet"),
-                ("c", "codex/gpt-5.4"),
+                ("c", "codex/gpt-5.6-luna"),
             ],
         )
 
@@ -696,7 +696,7 @@ def test_anonymization_strips_peer_agent_name_and_reviewer_model(
     ))
     harness.push("agent_b", Position(
         agent_name="agent_b", round=1, claims=[_claim("b1", "AGENT_B_R1")],
-        reviewer_model="codex/gpt-5.4",
+        reviewer_model="codex/gpt-5.6-luna",
     ))
     harness.push("agent_a", Position(
         agent_name="agent_a", round=2, claims=[_claim("a1", "AGENT_A_R2")],
@@ -720,7 +720,7 @@ def test_anonymization_strips_peer_agent_name_and_reviewer_model(
     _run(app, init, "t-anon")
 
     # Check agent_a's round-2 prompt — peer state (agent_b's round-1) must
-    # be anonymized. The peer's reviewer_model ("codex/gpt-5.4") and the
+    # be anonymized. The peer's reviewer_model ("codex/gpt-5.6-luna") and the
     # peer's agent_name ("agent_b") must not appear in the rendered JSON.
     agent_a_calls = [i for i, (k, _) in enumerate(harness.call_log) if k == "agent_a"]
     agent_a_r2 = harness.call_messages[agent_a_calls[1]][-1]["content"]
@@ -740,7 +740,7 @@ def test_anonymization_strips_peer_agent_name_and_reviewer_model(
     assert '"agent_name": "agent_b"' not in peer_section, (
         "peer agent_name leaked into prompt — anonymization failed"
     )
-    assert "codex/gpt-5.4" not in peer_section, (
+    assert "codex/gpt-5.6-luna" not in peer_section, (
         "peer reviewer_model leaked into prompt — anonymization failed"
     )
     # The neutral label SHOULD appear

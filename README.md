@@ -40,7 +40,7 @@ artifacts:
   adversarial review of a patch, plan, decision, or text artifact. It is
   designed to run in the background while the foreground agent keeps working.
 - `python -m llm_client deliberate-task --help` runs a two-agent symmetric
-  debate, usually `codex/gpt-5.4` plus `claude-code/sonnet`, with persisted
+  debate, usually `codex/gpt-5.6-luna` plus `claude-code/sonnet`, with persisted
   positions and synthesis.
 
 See [docs/guides/agent-collaboration.md](docs/guides/agent-collaboration.md)
@@ -219,7 +219,7 @@ export ANTHROPIC_API_KEY=sk-ant-...    # Direct Anthropic
 
 ### Provider governance
 
-- Exact `gpt-5.4` requests canonicalize to `codex/gpt-5.4` before routing policy is applied.
+- GPT-5.4-family requests are hard-blocked before dispatch; use GPT-5.6 Luna where the execution contract permits it.
 - Bare Gemini ids canonicalize to `gemini/<model>` before provider selection.
 - Gemini shared-cap and cooldown defaults come from the typed provider-governance policy, not scattered literals.
 - `result.routing_trace["provider_governance_events"]` records canonicalization decisions for click-through debugging and downstream operator tooling.

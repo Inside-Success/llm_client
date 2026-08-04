@@ -131,6 +131,9 @@ Negative:
    defaults move to Sonnet.
 4. Callers cannot use account-side model selectors while the non-overridable
    local model ban is active; they must request an explicit model.
+5. GPT-5.4-family routes are denied before provider or agent dispatch, and
+   Luna is the shared default; callers needing another allowed route must
+   select and justify it explicitly.
 
 ## Testing Contract
 
