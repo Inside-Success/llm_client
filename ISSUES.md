@@ -1,6 +1,6 @@
 # `llm_client` issue tracker
 
-## Open
+## Register
 
 ### LLM-001: Repository-wide static-analysis targets are baseline-red
 
@@ -23,33 +23,18 @@ worktree instead uses system Python and misses the declared `langgraph` extra.
 Makefile select the repo-local environment before treating `make check` as a
 required green gate.
 
-### LLM-002: Canonical instruction source is self-contradictory
+### LLM-002: Canonical instruction source is self-contradictory (resolved)
 
 | Field | Value |
 |---|---|
-| Status | Pending policy-friction handoff |
+| Status | Resolved 2026-08-03 |
 | Severity | High |
 | Reported | 2026-07-15 during Plan #104 orientation |
 
-`AGENTS.md` is a symlink to `CLAUDE.md`, while `CLAUDE.md` says it is a generated
-file that must not be edited and simultaneously names `CLAUDE.md` as its own
-canonical source. Agents therefore cannot follow both the repository rule that
-`CLAUDE.md` is canonical and the file-local instruction not to edit it.
-
-**Exact proposed policy-friction entry:**
-
-- **Policy:** `canonical-project-instructions`
-- **Friction:** In `llm_client`, `AGENTS.md` symlinks to `CLAUDE.md`, but
-  `CLAUDE.md` is a generated Codex projection that says not to edit it and names
-  itself as the canonical source. The declared canonical/editable instruction
-  authority is therefore circular and unavailable.
-- **Recommendation:** Restore a human-authored canonical `CLAUDE.md` and generate
-  a separate `AGENTS.md`, or declare a different editable canonical source and
-  make both projections point to it; add a negative control rejecting a generated
-  file whose `canonical_claude` resolves to itself.
-
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+`CLAUDE.md` is now the authored repository authority and `AGENTS.md` is a
+separate deterministic generated projection. The sync validator passes and the
+renderer retains its negative control rejecting an `AGENTS.md` symlink that
+would overwrite the canonical source.
 
 ### LLM-013: Inside Success remote routes pushes through the personal credential
 
