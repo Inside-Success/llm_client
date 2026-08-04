@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from enforced_planning import coordination_claims
+from enforced_planning.worktree_paths import resolve_canonical_repo_root
 
 
 @dataclass(frozen=True)
@@ -109,7 +110,10 @@ def ahead_behind(repo_root: Path, upstream_ref: str) -> tuple[int, int]:
 def changed_paths_since_default(repo_root: Path, default_branch: str) -> list[str]:
     """Return repo-relative paths changed on this branch against default."""
 
-    base = _git_stdout(repo_root, ["merge-base", "HEAD", f"refs/heads/{default_branch}"])
+    remote_default = f"refs/remotes/origin/{default_branch}"
+    remote_exists = _run_git(repo_root, ["show-ref", "--verify", remote_default])
+    default_ref = remote_default if remote_exists.returncode == 0 else f"refs/heads/{default_branch}"
+    base = _git_stdout(repo_root, ["merge-base", "HEAD", default_ref])
     diff = _git_stdout(repo_root, ["diff", "--name-only", f"{base}..HEAD"])
     if not diff:
         return []
@@ -117,9 +121,12 @@ def changed_paths_since_default(repo_root: Path, default_branch: str) -> list[st
 
 
 def _working_tree_dirty(repo_root: Path) -> bool:
-    """Return whether the repo has tracked or untracked local dirt."""
+    """Return whether tracked content could make the published delta ambiguous."""
 
-    return bool(_git_stdout(repo_root, ["status", "--short"]))
+    return (
+        _run_git(repo_root, ["diff", "--quiet"]).returncode != 0
+        or _run_git(repo_root, ["diff", "--cached", "--quiet"]).returncode != 0
+    )
 
 
 def _branch_claims(project: str, branch: str) -> list[coordination_claims.ClaimRecord]:
@@ -129,6 +136,18 @@ def _branch_claims(project: str, branch: str) -> list[coordination_claims.ClaimR
         claim
         for claim in coordination_claims.check_claims(project)
         if claim.branch == branch
+    ]
+
+
+def _healthy_branch_claims(
+    claims: list[coordination_claims.ClaimRecord],
+) -> list[coordination_claims.ClaimRecord]:
+    """Return branch claims with complete, live ownership metadata."""
+
+    return [
+        claim
+        for claim in claims
+        if coordination_claims.claim_runtime_status(claim) == "healthy"
     ]
 
 
@@ -190,12 +209,14 @@ def evaluate_push_safety(
     *,
     project: str | None = None,
     branch: str | None = None,
+    include_active_decisions: bool = False,
     fail_on_active_decisions: bool = False,
 ) -> dict[str, Any]:
     """Evaluate whether the current branch is safe to push as-is."""
 
     resolved_repo_root = resolve_repo_root(repo_root)
-    resolved_project = project or resolved_repo_root.name
+    canonical_repo_root = resolve_canonical_repo_root(resolved_repo_root)
+    resolved_project = project or canonical_repo_root.name
     resolved_branch = branch or current_branch(resolved_repo_root)
     default_branch = resolve_default_branch(resolved_repo_root)
     if not default_branch:
@@ -203,6 +224,8 @@ def evaluate_push_safety(
 
     issues: list[PushCheckFinding] = []
     warnings: list[PushCheckFinding] = []
+    live_write_overlap_paths: set[str] = set()
+    integration_owners: set[tuple[str, str]] = set()
 
     if _working_tree_dirty(resolved_repo_root):
         issues.append(
@@ -214,21 +237,54 @@ def evaluate_push_safety(
         )
 
     if resolved_branch == default_branch:
-        issues.append(
+        warnings.append(
             PushCheckFinding(
                 code="default_branch_push",
-                message="Direct pushes from the default branch are blocked; use a worktree-backed task branch.",
+                message=(
+                    "Direct default-branch pushes require repository governance that permits "
+                    "recoverable Git publication; this generic coordination check cannot establish ownership."
+                ),
                 details={"branch": resolved_branch, "default_branch": default_branch},
             )
         )
 
     branch_claims = _branch_claims(resolved_project, resolved_branch)
     if not branch_claims:
-        issues.append(
+        findings = warnings if resolved_branch == default_branch else issues
+        findings.append(
             PushCheckFinding(
                 code="missing_branch_claim",
-                message="No live coordination claim is attached to the current branch.",
+                message=(
+                    "No live coordination claim is attached to the default branch; "
+                    "verify that the published integration came from a claimed lane."
+                    if resolved_branch == default_branch
+                    else "No live coordination claim is attached to the current branch."
+                ),
                 details={"branch": resolved_branch, "project": resolved_project},
+            )
+        )
+    elif not _healthy_branch_claims(branch_claims):
+        issues.append(
+            PushCheckFinding(
+                code="no_healthy_branch_claim",
+                message=(
+                    "The current branch has no healthy canonical claim with complete "
+                    "session identity. Resume or recreate the lane before pushing."
+                ),
+                details={
+                    "branch": resolved_branch,
+                    "project": resolved_project,
+                    "claims": [
+                        {
+                            "scope": claim.scope,
+                            "session_id": claim.session_id,
+                            "session_name": claim.session_name,
+                            "health_issues": coordination_claims.claim_health_issues(claim),
+                            "liveness_issues": coordination_claims.claim_liveness_issues(claim),
+                        }
+                        for claim in branch_claims
+                    ],
+                },
             )
         )
 
@@ -289,10 +345,18 @@ def evaluate_push_safety(
             )
             continue
         if claim.claim_type == "write":
+            live_write_overlap_paths.update(
+                overlap.split(" <-> ", 1)[0] for overlap in overlaps
+            )
+            integration_owners.add((claim.agent, claim.scope))
             issues.append(
                 PushCheckFinding(
                     code="overlapping_write_claim",
-                    message="Changed files overlap another live write claim.",
+                    message=(
+                        "Changed files overlap another live write claim. Publication is "
+                        "waiting on those paths; this is not evidence that the whole goal "
+                        "is blocked."
+                    ),
                     details=claim_details,
                 )
             )
@@ -306,7 +370,11 @@ def evaluate_push_safety(
                 )
             )
 
-    active_decisions = load_active_decisions(resolved_project)
+    active_decisions = (
+        load_active_decisions(resolved_project)
+        if include_active_decisions or fail_on_active_decisions
+        else []
+    )
     if active_decisions:
         decision_finding = PushCheckFinding(
             code="active_decisions_present",
@@ -317,6 +385,22 @@ def evaluate_push_safety(
             issues.append(decision_finding)
         else:
             warnings.append(decision_finding)
+
+    blocked_paths = sorted(live_write_overlap_paths)
+    writable_paths = sorted(path for path in changed_paths if path not in live_write_overlap_paths)
+    if blocked_paths and writable_paths:
+        recommended_next_action = (
+            "Split or defer the blocked paths, publish a claim-compatible checkpoint, "
+            "and continue another authorized ready work unit."
+        )
+    elif blocked_paths:
+        recommended_next_action = (
+            "This branch publication is path-blocked. Preserve the checkpoint and move "
+            "to another authorized ready work unit; report the whole goal blocked only "
+            "after evaluating its complete ready queue."
+        )
+    else:
+        recommended_next_action = "Proceed with normal push-safety handling."
 
     return {
         "ok": not issues,
@@ -329,6 +413,17 @@ def evaluate_push_safety(
         "behind": behind,
         "changed_paths": changed_paths,
         "branch_claim_count": len(branch_claims),
+        "continuation": {
+            "state": "integration_wait" if blocked_paths else "ready",
+            "goal_blocked": False,
+            "blocked_paths": blocked_paths,
+            "writable_paths": writable_paths,
+            "integration_owners": [
+                {"agent": agent, "scope": scope}
+                for agent, scope in sorted(integration_owners)
+            ],
+            "recommended_next_action": recommended_next_action,
+        },
         "issues": [item.to_dict() for item in issues],
         "warnings": [item.to_dict() for item in warnings],
     }
