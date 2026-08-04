@@ -13,22 +13,22 @@ import pytest
 def test_parse_agents_two_agents() -> None:
     from llm_client.cli.deliberate import _parse_agents
 
-    pairs = _parse_agents("a:codex/gpt-5.4,b:claude-code/sonnet")
-    assert pairs == [("a", "codex/gpt-5.4"), ("b", "claude-code/sonnet")]
+    pairs = _parse_agents("a:codex/gpt-5.6-luna,b:claude-code/sonnet")
+    assert pairs == [("a", "codex/gpt-5.6-luna"), ("b", "claude-code/sonnet")]
 
 
 def test_parse_agents_strips_whitespace() -> None:
     from llm_client.cli.deliberate import _parse_agents
 
-    pairs = _parse_agents("  a : codex/gpt-5.4 , b : claude-code/sonnet  ")
-    assert pairs == [("a", "codex/gpt-5.4"), ("b", "claude-code/sonnet")]
+    pairs = _parse_agents("  a : codex/gpt-5.6-luna , b : claude-code/sonnet  ")
+    assert pairs == [("a", "codex/gpt-5.6-luna"), ("b", "claude-code/sonnet")]
 
 
 def test_parse_agents_rejects_malformed() -> None:
     from llm_client.cli.deliberate import _parse_agents
 
     with pytest.raises(ValueError, match="exactly 2 entries"):
-        _parse_agents("only-one:codex/gpt-5.4")
+        _parse_agents("only-one:codex/gpt-5.6-luna")
     with pytest.raises(ValueError, match="exactly 2 entries"):
         _parse_agents("a:m1,b:m2,c:m3")
     with pytest.raises(ValueError, match="expected 'name:model'"):
@@ -154,12 +154,12 @@ def test_cli_threads_explicit_agents_into_builder(tmp_path: Path, monkeypatch: p
 
     args = _make_cli_args(
         task_path, workspace, out,
-        agents="myA:codex/gpt-5.4,myB:claude-code/sonnet",
+        agents="myA:codex/gpt-5.6-luna,myB:claude-code/sonnet",
     )
     cli_mod.cmd_deliberate_task(args)
 
     assert captured["agents"] == [
-        ("myA", "codex/gpt-5.4"),
+        ("myA", "codex/gpt-5.6-luna"),
         ("myB", "claude-code/sonnet"),
     ]
 

@@ -4,6 +4,16 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-08-04 Amendment: GPT-5.4 Ban and Luna Default
+
+Plan #348 hard-blocks every GPT-5.4-family route before dispatch, including
+raw, OpenRouter, Mini/Nano, fallback, and Codex aliases. GPT-5.4 is removed
+from the exact execution allowlist, capability table, packaged registry, and
+maintained workflow defaults. GPT-5.6 Luna becomes the shared execution default
+and replaces GPT-5.4 on maintained Codex workflow surfaces. When Luna cannot
+satisfy a required execution contract, callers must select and justify an
+explicit non-GPT-5.4 route; they may not silently revive GPT-5.4.
+
 ## 2026-07-31 Amendment: OpenRouter Exact-Response Cache Policy
 
 Plan #347 extends `OpenRouterRoutePolicyV1` with an explicit, default-off

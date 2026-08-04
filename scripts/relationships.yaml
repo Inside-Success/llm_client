@@ -58,6 +58,7 @@ couplings:
   - docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md
   - docs/plans/110_provider-capabilities-opus-ban.md
   - docs/plans/117_explicit_reasoning_policy.md
+  - docs/plans/348_gpt54_ban_luna_default.md
   type: validated
   description: Generic provider controls, OpenRouter telemetry projection, and complete model-ban invariants.
 - sources:

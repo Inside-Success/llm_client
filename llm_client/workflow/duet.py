@@ -59,9 +59,9 @@ logger = logging.getLogger(__name__)
 # ChatGPT-account auth ("The 'gpt-5-codex' model is not supported when using
 # Codex with a ChatGPT account."). Operators with API auth can override per
 # stage via ``DuetRoles(plan="codex/gpt-5-codex", ...)``.
-DEFAULT_PLAN_MODEL = "codex/gpt-5.4"
+DEFAULT_PLAN_MODEL = "codex/gpt-5.6-luna"
 DEFAULT_PLAN_REVIEW_MODEL = "claude-code/sonnet"
-DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5.4"
+DEFAULT_IMPLEMENT_MODEL = "codex/gpt-5.6-luna"
 DEFAULT_IMPLEMENT_REVIEW_MODEL = "claude-code/sonnet"
 
 # Codex agent calls legitimately take minutes — codex auto-explores the
@@ -110,7 +110,7 @@ class DuetTask(BaseModel):
 class DuetRoles(BaseModel):
     """Per-stage model assignment.
 
-    Defaults to ``codex/gpt-5.4`` for implement stages and
+    Defaults to ``codex/gpt-5.6-luna`` for implement stages and
     ``claude-code/sonnet`` for review stages. Override per stage as needed.
     Operators with Codex API auth (not ChatGPT-account auth) can switch
     implement stages to ``codex/gpt-5-codex`` for stronger code performance.

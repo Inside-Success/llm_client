@@ -22,7 +22,7 @@ REASONING_EFFORTS: frozenset[str] = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 )
 
-DEFAULT_EXECUTION_MODEL = "openrouter/deepseek/deepseek-v4-flash"
+DEFAULT_EXECUTION_MODEL = "openrouter/openai/gpt-5.6-luna"
 
 # Exact canonical routes only. Provider aliases are canonicalized before this
 # list is evaluated. Adding a route is a reviewed source change, not a project
@@ -30,12 +30,12 @@ DEFAULT_EXECUTION_MODEL = "openrouter/deepseek/deepseek-v4-flash"
 ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
     {
         DEFAULT_EXECUTION_MODEL,
+        "openrouter/deepseek/deepseek-v4-flash",
         "openrouter/deepseek/deepseek-chat",
         "openrouter/inception/mercury-2",
         "openrouter/minimax/minimax-m3",
         "openrouter/openai/gpt-5",
         "openrouter/openai/gpt-5-nano",
-        "openrouter/openai/gpt-5.4-nano",
         "openrouter/openai/gpt-5.6-luna",
         "openrouter/openai/gpt-5.6-sol",
         "openrouter/openai/gpt-5.6-terra",
@@ -49,7 +49,6 @@ ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "gpt-5.6",
         "gpt-5.6-terra",
         "codex",
-        "codex/gpt-5.4",
         "codex/gpt-5.6-luna",
         "codex/gpt-5.6-sol",
         "codex/gpt-5.6-terra",
@@ -128,12 +127,6 @@ REASONING_CAPABILITIES: dict[str, ReasoningCapability] = {
         observed_default="medium",
         source=_OPENROUTER_MODELS_SOURCE,
     ),
-    "openrouter/openai/gpt-5.4-nano": _reasoning_capability(
-        {"none", "low", "medium", "high", "xhigh"},
-        mandatory=False,
-        observed_default="medium",
-        source=_OPENROUTER_MODELS_SOURCE,
-    ),
     "openrouter/openai/gpt-5.6-luna": _reasoning_capability(
         {"none", "low", "medium", "high", "xhigh", "max"},
         mandatory=False,
@@ -201,12 +194,6 @@ REASONING_CAPABILITIES: dict[str, ReasoningCapability] = {
         source=_OPENAI_MODELS_SOURCE,
     ),
     "codex": _reasoning_capability(
-        {"low", "medium", "high"},
-        mandatory=True,
-        observed_default="high",
-        source=_CODEX_SOURCE,
-    ),
-    "codex/gpt-5.4": _reasoning_capability(
         {"low", "medium", "high"},
         mandatory=True,
         observed_default="high",
