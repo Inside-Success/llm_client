@@ -50,6 +50,7 @@ class ModelInfo(BaseModel):
     cost: float  # blended $/1M tokens
     context: int
     structured_output: bool
+    native_structured_output: bool | None = None
     tool_calling: bool = True
     tags: list[str] = []
 
@@ -508,6 +509,32 @@ def supports_structured_output(litellm_id: str) -> bool | None:
         entry = m if isinstance(m, dict) else m.model_dump()
         if entry.get("litellm_id") == litellm_id:
             return bool(entry.get("structured_output", False))
+    return None
+
+
+def supports_native_structured_output(litellm_id: str) -> bool | None:
+    """Return the curated route's native ``json_schema`` capability.
+
+    The additive field separates native transport from overall typed-output
+    eligibility. Registries that omit it inherit ``structured_output``;
+    unknown models return ``None`` so the runtime can consult LiteLLM.
+    """
+
+    config = _load_config()
+    for model in config["models"]:
+        entry = model if isinstance(model, dict) else model.model_dump()
+        if entry.get("litellm_id") != litellm_id:
+            continue
+        native_capability = entry.get("native_structured_output")
+        if native_capability is None:
+            return bool(entry.get("structured_output", False))
+        if not isinstance(native_capability, bool):
+            raise RuntimeError(
+                "Invalid native_structured_output for "
+                f"{litellm_id}: expected boolean or null, got "
+                f"{type(native_capability).__name__}"
+            )
+        return native_capability
     return None
 
 
