@@ -137,7 +137,7 @@ Or via environment: `LLM_CLIENT_OPENROUTER_ROUTING=off`
 
 Provider-governance rules are applied before the final routing decision:
 
-- exact `gpt-5.4` requests canonicalize to `codex/gpt-5.4`
+- GPT-5.4-family requests fail before dispatch; use GPT-5.6 Luna when compatible
 - bare Gemini ids canonicalize to `gemini/<model>`
 - `result.routing_trace["provider_governance_events"]` records these decisions
 

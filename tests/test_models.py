@@ -40,15 +40,23 @@ def _reset():
 
 
 class TestGetModel:
+    def test_retired_gpt55_models_are_absent_from_registry(self):
+        """Selectable registry must not advertise the hard-blocked family."""
+        identifiers = {
+            model["litellm_id"] for model in _load_packaged_default_config()["models"]
+        }
+        assert not any("gpt-5.5" in identifier for identifier in identifiers)
+
     def test_openrouter_gpt56_planner_routes_are_registered(self):
         """Current OpenRouter planner candidates expose their tested capabilities."""
 
         for model in (
+            "openrouter/openai/gpt-5.6-sol",
             "openrouter/openai/gpt-5.6-terra",
         ):
             assert supports_structured_output(model) is True
             assert supports_tool_calling(model) is True
-        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is False
+        assert supports_structured_output("openrouter/openai/gpt-5.6-luna") is True
 
     def test_extraction_returns_highest_intelligence_structured(self):
         # available_only=False so we don't need env vars set
@@ -150,11 +158,11 @@ class TestGetModel:
             "ultra_fast_low_intel": "openrouter/inception/mercury-2",
             "ultra_cheap_low_intel": "openrouter/openai/gpt-5-nano",
             "fast_cheap_mid": "openrouter/deepseek/deepseek-v4-flash",
-            "fast_mid": "openrouter/openai/gpt-5.4-nano",
+            "fast_mid": "openrouter/openai/gpt-5.6-luna",
             "default_intelligent": "openrouter/minimax/minimax-m3",
             "fast_intelligent": "openrouter/z-ai/glm-5.2",
             "very_intelligent": "openrouter/x-ai/grok-4.5",
-            "max_intelligence": "openrouter/openai/gpt-5.5",
+            "max_intelligence": "openrouter/openai/gpt-5.6-sol",
         }
 
         for task, model_id in expected.items():
@@ -259,7 +267,7 @@ class TestPerformanceDemotion:
         self._insert_calls("openrouter/openai/gpt-5", "extraction", 5, 10)
         self._insert_calls("openrouter/deepseek/deepseek-chat", "extraction", 5, 10)
         self._insert_calls("openrouter/openai/gpt-5-mini", "extraction", 5, 10)
-        self._insert_calls("openrouter/openai/gpt-5.4-mini", "extraction", 5, 10)
+        self._insert_calls("openrouter/openai/gpt-5.6-luna", "extraction", 5, 10)
         self._insert_calls("openrouter/x-ai/grok-4.1-fast", "extraction", 5, 10)
 
         model = get_model("extraction", available_only=False)
@@ -516,6 +524,11 @@ class TestConfigLoading:
         models = _DEFAULT_CONFIG["models"]
         assert all("opus" not in m["litellm_id"].lower() for m in models)
         assert all("opus" not in m["name"].lower() for m in models)
+
+    def test_packaged_registry_has_no_gpt54_models(self):
+        models = _DEFAULT_CONFIG["models"]
+        assert all("gpt-5.4" not in m["litellm_id"].lower() for m in models)
+        assert all("gpt-5.4" not in m["name"].lower() for m in models)
 
     def test_parse_packaged_default_config_rejects_invalid_json(self):
         with pytest.raises(RuntimeError, match="Invalid packaged model registry JSON"):

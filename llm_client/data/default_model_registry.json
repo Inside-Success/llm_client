@@ -75,10 +75,32 @@
     {
       "api_key_env": "OPENROUTER_API_KEY",
       "context": 1050000,
+      "cost": 17.5,
+      "intelligence": 57,
+      "litellm_id": "openrouter/openai/gpt-5.6-sol",
+      "name": "gpt-5.6-sol-openrouter",
+      "native_structured_output": true,
+      "provider": "openrouter",
+      "speed": 40,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "frontier",
+        "manual-selection",
+        "openrouter",
+        "reasoning",
+        "bounded-schema-evidence",
+        "tier-max-intelligence"
+      ]
+    },
+    {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1050000,
       "cost": 8.75,
       "intelligence": 46,
       "litellm_id": "openrouter/openai/gpt-5.6-terra",
       "name": "gpt-5.6-terra-openrouter",
+      "native_structured_output": true,
       "provider": "openrouter",
       "speed": 121,
       "structured_output": true,
@@ -99,16 +121,18 @@
       "intelligence": 38,
       "litellm_id": "openrouter/openai/gpt-5.6-luna",
       "name": "gpt-5.6-luna-openrouter",
+      "native_structured_output": true,
       "provider": "openrouter",
       "speed": 192,
-      "structured_output": false,
+      "structured_output": true,
       "tags": [
         "1m-context",
         "manual-selection",
         "openrouter",
         "planner-candidate",
         "reasoning",
-        "native-schema-route-unverified"
+        "bounded-schema-evidence",
+        "tier-fast-mid"
       ]
     },
     {
@@ -205,37 +229,6 @@
     },
     {
       "api_key_env": "OPENROUTER_API_KEY",
-      "context": 400000,
-      "cost": 0.65,
-      "intelligence": 40,
-      "litellm_id": "openrouter/openai/gpt-5.4-mini",
-      "name": "gpt-5.4-mini",
-      "provider": "openrouter",
-      "speed": 161,
-      "structured_output": true,
-      "tags": [
-        "reliable-structured",
-        "strong-tool-calling"
-      ]
-    },
-    {
-      "api_key_env": "OPENROUTER_API_KEY",
-      "context": 400000,
-      "cost": 0.18,
-      "intelligence": 38,
-      "litellm_id": "openrouter/openai/gpt-5.4-nano",
-      "name": "gpt-5.4-nano",
-      "provider": "openrouter",
-      "speed": 163,
-      "structured_output": true,
-      "tags": [
-        "cheap",
-        "strong-tool-calling",
-        "tier-fast-mid"
-      ]
-    },
-    {
-      "api_key_env": "OPENROUTER_API_KEY",
       "context": 1000000,
       "cost": 0.9,
       "intelligence": 51,
@@ -288,26 +281,6 @@
       ]
     },
     {
-      "api_key_env": "OPENROUTER_API_KEY",
-      "context": 1050000,
-      "cost": 4.35,
-      "intelligence": 55,
-      "litellm_id": "openrouter/openai/gpt-5.5",
-      "name": "gpt-5.5",
-      "provider": "openrouter",
-      "speed": 70,
-      "structured_output": true,
-      "tags": [
-        "1m-context",
-        "deep-review",
-        "frontier",
-        "long-thinking",
-        "manual-selection",
-        "reasoning",
-        "tier-max-intelligence"
-      ]
-    },
-    {
       "api_key_env": "OPENAI_API_KEY",
       "context": 128000,
       "cost": 94.5,
@@ -321,23 +294,6 @@
         "deep-review",
         "frontier",
         "long-thinking"
-      ]
-    },
-    {
-      "api_key_env": "OPENAI_API_KEY",
-      "context": 1050000,
-      "cost": 17.5,
-      "intelligence": 51,
-      "litellm_id": "gpt-5.5",
-      "name": "gpt-5.5-direct",
-      "provider": "openai",
-      "speed": 40,
-      "structured_output": true,
-      "tags": [
-        "deep-review",
-        "frontier",
-        "manual-selection",
-        "reasoning"
       ]
     },
     {
@@ -376,24 +332,6 @@
         "manual-selection",
         "reasoning",
         "structured-route-certified"
-      ]
-    },
-    {
-      "api_key_env": "OPENAI_API_KEY",
-      "context": 1050000,
-      "cost": 105.0,
-      "intelligence": 55,
-      "litellm_id": "gpt-5.5-pro",
-      "name": "gpt-5.5-pro",
-      "provider": "openai",
-      "speed": 3,
-      "structured_output": true,
-      "tags": [
-        "deep-review",
-        "frontier",
-        "long-thinking",
-        "manual-selection",
-        "quality-optimal-review"
       ]
     }
   ],

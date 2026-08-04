@@ -771,6 +771,17 @@ def _coerce_model_kwargs_for_execution(
 # Key: model substring (matched case-insensitively).
 # Value: (replacement, reason).
 _HARD_BLOCKED_MODELS: dict[str, tuple[str, str]] = {
+    "gpt-5.4": (
+        "gpt-5.6-luna (preferred) OR an explicit non-GPT-5.4 route when Luna "
+        "cannot satisfy the required execution contract",
+        "GPT-5.4-family models are banned by ecosystem policy in every execution "
+        "lane, including raw provider routes, Mini/Nano variants, and Codex aliases.",
+    ),
+    "gpt-5.5": (
+        "gpt-5.6 (Sol) OR gpt-5.6-terra",
+        "GPT-5.5 is retired from ecosystem routing. Use GPT-5.6 Sol for "
+        "maximum-quality work or GPT-5.6 Terra for an explicit lower-cost route.",
+    ),
     "openrouter/auto": (
         "an explicit, policy-approved model ID",
         "OpenRouter Auto Router selects the final model account-side, so "

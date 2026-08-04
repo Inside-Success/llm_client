@@ -228,19 +228,19 @@ async def test_run_async_with_fallback_records_exhausted_model_for_future_calls(
         return "ok"
 
     result = await run_async_with_fallback(
-        models=["gemini/gemini-2.5-flash", "openrouter/openai/gpt-5.4-mini"],
+        models=["gemini/gemini-2.5-flash", "openrouter/openai/gpt-5.6-luna"],
         execute_model=execute_model,
         warning_sink=warnings,
         logger=logging.getLogger("test_execution_kernel"),
     )
 
     available, suppressed = filter_available_models(
-        ["gemini/gemini-2.5-flash", "openrouter/openai/gpt-5.4-mini"]
+        ["gemini/gemini-2.5-flash", "openrouter/openai/gpt-5.6-luna"]
     )
     clear_model_unavailability()
 
     assert result == "ok"
-    assert available == ["openrouter/openai/gpt-5.4-mini"]
+    assert available == ["openrouter/openai/gpt-5.6-luna"]
     assert suppressed[0]["model"] == "gemini/gemini-2.5-flash"
     assert suppressed[0]["reason"] == "provider_spend_cap_exhausted"
     assert any("MODEL_UNAVAILABLE: gemini/gemini-2.5-flash" in w for w in warnings)

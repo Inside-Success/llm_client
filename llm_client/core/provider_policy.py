@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from llm_client.core.config import RoutingPolicy
 
 ProviderRouteClass = Literal["agent_sdk", "direct_provider", "openrouter"]
-_CODEX_AGENT_ALIASES: frozenset[str] = frozenset({"codex-mini-latest", "gpt-5.4"})
+_CODEX_AGENT_ALIASES: frozenset[str] = frozenset({"codex-mini-latest"})
 _CODEX_FAMILY_RE = re.compile(r"-codex(?:-|$)", re.IGNORECASE)
 
 
@@ -172,13 +172,27 @@ def get_provider_governance_policy() -> ProviderGovernancePolicy:
             "claude-code",
             "openai-agents",
         ),
-        blocked_exact_aliases={},
+        blocked_exact_aliases={
+            model: BlockRule(
+                reason=(
+                    "GPT-5.4-family routes are prohibited; use GPT-5.6 Luna where "
+                    "the execution contract permits it."
+                )
+            )
+            for model in (
+                "gpt-5.4",
+                "gpt-5.4-mini",
+                "gpt-5.4-nano",
+                "codex/gpt-5.4",
+                "openai/gpt-5.4",
+                "openai/gpt-5.4-mini",
+                "openai/gpt-5.4-nano",
+                "openrouter/openai/gpt-5.4",
+                "openrouter/openai/gpt-5.4-mini",
+                "openrouter/openai/gpt-5.4-nano",
+            )
+        },
         exact_aliases={
-            "gpt-5.4": ExactAliasRule(
-                canonical_model="codex/gpt-5.4",
-                route_class="agent_sdk",
-                reason="Exact gpt-5.4 aliases must use the Codex SDK lane.",
-            ),
             "gpt-5.6": ExactAliasRule(
                 canonical_model="gpt-5.6",
                 route_class="direct_provider",
