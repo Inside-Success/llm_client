@@ -219,6 +219,7 @@ WORKTREE_CLAIMS_SCRIPT := scripts/meta/worktree-coordination/../check_coordinati
 WORKTREE_SESSION_START_SCRIPT := scripts/meta/worktree-coordination/../session_start.py
 WORKTREE_SESSION_HEARTBEAT_SCRIPT := scripts/meta/worktree-coordination/../session_heartbeat.py
 WORKTREE_SESSION_STATUS_SCRIPT := scripts/meta/worktree-coordination/../session_status.py
+WORKTREE_SESSION_END_SCRIPT := scripts/meta/worktree-coordination/../session_end.py
 WORKTREE_SESSION_FINISH_SCRIPT := scripts/meta/worktree-coordination/../session_finish.py
 WORKTREE_SESSION_CLOSE_SCRIPT := scripts/meta/worktree-coordination/../session_close.py
 WORKTREE_REVIEW_CLAIM_SCRIPT := scripts/meta/worktree-coordination/create_review_claim.py
@@ -234,6 +235,7 @@ SESSION_NEXT ?=
 SESSION_DEPENDS ?=
 SESSION_STOP_CONDITIONS ?=
 SESSION_NOTE ?=
+SESSION_ALLOW_PARALLEL ?=
 ALLOW_UNPLANNED ?=
 PLAN_RESUME ?=
 WORKTREE_EXECUTION_PROFILE ?= coordinated
@@ -247,11 +249,12 @@ WORKTREE_DISPOSITION ?= merged
 WORKTREE_DISPOSITION_REASON ?=
 WORKTREE_RECOVERY_REF ?=
 WORKTREE_ALLOW_DISCARD_UNIQUE ?=
+WORKTREE_MERGE_COMMIT ?=
 REVIEW_SCOPE ?=
 REVIEW_NOTES ?=
 RECIPIENT ?=
 
-.PHONY: worktree worktree-list worktree-remove session-start session-heartbeat session-status session-finish session-close review-claim raise-concern verification-batch-freeze verification-batch-check verification-batch-thaw
+.PHONY: worktree maintenance-worktree worktree-list worktree-remove session-start session-heartbeat session-status session-end session-finish session-close review-claim raise-concern verification-batch-freeze verification-batch-check verification-batch-thaw
 
 verification-batch-freeze:  ## Freeze clean HEAD for DECISION="..." VERIFY_COMMAND="..."
 	@test -n "$(DECISION)" || (echo "DECISION is required" && exit 1)
@@ -319,6 +322,7 @@ endif
 		--worktree-path "$(WORKTREE_DIR)/$(BRANCH)" \
 		--session-name "$(SESSION_GOAL)" \
 		$(if $(SESSION_PARENT_SCOPE),--parent-scope "$(SESSION_PARENT_SCOPE)",) \
+		$(if $(filter 1 true yes,$(SESSION_ALLOW_PARALLEL)),--allow-parallel,) \
 		$(foreach path,$(SESSION_WRITE_PATHS),--write-path "$(path)") \
 		$(foreach path,$(SESSION_READ_PATHS),--read-path "$(path)") \
 		$(if $(PLAN),--plan "$(PLAN_PROJECT)#$(PLAN)",)
@@ -339,6 +343,7 @@ endif
 		--current-phase "$(SESSION_PHASE)" \
 		--claim-type "$(SESSION_CLAIM_TYPE)" \
 		$(if $(SESSION_PARENT_SCOPE),--parent-scope "$(SESSION_PARENT_SCOPE)",) \
+		$(if $(filter 1 true yes,$(SESSION_ALLOW_PARALLEL)),--allow-parallel,) \
 		$(foreach path,$(SESSION_WRITE_PATHS),--write-path "$(path)") \
 		$(foreach path,$(SESSION_READ_PATHS),--read-path "$(path)") \
 		$(if $(PLAN),--plan "$(PLAN_PROJECT)#$(PLAN)",) \
@@ -356,6 +361,21 @@ endif
 	@echo "Worktree created at $(WORKTREE_DIR)/$(BRANCH)"
 	@echo "Claim created for branch $(BRANCH)"
 	@echo "Session contract started for $(SESSION_GOAL)"
+
+maintenance-worktree:  ## Create a claimed light maintenance worktree without a numbered plan
+	@if [ -n "$(PLAN)" ]; then \
+		echo "maintenance-worktree is only for explicitly unplanned light maintenance; use make worktree PLAN=N for plan-owned work."; \
+		exit 2; \
+	fi
+	@$(MAKE) worktree \
+		BRANCH="$(BRANCH)" TASK="$(TASK)" WORKTREE_AGENT="$(WORKTREE_AGENT)" \
+		SESSION_GOAL="$(SESSION_GOAL)" SESSION_PHASE="$(SESSION_PHASE)" \
+		SESSION_NEXT="$(SESSION_NEXT)" SESSION_DEPENDS="$(SESSION_DEPENDS)" \
+		SESSION_STOP_CONDITIONS="$(SESSION_STOP_CONDITIONS)" SESSION_NOTE="$(SESSION_NOTE)" \
+		SESSION_CLAIM_TYPE="$(SESSION_CLAIM_TYPE)" SESSION_PARENT_SCOPE="$(SESSION_PARENT_SCOPE)" \
+		SESSION_ALLOW_PARALLEL="$(SESSION_ALLOW_PARALLEL)" \
+		SESSION_WRITE_PATHS="$(SESSION_WRITE_PATHS)" SESSION_READ_PATHS="$(SESSION_READ_PATHS)" \
+		WORKTREE_EXECUTION_PROFILE=light ALLOW_UNPLANNED=1
 
 session-start:  ## Create or refresh the active session contract for BRANCH=name
 ifndef BRANCH
@@ -385,6 +405,7 @@ endif
 		--current-phase "$(SESSION_PHASE)" \
 		--claim-type "$(SESSION_CLAIM_TYPE)" \
 		$(if $(SESSION_PARENT_SCOPE),--parent-scope "$(SESSION_PARENT_SCOPE)",) \
+		$(if $(filter 1 true yes,$(SESSION_ALLOW_PARALLEL)),--allow-parallel,) \
 		$(foreach path,$(SESSION_WRITE_PATHS),--write-path "$(path)") \
 		$(foreach path,$(SESSION_READ_PATHS),--read-path "$(path)") \
 		$(if $(PLAN),--plan "Plan #$(PLAN)",) \
@@ -410,6 +431,14 @@ endif
 
 session-status:  ## Show live session summaries for this repo
 	@python "$(WORKTREE_SESSION_STATUS_SCRIPT)" --project "$(WORKTREE_PROJECT)"
+
+session-end:  ## Retire this runtime session's live claims without deleting Git work
+ifndef WORKTREE_AGENT
+	$(error Unable to infer agent runtime. Set AGENT via WORKTREE_AGENT=codex|claude-code|openclaw)
+endif
+	@python "$(WORKTREE_SESSION_END_SCRIPT)" \
+		--agent "$(WORKTREE_AGENT)" \
+		$(if $(SESSION_NOTE),--reason "$(SESSION_NOTE)",)
 
 session-finish:  ## Finish the session for BRANCH=name; blocks if the worktree is dirty
 ifndef BRANCH
@@ -442,6 +471,7 @@ endif
 		--disposition-reason "$(WORKTREE_DISPOSITION_REASON)" \
 		--recovery-ref "$(WORKTREE_RECOVERY_REF)" \
 		$(if $(filter 1 true yes,$(WORKTREE_ALLOW_DISCARD_UNIQUE)),--allow-discard-unique,) \
+		$(if $(WORKTREE_MERGE_COMMIT),--merge-commit "$(WORKTREE_MERGE_COMMIT)",) \
 		$(if $(SESSION_NOTE),--note "$(SESSION_NOTE)",)
 
 worktree-list:  ## Show claimed worktree coordination status
@@ -461,7 +491,9 @@ endif
 		echo "Install or sync the sanctioned session lifecycle module before using make worktree-remove."; \
 		exit 1; \
 	fi
-	@$(MAKE) session-close BRANCH="$(BRANCH)" $(if $(SESSION_NOTE),SESSION_NOTE="$(SESSION_NOTE)",)
+	@$(MAKE) session-close BRANCH="$(BRANCH)" \
+		$(if $(WORKTREE_MERGE_COMMIT),WORKTREE_MERGE_COMMIT="$(WORKTREE_MERGE_COMMIT)",) \
+		$(if $(SESSION_NOTE),SESSION_NOTE="$(SESSION_NOTE)",)
 
 review-claim:  ## Create a review claim for TARGET_BRANCH=name WRITE_PATHS="a|b" TASK="..."
 ifndef TARGET_BRANCH

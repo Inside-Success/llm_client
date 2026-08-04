@@ -14,7 +14,7 @@ import logging
 import os
 import tempfile
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -261,7 +261,7 @@ def fetch_openrouter_generation_evidence(
             else None
         ),
         retrieval_attempt_count=attempt,
-        retrieved_at=retrieved_at or datetime.now(UTC),
+        retrieved_at=retrieved_at or datetime.now(timezone.utc),
         source_url=f"{source_url}?id={normalized_id}",
     )
 

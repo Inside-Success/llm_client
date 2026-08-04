@@ -180,7 +180,7 @@ def close_plan_lanes(
                 failures.append(f"{claim.scope}: {terminal}")
             else:
                 terminal_lanes.append(terminal)
-        elif claim.is_live():
+        elif claim.status in coordination_claims.CLOSEABLE_STATUSES:
             owned.append(claim)
         else:
             failures.append(

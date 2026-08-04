@@ -23,10 +23,11 @@ import json
 import math
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Literal, Mapping, Self
+from typing import Any, Literal, Mapping
 
 import llm_client.io_log as _io_log
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing_extensions import Self
 
 from llm_client.execution.retry import RetryPolicy
 

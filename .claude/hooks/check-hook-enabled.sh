@@ -15,8 +15,8 @@ get_repo_root() {
     git rev-parse --show-toplevel 2>/dev/null || dirname "$(dirname "$(dirname "$0")")"
 }
 
-# Check if a hook is enabled
-# Returns 0 (true) if enabled, 1 (false) if disabled
+# Check if a hook is enabled.
+# Returns 0 when enabled, 1 when disabled, and 2 for invalid configuration.
 is_hook_enabled() {
     local hook_name="$1"
     local repo_root
@@ -28,20 +28,43 @@ is_hook_enabled() {
         return $?
     fi
 
-    # Fallback: grep for the setting in meta-process.yaml
     local config_file="$repo_root/meta-process.yaml"
     if [[ ! -f "$config_file" ]]; then
-        # No config file = all hooks enabled by default
-        return 0
+        return 1
     fi
 
-    # Simple grep-based check (not perfect but works for basic cases)
-    # Look for "hook_name: false" under hooks section
-    if grep -A 50 "^hooks:" "$config_file" 2>/dev/null | grep -q "^\s*${hook_name}:\s*false"; then
-        return 1  # Disabled
-    fi
+    "${PYTHON:-python3}" - "$config_file" "$hook_name" <<'PY'
+from __future__ import annotations
 
-    return 0  # Enabled (default)
+import sys
+from pathlib import Path
+
+import yaml
+
+config_path = Path(sys.argv[1])
+hook_name = sys.argv[2]
+try:
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    meta_process = raw.get("meta_process", {})
+    if not isinstance(meta_process, dict):
+        raise ValueError("meta_process must be a mapping")
+    worktrees = meta_process.get("worktrees", {})
+    if not isinstance(worktrees, dict):
+        raise ValueError("meta_process.worktrees must be a mapping")
+    explicit_hooks = meta_process.get("hooks", {})
+    if not isinstance(explicit_hooks, dict):
+        raise ValueError("meta_process.hooks must be a mapping")
+except (OSError, ValueError, yaml.YAMLError) as exc:
+    print(f"ERROR: cannot resolve hook mode from {config_path}: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+
+resolved = {
+    "protect_main": bool(worktrees.get("protect_main", False)),
+    "enforce_workflow": bool(worktrees.get("enabled", False)),
+    "warn_worktree_cwd": bool(worktrees.get("enabled", False)),
+}.get(hook_name, bool(explicit_hooks.get(hook_name, False)))
+raise SystemExit(0 if resolved else 1)
+PY
 }
 
 # If called directly (not sourced), check the hook

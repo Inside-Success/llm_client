@@ -77,13 +77,19 @@ def _plan_number(value: str | None) -> int | None:
 
 
 def _live_matching_claim_scopes(*, repository: str, qualified_plan_id: str) -> list[str]:
-    """Return live canonical claim scopes for one repository/numbered plan."""
+    """Return live or preserved canonical claim scopes for one numbered plan."""
     plan_number = _plan_number(qualified_plan_id)
     if plan_number is None:
         raise ValueError(f"invalid qualified plan identity for resume: {qualified_plan_id}")
     scopes = []
-    for claim in coordination_claims.check_claims(repository):
-        if not claim.is_live() or claim.primary_project() != repository:
+    for claim in coordination_claims.list_claims(
+        repository,
+        include_inactive=True,
+    ):
+        if (
+            claim.status not in coordination_claims.CLOSEABLE_STATUSES
+            or claim.primary_project() != repository
+        ):
             continue
         if _plan_number(claim.plan_ref) == plan_number:
             scopes.append(claim.scope)

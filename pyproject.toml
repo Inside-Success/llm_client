@@ -16,6 +16,7 @@ dependencies = [
     "jsonschema>=4.18,<5.0",
     # Core, not an extra: structured fallback imports instructor at runtime.
     "instructor>=1.14.0",
+    "typing-extensions>=4.0",
 ]
 
 [project.optional-dependencies]

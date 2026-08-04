@@ -24,6 +24,9 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_WORKTREE_EXCLUDE = "/worktrees/"
+
+
 @dataclass(frozen=True)
 class StatusEntry:
     """One porcelain status entry from a worktree checkout."""
@@ -179,6 +182,46 @@ def get_canonical_project_name(repo_root: Path) -> str:
     """Return a stable project name from root or linked-worktree context."""
 
     return resolve_main_repo_root(repo_root.resolve()).name
+
+
+def ensure_default_worktree_container_excluded(
+    repo_root: Path,
+    worktree_path: Path,
+) -> bool:
+    """Keep the required nested worktree container out of canonical status.
+
+    The workspace contract places governed worktrees below ``<repo>/worktrees``.
+    Git otherwise reports that container and every linked checkout below it as
+    untracked content in the canonical checkout.  Record the exclusion in the
+    repository-local Git info file rather than changing a portable ``.gitignore``.
+    """
+
+    main_repo_root = resolve_main_repo_root(repo_root.resolve())
+    default_dir = get_default_worktree_dir(main_repo_root)
+    try:
+        worktree_path.resolve().relative_to(default_dir)
+    except ValueError:
+        return False
+
+    exclude_result = run_git(
+        ["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"],
+        cwd=main_repo_root,
+    )
+    if exclude_result.returncode != 0:
+        raise RuntimeError(
+            "Unable to resolve repository-local Git excludes file:\n"
+            f"{exclude_result.stderr or exclude_result.stdout}".strip()
+        )
+    exclude_path = Path(exclude_result.stdout.strip())
+    exclude_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = exclude_path.read_text(encoding="utf-8") if exclude_path.is_file() else ""
+    if DEFAULT_WORKTREE_EXCLUDE in {line.strip() for line in existing.splitlines()}:
+        return True
+
+    separator = "" if not existing or existing.endswith("\n") else "\n"
+    with exclude_path.open("a", encoding="utf-8") as handle:
+        handle.write(f"{separator}{DEFAULT_WORKTREE_EXCLUDE}\n")
+    return True
 
 
 def _load_claims_module() -> Any:
@@ -525,6 +568,7 @@ def create_worktree(
             )
 
     ensure_safe_target_path(worktree_path)
+    ensure_default_worktree_container_excluded(repo_root, worktree_path)
     worktree_path.parent.mkdir(parents=True, exist_ok=True)
 
     branch_already_exists = branch_exists(repo_root, branch)
