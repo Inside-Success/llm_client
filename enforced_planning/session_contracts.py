@@ -281,6 +281,51 @@ def session_tracker_path(
     return tracker_dir / contract.project / filename
 
 
+def find_session_tracker_path(
+    *,
+    agent: str,
+    project: str,
+    scope: str,
+    session_id: str | None,
+    preferred_path: str | None = None,
+    tracker_dir: Path | None = None,
+) -> Path | None:
+    """Find one exact tracker when refreshed claim metadata lost its path.
+
+    The lookup is deliberately identity-bound rather than an age or filename
+    heuristic. More than one exact match is unsafe to resolve automatically.
+    """
+
+    if preferred_path:
+        preferred = Path(preferred_path).expanduser()
+        if preferred.is_file():
+            return preferred
+    if not session_id:
+        return None
+
+    safe_session_id = re.sub(r"[^a-zA-Z0-9._-]+", "-", session_id)
+    root = tracker_dir or DEFAULT_SESSION_TRACKERS_DIR
+    candidates: list[Path] = []
+    for path in sorted((root / project).glob(f"{agent}__{project}__{safe_session_id}__*.yaml")):
+        payload = read_session_tracker(path)
+        contract = payload.get("claim")
+        if not isinstance(contract, dict):
+            raise ValueError(f"Session tracker at {path} is missing claim metadata")
+        if (
+            contract.get("agent") == agent
+            and contract.get("project") == project
+            and contract.get("scope") == scope
+            and contract.get("session_id") == session_id
+        ):
+            candidates.append(path)
+    if len(candidates) > 1:
+        rendered = ", ".join(str(path) for path in candidates)
+        raise ValueError(
+            "Ambiguous exact session trackers after claim metadata refresh: " + rendered
+        )
+    return candidates[0] if candidates else None
+
+
 def write_session_tracker(
     record: SessionTrackerRecord,
     *,
