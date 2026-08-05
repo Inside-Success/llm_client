@@ -4,6 +4,21 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-08-05 Amendment: Provider Exclusion and Malformed-JSON Recovery
+
+Plan #349 adds `ignored_providers` to `OpenRouterRoutePolicyV1` and compiles it
+to OpenRouter's native `provider.ignore` field. Exclusions are explicit
+caller-owned routing intent, retained in call snapshots and replay identity;
+they do not create a shared endpoint-health database. Allowed and ignored
+provider sets must be non-empty, duplicate-free, and disjoint when supplied.
+
+A syntactically malformed structured response remains retryable only within the
+caller's existing retry, deadline, and budget bounds. The next attempt receives
+a concise instruction to return only valid JSON matching the supplied schema.
+This recovery does not retry a response that already satisfies the Pydantic
+contract, and therefore does not move application semantic judgment into the
+shared runtime.
+
 ## 2026-08-04 Amendment: GPT-5.4 Ban and Luna Default
 
 Plan #348 hard-blocks every GPT-5.4-family route before dispatch, including

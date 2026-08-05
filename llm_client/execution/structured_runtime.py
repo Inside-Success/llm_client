@@ -474,6 +474,19 @@ def _build_validation_repair_message(exc: _StructuredValidationRetry) -> dict[st
     }
 
 
+def _build_parse_repair_message() -> dict[str, str]:
+    """Tell the next bounded attempt how to correct malformed JSON."""
+
+    return {
+        "role": "user",
+        "content": (
+            "Your previous response was not valid JSON. Return only valid JSON "
+            "that conforms to the supplied schema, with no markdown fences or "
+            "additional commentary."
+        ),
+    }
+
+
 def _validation_failure_class(error: ValidationError) -> AttemptFailureClass:
     """Classify missing required fields separately from other schema failures."""
 
@@ -1286,7 +1299,7 @@ def _call_llm_structured_impl(
                     )
                     pending_repair_message = None
                     logger.info(
-                        "call_llm_structured: appended validation repair message for responses attempt %d",
+                        "call_llm_structured: appended structured repair message for responses attempt %d",
                         attempt,
                     )
 
@@ -1370,6 +1383,7 @@ def _call_llm_structured_impl(
                             execution_path="responses_api",
                         )
                         responses_recovery_pending.add(logical_attempt)
+                        pending_repair_message = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error
@@ -1609,7 +1623,7 @@ def _call_llm_structured_impl(
                 if _pending_repair_message is not None:
                     base_kwargs["messages"] = list(base_kwargs["messages"]) + [_pending_repair_message]
                     _pending_repair_message = None
-                    logger.info("call_llm_structured: appended validation repair message for attempt %d", attempt)
+                    logger.info("call_llm_structured: appended structured repair message for attempt %d", attempt)
                 attempt_validated = False
 
                 def provider_call() -> Any:
@@ -1669,6 +1683,7 @@ def _call_llm_structured_impl(
                             schema_hash=_schema_hash,
                         )
                         _recovery_pending.add(logical_attempt)
+                        _pending_repair_message = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error
@@ -2389,7 +2404,7 @@ async def _acall_llm_structured_impl(
                     )
                     pending_repair_message_async = None
                     logger.info(
-                        "acall_llm_structured: appended validation repair message for responses attempt %d",
+                        "acall_llm_structured: appended structured repair message for responses attempt %d",
                         attempt,
                     )
 
@@ -2477,6 +2492,7 @@ async def _acall_llm_structured_impl(
                             execution_path="responses_api",
                         )
                         responses_recovery_pending_async.add(logical_attempt)
+                        pending_repair_message_async = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error
@@ -2716,7 +2732,7 @@ async def _acall_llm_structured_impl(
                 if _pending_repair_message_async is not None:
                     base_kwargs["messages"] = list(base_kwargs["messages"]) + [_pending_repair_message_async]
                     _pending_repair_message_async = None
-                    logger.info("acall_llm_structured: appended validation repair message for attempt %d", attempt)
+                    logger.info("acall_llm_structured: appended structured repair message for attempt %d", attempt)
                 attempt_validated = False
                 async def provider_call() -> Any:
                     async with _rate_limit.aacquire(current_model):
@@ -2779,6 +2795,7 @@ async def _acall_llm_structured_impl(
                             schema_hash=_schema_hash_async,
                         )
                         _recovery_pending_async.add(logical_attempt)
+                        _pending_repair_message_async = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error

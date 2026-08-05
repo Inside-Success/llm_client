@@ -17,19 +17,20 @@ import pytest
 from pydantic import BaseModel, Field, ValidationError
 
 from llm_client import LRUCache
-from llm_client.core.errors import LLMCapabilityError, LLMLogicalDeadlineError
+from llm_client.core.errors import LLMCapabilityError, LLMError, LLMLogicalDeadlineError
 from llm_client.execution.responses_runtime import (
     _openrouter_compatible_strict_json_schema,
     _provider_compatible_discriminated_union_schema,
-    _strict_openai_response_model_schema,
     _strict_json_schema,
+    _strict_openai_response_model_schema,
 )
 from llm_client.execution.structured_runtime import (
-    _StructuredValidationRetry,
     _acall_llm_structured_impl,
+    _build_parse_repair_message,
     _build_validation_repair_message,
     _call_llm_structured_impl,
     _robust_validate_json,
+    _StructuredValidationRetry,
 )
 
 
@@ -471,6 +472,106 @@ def _mock_structured_response(content: str = '{"name":"Tokyo"}') -> MagicMock:
     mock.usage.completion_tokens = 5
     mock.usage.total_tokens = 15
     return mock
+
+
+def test_parse_repair_message_requires_json_only_schema_conformance() -> None:
+    """Malformed JSON retries receive a concise provider-agnostic correction."""
+
+    message = _build_parse_repair_message()
+
+    assert message["role"] == "user"
+    assert "not valid JSON" in message["content"]
+    assert "only valid JSON" in message["content"]
+    assert "supplied schema" in message["content"]
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_native_parse_retry_adds_corrective_message(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """The next bounded native attempt knows why the first response failed."""
+
+    mock_comp.side_effect = [
+        _mock_structured_response("not json"),
+        _mock_structured_response('{"name":"Tokyo"}'),
+    ]
+
+    parsed, _result = _call_llm_structured_impl(
+        "gpt-4",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        num_retries=1,
+        base_delay=0,
+        task="test",
+        trace_id="structured.runtime.sync.parse-repair",
+        max_budget=0,
+    )
+
+    assert parsed.name == "Tokyo"
+    second_messages = mock_comp.call_args_list[1].kwargs["messages"]
+    assert second_messages[-1] == _build_parse_repair_message()
+
+
+@pytest.mark.asyncio
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)
+async def test_async_native_parse_retry_adds_corrective_message(
+    mock_acompletion: AsyncMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """Async native recovery receives the same bounded correction as sync."""
+
+    mock_acompletion.side_effect = [
+        _mock_structured_response("not json"),
+        _mock_structured_response('{"name":"Tokyo"}'),
+    ]
+
+    parsed, _result = await _acall_llm_structured_impl(
+        "gpt-4",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        num_retries=1,
+        base_delay=0,
+        task="test",
+        trace_id="structured.runtime.async.parse-repair",
+        max_budget=0,
+    )
+
+    assert parsed.name == "Tokyo"
+    second_messages = mock_acompletion.call_args_list[1].kwargs["messages"]
+    assert second_messages[-1] == _build_parse_repair_message()
+
+
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch("llm_client.core.client.litellm.completion")
+def test_native_parse_failure_respects_zero_retry_bound(
+    mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+) -> None:
+    """Corrective recovery never creates an attempt beyond the caller's bound."""
+
+    mock_comp.return_value = _mock_structured_response("not json")
+
+    with pytest.raises(LLMError, match="not valid JSON"):
+        _call_llm_structured_impl(
+            "gpt-4",
+            [{"role": "user", "content": "Name a city"}],
+            _City,
+            num_retries=0,
+            task="test",
+            trace_id="structured.runtime.sync.parse-no-retry",
+            max_budget=0,
+        )
+
+    assert mock_comp.call_count == 1
 
 
 @pytest.fixture(autouse=True)

@@ -4,21 +4,22 @@ from __future__ import annotations
 
 import pytest
 
-from llm_client.core.errors import LLMConfigurationError
 from llm_client.core.client_dispatch import _finalize_result
 from llm_client.core.data_types import LLMCallResult
+from llm_client.core.errors import LLMConfigurationError
 from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
+from llm_client.observability.replay import build_call_snapshot, snapshot_fingerprint
 from llm_client.utils.openrouter import (
     _enable_openrouter_inline_metadata,
     _openrouter_response_cache_status,
     compile_openrouter_route_policy,
 )
-from llm_client.observability.replay import build_call_snapshot, snapshot_fingerprint
 
 
 def test_compiles_typed_policy_without_unrelated_defaults() -> None:
     policy = OpenRouterRoutePolicyV1(
         allowed_providers=("Morph", "DeepInfra"),
+        ignored_providers=("Fireworks",),
         data_collection="deny",
         zero_data_retention=True,
         allow_provider_fallbacks=False,
@@ -28,6 +29,7 @@ def test_compiles_typed_policy_without_unrelated_defaults() -> None:
     assert compile_openrouter_route_policy(policy) == {
         "require_parameters": True,
         "only": ["Morph", "DeepInfra"],
+        "ignore": ["Fireworks"],
         "data_collection": "deny",
         "zdr": True,
         "allow_fallbacks": False,
@@ -40,6 +42,17 @@ def test_policy_rejects_empty_or_conflicting_constraints() -> None:
         OpenRouterRoutePolicyV1(allowed_providers=())
     with pytest.raises(ValueError, match="conflicts"):
         OpenRouterRoutePolicyV1(data_collection="allow", zero_data_retention=True)
+    with pytest.raises(ValueError, match="ignored_providers must not be empty"):
+        OpenRouterRoutePolicyV1(ignored_providers=())
+    with pytest.raises(ValueError, match="non-empty strings"):
+        OpenRouterRoutePolicyV1(ignored_providers=("",))
+    with pytest.raises(ValueError, match="must not contain duplicates"):
+        OpenRouterRoutePolicyV1(ignored_providers=("Morph", "morph"))
+    with pytest.raises(ValueError, match="must not overlap"):
+        OpenRouterRoutePolicyV1(
+            allowed_providers=("Morph",),
+            ignored_providers=("morph",),
+        )
     with pytest.raises(ValueError, match="zero_data_retention"):
         OpenRouterRoutePolicyV1(
             zero_data_retention=True,
@@ -55,8 +68,12 @@ def test_policy_rejects_empty_or_conflicting_constraints() -> None:
 
 
 def test_policy_normalizes_provider_names_without_changing_order() -> None:
-    policy = OpenRouterRoutePolicyV1(allowed_providers=(" Morph ", "DeepInfra"))
+    policy = OpenRouterRoutePolicyV1(
+        allowed_providers=(" Morph ", "DeepInfra"),
+        ignored_providers=(" Fireworks ",),
+    )
     assert policy.allowed_providers == ("Morph", "DeepInfra")
+    assert policy.ignored_providers == ("Fireworks",)
 
 
 def test_policy_applies_to_openrouter_payload() -> None:
@@ -223,6 +240,7 @@ def test_policy_is_replay_serializable() -> None:
 
     assert snapshot["request"]["kwargs"]["openrouter_route_policy"] == {
         "allowed_providers": ["Morph"],
+        "ignored_providers": None,
         "data_collection": None,
         "zero_data_retention": True,
         "allow_provider_fallbacks": True,

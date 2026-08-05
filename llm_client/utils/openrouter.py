@@ -225,6 +225,8 @@ def compile_openrouter_route_policy(policy: OpenRouterRoutePolicyV1) -> dict[str
     provider: dict[str, Any] = {"require_parameters": True}
     if policy.allowed_providers is not None:
         provider["only"] = list(policy.allowed_providers)
+    if policy.ignored_providers is not None:
+        provider["ignore"] = list(policy.ignored_providers)
     if policy.data_collection is not None:
         provider["data_collection"] = policy.data_collection
     if policy.zero_data_retention is not None:
