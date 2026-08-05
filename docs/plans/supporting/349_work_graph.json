@@ -1,0 +1,140 @@
+{
+  "units": [
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-349-01",
+      "initiative_id": "llm-client-runtime-substrate",
+      "goal_id": "structured-recovery-and-provider-exclusion",
+      "design_revision": "plan-349-v1",
+      "spec_revision": "wu-349-01-v1",
+      "title": "Shared structured recovery and provider exclusion",
+      "class": "implementation",
+      "objective": "Add replay-safe OpenRouter provider exclusions and a corrective malformed-JSON retry within existing execution bounds.",
+      "profile": "standard",
+      "execution_class": "independently_executable",
+      "claimability": "ready_for_execution",
+      "authorization_mode": "registry_claim",
+      "scope": {
+        "included": [
+          "OpenRouterRoutePolicyV1 ignored provider contract",
+          "Provider payload compilation and replay identity",
+          "Malformed JSON repair instruction",
+          "Focused tests and generated public API documentation"
+        ],
+        "excluded": [
+          "Dynamic provider inventory",
+          "Automatic model fallback",
+          "Semantic validation",
+          "Paid provider calls",
+          "Package publication"
+        ]
+      },
+      "inputs": [
+        {"kind": "ImplementationPlan", "id": "plan-349", "revision": "plan-349-v1"},
+        {"kind": "GitRevision", "id": "llm-client-main", "revision": "1a67076bd1bbaf9a179df9f7ecb0c447cfec034e"},
+        {"kind": "ArchitectureDecision", "id": "ADR-0016", "revision": "2026-07-27-amended"}
+      ],
+      "outputs": [
+        "Accepted typed provider-exclusion contract",
+        "Corrective malformed-JSON recovery behavior",
+        "Focused deterministic evidence",
+        "Accepted shared-client Git revision"
+      ],
+      "dependencies": [],
+      "conflict_surfaces": [
+        {"kind": "repository_path", "target": "llm_client/execution/", "repository": "llm_client", "access": "exclusive", "coordination_key": "llm-client-plan-349-runtime"},
+        {"kind": "repository_path", "target": "llm_client/utils/openrouter.py", "repository": "llm_client", "access": "exclusive", "coordination_key": "llm-client-plan-349-openrouter"},
+        {"kind": "repository_path", "target": "tests/", "repository": "llm_client", "access": "exclusive", "coordination_key": "llm-client-plan-349-tests"},
+        {"kind": "contract", "target": "OpenRouterRoutePolicyV1", "access": "exclusive", "coordination_key": "llm-client-openrouter-route-policy-v1"}
+      ],
+      "acceptance": [
+        {
+          "id": "AC-349-01-policy",
+          "criterion": "Ignored providers validate, compile to provider.ignore, and participate in replay identity without changing existing policy behavior.",
+          "evidence_required": ["Focused positive and negative contract tests", "Exact compiled provider payload assertion", "Replay round-trip assertion"],
+          "negative_control": "Allowed and ignored provider sets that overlap fail before dispatch."
+        },
+        {
+          "id": "AC-349-01-repair",
+          "criterion": "A malformed JSON attempt gives the next bounded retry a concise corrective instruction.",
+          "evidence_required": ["Two-attempt structured-runtime fixture", "Observed second-attempt messages", "Validated final Pydantic result"],
+          "negative_control": "With zero retries the same malformed response fails loud after one dispatch."
+        }
+      ],
+      "readiness": {"status": "ready", "required_approval_types": [], "approvals": [], "failed_guards": []},
+      "status": "ready",
+      "record_version": 1
+    },
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-349-02",
+      "initiative_id": "process-tracing-pilot",
+      "goal_id": "structured-recovery-and-provider-exclusion",
+      "design_revision": "plan-349-v1",
+      "spec_revision": "wu-349-02-v1",
+      "title": "Process Tracing governed route integration",
+      "class": "integration",
+      "objective": "Pin the accepted client, default Process Tracing to Luna/Medium, and exclude Morph on explicit DeepSeek calls through the typed policy.",
+      "profile": "standard",
+      "execution_class": "independently_executable",
+      "claimability": "blocked_dependencies",
+      "authorization_mode": "registry_claim",
+      "scope": {
+        "included": [
+          "Pinned llm_client revision",
+          "Luna governed default and DeepSeek governed alternative",
+          "Typed Morph exclusion for explicit DeepSeek calls",
+          "Workbench model copy and focused deterministic integration tests"
+        ],
+        "excluded": [
+          "Prompt or methodology changes",
+          "Automatic model fallback",
+          "Paid live analysis",
+          "Mutation of accepted reports"
+        ]
+      },
+      "inputs": [
+        {"kind": "WorkUnitOutput", "id": "WU-349-01", "revision": "accepted-at-integration"},
+        {"kind": "GitRevision", "id": "process-tracing-master", "revision": "23617dc060083219c3e962f078116d8819f4ed13"}
+      ],
+      "outputs": [
+        "Pinned accepted llm_client runtime",
+        "Luna/Medium default confirmation",
+        "DeepSeek Morph-exclusion call policy",
+        "Focused Process Tracing integration evidence"
+      ],
+      "dependencies": [
+        {
+          "unit_id": "WU-349-01",
+          "type": "hard",
+          "gate": {"type": "unit_status", "required_status": "accepted"},
+          "rationale": "The consumer must pin an accepted shared contract rather than candidate worktree code."
+        }
+      ],
+      "conflict_surfaces": [
+        {"kind": "repository_path", "target": "config/llm_client_runtime.json", "repository": "process_tracing", "access": "exclusive", "coordination_key": "process-tracing-llm-runtime-pin"},
+        {"kind": "repository_path", "target": "pt/llm.py", "repository": "process_tracing", "access": "exclusive", "coordination_key": "process-tracing-llm-boundary"},
+        {"kind": "repository_path", "target": "pt/templates/workbench.html", "repository": "process_tracing", "access": "exclusive", "coordination_key": "process-tracing-workbench-model-selection"}
+      ],
+      "acceptance": [
+        {
+          "id": "AC-349-02-default",
+          "criterion": "A new governed workbench run persists Luna as its default model and Medium as its base reasoning effort.",
+          "evidence_required": ["Focused host/workbench tests", "Exact persisted run configuration assertion", "Visible confirmation-copy assertion"],
+          "negative_control": "An unsupported model fails before provider dispatch."
+        },
+        {
+          "id": "AC-349-02-deepseek",
+          "criterion": "An explicit DeepSeek call supplies ignored_providers=(\"morph\",) through OpenRouterRoutePolicyV1.",
+          "evidence_required": ["Mocked shared-client call assertion", "Pinned accepted llm_client revision", "No raw provider dictionary in Process Tracing"],
+          "negative_control": "Luna calls do not receive a DeepSeek-specific provider exclusion."
+        }
+      ],
+      "readiness": {"status": "blocked", "required_approval_types": [], "approvals": [], "failed_guards": ["WU-349-01 is not yet accepted on canonical llm_client main."]},
+      "status": "blocked",
+      "record_version": 1
+    }
+  ]
+}

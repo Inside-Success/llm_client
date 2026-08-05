@@ -52,6 +52,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 349 | [Structured Recovery and Provider Exclusion](349_structured_recovery_and_provider_exclusion.md) | Critical | 🚧 In Progress | Process Tracing default-route correction |
 | 348 | [GPT-5.4 Ban and Luna Default](348_gpt54_ban_luna_default.md) | Critical | ✅ Complete | consistent ecosystem model selection |
 | 347 | [OpenRouter Response Cache Controls](347_openrouter_response_cache_controls.md) | Critical | ✅ Complete | cost-bounded Inside Success corpus preprocessing |
 | 346 | [Production LLM Call Receipt](346_production_llm_call_receipt.md) | Critical | 🚧 In Progress | Team-Brains Hermes observability adapter |
