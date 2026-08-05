@@ -119,14 +119,15 @@ the Process Tracing integration.
 
 ## Acceptance and Disproof
 
-- [ ] The shared public contract and generated docs include provider exclusions.
-- [ ] The exact malformed-JSON retry fixture observes a corrective message.
-- [ ] No retry, timeout, budget, or semantic-acceptance bound is broadened.
+- [x] The shared public contract and generated docs include provider exclusions.
+- [x] The exact malformed-JSON retry fixture observes a corrective message.
+- [x] No retry, timeout, budget, or semantic-acceptance bound is broadened.
 - [ ] Process Tracing defaults to Luna/Medium and no longer presents DeepSeek as
       its silent default.
 - [ ] Explicit DeepSeek calls compile `provider.ignore=["morph"]` through the
       typed client policy.
-- [ ] Focused shared-client and Process Tracing tests pass.
+- [ ] Focused shared-client and Process Tracing tests pass. Shared-client evidence:
+      136 focused tests passed at `052ba48bebf6a7a93d44ceac2b1cd1a22f527034`.
 
 The design is disproved if exclusions require a raw provider dictionary, if a
 malformed response can trigger an extra dispatch beyond the configured retry
@@ -139,4 +140,3 @@ Both repositories use reversible feature branches. Shared-client failure stops
 before the consumer pin changes. Consumer failure preserves the accepted shared
 revision and restores the prior runtime pin/default in one revert. No persisted
 run or accepted report is mutated.
-

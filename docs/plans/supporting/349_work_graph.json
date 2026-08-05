@@ -13,7 +13,7 @@
       "objective": "Add replay-safe OpenRouter provider exclusions and a corrective malformed-JSON retry within existing execution bounds.",
       "profile": "standard",
       "execution_class": "independently_executable",
-      "claimability": "ready_for_execution",
+      "claimability": "not_applicable",
       "authorization_mode": "registry_claim",
       "scope": {
         "included": [
@@ -63,7 +63,7 @@
         }
       ],
       "readiness": {"status": "ready", "required_approval_types": [], "approvals": [], "failed_guards": []},
-      "status": "ready",
+      "status": "accepted",
       "record_version": 1
     },
     {
@@ -79,7 +79,7 @@
       "objective": "Pin the accepted client, default Process Tracing to Luna/Medium, and exclude Morph on explicit DeepSeek calls through the typed policy.",
       "profile": "standard",
       "execution_class": "independently_executable",
-      "claimability": "blocked_dependencies",
+      "claimability": "ready_for_execution",
       "authorization_mode": "registry_claim",
       "scope": {
         "included": [
@@ -96,7 +96,7 @@
         ]
       },
       "inputs": [
-        {"kind": "WorkUnitOutput", "id": "WU-349-01", "revision": "accepted-at-integration"},
+        {"kind": "WorkUnitOutput", "id": "WU-349-01", "revision": "052ba48bebf6a7a93d44ceac2b1cd1a22f527034"},
         {"kind": "GitRevision", "id": "process-tracing-master", "revision": "23617dc060083219c3e962f078116d8819f4ed13"}
       ],
       "outputs": [
@@ -132,8 +132,8 @@
           "negative_control": "Luna calls do not receive a DeepSeek-specific provider exclusion."
         }
       ],
-      "readiness": {"status": "blocked", "required_approval_types": [], "approvals": [], "failed_guards": ["WU-349-01 is not yet accepted on canonical llm_client main."]},
-      "status": "blocked",
+      "readiness": {"status": "ready", "required_approval_types": [], "approvals": [], "failed_guards": []},
+      "status": "ready",
       "record_version": 1
     }
   ]
