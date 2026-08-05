@@ -79,7 +79,7 @@
       "objective": "Pin the accepted client, default Process Tracing to Luna/Medium, and exclude Morph on explicit DeepSeek calls through the typed policy.",
       "profile": "standard",
       "execution_class": "independently_executable",
-      "claimability": "ready_for_execution",
+      "claimability": "not_applicable",
       "authorization_mode": "registry_claim",
       "scope": {
         "included": [
@@ -133,7 +133,7 @@
         }
       ],
       "readiness": {"status": "ready", "required_approval_types": [], "approvals": [], "failed_guards": []},
-      "status": "ready",
+      "status": "accepted",
       "record_version": 1
     }
   ]

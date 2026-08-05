@@ -1,6 +1,6 @@
 # Plan #349: Structured Recovery and Provider Exclusion
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -122,12 +122,15 @@ the Process Tracing integration.
 - [x] The shared public contract and generated docs include provider exclusions.
 - [x] The exact malformed-JSON retry fixture observes a corrective message.
 - [x] No retry, timeout, budget, or semantic-acceptance bound is broadened.
-- [ ] Process Tracing defaults to Luna/Medium and no longer presents DeepSeek as
+- [x] Process Tracing defaults to Luna/Medium and no longer presents DeepSeek as
       its silent default.
-- [ ] Explicit DeepSeek calls compile `provider.ignore=["morph"]` through the
+- [x] Explicit DeepSeek calls compile `provider.ignore=["morph"]` through the
       typed client policy.
-- [ ] Focused shared-client and Process Tracing tests pass. Shared-client evidence:
+- [x] Focused shared-client and Process Tracing tests pass. Shared-client evidence:
       136 focused tests passed at `052ba48bebf6a7a93d44ceac2b1cd1a22f527034`.
+      Process Tracing evidence: 816 tests passed with 3 opt-in skips, MyPy was
+      clean across 55 files, and canonical consumer revision is
+      `757510b1cbbadcc0dbb2c4360347b4c81fc6f36c`.
 
 The design is disproved if exclusions require a raw provider dictionary, if a
 malformed response can trigger an extra dispatch beyond the configured retry
