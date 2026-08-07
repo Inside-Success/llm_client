@@ -132,9 +132,9 @@ class TestSupportsStructuredOutput:
                 supports_native_structured_output("openrouter/x/malformed")
 
     def test_openrouter_gpt56_native_transport_matches_current_route_evidence(self):
-        """Only routes with current native-schema evidence select that transport."""
+        """Luna stays structured-capable but uses its observed Instructor transport."""
 
-        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is True
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is False
         assert supports_native_structured_output("openrouter/openai/gpt-5.6-sol") is True
         assert supports_native_structured_output("openrouter/openai/gpt-5.6-terra") is True
 
