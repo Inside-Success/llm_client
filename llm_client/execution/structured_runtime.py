@@ -86,6 +86,8 @@ _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
 _INSTRUCTOR_INIT_LOCK = _threading.Lock()
 _INSTRUCTOR_CLIENT_CACHE: dict[Any, Any] = {}
+_INSTRUCTOR_FIRST_CALL_LOCK = _threading.Lock()
+_INSTRUCTOR_READY_CLIENT_IDS: set[int] = set()
 _ROUTE_CERTIFICATION_OBSERVATION_ENV = (
     "LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION"
 )
@@ -126,6 +128,20 @@ def _instructor_from_litellm(create_fn: Any) -> Any:
             cached = instructor.from_litellm(create_fn)
             _INSTRUCTOR_CLIENT_CACHE[create_fn] = cached
         return cached
+
+
+def _invoke_instructor_sync(client: Any, call_kwargs: dict[str, Any]) -> Any:
+    """Serialize only one client's first lazy provider-handler initialization."""
+
+    client_id = id(client)
+    if client_id in _INSTRUCTOR_READY_CLIENT_IDS:
+        return client.chat.completions.create_with_completion(**call_kwargs)
+    with _INSTRUCTOR_FIRST_CALL_LOCK:
+        if client_id in _INSTRUCTOR_READY_CLIENT_IDS:
+            return client.chat.completions.create_with_completion(**call_kwargs)
+        result = client.chat.completions.create_with_completion(**call_kwargs)
+        _INSTRUCTOR_READY_CLIENT_IDS.add(client_id)
+        return result
 
 
 def _model_supports_native_schema(model: str) -> bool:
@@ -1874,7 +1890,7 @@ def _call_llm_structured_impl(
                 if attempt_timeout > 0:
                     call_kwargs["timeout"] = attempt_timeout
                 parsed, completion_response = _run_sync_with_deadline(
-                    lambda: client.chat.completions.create_with_completion(**call_kwargs),
+                lambda: _invoke_instructor_sync(client, call_kwargs),
                     timeout=attempt_timeout,
                     logical_cap=logical_cap,
                 )

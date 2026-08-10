@@ -13,7 +13,9 @@ import instructor
 
 from llm_client.execution.structured_runtime import (
     _INSTRUCTOR_CLIENT_CACHE,
+    _INSTRUCTOR_READY_CLIENT_IDS,
     _instructor_from_litellm,
+    _invoke_instructor_sync,
 )
 
 
@@ -65,6 +67,42 @@ def test_concurrent_calls_reuse_one_instructor_client(monkeypatch) -> None:
 
     assert results == [marker] * 12
     assert calls == 1
+
+
+def test_concurrent_first_use_initializes_provider_handler_once() -> None:
+    """The first request completes before later requests may enter in parallel."""
+
+    state_lock = threading.Lock()
+    calls = 0
+    active = 0
+    maximum_active = 0
+
+    class Completions:
+        def create_with_completion(self, **kwargs: object) -> int:
+            nonlocal calls, active, maximum_active
+            with state_lock:
+                calls += 1
+                active += 1
+                maximum_active = max(maximum_active, active)
+            time.sleep(0.01)
+            with state_lock:
+                active -= 1
+            return calls
+
+    class Chat:
+        completions = Completions()
+
+    class Client:
+        chat = Chat()
+
+    client = Client()
+    _INSTRUCTOR_READY_CLIENT_IDS.discard(id(client))
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda _: _invoke_instructor_sync(client, {}), range(12)))
+
+    assert calls == 12
+    assert maximum_active > 1
+    assert id(client) in _INSTRUCTOR_READY_CLIENT_IDS
 
 
 def test_runtime_does_not_depend_on_instructor_v2() -> None:
