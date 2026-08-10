@@ -11,7 +11,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import instructor
 
-from llm_client.execution.structured_runtime import _instructor_from_litellm
+from llm_client.execution.structured_runtime import (
+    _INSTRUCTOR_CLIENT_CACHE,
+    _instructor_from_litellm,
+)
 
 
 def test_instructor_construction_is_serialized(monkeypatch) -> None:
@@ -38,6 +41,30 @@ def test_instructor_construction_is_serialized(monkeypatch) -> None:
 
     assert results == values
     assert maximum_active == 1
+
+
+def test_concurrent_calls_reuse_one_instructor_client(monkeypatch) -> None:
+    """One LiteLLM callable maps to one fully initialized shared client."""
+
+    calls = 0
+    marker = object()
+
+    def create_fn() -> None:
+        return None
+
+    def fake_from_litellm(value: object) -> object:
+        nonlocal calls
+        calls += 1
+        time.sleep(0.01)
+        return marker
+
+    _INSTRUCTOR_CLIENT_CACHE.pop(create_fn, None)
+    monkeypatch.setattr(instructor, "from_litellm", fake_from_litellm)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(_instructor_from_litellm, [create_fn] * 12))
+
+    assert results == [marker] * 12
+    assert calls == 1
 
 
 def test_runtime_does_not_depend_on_instructor_v2() -> None:

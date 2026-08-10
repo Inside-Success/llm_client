@@ -85,6 +85,7 @@ class _EmptyStructuredContentError(ValueError):
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
 _INSTRUCTOR_INIT_LOCK = _threading.Lock()
+_INSTRUCTOR_CLIENT_CACHE: dict[Any, Any] = {}
 _ROUTE_CERTIFICATION_OBSERVATION_ENV = (
     "LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION"
 )
@@ -107,18 +108,24 @@ def _provider_schema_name(response_model: type[BaseModel]) -> str:
 
 
 def _instructor_from_litellm(create_fn: Any) -> Any:
-    """Construct an Instructor client without racing global registration.
+    """Construct one reusable Instructor client without racing registration.
 
     Instructor client construction may lazily mutate process-global provider
-    registration. Serializing the public construction seam supports both the
-    declared 1.x dependency and newer implementations without importing
-    version-private registry modules.
+    registration. Serializing and caching the public construction seam prevents
+    concurrent structured calls from repeatedly rebuilding clients while that
+    shared registry is being initialized. This supports both the declared 1.x
+    dependency and newer implementations without importing version-private
+    registry modules.
     """
 
     import instructor
 
     with _INSTRUCTOR_INIT_LOCK:
-        return instructor.from_litellm(create_fn)
+        cached = _INSTRUCTOR_CLIENT_CACHE.get(create_fn)
+        if cached is None:
+            cached = instructor.from_litellm(create_fn)
+            _INSTRUCTOR_CLIENT_CACHE[create_fn] = cached
+        return cached
 
 
 def _model_supports_native_schema(model: str) -> bool:
