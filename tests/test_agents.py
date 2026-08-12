@@ -1810,6 +1810,58 @@ class TestCodexBatch:
 
 
 class TestCodexFallback:
+    def test_extract_codex_cli_completed_items_retains_intrinsic_and_mcp_events(
+        self,
+    ) -> None:
+        items = [
+            {"id": "cmd-1", "type": "command_execution", "status": "completed"},
+            {"id": "file-1", "type": "file_change", "status": "completed"},
+            {"id": "web-1", "type": "web_search", "status": "completed"},
+            {
+                "id": "mcp-1",
+                "type": "mcp_tool_call",
+                "server": "probe",
+                "tool": "lookup",
+                "arguments": {"query": "ecosystem"},
+                "status": "completed",
+            },
+        ]
+        stdout_jsonl = "\n".join(
+            json.dumps({"type": "item.completed", "item": item}) for item in items
+        )
+
+        completed = agents_codex_mod._extract_codex_cli_completed_items(stdout_jsonl)
+        tool_calls = agents_codex_mod._extract_codex_cli_tool_calls(stdout_jsonl)
+
+        assert completed == items
+        assert [item["type"] for item in completed] == [
+            "command_execution",
+            "file_change",
+            "web_search",
+            "mcp_tool_call",
+        ]
+        assert [call["function"]["name"] for call in tool_calls] == ["lookup"]
+
+    def test_extract_codex_cli_completed_items_ignores_malformed_and_unsettled_events(
+        self,
+    ) -> None:
+        stdout_jsonl = "\n".join(
+            [
+                "not-json",
+                json.dumps(["not", "an", "event"]),
+                json.dumps(
+                    {
+                        "type": "item.started",
+                        "item": {"id": "cmd-1", "type": "command_execution"},
+                    }
+                ),
+                json.dumps({"type": "item.completed", "item": "not-a-mapping"}),
+                json.dumps({"type": "item.completed"}),
+            ]
+        )
+
+        assert agents_codex_mod._extract_codex_cli_completed_items(stdout_jsonl) == []
+
     def test_fallback_from_codex_to_litellm(self, monkeypatch) -> None:
         """Codex fails, falls back to regular model."""
         fake_mod, codex_submod = _make_fake_codex_module()
@@ -2252,6 +2304,89 @@ class TestCodexFallback:
             "session_id": None,
             "n_turns": 0,
         }
+
+    def test_call_codex_via_cli_exposes_completed_items_on_public_result(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        items = [
+            {"id": "cmd-1", "type": "command_execution", "status": "completed"},
+            {"id": "file-1", "type": "file_change", "status": "completed"},
+            {"id": "web-1", "type": "web_search", "status": "completed"},
+        ]
+
+        def _fake_run(command, *, input, text, capture_output, check, timeout, env):
+            del input, text, capture_output, check, timeout, env
+            output_path = command[command.index("-o") + 1]
+            Path(output_path).write_text("structured response\n")
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout="\n".join(
+                    json.dumps({"type": "item.completed", "item": item})
+                    for item in items
+                ),
+                stderr="",
+            )
+
+        monkeypatch.setattr(agents_codex_mod.subprocess, "run", _fake_run)
+
+        result = agents_codex_mod._call_codex_via_cli(
+            "codex",
+            [{"role": "user", "content": "Choose one action."}],
+            working_directory=str(tmp_path),
+            approval_policy="never",
+            sandbox_mode="read-only",
+            model_reasoning_effort="medium",
+        )
+
+        assert result.codex_events == items
+        assert result.tool_calls == []
+
+    def test_public_structured_call_retains_codex_completed_items(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class Decision(BaseModel):
+            action: Literal["wait"]
+
+        items = [
+            {"id": "cmd-1", "type": "command_execution", "status": "completed"},
+            {"id": "file-1", "type": "file_change", "status": "completed"},
+            {"id": "web-1", "type": "web_search", "status": "completed"},
+        ]
+
+        def _fake_cli(*args, **kwargs):
+            del args, kwargs
+            return LLMCallResult(
+                content='{"action":"wait"}',
+                usage={},
+                cost=0.0,
+                model="codex/gpt-5.6-luna",
+                resolved_model="codex/gpt-5.6-luna",
+                codex_events=items,
+                finish_reason="stop",
+                raw_response={"transport": "codex_cli"},
+                cost_source="subscription_included",
+                billing_mode="subscription_included",
+            )
+
+        monkeypatch.setattr(agents_codex_mod, "_call_codex_via_cli", _fake_cli)
+
+        decision, result = call_llm_structured(
+            "codex/gpt-5.6-luna",
+            [{"role": "user", "content": "Choose one action."}],
+            response_model=Decision,
+            reasoning_effort="medium",
+            codex_transport="cli",
+            task="test",
+            trace_id="test_public_codex_completed_item_custody",
+            max_budget=0,
+        )
+
+        assert decision == Decision(action="wait")
+        assert result.codex_events == items
+        assert result.raw_response == {"transport": "codex_cli"}
 
     def test_call_codex_via_cli_attaches_mcp_and_returns_tool_evidence(
         self,
