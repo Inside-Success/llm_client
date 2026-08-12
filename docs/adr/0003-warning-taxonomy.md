@@ -54,3 +54,7 @@ Local failures after schema validation now propagate as terminal call errors
 without another provider attempt or an advisory warning.
 
 Plan 101 receipt contradictions remain fail-loud integrity errors, not warnings.
+
+Plan 354 removes only a duplicate terminal lifecycle row. Warning categories,
+fail-loud persistence, and retry diagnostics remain unchanged; affected
+structured suites pass in fresh processes.

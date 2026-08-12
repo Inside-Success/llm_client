@@ -10,7 +10,6 @@ caller-facing signatures.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from importlib import import_module
 import queue
 import threading
@@ -1043,7 +1042,6 @@ def _call_llm_structured_impl(
             logical_call_id=_logical_call_id,
             observability_content_policy=observability_content_policy,
         )
-        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "failed" if event.get("error") is not None else "completed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="call_llm_structured",
@@ -2155,7 +2153,6 @@ async def _acall_llm_structured_impl(
             logical_call_id=_logical_call_id,
             observability_content_policy=observability_content_policy,
         )
-        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "failed" if event.get("error") is not None else "completed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="acall_llm_structured",

@@ -152,3 +152,8 @@ explicit once instead of relying on project-local provider payloads.
 - This does not add a runtime fetch of mutable provider capability metadata.
 - Models that expose reasoning but no configurable effort remain outside this
   effort-specific enforcement until a normalized explicit control exists.
+
+Plan 354 removes a duplicate private-runtime terminal lifecycle write and does
+not change reasoning validation, transport projection, cache identity, replay,
+or fallback behavior. Focused structured runtime and lifecycle suites pass in
+fresh processes.

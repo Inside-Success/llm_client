@@ -224,3 +224,8 @@ Negative:
 5. Local observability tests remain unchanged and green.
 6. OpenRouter reasoning controls must set `provider.require_parameters=true`,
    preserve other provider-routing fields, and reject an explicit false value.
+
+Plan 354 changes only local structured terminal-lifecycle ownership. Provider
+selection, capability enforcement, OpenRouter policy, vendor telemetry, model
+allowlisting, and explicit reasoning behavior remain unchanged; composed
+sync/async structured controls pass.
