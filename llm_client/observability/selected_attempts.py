@@ -1,4 +1,4 @@
-"""Strict typed reads of selected provider-native structured-output attempts.
+"""Strict typed reads of selected structured-output attempts.
 
 The reader joins the runtime's terminal call row to its complete attempt
 lifecycle. It is provider-free and fails rather than guessing when persistence
@@ -31,7 +31,7 @@ class SelectedAttemptReceiptError(ValueError):
 
 
 class RuntimeSelectedAttemptReceipt(BaseModel):
-    """One trusted-process receipt for a runtime-selected provider-native attempt.
+    """One trusted-process receipt for a runtime-selected structured attempt.
 
     The digest is an integrity fingerprint over persisted runtime evidence, not
     independent provider attestation, source authentication, a signature, or a
@@ -281,15 +281,17 @@ def get_runtime_selected_attempt_receipt(
     if row.get("execution_path") != selected.execution_path:
         raise _fail(
             logical_call_id,
-            "terminal execution_path does not match the selected provider-native attempt.",
+            "terminal execution_path does not match the selected structured attempt.",
         )
-    expected_response_format = (
-        "json_schema" if selected.execution_path == "native_schema" else "responses_api"
-    )
+    expected_response_format = {
+        "native_schema": "json_schema",
+        "responses_api": "responses_api",
+        "instructor": "instructor",
+    }[selected.execution_path]
     if row.get("response_format_type") != expected_response_format:
         raise _fail(
             logical_call_id,
-            "terminal response format does not match the selected provider-native path.",
+            "terminal response format does not match the selected structured path.",
         )
     for event in events:
         if event.logical_call_id != logical_call_id:
@@ -327,7 +329,7 @@ def get_runtime_selected_attempt_receipt(
 def get_runtime_selected_raw_content(
     logical_call_id: str,
 ) -> RuntimeSelectedRawContent:
-    """Return exact retained bytes for the strict selected provider-native attempt."""
+    """Return exact retained bytes for the strict selected structured attempt."""
 
     receipt = get_runtime_selected_attempt_receipt(logical_call_id)
     if receipt.raw_artifact_ref is None:

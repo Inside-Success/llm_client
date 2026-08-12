@@ -120,3 +120,8 @@ Plan 354 reasserts public-wrapper ownership of the structured call's sole
 terminal lifecycle. Private runtimes still persist one terminal call row and
 structured-attempt events under the same logical call ID; composed sync/async
 controls prove the joined boundary.
+
+Plan 356 makes Instructor a first-class structured-attempt path without moving
+evaluation semantics into this substrate. The shared retry kernel owns retry
+count and disposition, and downstream evaluations may require the resulting
+attempt receipt before treating a model result as execution evidence.
