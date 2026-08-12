@@ -141,6 +141,62 @@ def _latest_call_id(trace_id: str) -> int:
     return int(row[0])
 
 
+def test_get_call_record_reopens_response_tool_calls() -> None:
+    tool_calls = [
+        {
+            "id": "call-replay-1",
+            "type": "function",
+            "function": {"name": "ae3_action", "arguments": '{"action_type":"query_kernel"}'},
+        }
+    ]
+    result = MagicMock(
+        content="",
+        tool_calls=tool_calls,
+        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        cost=0.0,
+        finish_reason="tool_calls",
+    )
+    io_log.log_call(
+        model="openrouter/minimax/minimax-m3",
+        messages=[{"role": "user", "content": "choose"}],
+        result=result,
+        latency_s=0.1,
+        trace_id="ae3/tool-custody/replay",
+    )
+
+    record = replay_module.get_call_record(_latest_call_id("ae3/tool-custody/replay"))
+
+    assert record["response"] == ""
+    assert record["response_tool_calls"] == tool_calls
+    assert record["n_tool_calls"] == 1
+
+
+def test_get_call_record_rejects_malformed_response_tool_calls() -> None:
+    result = MagicMock(
+        content="",
+        tool_calls=[],
+        usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        cost=0.0,
+        finish_reason="tool_calls",
+    )
+    io_log.log_call(
+        model="openrouter/test",
+        messages=[{"role": "user", "content": "choose"}],
+        result=result,
+        latency_s=0.1,
+        trace_id="ae3/tool-custody/malformed",
+    )
+    call_id = _latest_call_id("ae3/tool-custody/malformed")
+    with io_log._get_db() as db:
+        db.execute(
+            "UPDATE llm_calls SET response_tool_calls = ? WHERE id = ?",
+            ('{"unexpected":"object"}', call_id),
+        )
+
+    with pytest.raises(TypeError, match="response_tool_calls"):
+        replay_module.get_call_record(call_id)
+
+
 def _snapshot_builder_kwargs() -> dict[str, Any]:
     """Return one complete text snapshot input before the v3 budget field."""
 

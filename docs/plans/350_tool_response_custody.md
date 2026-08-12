@@ -59,6 +59,7 @@ application-local duplicate would create a second custody authority.
 ## Files Affected
 
 - `llm_client/io_log.py`
+- `llm_client/observability/query.py`
 - `llm_client/observability/replay.py`
 - `tests/test_io_log.py`
 - `tests/test_observability_replay.py`
@@ -75,6 +76,10 @@ application-local duplicate would create a second custody authority.
 5. Run focused tests, the full suite, type/lint checks, and plan closeout.
 
 ## Required Tests
+
+- `tests/test_io_log.py`
+- `tests/test_observability_replay.py`
+- `tests/test_call_receipts.py`
 
 | Test | What it proves |
 |---|---|
