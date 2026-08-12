@@ -52,6 +52,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 350 | [Cross-Project Model Experiment Records](350_cross_project_model_experiment_records.md) | High | ✅ Complete | Reusable evidence-based model routing across projects |
 | 349 | [Structured Recovery and Provider Exclusion](349_structured_recovery_and_provider_exclusion.md) | Critical | ✅ Complete | - |
 | 348 | [GPT-5.4 Ban and Luna Default](348_gpt54_ban_luna_default.md) | Critical | ✅ Complete | consistent ecosystem model selection |
 | 347 | [OpenRouter Response Cache Controls](347_openrouter_response_cache_controls.md) | Critical | ✅ Complete | cost-bounded Inside Success corpus preprocessing |
