@@ -1,6 +1,6 @@
 # Plan #355: Codex Intrinsic Event Custody
 
-**Status:** Planned
+**Status:** Implemented (shared unit; downstream adoption pending)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -71,7 +71,7 @@ custody.
 - `llm_client/core/data_types.py`
 - `llm_client/schemas.py`
 - `llm_client/sdk/agents_codex.py`
-- `tests/test_agents_codex_cli.py`
+- `tests/test_agents.py`
 - `tests/test_boundary_schemas.py`
 - generated `docs/API_REFERENCE.md`
 - generated `docs/API_REFERENCE.html`
@@ -99,23 +99,24 @@ custody.
 | `tests/test_agents.py` | `test_extract_codex_cli_completed_items_retains_intrinsic_and_mcp_events` | all completed items remain ordered while MCP normalization stays separate |
 | `tests/test_agents.py` | `test_extract_codex_cli_completed_items_ignores_malformed_and_unsettled_events` | invalid or incomplete envelopes do not create false completion evidence |
 | `tests/test_agents.py` | `test_call_codex_via_cli_exposes_completed_items_on_public_result` | direct CLI results expose completed items through `codex_events` |
+| `tests/test_agents.py` | `test_public_structured_call_retains_codex_completed_items` | the public structured API preserves the same completed-item receipt consumed by Agent Ecology 3 |
 | `tests/test_boundary_schemas.py` | `test_codex_events_schema_is_additive_list` | the Pydantic public schema mirrors the additive list field |
 
 ### Existing Tests
 
 | Test Pattern | Why |
 |---|---|
-| `tests/test_agents.py::TestCodexFallback` | existing command, result, MCP, usage, and subscription semantics do not regress |
+| `tests/test_agents.py` | existing command, result, MCP, usage, and subscription semantics do not regress |
 | `tests/test_boundary_schemas.py` | every public result field remains represented at the boundary |
 
 ## Acceptance Criteria
 
-- [ ] `LLMCallResult` and `LLMCallResultSchema` expose additive
+- [x] `LLMCallResult` and `LLMCallResultSchema` expose additive
       `codex_events: list[dict[str, Any]]` fields with empty-list defaults.
-- [ ] Direct Codex CLI calls retain every mapping-valued completed item in
+- [x] Direct Codex CLI calls retain every mapping-valued completed item in
       stream order.
-- [ ] Existing MCP `tool_calls` normalization is unchanged.
-- [ ] Focused tests, lint/type checks, required-reading gates, API generation,
+- [x] Existing MCP `tool_calls` normalization is unchanged.
+- [x] Focused tests, lint/type checks, required-reading gates, API generation,
       and diff hygiene pass.
 - [ ] Agent Ecology 3's provider-free preflight observes its three intrinsic
       fixture types from this public field at the exact merged revision.
@@ -133,3 +134,22 @@ The machine-consumed coordination record is
 `docs/plans/supporting/355_work_graph.json`. `WU-355-01` owns the shared-client
 contract and is ready. `WU-355-02` owns the Agent Ecology 3 adoption and remains
 blocked until the shared unit is accepted on the canonical default branch.
+
+## Shared-Unit Evidence (2026-08-12)
+
+- Five new deterministic tests cover ordered completed-item custody, malformed
+  and unsettled input, direct CLI result attachment, the public structured-call
+  path used by Agent Ecology 3, and boundary-schema parity.
+- The plan-scoped gate passed 161 tests across `tests/test_agents.py` and
+  `tests/test_boundary_schemas.py`; the Luna/Terra route selection subset also
+  passed. No provider call was made.
+- The generated Markdown and HTML API references are in sync. Required-reading
+  gates and `git diff --check` pass.
+- Ruff and focused mypy retain the exact diagnostic counts present on `main`;
+  neither reports a branch-only finding. The broad repository run produced
+  2,081 passes, four skips, 12 deselections, and 16 unrelated baseline failures
+  in optional `prompt_eval`, shared Instructor-cache ordering, doc-coupling
+  fixtures, and hook subprocess PATH handling.
+- The remaining acceptance item belongs to `WU-355-02`: after this shared unit
+  merges, Agent Ecology 3 must bind the exact revision and rerun its
+  provider-free preflight before any live Luna canary is considered.

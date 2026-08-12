@@ -682,6 +682,7 @@ def _result_from_codex_cli(
     transport: str,
     session: dict[str, Any] | None = None,
     tool_calls: list[dict[str, Any]] | None = None,
+    codex_events: list[dict[str, Any]] | None = None,
     warning: str | None = None,
 ) -> LLMCallResult:
     """Build an `LLMCallResult` from direct Codex CLI output."""
@@ -698,6 +699,7 @@ def _result_from_codex_cli(
         cost=0.0,
         model=model,
         tool_calls=tool_calls or [],
+        codex_events=codex_events or [],
         finish_reason="stop",
         raw_response={
             "transport": transport,
@@ -793,12 +795,14 @@ def _call_codex_via_cli(
             if not final_response:
                 raise ValueError("Empty response from Codex CLI")
             session = parse_codex_exec_events(completed.stdout, completed.stderr)
+            codex_events = _extract_codex_cli_completed_items(completed.stdout)
             return _result_from_codex_cli(
                 model,
                 final_response,
                 transport="codex_cli",
                 session=session,
-                tool_calls=_extract_codex_cli_tool_calls(completed.stdout),
+                tool_calls=_codex_cli_tool_calls_from_completed_items(codex_events),
+                codex_events=codex_events,
                 warning=fallback_warning,
             )
     finally:
@@ -1423,10 +1427,10 @@ def _stream_codex(
 # Public: Codex exec session observability
 # ---------------------------------------------------------------------------
 
-def _extract_codex_cli_tool_calls(stdout_jsonl: str) -> list[dict[str, Any]]:
-    """Extract completed MCP calls from ``codex exec --json`` events."""
+def _extract_codex_cli_completed_items(stdout_jsonl: str) -> list[dict[str, Any]]:
+    """Return JSON-safe copies of completed Codex CLI items in stream order."""
 
-    tool_calls: list[dict[str, Any]] = []
+    completed_items: list[dict[str, Any]] = []
     for line in stdout_jsonl.splitlines():
         try:
             event = _json.loads(line)
@@ -1435,7 +1439,27 @@ def _extract_codex_cli_tool_calls(stdout_jsonl: str) -> list[dict[str, Any]]:
         if not isinstance(event, dict) or event.get("type") != "item.completed":
             continue
         item = event.get("item")
-        if not isinstance(item, dict) or item.get("type") != "mcp_tool_call":
+        if isinstance(item, dict):
+            completed_items.append(dict(item))
+    return completed_items
+
+
+def _extract_codex_cli_tool_calls(stdout_jsonl: str) -> list[dict[str, Any]]:
+    """Extract completed MCP calls from ``codex exec --json`` events."""
+
+    return _codex_cli_tool_calls_from_completed_items(
+        _extract_codex_cli_completed_items(stdout_jsonl)
+    )
+
+
+def _codex_cli_tool_calls_from_completed_items(
+    completed_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Project completed MCP items into the existing public tool-call shape."""
+
+    tool_calls: list[dict[str, Any]] = []
+    for item in completed_items:
+        if item.get("type") != "mcp_tool_call":
             continue
         tool_name = str(item.get("tool") or "")
         if not tool_name:

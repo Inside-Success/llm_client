@@ -53,7 +53,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
 | 356 | [Instructor Structured-Attempt Ledger](356_instructor_attempt_ledger.md) | Critical | ✅ Complete | `research_v3` Plan #25 evidence-complete Luna comparison |
-| 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | Planned | Agent Ecology 3 Plan #10 Luna Medium recovery gate |
+| 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | 🚧 Implemented (downstream adoption pending) | Agent Ecology 3 Plan #10 Luna Medium recovery gate |
 | 354 | [Single Structured-Call Terminal Lifecycle](354_single_structured_terminal.md) | Critical | ✅ Complete | `research_v3` Plan #25 trace validity |
 | 353 | [Terminal Structured-Attempt Cost Settlement](353_terminal_structured_attempt_cost_settlement.md) | Critical | ✅ Complete | Complete reserved-concurrent budget accounting for structured workloads |
 | 352 | [Monotonic Concurrent Budget-Cap Resume](352_monotonic_concurrent_budget_cap_resume.md) | Critical | ✅ Complete | Process Tracing Plan 038 full revolution-corpus adjudication |
