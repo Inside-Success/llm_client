@@ -1,4 +1,4 @@
-# Plan #350: Cross-Project Model Experiment Records
+# Plan #351: Cross-Project Model Experiment Records
 
 **Status:** Complete
 **Type:** implementation
@@ -48,7 +48,7 @@ without those fields invites false generalization.
 - `runs/README.md` (modify)
 - `runs/model-experiments/process-tracing-revolution-adjudication-2026-08-12/record.json` (create)
 - `docs/plans/CLAUDE.md` (modify)
-- `docs/plans/350_cross_project_model_experiment_records.md` (create)
+- `docs/plans/351_cross_project_model_experiment_records.md` (create)
 
 ---
 
