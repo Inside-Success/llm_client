@@ -110,3 +110,13 @@ non-negative. Partial, pre-response, and cancelled paths release the lease, but
 any numeric cost persisted on their failed call row remains included in future
 budget-scope snapshots. No missing attempt cost is inferred, and no historical
 row is backfilled.
+
+## 2026-08-12 Amendment: Instructor Attempt Custody
+
+Plan 356 extends the same append-only structured-attempt contract to the
+Instructor execution path. Instructor receives `max_retries=1`; the shared
+retry kernel owns every retry and fallback so provider generations cannot be
+hidden inside the adapter. Successful attempts persist exact message content or
+one tool call's function arguments as the received bytes, never a reserialized
+parsed object. Metadata, raw-artifact, cost, and selected-attempt custody follow
+the existing privacy and fail-loud rules.

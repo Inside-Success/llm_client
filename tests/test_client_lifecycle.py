@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from llm_client.core import client
 import llm_client.io_log as io_log
+from llm_client.execution import structured_runtime
 import llm_client.execution.timeout_policy as timeout_policy
 from llm_client.core.data_types import LLMCallResult
 from llm_client.core.errors import (
@@ -51,9 +52,13 @@ def _isolate_io_log(tmp_path: Path):
     io_log._db_path = tmp_path / "test.db"
     io_log._db_conn = None
     io_log._last_cleanup_date = None
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
 
     yield
 
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
     io_log._enabled = old_enabled
     io_log._data_root = old_root
     io_log._project = old_project
