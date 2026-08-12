@@ -1,6 +1,6 @@
 # Plan #356: Instructor Structured-Attempt Ledger
 
-**Status:** Implemented — awaiting one post-merge Luna acceptance canary
+**Status:** Complete
 **Type:** bounded maintenance repair
 **Priority:** Critical
 **Blocked By:** None
@@ -92,6 +92,27 @@ caller's declared `num_retries`, deadline, and budget.
 - Code-diff review verdict: `pass` after adding retry-ownership and
   no-regeneration controls and removing unrelated formatter churn.
 
-Remaining acceptance is exactly one post-merge Luna canary with one public
-start, one terminal completion, one Instructor provider attempt, a readable
-selected-attempt receipt, and zero external actions.
+## Live Acceptance Evidence (2026-08-12)
+
+The first post-merge canary ran from merged revision
+`d5ee5ddee403fd5b8431b5666af6f1762d8151e9` on the local library profile at
+`2026-08-12T19:19:51.906023Z`:
+
+- model: `openrouter/openai/gpt-5.6-luna`, reasoning effort `high`;
+- trace: `llm_client/plan356/post-merge-luna/d5ee5dd`;
+- logical call: `llmcall_98d08fed47464a969d8cded891e3cbcf`;
+- fresh execution: `cache_hit=false`, one model call, no retry or fallback;
+- validated output: exact status `ready`;
+- attempt lifecycle: `started -> received -> validated`, ordinal `0`, execution
+  path `instructor`;
+- public lifecycle: one `started` and one terminal `completed`;
+- selected-attempt receipt digest:
+  `d3bd21711095dc4741c336bd65e35cc89180a98eef104ab0320aa5b10d2c24c8`;
+- exact raw-content SHA-256:
+  `edb9f230a3ad9e6da49534b52d14151ff9254c2aec3f27ea45ba72f9d2fd609a`;
+- observed cost: `$0.000031`; external actions: zero.
+
+A separate process reconstructed the attempt history, terminal lifecycle, and
+strict receipt from the shared observability store. This certifies the merged
+library contract for this bounded Luna scenario; it does not claim provider
+attestation, deployment verification, or general model quality.
