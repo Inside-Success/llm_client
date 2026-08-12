@@ -1,0 +1,226 @@
+{
+  "units": [
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-355-01",
+      "initiative_id": "agent-ecology-luna-recovery",
+      "goal_id": "public-codex-intrinsic-event-custody",
+      "design_revision": "e01d2df09f45d78d79033fbd0d679ae972e689ca",
+      "spec_revision": "wu-355-01-v1",
+      "title": "Expose completed Codex CLI items on the public result",
+      "class": "implementation",
+      "objective": "Extend the shared LLM result with ordered, JSON-safe custody of completed Codex CLI items while preserving the existing MCP projection.",
+      "profile": "small",
+      "execution_class": "independently_executable",
+      "claimability": "ready_for_execution",
+      "authorization_mode": "registry_claim",
+      "scope": {
+        "included": [
+          "Additive LLMCallResult and boundary-schema field",
+          "Completed Codex CLI item extraction in stream order",
+          "Direct CLI result attachment",
+          "Focused deterministic tests and generated API documentation"
+        ],
+        "excluded": [
+          "MCP architecture changes",
+          "Persistence or replay migration",
+          "Generic cross-provider event taxonomy",
+          "Live provider calls",
+          "Package publication"
+        ]
+      },
+      "inputs": [
+        {
+          "kind": "ImplementationPlan",
+          "id": "llm-client-plan-355",
+          "revision": "e01d2df09f45d78d79033fbd0d679ae972e689ca"
+        },
+        {
+          "kind": "ConsumerEvidence",
+          "id": "agent-ecology3-plan-10-slice-a",
+          "revision": "6bd99d743c948fa5da528375c7de7faba1399a77"
+        }
+      ],
+      "outputs": [
+        "Public codex_events result contract",
+        "Completed-item extraction and direct CLI integration",
+        "Focused contract evidence",
+        "Merged shared-client revision for downstream pinning"
+      ],
+      "dependencies": [],
+      "conflict_surfaces": [
+        {
+          "kind": "repository_path",
+          "target": "llm_client/core/data_types.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-public-result"
+        },
+        {
+          "kind": "repository_path",
+          "target": "llm_client/schemas.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-boundary-schema"
+        },
+        {
+          "kind": "repository_path",
+          "target": "llm_client/sdk/agents_codex.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-codex-cli"
+        },
+        {
+          "kind": "repository_path",
+          "target": "tests/test_agents.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-tests"
+        },
+        {
+          "kind": "repository_path",
+          "target": "tests/test_boundary_schemas.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-tests"
+        },
+        {
+          "kind": "contract",
+          "target": "LLMCallResult.codex_events",
+          "access": "exclusive",
+          "coordination_key": "llm-client-codex-events-v1"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-355-01-custody",
+          "criterion": "A valid Codex JSONL stream exposes every mapping-valued item.completed item through result.codex_events in stream order.",
+          "evidence_required": [
+            "Positive fixture containing command_execution, file_change, web_search, and mcp_tool_call items",
+            "Exact ordered public-result assertion"
+          ],
+          "negative_control": "Malformed JSON, non-completed envelopes, and non-mapping item values produce no completed-event evidence."
+        },
+        {
+          "id": "AC-355-01-compatibility",
+          "criterion": "The additive field defaults empty on other routes and the existing MCP-only tool_calls projection remains unchanged.",
+          "evidence_required": [
+            "Dataclass/schema parity assertion",
+            "Existing Codex CLI MCP regression suite"
+          ],
+          "negative_control": "Intrinsic completed items never appear as normalized MCP tool_calls."
+        }
+      ],
+      "readiness": {
+        "status": "ready",
+        "required_approval_types": [],
+        "approvals": [],
+        "failed_guards": []
+      },
+      "status": "ready",
+      "record_version": 1
+    },
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-355-02",
+      "initiative_id": "agent-ecology-luna-recovery",
+      "goal_id": "public-codex-intrinsic-event-custody",
+      "design_revision": "e01d2df09f45d78d79033fbd0d679ae972e689ca",
+      "spec_revision": "wu-355-02-v1",
+      "title": "Adopt the shared event receipt in Agent Ecology 3",
+      "class": "integration",
+      "objective": "Pin the accepted shared-client revision and prove Agent Ecology 3's provider-free Luna gate can observe and reject intrinsic Codex events without MCP.",
+      "profile": "small",
+      "execution_class": "independently_executable",
+      "claimability": "blocked_dependencies",
+      "authorization_mode": "registry_claim",
+      "scope": {
+        "included": [
+          "Exact shared-client revision update",
+          "Provider-free event-custody preflight",
+          "Fail-closed Luna action boundary integration test"
+        ],
+        "excluded": [
+          "Live Luna call",
+          "Detached worker or recovery machinery",
+          "MCP server changes",
+          "Agent Ecology simulation promotion"
+        ]
+      },
+      "inputs": [
+        {
+          "kind": "WorkUnitOutput",
+          "id": "WU-355-01",
+          "revision": "accepted-merge-required"
+        },
+        {
+          "kind": "ConsumerCheckpoint",
+          "id": "agent-ecology3-plan-10-slice-a",
+          "revision": "6bd99d743c948fa5da528375c7de7faba1399a77"
+        }
+      ],
+      "outputs": [
+        "Agent Ecology 3 provider-free preflight with observable intrinsic fixtures",
+        "Exact accepted llm_client revision binding",
+        "MCP-free consumer integration evidence"
+      ],
+      "dependencies": [
+        {
+          "unit_id": "WU-355-01",
+          "type": "hard",
+          "gate": {
+            "type": "unit_status",
+            "required_status": "accepted"
+          },
+          "rationale": "The consumer must bind to an accepted shared public contract rather than candidate worktree code."
+        }
+      ],
+      "conflict_surfaces": [
+        {
+          "kind": "repository_path",
+          "target": "src/agent_ecology3/analysis/luna_recovery_gate.py",
+          "repository": "agent_ecology3",
+          "access": "exclusive",
+          "coordination_key": "agent-ecology3-plan-10-luna-gate"
+        },
+        {
+          "kind": "repository_path",
+          "target": "tests/test_luna_recovery_gate.py",
+          "repository": "agent_ecology3",
+          "access": "exclusive",
+          "coordination_key": "agent-ecology3-plan-10-luna-gate"
+        },
+        {
+          "kind": "contract",
+          "target": "LLMCallResult.codex_events",
+          "access": "read",
+          "coordination_key": "llm-client-codex-events-v1"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-355-02-consumer",
+          "criterion": "Agent Ecology 3 observes command_execution, file_change, and web_search fixture items through the accepted public result field and its provider-free preflight passes the event-custody gate.",
+          "evidence_required": [
+            "Exact shared-client merge revision",
+            "Provider-free preflight JSON",
+            "Focused Agent Ecology 3 test"
+          ],
+          "negative_control": "A result lacking public codex_events fails before budget reservation or provider dispatch."
+        }
+      ],
+      "readiness": {
+        "status": "blocked",
+        "required_approval_types": [],
+        "approvals": [],
+        "failed_guards": [
+          "WU-355-01 is not accepted"
+        ]
+      },
+      "status": "blocked",
+      "record_version": 1
+    }
+  ]
+}

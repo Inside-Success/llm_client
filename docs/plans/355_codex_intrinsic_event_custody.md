@@ -67,6 +67,7 @@ custody.
 
 ## Files Affected
 
+- `docs/plans/supporting/355_work_graph.json`
 - `llm_client/core/data_types.py`
 - `llm_client/schemas.py`
 - `llm_client/sdk/agents_codex.py`
@@ -125,3 +126,10 @@ If the Codex CLI fixture shows completed intrinsic activity outside
 `item.completed.item`, pause implementation and revise this plan from the
 observed envelope. Do not broaden into persistence, streaming, or a generic
 cross-provider event taxonomy without a demonstrated consumer requirement.
+
+## Work Graph
+
+The machine-consumed coordination record is
+`docs/plans/supporting/355_work_graph.json`. `WU-355-01` owns the shared-client
+contract and is ready. `WU-355-02` owns the Agent Ecology 3 adoption and remains
+blocked until the shared unit is accepted on the canonical default branch.
