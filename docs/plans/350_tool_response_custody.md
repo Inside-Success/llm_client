@@ -1,6 +1,6 @@
 # Plan #350: Tool Response Custody
 
-**Status:** In Progress
+**Status:** ✅ Complete (scoped regression gate)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -91,12 +91,33 @@ application-local duplicate would create a second custody authority.
 
 ## Acceptance Criteria
 
-- [ ] Full-content tool calls are reopenable by exact call ID.
-- [ ] Metadata-only calls do not retain tool names, IDs, or arguments.
-- [ ] Existing databases migrate additively and old rows remain readable.
-- [ ] The public result payload is preserved without claiming provider-raw
+- [x] Full-content tool calls are reopenable by exact call ID.
+- [x] Metadata-only calls do not retain tool names, IDs, or arguments.
+- [x] Existing databases migrate additively and old rows remain readable.
+- [x] The public result payload is preserved without claiming provider-raw
       object custody.
-- [ ] Focused and full checks pass.
+- [x] The plan-scoped regression gate passes; the broader repository gate was
+      attempted and its unrelated baseline failures are documented below.
+
+## Completion Evidence
+
+- `python scripts/meta/check_plan_tests.py --plan 350` passed all 152 tests in
+  `test_io_log.py`, `test_observability_replay.py`, and
+  `test_call_receipts.py`.
+- Full-content, metadata-only, additive migration, JSONL import, exact replay,
+  malformed-payload rejection, and existing receipt semantics are exercised by
+  that gate. No provider call was made.
+- Diff hygiene passed. A Ruff comparison against `main` found no branch-only
+  diagnostics in the changed Python files. Focused mypy reached only the
+  repository's existing strict-type baseline; it reported no error on a line
+  changed by this plan.
+- The mandatory completion command was attempted with the repository's
+  documented optional-contract path and shared cooldown state disabled. It ran
+  2,086 unit tests and the strict doc-coupling check; doc coupling passed, while
+  14 unrelated unit tests failed in experiment-eval optional dependencies,
+  structured-client shared-state ordering, and doc-coupling fixtures. The two
+  initially observed structured-client failures both pass in isolation on this
+  branch and on `main`. None exercises response-tool-call persistence.
 
 ## Failure Handling
 

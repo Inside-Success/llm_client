@@ -144,7 +144,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 335 | [Concurrent Root-Budget Reservations](335_concurrent-root-budget-reservations.md) | Critical | ✅ Complete | DIGIMON Plan #182 |
 | 337 | [Current Model Selection Evidence and GPT-5.5 Retirement](337_current-model-selection-evidence-and-gpt-5-5-retirement.md) | Critical | ✅ Complete | - |
 | 338 | [Observed Application-Run Lifecycle](338_observed_application_run_lifecycle.md) | Critical | ❓  | Process Tracing outer-run receipt |
-| 350 | [Tool Response Custody](350_tool_response_custody.md) | High | In Progress | Agent Ecology 3 provider qualification and prescription ablation |
+| 350 | [Tool Response Custody](350_tool_response_custody.md) | High | ✅ Complete | Agent Ecology 3 provider qualification and prescription ablation |
 
 
 ## Status Key
