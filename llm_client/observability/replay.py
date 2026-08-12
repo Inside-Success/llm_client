@@ -642,6 +642,17 @@ def _decode_json_column(value: str | None) -> JSONValue:
     return normalized
 
 
+def _decode_tool_calls_column(value: str | None) -> list[JSONValue] | None:
+    """Decode one persisted public tool-call payload without shape recovery."""
+
+    loaded = _decode_json_column(value)
+    if loaded is None:
+        return None
+    if not isinstance(loaded, list):
+        raise TypeError("Stored response_tool_calls must decode to a list.")
+    return loaded
+
+
 def get_call_record(call_id: int) -> dict[str, Any]:
     """Return one persisted call record with decoded snapshot and messages."""
 
@@ -649,6 +660,7 @@ def get_call_record(call_id: int) -> dict[str, Any]:
     row = db.execute(
         """
         SELECT id, timestamp, project, model, messages, response,
+               response_tool_calls, n_tool_calls,
                finish_reason, latency_s, error, caller, task, trace_id,
                prompt_ref, call_fingerprint, call_snapshot
         FROM llm_calls
@@ -665,15 +677,17 @@ def get_call_record(call_id: int) -> dict[str, Any]:
         "model": row[3],
         "messages": _decode_json_column(row[4]),
         "response": row[5],
-        "finish_reason": row[6],
-        "latency_s": row[7],
-        "error": row[8],
-        "caller": row[9],
-        "task": row[10],
-        "trace_id": row[11],
-        "prompt_ref": row[12],
-        "call_fingerprint": row[13],
-        "call_snapshot": _decode_json_column(row[14]),
+        "response_tool_calls": _decode_tool_calls_column(row[6]),
+        "n_tool_calls": row[7],
+        "finish_reason": row[8],
+        "latency_s": row[9],
+        "error": row[10],
+        "caller": row[11],
+        "task": row[12],
+        "trace_id": row[13],
+        "prompt_ref": row[14],
+        "call_fingerprint": row[15],
+        "call_snapshot": _decode_json_column(row[16]),
     }
 
 

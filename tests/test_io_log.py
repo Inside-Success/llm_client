@@ -236,6 +236,44 @@ class TestLogCall:
         assert row[4] == 15
         db.close()
 
+    def test_full_content_retains_response_tool_calls(self, tmp_path):
+        tool_calls = [
+            {
+                "id": "call_exact_1",
+                "type": "function",
+                "function": {
+                    "name": "ae3_action",
+                    "arguments": '{"action_type":"query_kernel","query_type":"resources"}',
+                },
+            }
+        ]
+        result = _mock_result(content="", finish_reason="tool_calls")
+        result.tool_calls = tool_calls
+
+        io_log.log_call(
+            model="openrouter/minimax/minimax-m3",
+            messages=[{"role": "user", "content": "choose an action"}],
+            result=result,
+            latency_s=0.5,
+            trace_id="ae3/tool-custody/full",
+        )
+
+        record = json.loads(_today_jsonl(tmp_path, "calls").read_text().strip())
+        assert record["response"] == ""
+        assert record["n_tool_calls"] == 1
+        assert record["response_tool_calls"] == tool_calls
+
+        with sqlite3.connect(tmp_path / "test.db") as db:
+            row = db.execute(
+                "SELECT response, n_tool_calls, response_tool_calls FROM llm_calls"
+            ).fetchone()
+        assert row is not None
+        assert row[:2] == ("", 1)
+        assert json.loads(row[2]) == tool_calls
+        looked_up = io_log.lookup_result("ae3/tool-custody/full")
+        assert looked_up is not None
+        assert looked_up["response_tool_calls"] == tool_calls
+
     def test_metadata_only_retains_telemetry_without_content(self, tmp_path):
         prompt_sentinel = "PRIVATE_SOURCE_SENTINEL_7fd3"
         response_sentinel = "PRIVATE_RESPONSE_SENTINEL_61aa"
@@ -250,6 +288,16 @@ class TestLogCall:
             cost=0.002,
         )
         result.warnings = [prompt_sentinel]
+        result.tool_calls = [
+            {
+                "id": "private-tool-id",
+                "type": "function",
+                "function": {
+                    "name": "private_tool_name",
+                    "arguments": json.dumps({"secret": prompt_sentinel}),
+                },
+            }
+        ]
         io_log.log_call(
             model="openrouter/test",
             messages=[{"role": "user", "content": prompt_sentinel}],
@@ -267,6 +315,8 @@ class TestLogCall:
         assert record["content_persistence"] == "metadata_only"
         assert record["messages"] is None
         assert record["response"] is None
+        assert record["response_tool_calls"] is None
+        assert record["n_tool_calls"] == 1
         assert record["call_snapshot"] is None
         assert record["call_fingerprint"] is None
         assert record["warnings"] is None
@@ -282,7 +332,8 @@ class TestLogCall:
 
         with sqlite3.connect(tmp_path / "test.db") as db:
             row = db.execute(
-                """SELECT messages, response, prompt_tokens, completion_tokens,
+                """SELECT messages, response, response_tool_calls, n_tool_calls,
+                          prompt_tokens, completion_tokens,
                           total_tokens, cost, task, trace_id, call_snapshot,
                           call_fingerprint, validation_errors, content_persistence
                    FROM llm_calls"""
@@ -290,6 +341,8 @@ class TestLogCall:
         assert row == (
             None,
             None,
+            None,
+            1,
             10,
             5,
             15,
@@ -964,6 +1017,8 @@ class TestSQLiteDB:
         assert "cache_creation_tokens" in llm_cols
         assert "usage_details" in llm_cols
         assert "content_persistence" in llm_cols
+        assert "response_tool_calls" in llm_cols
+        assert "n_tool_calls" in llm_cols
         default = db.execute(
             "SELECT dflt_value FROM pragma_table_info('llm_calls') "
             "WHERE name = 'content_persistence'"
@@ -1039,6 +1094,37 @@ class TestImportJsonl:
             "prompt_tokens_details": usage["prompt_tokens_details"],
             "completion_tokens_details": usage["completion_tokens_details"],
         }
+
+    def test_import_calls_preserves_response_tool_calls(self, tmp_path):
+        data_dir = tmp_path / "myproj" / "myproj_llm_client_data"
+        data_dir.mkdir(parents=True)
+        jsonl_file = data_dir / "calls.jsonl"
+        tool_calls = [
+            {
+                "id": "imported-call",
+                "type": "function",
+                "function": {"name": "lookup", "arguments": '{"id":7}'},
+            }
+        ]
+        jsonl_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-08-12T00:00:00+00:00",
+                    "model": "openrouter/test",
+                    "response_tool_calls": tool_calls,
+                    "content_persistence": "full",
+                }
+            )
+            + "\n"
+        )
+
+        assert io_log.import_jsonl(jsonl_file, table="llm_calls") == 1
+        row = io_log._get_db().execute(
+            "SELECT response_tool_calls, content_persistence FROM llm_calls"
+        ).fetchone()
+        assert row is not None
+        assert json.loads(row[0]) == tool_calls
+        assert row[1] == "full"
 
     def test_import_embeddings(self, tmp_path):
         data_dir = tmp_path / "proj" / "proj_llm_client_data"
