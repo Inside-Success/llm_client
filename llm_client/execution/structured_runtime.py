@@ -28,6 +28,7 @@ from llm_client.core.config import ClientConfig
 from llm_client.core.errors import (
     LLMCapabilityError,
     LLMConfigurationError,
+    LLMError,
     LLMLogicalDeadlineError,
     _unwrap_instructor_retry,
 )
@@ -452,6 +453,36 @@ class _AttemptCostLedger:
         result.cost_covers_all_attempts = bool(self._started) and (
             self._started == set(self._observed)
         )
+
+    def failure_result(
+        self,
+        *,
+        model: str,
+        content: str = "",
+    ) -> LLMCallResult | None:
+        """Build bounded terminal accounting without claiming output success."""
+
+        if not self._observed:
+            return None
+        result = LLMCallResult(
+            content=content,
+            usage={},
+            cost=0.0,
+            model=model,
+            resolved_model=model,
+            finish_reason="error",
+        )
+        self.apply(result)
+        return result
+
+    def bind_error(self, error: LLMError, result: LLMCallResult | None) -> None:
+        """Carry attempt-cost evidence through the public typed error boundary."""
+
+        if result is None:
+            return
+        error.cost = result.cost
+        error.cost_source = result.cost_source
+        error.cost_covers_all_attempts = result.cost_covers_all_attempts
 
 
 def _prepare_raw_artifact_store_for_runtime() -> None:
@@ -1012,7 +1043,7 @@ def _call_llm_structured_impl(
             logical_call_id=_logical_call_id,
             observability_content_policy=observability_content_policy,
         )
-        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
+        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "failed" if event.get("error") is not None else "completed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="call_llm_structured",
@@ -1992,9 +2023,16 @@ def _call_llm_structured_impl(
         ))
     except Exception as e:
         terminal_error = _unwrap_structured_finalization_failure(e)
+        public_error = wrap_error(terminal_error)
+        failure_result = structured_attempt_costs.failure_result(
+            model=last_model_attempted,
+            content=str(getattr(terminal_error, "raw_content", "") or ""),
+        )
+        structured_attempt_costs.bind_error(public_error, failure_result)
         _log_call_event(
             model=last_model_attempted,
             messages=messages,
+            result=failure_result,
             error=terminal_error,
             latency_s=time.monotonic() - _log_t0,
             caller="call_llm_structured",
@@ -2005,7 +2043,7 @@ def _call_llm_structured_impl(
             execution_path="error",
             retry_count=None,
         )
-        raise wrap_error(terminal_error) from terminal_error
+        raise public_error from terminal_error
 
 async def _acall_llm_structured_impl(
     model: str,
@@ -2117,7 +2155,7 @@ async def _acall_llm_structured_impl(
             logical_call_id=_logical_call_id,
             observability_content_policy=observability_content_policy,
         )
-        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
+        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "failed" if event.get("error") is not None else "completed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="acall_llm_structured",
@@ -3114,9 +3152,16 @@ async def _acall_llm_structured_impl(
         # Unwrap InstructorRetryException to expose the underlying provider error
         # in the observability record (e.g. BadRequestError, RateLimitError).
         log_error = _unwrap_instructor_retry(terminal_error)
+        public_error = wrap_error(terminal_error)
+        failure_result = structured_attempt_costs.failure_result(
+            model=last_model_attempted,
+            content=str(getattr(log_error, "raw_content", "") or ""),
+        )
+        structured_attempt_costs.bind_error(public_error, failure_result)
         _log_call_event(
             model=last_model_attempted,
             messages=messages,
+            result=failure_result,
             error=log_error,
             latency_s=time.monotonic() - _log_t0,
             caller="acall_llm_structured",
@@ -3127,4 +3172,4 @@ async def _acall_llm_structured_impl(
             execution_path="error",
             retry_count=None,
         )
-        raise wrap_error(terminal_error) from terminal_error
+        raise public_error from terminal_error

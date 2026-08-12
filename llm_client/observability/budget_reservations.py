@@ -135,7 +135,8 @@ def _settled_microusd(db: sqlite3.Connection, scope_trace_id: str) -> int:
     llm_row = db.execute(
         """SELECT COALESCE(SUM(COALESCE(marginal_cost, cost)), 0)
            FROM llm_calls
-           WHERE error IS NULL AND (trace_id = ? OR trace_id LIKE ?)""",
+           WHERE COALESCE(marginal_cost, cost) IS NOT NULL
+             AND (trace_id = ? OR trace_id LIKE ?)""",
         params,
     ).fetchone()
     embedding_row = db.execute(
