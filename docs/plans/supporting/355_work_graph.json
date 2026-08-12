@@ -13,7 +13,7 @@
       "objective": "Extend the shared LLM result with ordered, JSON-safe custody of completed Codex CLI items while preserving the existing MCP projection.",
       "profile": "small",
       "execution_class": "independently_executable",
-      "claimability": "ready_for_execution",
+      "claimability": "not_applicable",
       "authorization_mode": "registry_claim",
       "scope": {
         "included": [
@@ -118,7 +118,7 @@
         "approvals": [],
         "failed_guards": []
       },
-      "status": "ready",
+      "status": "accepted",
       "record_version": 1
     },
     {
@@ -134,7 +134,7 @@
       "objective": "Pin the accepted shared-client revision and prove Agent Ecology 3's provider-free Luna gate can observe and reject intrinsic Codex events without MCP.",
       "profile": "small",
       "execution_class": "independently_executable",
-      "claimability": "blocked_dependencies",
+      "claimability": "ready_for_execution",
       "authorization_mode": "registry_claim",
       "scope": {
         "included": [
@@ -153,7 +153,7 @@
         {
           "kind": "WorkUnitOutput",
           "id": "WU-355-01",
-          "revision": "accepted-merge-required"
+          "revision": "63f471347f2f1e18b37cf82d50b5546336b6a5e1"
         },
         {
           "kind": "ConsumerCheckpoint",
@@ -212,14 +212,12 @@
         }
       ],
       "readiness": {
-        "status": "blocked",
+        "status": "ready",
         "required_approval_types": [],
         "approvals": [],
-        "failed_guards": [
-          "WU-355-01 is not accepted"
-        ]
+        "failed_guards": []
       },
-      "status": "blocked",
+      "status": "ready",
       "record_version": 1
     }
   ]
