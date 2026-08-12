@@ -115,3 +115,8 @@ without repeating generation or switching models.
 
 Plan 101 consumers pin the logical call identity returned by the same runtime
 result; trace-only lookup is diagnostic.
+
+Plan 354 reasserts public-wrapper ownership of the structured call's sole
+terminal lifecycle. Private runtimes still persist one terminal call row and
+structured-attempt events under the same logical call ID; composed sync/async
+controls prove the joined boundary.

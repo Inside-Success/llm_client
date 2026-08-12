@@ -51,3 +51,7 @@ changing `LLMCallResult.model`, `requested_model`, or `routing_trace`.
 
 Post-validation finalization cannot switch models, preserving the executed
 model identity attached to the already-validated result.
+
+Plan 354 makes the public wrapper the sole structured terminal-lifecycle owner.
+`LLMCallResult` model semantics and terminal call-row identity remain unchanged;
+composed sync/async controls pass.

@@ -50,3 +50,6 @@ existing route; it does not change configuration precedence.
 
 The runtime now treats a validated native-schema response as terminal for model
 fallback; this is an execution-integrity boundary, not a new routing precedence.
+
+Plan 354 changes only structured terminal-event ownership. Routing and config
+precedence remain unchanged; composed sync/async structured controls pass.

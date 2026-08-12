@@ -70,3 +70,7 @@ semantics in this ADR remain unchanged.
 Within that bounded native-schema path, local finalization after validation is
 terminal and cannot re-enter provider retry or fallback; polling remains out of
 scope and unchanged.
+
+Plan 354 removes a duplicate private-runtime terminal lifecycle write without
+changing Responses routing, background polling, or timeout behavior. Focused
+structured runtime and lifecycle suites pass in fresh processes.

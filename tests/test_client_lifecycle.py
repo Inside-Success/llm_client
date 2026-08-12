@@ -69,6 +69,31 @@ class _ResponseModel(BaseModel):
     label: str
 
 
+def _mock_structured_response(content: str = '{"label":"ok"}') -> MagicMock:
+    """Build one provider response for the composed structured-call path."""
+
+    response = MagicMock()
+    response.choices = [MagicMock()]
+    response.choices[0].message.content = content
+    response.choices[0].message.refusal = None
+    response.choices[0].finish_reason = "stop"
+    response.usage.prompt_tokens = 10
+    response.usage.completion_tokens = 5
+    response.usage.total_tokens = 15
+    return response
+
+
+def _typed_lifecycle_phases(logical_call_id: str) -> list[str]:
+    """Return the canonical typed phases for one exact logical call."""
+
+    rows = io_log._get_db().execute(
+        """SELECT phase FROM call_lifecycle_events
+           WHERE logical_call_id = ? ORDER BY id""",
+        (logical_call_id,),
+    ).fetchall()
+    return [str(row[0]) for row in rows]
+
+
 def _lifecycle_rows() -> list[tuple[str, dict[str, Any]]]:
     """Return Foundation lifecycle rows from the isolated observability DB."""
 
@@ -264,6 +289,102 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
     assert completed["progress_observable"] is True
     assert completed["progress_source"] == "unit_test"
     assert completed["progress_event_count"] == 1
+
+
+def test_composed_sync_structured_call_emits_one_terminal_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real sync wrapper/runtime composition has one public terminal."""
+
+    # mock-ok: provider transport is fake; public/runtime lifecycle composition is real.
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._model_supports_native_schema",
+        lambda _model: True,
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion",
+        lambda **_kwargs: _mock_structured_response(),
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion_cost",
+        lambda **_kwargs: 0.001,
+    )
+
+    parsed, result = client.call_llm_structured(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return a label."}],
+        _ResponseModel,
+        num_retries=0,
+        fallback_models=[],
+        task="test.lifecycle.composed.sync",
+        trace_id="trace.lifecycle.composed.sync",
+        max_budget=0.1,
+        lifecycle_heartbeat_interval_s=0,
+        lifecycle_stall_after_s=0,
+    )
+
+    assert parsed.label == "ok"
+    assert result.logical_call_id
+    phases = _typed_lifecycle_phases(result.logical_call_id)
+    assert phases.count("started") == 1
+    assert [phase for phase in phases if phase in {"completed", "failed", "cancelled"}] == [
+        "completed"
+    ]
+    terminal_rows = io_log._get_db().execute(
+        "SELECT COUNT(*) FROM llm_calls WHERE logical_call_id = ?",
+        (result.logical_call_id,),
+    ).fetchone()
+    assert terminal_rows == (1,)
+
+
+@pytest.mark.asyncio
+async def test_composed_async_structured_call_emits_one_terminal_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real async wrapper/runtime composition has one public terminal."""
+
+    # mock-ok: provider transport is fake; public/runtime lifecycle composition is real.
+    async def _completion(**_kwargs: Any) -> MagicMock:
+        return _mock_structured_response()
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._model_supports_native_schema",
+        lambda _model: True,
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.acompletion",
+        _completion,
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion_cost",
+        lambda **_kwargs: 0.001,
+    )
+
+    parsed, result = await client.acall_llm_structured(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return a label."}],
+        _ResponseModel,
+        num_retries=0,
+        fallback_models=[],
+        task="test.lifecycle.composed.async",
+        trace_id="trace.lifecycle.composed.async",
+        max_budget=0.1,
+        lifecycle_heartbeat_interval_s=0,
+        lifecycle_stall_after_s=0,
+    )
+
+    assert parsed.label == "ok"
+    assert result.logical_call_id
+    phases = _typed_lifecycle_phases(result.logical_call_id)
+    assert phases.count("started") == 1
+    assert [phase for phase in phases if phase in {"completed", "failed", "cancelled"}] == [
+        "completed"
+    ]
+    terminal_rows = io_log._get_db().execute(
+        "SELECT COUNT(*) FROM llm_calls WHERE logical_call_id = ?",
+        (result.logical_call_id,),
+    ).fetchone()
+    assert terminal_rows == (1,)
 
 
 def test_incomplete_failed_attempt_cost_releases_reservation(
