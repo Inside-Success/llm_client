@@ -1,6 +1,6 @@
 # Plan #352: Monotonic Concurrent Budget-Cap Resume
 
-**Status:** In Progress
+**Status:** Complete
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -44,15 +44,33 @@ cap match; there is no implicit increase, decrease, or fallback.
 
 ## Acceptance
 
-- [ ] Focused real-SQLite tests cover successful raise, active-reservation
+- [x] Focused real-SQLite tests cover successful raise, active-reservation
       preservation, idempotent retry, missing scope, stale expectation, and
       decrease rejection.
-- [ ] Plan 335's focused reservation/call/runtime tests remain green.
-- [ ] A clean Process Tracing resume raises the same scope, reuses its first
+- [x] Plan 335's focused reservation/call/runtime tests remain green.
+- [x] A clean Process Tracing resume raises the same scope, reuses its first
       four producer/reviewer checkpoints, and admits the next batch without
       discarding settled cost.
-- [ ] The change merges to personal `main`; downstream runtime pinning remains
+- [x] The change merges to personal `main`; downstream runtime pinning remains
       the consumer repository's explicit responsibility.
+
+## Adoption Evidence
+
+PR #143 merged the operation to personal `main` at
+`a819730c888fd0842c5592059b823ff096248bb6` after 48 focused tests passed.
+Process Tracing Plan 038 pinned that exact revision, raised the existing
+`plan038-revolution-adjudication-full-v1` scope from `$8.36304534375` to
+`$11.00`, replayed the first four producer/reviewer checkpoint pairs, admitted
+the next batch, and ultimately completed all 342 batch pairs. The terminal
+snapshot records `$6.28355` settled, zero active reservations, and `$4.71645`
+available. This establishes downstream adoption and checkpoint preservation.
+
+The same run exposed a separate limitation outside this plan: twelve provider
+attempts inside four terminal structured failures retain `$0.081136555` of
+provider-reported cost in failure custody, but their logical call rows have
+null cost and their reservations are released rather than settled. The cap-
+raise operation is complete; complete failed-attempt settlement requires a
+successor budget-accounting change.
 
 ## Non-Claims
 

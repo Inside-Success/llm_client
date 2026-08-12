@@ -87,3 +87,14 @@ without those fields invites false generalization.
 This plan does not change the SQLite schema or move evaluation aggregation from
 `prompt_eval`. The committed JSON record is a portable decision card; shared
 SQLite remains the query surface for run/item telemetry.
+
+Post-completion operational evidence from Process Tracing Plan 038 exposed an
+ambiguity that did not invalidate the reference record: summed logical-call
+latency is not wall-clock duration under concurrent dispatch, and a Boolean
+cache hit is insufficient for a multi-call workload. The v1 schema therefore
+accepts optional latency scope, wall-clock duration, maximum in-flight calls,
+counted exact-response cache hits, and cache measurement scope. The guide also
+forbids attributing cache or concurrency savings when the compared workloads
+do not hold their packets and other conditions constant. It also requires
+terminal structured failures to be checked for provider-reported attempt cost
+before a null logical-call cost is interpreted as zero spend.

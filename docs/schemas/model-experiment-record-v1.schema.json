@@ -144,7 +144,12 @@
             "provider_attempts": {"type": "integer", "minimum": 1},
             "retries": {"type": "integer", "minimum": 0},
             "terminal_errors": {"type": "integer", "minimum": 0},
-            "latency_s": {"type": "number", "minimum": 0}
+            "latency_s": {"type": "number", "minimum": 0},
+            "latency_scope": {
+              "enum": ["summed_logical_call_latency", "critical_path_proxy", "wall_clock_condition"]
+            },
+            "wall_clock_s": {"type": "number", "minimum": 0},
+            "max_in_flight_calls": {"type": "integer", "minimum": 1}
           }
         },
         "usage": {
@@ -187,7 +192,9 @@
           "properties": {
             "cached_tokens": {"type": "integer", "minimum": 0},
             "cache_creation_tokens": {"type": ["integer", "null"], "minimum": 0},
-            "response_cache_hit": {"type": ["boolean", "null"]}
+            "response_cache_hit": {"type": ["boolean", "null"]},
+            "response_cache_hits": {"type": ["integer", "null"], "minimum": 0},
+            "measurement_scope": {"type": "string", "minLength": 1}
           }
         },
         "contract_outcome": {

@@ -66,8 +66,12 @@ At minimum, retain:
 - a frozen dataset ID, selection method, unit of analysis, and content hashes;
 - exact requested and resolved routes, reasoning effort, prompt/schema/config
   identity, and repository/runtime revisions;
-- logical calls, provider attempts, retries, terminal errors, wall latency,
-  tokens, cached tokens, and response-cache hits;
+- logical calls, provider attempts, retries, terminal errors, and the declared
+  scope of the latency measure;
+- wall-clock duration and maximum in-flight calls when concurrency can affect
+  elapsed time;
+- tokens, provider-cached tokens, cache-creation tokens, and counted exact-
+  response cache hits, with the cache layer and measurement scope named;
 - observed provider-billed cost with its scope, separate from a dated external
   list-price snapshot or projection;
 - deterministic contract results, independent-review coverage, and item-level
@@ -83,6 +87,19 @@ The reference instance is
 `runs/model-experiments/process-tracing-revolution-adjudication-2026-08-12/record.json`.
 It deliberately records a narrow no-switch decision rather than claiming that
 one model is globally better.
+
+For a cache or concurrency experiment, compare conditions on the same frozen
+items, prompts, schemas, and route whenever possible. A production run with a
+different packet mix may establish descriptive cost, cache, and throughput
+telemetry, but it does not identify savings caused by caching or parallelism.
+Retain summed call latency separately from wall-clock duration: their ratio can
+describe realized overlap, while neither alone establishes provider speed.
+
+When a structured logical call fails after provider responses, inspect retained
+attempt custody before treating a null logical-call cost or a released budget
+reservation as zero spend. Record a recovered provider-attempt total separately
+from the governed ledger until the shared client settles that failure path; do
+not silently add it to successful-call token fields whose scope differs.
 
 ```bash
 python -m jsonschema \
