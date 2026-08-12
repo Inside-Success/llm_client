@@ -16,7 +16,7 @@ import litellm
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
-from llm_client import LRUCache
+from llm_client import LLMCallResult, LRUCache
 from llm_client.core.errors import LLMCapabilityError, LLMError, LLMLogicalDeadlineError
 from llm_client.execution.responses_runtime import (
     _openrouter_compatible_strict_json_schema,
@@ -260,6 +260,85 @@ async def test_async_logical_timeout_caps_provider_attempt_and_stops_chain(
     assert time.monotonic() - started < 0.09
     assert mock_acompletion.await_count == 1
     assert 0 < mock_acompletion.call_args.kwargs["timeout"] <= 0.02
+
+
+@patch("llm_client.sdk.agents._route_call_structured")
+def test_sync_logical_timeout_floors_agent_adapter_timeout(
+    mock_agent_call: MagicMock,
+) -> None:
+    """A fractional remaining deadline reaches the sync agent as whole seconds."""
+
+    mock_agent_call.return_value = (
+        _BoundedCount(count=1),
+        LLMCallResult(
+            content='{"count":1}',
+            usage={},
+            cost=0.0,
+            model="codex/gpt-5.6-luna",
+            requested_model="codex/gpt-5.6-luna",
+            resolved_model="codex/gpt-5.6-luna",
+        ),
+    )
+
+    parsed, _metadata = _call_llm_structured_impl(
+        "codex/gpt-5.6-luna",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        timeout=0,
+        logical_timeout=360,
+        num_retries=0,
+        fallback_models=[],
+        reasoning_effort="medium",
+        model_justification="Exercise the exact approved Luna agent route.",
+        task="test",
+        trace_id="structured.runtime.agent.logical_deadline.sync",
+        max_budget=0,
+    )
+
+    adapter_timeout = mock_agent_call.call_args.kwargs["timeout"]
+    assert parsed.count == 1
+    assert isinstance(adapter_timeout, int)
+    assert 0 < adapter_timeout < 360
+
+
+@pytest.mark.asyncio
+@patch("llm_client.sdk.agents._route_acall_structured", new_callable=AsyncMock)
+async def test_async_logical_timeout_floors_agent_adapter_timeout(
+    mock_agent_call: AsyncMock,
+) -> None:
+    """A fractional remaining deadline reaches the async agent as whole seconds."""
+
+    mock_agent_call.return_value = (
+        _BoundedCount(count=1),
+        LLMCallResult(
+            content='{"count":1}',
+            usage={},
+            cost=0.0,
+            model="codex/gpt-5.6-luna",
+            requested_model="codex/gpt-5.6-luna",
+            resolved_model="codex/gpt-5.6-luna",
+        ),
+    )
+
+    parsed, _metadata = await _acall_llm_structured_impl(
+        "codex/gpt-5.6-luna",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        timeout=0,
+        logical_timeout=360,
+        num_retries=0,
+        fallback_models=[],
+        reasoning_effort="medium",
+        model_justification="Exercise the exact approved Luna agent route.",
+        task="test",
+        trace_id="structured.runtime.agent.logical_deadline.async",
+        max_budget=0,
+    )
+
+    adapter_timeout = mock_agent_call.call_args.kwargs["timeout"]
+    assert parsed.count == 1
+    assert isinstance(adapter_timeout, int)
+    assert 0 < adapter_timeout < 360
 
 
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)

@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-16
+Last verified: 2026-08-12 (Plan 124 agent-adapter logical-timeout maintenance)
 Verification context: The shared experiment substrate now serializes canonical
 run-start insertion before emitting JSONL evidence, preventing duplicate
 run_id starts from appearing as two attempts. Focused persistence and

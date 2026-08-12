@@ -1154,9 +1154,9 @@ def _call_llm_structured_impl(
                 model,
                 messages,
                 response_model,
-                # The legacy SDK annotation is integral, but its runtime accepts
-                # fractional seconds and the precise remaining cap must not round up.
-                timeout=cast(int, attempt_timeout),
+                # Agent adapters require whole seconds. Floor their inner timeout
+                # while the precise outer deadline retains the fractional cap.
+                timeout=_math.floor(attempt_timeout),
                 **public_kwargs,
             ),
             timeout=attempt_timeout,
@@ -2266,9 +2266,9 @@ async def _acall_llm_structured_impl(
                 model,
                 messages,
                 response_model,
-                # Preserve the precise remaining cap across the legacy integral
-                # SDK annotation; runtime timeout consumers accept fractional values.
-                timeout=cast(int, attempt_timeout),
+                # Agent adapters require whole seconds. Floor their inner timeout
+                # while the precise outer deadline retains the fractional cap.
+                timeout=_math.floor(attempt_timeout),
                 **public_kwargs,
             ),
             timeout=attempt_timeout,
