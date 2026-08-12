@@ -21,7 +21,12 @@ from llm_client.core import client
 import llm_client.io_log as io_log
 import llm_client.execution.timeout_policy as timeout_policy
 from llm_client.core.data_types import LLMCallResult
-from llm_client.core.errors import LLMBudgetExceededError, LLMTransientError
+from llm_client.core.errors import (
+    LLMBudgetExceededError,
+    LLMBudgetReservationOverrunError,
+    LLMError,
+    LLMTransientError,
+)
 from llm_client.observability import (
     ObservedRun,
     get_budget_scope_snapshot,
@@ -259,6 +264,84 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
     assert completed["progress_observable"] is True
     assert completed["progress_source"] == "unit_test"
     assert completed["progress_event_count"] == 1
+
+
+def test_incomplete_failed_attempt_cost_releases_reservation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Partial cost evidence cannot turn an error lease into settled custody."""
+
+    # mock-ok: isolates the outer budget wrapper's typed-error contract.
+    def _fake_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        error = LLMError("provider failed after one priced response")
+        error.cost = 0.002
+        error.cost_source = "provider_reported"
+        error.cost_covers_all_attempts = False
+        raise error
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+    with pytest.raises(LLMError, match="provider failed"):
+        client.call_llm_structured(
+            "gemini/gemini-2.5-flash",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.partial-cost",
+            trace_id="trace.lifecycle.partial-cost",
+            max_budget=0.1,
+            budget_scope_trace_id="trace.lifecycle.partial-cost",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.01,
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    row = io_log._get_db().execute(
+        """SELECT status, settled_cost_microusd FROM budget_reservations
+           WHERE scope_trace_id = ?""",
+        ("trace.lifecycle.partial-cost",),
+    ).fetchone()
+    assert row == ("released_error", None)
+
+
+def test_fully_observed_failed_attempt_cost_reports_reservation_overrun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Known failed spend above its reservation remains a typed hard failure."""
+
+    # mock-ok: isolates terminal settlement and overrun behavior.
+    def _fake_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        error = LLMError("validation exhausted")
+        error.cost = 0.003
+        error.cost_source = "attempt_aggregate"
+        error.cost_covers_all_attempts = True
+        raise error
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+    with pytest.raises(LLMBudgetReservationOverrunError):
+        client.call_llm_structured(
+            "gemini/gemini-2.5-flash",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.failed-overrun",
+            trace_id="trace.lifecycle.failed-overrun",
+            max_budget=0.1,
+            budget_scope_trace_id="trace.lifecycle.failed-overrun",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.001,
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    row = io_log._get_db().execute(
+        """SELECT status, settled_cost_microusd FROM budget_reservations
+           WHERE scope_trace_id = ?""",
+        ("trace.lifecycle.failed-overrun",),
+    ).fetchone()
+    assert row == ("settled", 3_000)
 
 
 def test_public_structured_call_is_joinable_to_observed_run(

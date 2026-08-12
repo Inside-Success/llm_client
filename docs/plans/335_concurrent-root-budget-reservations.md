@@ -310,8 +310,18 @@ Success:
 Failure/cancellation:
 
 1. runtime records its normal failure lifecycle;
-2. mark the lease `released_error`;
-3. re-raise the original error.
+2. if a typed terminal error carries an observed aggregate cost and explicitly
+   confirms that the cost covers every dispatched attempt, settle the lease at
+   that cost;
+3. otherwise mark the lease `released_error`; known partial cost may remain on
+   the failed call row and is still included in later scope snapshots;
+4. re-raise the original error, except that a fully observed cost above its
+   reservation raises `LLMBudgetReservationOverrunError` after settlement.
+
+Cancellation, pre-response failure, and incomplete attempt coverage never
+invent spend. A failed row with a numeric observed cost is settled spend for
+scope accounting even though its error column remains populated; error status
+and cost evidence are independent facts.
 
 Streaming:
 
@@ -453,9 +463,10 @@ observability or forwards control fields.
   `budget_scope_mode` and `budget_reservation`; `sequential` remains the
   default.
 - One outer public-call lease covers internal retry/fallback work. Success
-  settles after normal result/lifecycle observability; failure, cancellation,
-  stream error, and explicit stream close release after terminal lifecycle
-  emission.
+  settles after normal result/lifecycle observability. As amended by Plan 353,
+  a failed structured call also settles when its typed terminal error proves
+  complete attempt-cost coverage; incomplete failure, cancellation, stream
+  error, and explicit stream close release after terminal lifecycle emission.
 - A process-wide daemon keeper renews only locally owned active durable leases;
   lost custody fails at the terminal boundary rather than returning a success.
 - Focused zero-spend verification: 41 tests passed across reservation,
