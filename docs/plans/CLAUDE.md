@@ -52,7 +52,8 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
-| 352 | [Monotonic Concurrent Budget-Cap Resume](352_monotonic_concurrent_budget_cap_resume.md) | Critical | 🚧 In Progress | Process Tracing Plan 038 full revolution-corpus adjudication |
+| 353 | [Terminal Structured-Attempt Cost Settlement](353_terminal_structured_attempt_cost_settlement.md) | Critical | 🚧 In Progress | Complete reserved-concurrent budget accounting for structured workloads |
+| 352 | [Monotonic Concurrent Budget-Cap Resume](352_monotonic_concurrent_budget_cap_resume.md) | Critical | ✅ Complete | Process Tracing Plan 038 full revolution-corpus adjudication |
 | 351 | [Cross-Project Model Experiment Records](351_cross_project_model_experiment_records.md) | High | ✅ Complete | Reusable evidence-based model routing across projects |
 | 349 | [Structured Recovery and Provider Exclusion](349_structured_recovery_and_provider_exclusion.md) | Critical | ✅ Complete | - |
 | 348 | [GPT-5.4 Ban and Luna Default](348_gpt54_ban_luna_default.md) | Critical | ✅ Complete | consistent ecosystem model selection |
