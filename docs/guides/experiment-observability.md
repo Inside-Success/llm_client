@@ -2,21 +2,92 @@
 
 ## Recording experiments
 
+Use one run per condition. Keep the dataset, scenario, phase, item IDs, and
+metrics schema stable across the comparison. `start_run`, `log_item`, and
+`finish_run` are keyword-only APIs.
+
 ```python
-from llm_client import start_run, log_item, finish_run
+import time
+
+from llm_client import acall_llm_structured, finish_run, log_item, start_run
 
 run_id = start_run(
-    name="extraction_v2",
+    dataset="frozen-corpus:v2",
+    model="openrouter/openai/gpt-5.6-luna",
+    task="example.extraction",
     condition_id="baseline",
-    scenario_id="phase1",
-    phase="phase1",
+    scenario_id="extraction-contract-v2",
+    phase="model-routing",
+    metrics_schema=["contract_valid", "review_accepted"],
+    config={"reasoning_effort": "medium", "temperature": 0.1},
+    provenance={
+        "dataset_sha256": "<sha256>",
+        "prompt_sha256": "<sha256>",
+        "schema_sha256": "<sha256>",
+    },
 )
 
 for item in dataset:
-    result = await acall_llm_structured(...)
-    log_item(run_id, item_id=item.id, result=result, score=score)
+    trace_id = f"{run_id}/{item.id}"
+    started = time.monotonic()
+    parsed, metadata = await acall_llm_structured(..., trace_id=trace_id)
+    log_item(
+        run_id=run_id,
+        item_id=item.id,
+        predicted=parsed.model_dump_json(),
+        metrics={
+            "contract_valid": 1.0,
+            "review_accepted": float(review.accepted),
+        },
+        latency_s=time.monotonic() - started,
+        cost=metadata.cost,
+        trace_id=trace_id,
+    )
 
-finish_run(run_id)
+finish_run(
+    run_id=run_id,
+    summary_metrics={"decision_ready": True},
+)
+```
+
+For an agent task subject to AgentSpec enforcement, also pass `agent_spec=` or
+an explicit, reasoned opt-out. Do not silently disable the enforcement policy.
+
+## Making a comparison reusable
+
+The experiment database is the query surface for run and item telemetry. A
+curated cross-project decision also needs a portable record that explains what
+the numbers license. Validate committed records against
+`docs/schemas/model-experiment-record-v1.schema.json`.
+
+At minimum, retain:
+
+- the decision question, experimental stage, licensed claim, and non-claims;
+- a frozen dataset ID, selection method, unit of analysis, and content hashes;
+- exact requested and resolved routes, reasoning effort, prompt/schema/config
+  identity, and repository/runtime revisions;
+- logical calls, provider attempts, retries, terminal errors, wall latency,
+  tokens, cached tokens, and response-cache hits;
+- observed provider-billed cost with its scope, separate from a dated external
+  list-price snapshot or projection;
+- deterministic contract results, independent-review coverage, and item-level
+  disagreements;
+- stable artifact references with SHA-256 digests; and
+- the signed decision, rationale, and evidence required to revisit it.
+
+Do not copy bulk corpora or task-owned outputs into `llm_client`. Keep them with
+their owner and use a logical URI plus digest. `prompt_eval` continues to own
+rubrics, statistical comparison, and evaluation aggregation.
+
+The reference instance is
+`runs/model-experiments/process-tracing-revolution-adjudication-2026-08-12/record.json`.
+It deliberately records a narrow no-switch decision rather than claiming that
+one model is globally better.
+
+```bash
+python -m jsonschema \
+  --instance runs/model-experiments/process-tracing-revolution-adjudication-2026-08-12/record.json \
+  docs/schemas/model-experiment-record-v1.schema.json
 ```
 
 ## CLI commands
