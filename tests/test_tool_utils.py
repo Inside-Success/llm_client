@@ -805,6 +805,27 @@ class TestPythonToolsRouting:
             # python_tools should be passed through
             assert len(call_kw["python_tools"]) == 1
 
+    async def test_routes_model_justification_to_nested_tool_loop(self) -> None:
+        """Nested tool turns retain local exact-model policy evidence."""
+        justification = "Exercise the reviewed agent-reasoning tool route."
+        with patch("llm_client.agent.mcp_agent._acall_with_tools") as mock_loop:
+            mock_loop.return_value = _make_llm_result(content="answer")
+
+            from llm_client import acall_llm
+
+            await acall_llm(
+                "openrouter/minimax/minimax-m3",
+                [{"role": "user", "content": "Q"}],
+                python_tools=[add],
+                reasoning_effort="low",
+                model_justification=justification,
+                task="test",
+                trace_id="test_routes_model_justification_to_nested_tool_loop",
+                max_budget=0,
+            )
+
+            assert mock_loop.call_args.kwargs["model_justification"] == justification
+
     async def test_mutual_exclusion(self) -> None:
         """python_tools + mcp_servers raises ValueError."""
         from llm_client import acall_llm
