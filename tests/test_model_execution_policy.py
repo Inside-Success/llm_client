@@ -133,9 +133,7 @@ def test_allowed_alternate_without_justification_fails() -> None:
         "openrouter/openai/gpt-5-mini",
         "openrouter/openai/gpt-5.1-mini",
         "openrouter/openai/gpt-5.4",
-        "openrouter/openai/gpt-5.4-mini",
         "codex/gpt-5.4",
-        "openrouter/openai/gpt-5.5",
         "gpt-5.5",
         "gpt-5.5-pro",
         "codex/gpt-5.1-codex-mini",
@@ -221,14 +219,24 @@ def test_reasoning_capability_routes_are_all_allowlisted() -> None:
 
 
 def test_gpt55_family_is_absent_from_execution_policy() -> None:
-    """Retired GPT-5.5 aliases cannot remain selectable or configurable."""
-    assert not any("gpt-5.5" in model for model in ALLOWED_EXECUTION_MODELS)
+    """Generic GPT-5.5 aliases stay absent outside the company overlay."""
+    from llm_client.inside_success_policy import (
+        INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS,
+    )
+
+    generic_models = ALLOWED_EXECUTION_MODELS - INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
+    assert not any("gpt-5.5" in model for model in generic_models)
     assert not any("gpt-5.5" in model for model in REASONING_CAPABILITIES)
 
 
 def test_gpt54_family_is_absent_from_execution_policy() -> None:
-    """Banned GPT-5.4 aliases cannot remain selectable or configurable."""
-    assert not any("gpt-5.4" in model for model in ALLOWED_EXECUTION_MODELS)
+    """Generic GPT-5.4 aliases stay absent outside the company overlay."""
+    from llm_client.inside_success_policy import (
+        INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS,
+    )
+
+    generic_models = ALLOWED_EXECUTION_MODELS - INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
+    assert not any("gpt-5.4" in model for model in generic_models)
     assert not any("gpt-5.4" in model for model in REASONING_CAPABILITIES)
 
 

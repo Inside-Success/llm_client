@@ -7,6 +7,7 @@ from typing import Literal, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm_client.core.errors import LLMConfigurationError
+from llm_client.inside_success_policy import INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
 
 ModelPolicyMode = Literal["enforce_allowlist"]
 ReasoningEffort = Literal[
@@ -55,7 +56,7 @@ ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "claude-code",
         "claude-code/sonnet",
     }
-)
+) | INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
 
 
 class ReasoningCapability(BaseModel):

@@ -199,3 +199,17 @@ Completed 2026-07-15.
 Revert the Plan 105 integration commit(s) with new commits on each affected
 remote. Do not rewrite shared history. The pre-reconciliation refs remain
 reachable through merge parents and GitHub history.
+
+## 2026-08-13 Downstream Sync Addendum
+
+The ancestry-preserving sync to personal `main` remains the correct direction,
+but Grounded consumer verification exposed one intentional company difference:
+the generic upstream's current model retirement/allowlist policy excludes
+Grounded's benchmark-selected production, fallback, and subscription seats.
+
+Inside Success therefore retains a small, explicit downstream overlay in
+`llm_client/inside_success_policy.py`. It enumerates only the routes present in
+Grounded's reviewed configuration, leaves unknown neighboring models blocked,
+and is covered by a focused regression test. This is company execution policy,
+not reusable runtime infrastructure, so it must not be ported back to the
+personal upstream without a separate policy decision.

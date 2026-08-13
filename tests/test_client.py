@@ -4747,11 +4747,9 @@ class TestModelDeprecation:
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*fable"):
             call_llm("anthropic/claude-fable-5", [{"role": "user", "content": "hi"}], task="test", trace_id="test_depr_fable", max_budget=0)
 
-    @pytest.mark.parametrize(
-        "model", ["gpt-5.5", "gpt-5.5-pro", "openrouter/openai/gpt-5.5"]
-    )
+    @pytest.mark.parametrize("model", ["gpt-5.5", "gpt-5.5-pro"])
     def test_gpt55_raises(self, model: str):
-        """GPT-5.5 is retired across direct and OpenRouter aliases."""
+        """Unapproved GPT-5.5 aliases remain retired outside the company overlay."""
         from llm_client.core.errors import DeprecatedModelError
 
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.5"):
@@ -4795,7 +4793,7 @@ class TestModelDeprecation:
                 call_llm(
                     "openrouter/openai/gpt-5.6-luna",
                     [{"role": "user", "content": "hi"}],
-                    fallback_models=["openrouter/openai/gpt-5.4-mini"],
+                    fallback_models=["openrouter/openai/gpt-5.4"],
                     task="test",
                     trace_id="test_gpt54_fallback",
                     max_budget=0,
@@ -4807,12 +4805,11 @@ class TestModelDeprecation:
         "model",
         [
             "anthropic/claude-opus-4-8",
-            "openrouter/anthropic/claude-opus-4.8",
             "claude-code/opus",
         ],
     )
     def test_opus_raises_before_any_execution_lane(self, model):
-        """Opus is banned for raw, routed, and workspace-agent calls."""
+        """Unapproved Opus aliases remain banned outside the company overlay."""
         from llm_client.core.errors import DeprecatedModelError
 
         with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*opus"):
@@ -4858,7 +4855,7 @@ class TestModelDeprecation:
                 call_llm(
                     "deepseek/deepseek-chat",
                     [{"role": "user", "content": "hi"}],
-                    fallback_models=["openrouter/anthropic/claude-opus-4.8"],
+                    fallback_models=["anthropic/claude-opus-4-8"],
                     task="test",
                     trace_id="test_opus_fallback",
                     max_budget=0,

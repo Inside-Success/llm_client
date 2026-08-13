@@ -38,16 +38,17 @@ from llm_client.core.errors import (
     LLMEmptyResponseError,
     LLMModelNotFoundError,
 )
+from llm_client.core.model_detection import (
+    _base_model_name,
+    _is_responses_api_model,
+)
+from llm_client.inside_success_policy import INSIDE_SUCCESS_HARD_BLOCK_EXCEPTIONS
 from llm_client.observability.budget_reservations import (
     BudgetReservationLease,
     acquire_budget_reservation,
     release_tracked_budget_reservation,
     settle_tracked_budget_reservation,
     track_budget_reservation,
-)
-from llm_client.core.model_detection import (
-    _base_model_name,
-    _is_responses_api_model,
 )
 from llm_client.prompt_assets import parse_prompt_ref
 
@@ -1009,6 +1010,10 @@ _DEPRECATED_MODEL_EXCEPTIONS: set[str] = {
     "gpt-4o-mini",  # has its own entry — prevent double-match from gpt-4o
     "gemini-2.0-flash-lite",  # NOT deprecated — cheapest Google model, no 2.5 equivalent
 }
+
+# Company-downstream policy: preserve Grounded Research's explicitly reviewed
+# seats without weakening the generic upstream's model retirement defaults.
+_DEPRECATED_MODEL_EXCEPTIONS.update(INSIDE_SUCCESS_HARD_BLOCK_EXCEPTIONS)
 
 
 def _check_model_deprecation(model: str) -> None:
