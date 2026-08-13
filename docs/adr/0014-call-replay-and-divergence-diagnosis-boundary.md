@@ -147,3 +147,13 @@ reconstruction.
 
 Plan 101 receipt lookup verifies the same v3 fingerprint but remains a
 trusted-process provenance read, not replay authority or provider attestation.
+
+Plan 354 removes a duplicate terminal lifecycle emitted by the private
+structured runtime. Call snapshots, fingerprints, replay authority,
+structured-attempt histories, and terminal call rows are unchanged; the
+public wrapper retains one terminal event for the joined logical call.
+
+Plan 356 adds `instructor` as an explicit selected-attempt execution path. Its
+receipt is accepted only when the terminal row, call fingerprint, schema, model,
+exact raw-content hash, and `started -> received -> validated` history agree.
+This remains trusted-process evidence, not provider attestation.

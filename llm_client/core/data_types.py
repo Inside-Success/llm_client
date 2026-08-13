@@ -35,6 +35,7 @@ class LLMCallResult:
         cost: Cost in USD for this call
         model: The model string that was used
         tool_calls: List of tool calls if the model invoked tools, else empty
+        codex_events: Completed Codex CLI items in stream order, else empty
         finish_reason: Why the model stopped: "stop", "length", "tool_calls",
                        "content_filter", etc. Empty string if unavailable.
         raw_response: The full litellm response object for edge cases
@@ -83,6 +84,8 @@ class LLMCallResult:
     """
     cache_hit: bool = False
     """Whether this result came from cache instead of a model call."""
+    codex_events: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    """Completed items exposed by direct Codex CLI JSONL, in stream order."""
 
     def __post_init__(self) -> None:
         if self.marginal_cost is None:

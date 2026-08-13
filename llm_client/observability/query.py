@@ -128,7 +128,8 @@ def lookup_result(trace_id: str) -> dict[str, Any] | None:
     if db is None:
         return None
     row = db.execute(
-        "SELECT response, model, cost, latency_s, finish_reason, "
+        "SELECT response, response_tool_calls, n_tool_calls, model, cost, "
+        "latency_s, finish_reason, "
         "prompt_tokens, completion_tokens, timestamp, prompt_ref, "
         "reasoning_tokens, cached_tokens, cache_creation_tokens, usage_details "
         "FROM llm_calls WHERE trace_id = ? AND error IS NULL "
@@ -138,24 +139,31 @@ def lookup_result(trace_id: str) -> dict[str, Any] | None:
     if row is None:
         return None
     usage_details = None
-    if row[12] is not None:
+    if row[14] is not None:
         try:
-            usage_details = json.loads(row[12])
+            usage_details = json.loads(row[14])
         except (TypeError, json.JSONDecodeError):
             usage_details = None
+    response_tool_calls = None
+    if row[1] is not None:
+        response_tool_calls = json.loads(row[1])
+        if not isinstance(response_tool_calls, list):
+            raise TypeError("Stored response_tool_calls must decode to a list.")
     return {
         "response": row[0],
-        "model": row[1],
-        "cost": row[2],
-        "latency_s": row[3],
-        "finish_reason": row[4],
-        "prompt_tokens": row[5],
-        "completion_tokens": row[6],
-        "timestamp": row[7],
-        "prompt_ref": row[8],
-        "reasoning_tokens": row[9],
-        "cached_tokens": row[10],
-        "cache_creation_tokens": row[11],
+        "response_tool_calls": response_tool_calls,
+        "n_tool_calls": row[2],
+        "model": row[3],
+        "cost": row[4],
+        "latency_s": row[5],
+        "finish_reason": row[6],
+        "prompt_tokens": row[7],
+        "completion_tokens": row[8],
+        "timestamp": row[9],
+        "prompt_ref": row[10],
+        "reasoning_tokens": row[11],
+        "cached_tokens": row[12],
+        "cache_creation_tokens": row[13],
         "usage_details": usage_details,
     }
 

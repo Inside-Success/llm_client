@@ -101,6 +101,20 @@ contention with model behavior.
 | Privacy control | terminal record contains client classification but no raw exception/body content |
 | Process Tracing live replay | one real bounded mechanism call returns an artifact or a terminal classified failure |
 
+### New Tests
+
+| File | Test | Evidence |
+|---|---|---|
+| `tests/test_structured_runtime.py` | `test_sync_logical_timeout_floors_agent_adapter_timeout` | Sync Codex/Luna adapter receives a positive whole-second timeout below the precise outer deadline. |
+| `tests/test_structured_runtime.py` | `test_async_logical_timeout_floors_agent_adapter_timeout` | Async Codex/Luna adapter receives the same bounded whole-second timeout. |
+
+### Existing Tests
+
+| Test | Evidence |
+|---|---|
+| `tests/test_structured_runtime.py::test_sync_logical_timeout_caps_provider_attempt_and_stops_chain` | The caller-visible sync deadline still bounds the provider attempt and suppresses retry/fallback. |
+| `tests/test_structured_runtime.py::test_async_logical_timeout_caps_provider_attempt_and_stops_chain` | The caller-visible async deadline still bounds the provider attempt and suppresses retry/fallback. |
+
 ## Completion Claim
 
 Completion establishes only caller-visible bounded structured retry chains and
@@ -128,3 +142,21 @@ truth, or cancellation of already-blocked daemon transport threads.
 - Remaining acceptance is the explicitly governed Process Tracing replay. It
   may incur provider cost and remains downstream rather than being silently run
   as part of this shared-library change.
+
+2026-08-11 maintenance correction:
+
+- A retained Inside Success Codex-Luna call exposed that the structured runtime
+  passed a fractional remaining logical deadline to agent adapters whose shared
+  timeout contract accepts only whole seconds. The call failed before model
+  dispatch.
+- Sync and async agent paths now floor only the adapter's inner timeout while
+  retaining the precise fractional value at the outer caller-visible deadline.
+  This does not add a retry, fallback, or provider-specific timeout path.
+- Focused regression tests cover both agent paths with the exact
+  `codex/gpt-5.6-luna` route identity.
+- Verification: 79 focused runtime, timeout-policy, Luna-route, and
+  model-policy tests passed. The full suite reached 2,072 passed, 3 skipped,
+  and 3 failures; all three failures reproduce unchanged on canonical `main`
+  and are outside this timeout seam. Changed-file Ruff, relationship
+  validation, and documentation-coupling validation passed; repository-wide
+  Ruff and strict mypy retain pre-existing baseline debt.

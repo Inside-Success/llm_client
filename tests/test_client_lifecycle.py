@@ -19,9 +19,15 @@ from pydantic import BaseModel
 
 from llm_client.core import client
 import llm_client.io_log as io_log
+from llm_client.execution import structured_runtime
 import llm_client.execution.timeout_policy as timeout_policy
 from llm_client.core.data_types import LLMCallResult
-from llm_client.core.errors import LLMBudgetExceededError, LLMTransientError
+from llm_client.core.errors import (
+    LLMBudgetExceededError,
+    LLMBudgetReservationOverrunError,
+    LLMError,
+    LLMTransientError,
+)
 from llm_client.observability import (
     ObservedRun,
     get_budget_scope_snapshot,
@@ -46,9 +52,13 @@ def _isolate_io_log(tmp_path: Path):
     io_log._db_path = tmp_path / "test.db"
     io_log._db_conn = None
     io_log._last_cleanup_date = None
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
 
     yield
 
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
     io_log._enabled = old_enabled
     io_log._data_root = old_root
     io_log._project = old_project
@@ -62,6 +72,31 @@ class _ResponseModel(BaseModel):
     """Small structured-output contract used to test wrapper lifecycle emission."""
 
     label: str
+
+
+def _mock_structured_response(content: str = '{"label":"ok"}') -> MagicMock:
+    """Build one provider response for the composed structured-call path."""
+
+    response = MagicMock()
+    response.choices = [MagicMock()]
+    response.choices[0].message.content = content
+    response.choices[0].message.refusal = None
+    response.choices[0].finish_reason = "stop"
+    response.usage.prompt_tokens = 10
+    response.usage.completion_tokens = 5
+    response.usage.total_tokens = 15
+    return response
+
+
+def _typed_lifecycle_phases(logical_call_id: str) -> list[str]:
+    """Return the canonical typed phases for one exact logical call."""
+
+    rows = io_log._get_db().execute(
+        """SELECT phase FROM call_lifecycle_events
+           WHERE logical_call_id = ? ORDER BY id""",
+        (logical_call_id,),
+    ).fetchall()
+    return [str(row[0]) for row in rows]
 
 
 def _lifecycle_rows() -> list[tuple[str, dict[str, Any]]]:
@@ -259,6 +294,180 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
     assert completed["progress_observable"] is True
     assert completed["progress_source"] == "unit_test"
     assert completed["progress_event_count"] == 1
+
+
+def test_composed_sync_structured_call_emits_one_terminal_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real sync wrapper/runtime composition has one public terminal."""
+
+    # mock-ok: provider transport is fake; public/runtime lifecycle composition is real.
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._model_supports_native_schema",
+        lambda _model: True,
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion",
+        lambda **_kwargs: _mock_structured_response(),
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion_cost",
+        lambda **_kwargs: 0.001,
+    )
+
+    parsed, result = client.call_llm_structured(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return a label."}],
+        _ResponseModel,
+        num_retries=0,
+        fallback_models=[],
+        task="test.lifecycle.composed.sync",
+        trace_id="trace.lifecycle.composed.sync",
+        max_budget=0.1,
+        lifecycle_heartbeat_interval_s=0,
+        lifecycle_stall_after_s=0,
+    )
+
+    assert parsed.label == "ok"
+    assert result.logical_call_id
+    phases = _typed_lifecycle_phases(result.logical_call_id)
+    assert phases.count("started") == 1
+    assert [phase for phase in phases if phase in {"completed", "failed", "cancelled"}] == [
+        "completed"
+    ]
+    terminal_rows = io_log._get_db().execute(
+        "SELECT COUNT(*) FROM llm_calls WHERE logical_call_id = ?",
+        (result.logical_call_id,),
+    ).fetchone()
+    assert terminal_rows == (1,)
+
+
+@pytest.mark.asyncio
+async def test_composed_async_structured_call_emits_one_terminal_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real async wrapper/runtime composition has one public terminal."""
+
+    # mock-ok: provider transport is fake; public/runtime lifecycle composition is real.
+    async def _completion(**_kwargs: Any) -> MagicMock:
+        return _mock_structured_response()
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._model_supports_native_schema",
+        lambda _model: True,
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.acompletion",
+        _completion,
+    )
+    monkeypatch.setattr(
+        "llm_client.core.client.litellm.completion_cost",
+        lambda **_kwargs: 0.001,
+    )
+
+    parsed, result = await client.acall_llm_structured(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Return a label."}],
+        _ResponseModel,
+        num_retries=0,
+        fallback_models=[],
+        task="test.lifecycle.composed.async",
+        trace_id="trace.lifecycle.composed.async",
+        max_budget=0.1,
+        lifecycle_heartbeat_interval_s=0,
+        lifecycle_stall_after_s=0,
+    )
+
+    assert parsed.label == "ok"
+    assert result.logical_call_id
+    phases = _typed_lifecycle_phases(result.logical_call_id)
+    assert phases.count("started") == 1
+    assert [phase for phase in phases if phase in {"completed", "failed", "cancelled"}] == [
+        "completed"
+    ]
+    terminal_rows = io_log._get_db().execute(
+        "SELECT COUNT(*) FROM llm_calls WHERE logical_call_id = ?",
+        (result.logical_call_id,),
+    ).fetchone()
+    assert terminal_rows == (1,)
+
+
+def test_incomplete_failed_attempt_cost_releases_reservation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Partial cost evidence cannot turn an error lease into settled custody."""
+
+    # mock-ok: isolates the outer budget wrapper's typed-error contract.
+    def _fake_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        error = LLMError("provider failed after one priced response")
+        error.cost = 0.002
+        error.cost_source = "provider_reported"
+        error.cost_covers_all_attempts = False
+        raise error
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+    with pytest.raises(LLMError, match="provider failed"):
+        client.call_llm_structured(
+            "gemini/gemini-2.5-flash",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.partial-cost",
+            trace_id="trace.lifecycle.partial-cost",
+            max_budget=0.1,
+            budget_scope_trace_id="trace.lifecycle.partial-cost",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.01,
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    row = io_log._get_db().execute(
+        """SELECT status, settled_cost_microusd FROM budget_reservations
+           WHERE scope_trace_id = ?""",
+        ("trace.lifecycle.partial-cost",),
+    ).fetchone()
+    assert row == ("released_error", None)
+
+
+def test_fully_observed_failed_attempt_cost_reports_reservation_overrun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Known failed spend above its reservation remains a typed hard failure."""
+
+    # mock-ok: isolates terminal settlement and overrun behavior.
+    def _fake_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        error = LLMError("validation exhausted")
+        error.cost = 0.003
+        error.cost_source = "attempt_aggregate"
+        error.cost_covers_all_attempts = True
+        raise error
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+    with pytest.raises(LLMBudgetReservationOverrunError):
+        client.call_llm_structured(
+            "gemini/gemini-2.5-flash",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.failed-overrun",
+            trace_id="trace.lifecycle.failed-overrun",
+            max_budget=0.1,
+            budget_scope_trace_id="trace.lifecycle.failed-overrun",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.001,
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    row = io_log._get_db().execute(
+        """SELECT status, settled_cost_microusd FROM budget_reservations
+           WHERE scope_trace_id = ?""",
+        ("trace.lifecycle.failed-overrun",),
+    ).fetchone()
+    assert row == ("settled", 3_000)
 
 
 def test_public_structured_call_is_joinable_to_observed_run(

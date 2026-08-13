@@ -328,6 +328,8 @@ async def _acall_llm_impl(
                 trace_id=trace_id,
                 max_budget=max_budget,
             )
+            if model_justification is not None:
+                remaining["model_justification"] = model_justification
             inner_named_loop = dict(_inner_named)
             inner_named_loop.pop("fallback_models", None)
             result = await acall_with_mcp_runtime(
@@ -353,6 +355,8 @@ async def _acall_llm_impl(
                 trace_id=trace_id,
                 max_budget=max_budget,
             )
+            if model_justification is not None:
+                remaining["model_justification"] = model_justification
             inner_named_loop = dict(_inner_named)
             inner_named_loop.pop("fallback_models", None)
             if not supports_tool_calling(current_model):

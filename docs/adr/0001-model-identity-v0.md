@@ -58,3 +58,7 @@ actual model used; final requested/resolved model semantics remain unchanged.
 
 Post-validation finalization failures now stop retry and model fallback, so a
 validated response cannot fabricate a later executed-model identity.
+
+Plan 354 removes a duplicate private-runtime terminal lifecycle write. Requested,
+resolved, and executed model identities remain unchanged; composed sync/async
+structured controls pass.

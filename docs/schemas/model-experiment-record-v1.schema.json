@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BrianMills2718/llm_client/blob/main/docs/schemas/model-experiment-record-v1.schema.json",
+  "title": "Cross-project model experiment record v1",
+  "description": "Portable decision evidence for a bounded comparison of exact LLM routes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "recorded_at",
+    "project",
+    "task",
+    "decision_question",
+    "scope",
+    "dataset",
+    "held_constant",
+    "conditions",
+    "comparison",
+    "decision",
+    "artifacts",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": "model-experiment-record/v1"},
+    "experiment_id": {"type": "string", "minLength": 1},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "project": {"type": "string", "minLength": 1},
+    "task": {"type": "string", "minLength": 1},
+    "decision_question": {"type": "string", "minLength": 1},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "licensed_claim", "non_claims"],
+      "properties": {
+        "stage": {"type": "string", "minLength": 1},
+        "licensed_claim": {"type": "string", "minLength": 1},
+        "non_claims": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "unit_of_analysis", "population", "sample_size", "selection"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "unit_of_analysis": {"type": "string", "minLength": 1},
+        "population": {"type": "string", "minLength": 1},
+        "sample_size": {"type": "integer", "minimum": 1},
+        "selection": {"type": "string", "minLength": 1}
+      }
+    },
+    "held_constant": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "conditions": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/condition"}
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics", "item_results", "interpretation"],
+      "properties": {
+        "metrics": {"type": "object", "minProperties": 1},
+        "item_results": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "object", "minProperties": 2}
+        },
+        "interpretation": {"type": "string", "minLength": 1}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "outcome", "rationale", "next_evidence"],
+      "properties": {
+        "status": {"enum": ["pending", "signed_off", "rejected", "superseded"]},
+        "outcome": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "next_evidence": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "retrospective_import", "notes"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "retrospective_import": {"type": "boolean"},
+        "notes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "revision": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition_id",
+        "role",
+        "requested_model",
+        "resolved_model",
+        "reasoning_effort",
+        "repository_revision",
+        "runtime_revision",
+        "calls",
+        "usage",
+        "cost",
+        "cache",
+        "contract_outcome"
+      ],
+      "properties": {
+        "condition_id": {"type": "string", "minLength": 1},
+        "role": {"enum": ["baseline", "candidate", "control"]},
+        "requested_model": {"type": "string", "minLength": 1},
+        "resolved_model": {"type": "string", "minLength": 1},
+        "reasoning_effort": {"type": "string", "minLength": 1},
+        "repository_revision": {"$ref": "#/$defs/revision"},
+        "runtime_revision": {"$ref": "#/$defs/revision"},
+        "calls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["logical", "provider_attempts", "retries", "terminal_errors", "latency_s"],
+          "properties": {
+            "logical": {"type": "integer", "minimum": 1},
+            "provider_attempts": {"type": "integer", "minimum": 1},
+            "retries": {"type": "integer", "minimum": 0},
+            "terminal_errors": {"type": "integer", "minimum": 0},
+            "latency_s": {"type": "number", "minimum": 0},
+            "latency_scope": {
+              "enum": ["summed_logical_call_latency", "critical_path_proxy", "wall_clock_condition"]
+            },
+            "wall_clock_s": {"type": "number", "minimum": 0},
+            "max_in_flight_calls": {"type": "integer", "minimum": 1}
+          }
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens", "measurement_scope"],
+          "properties": {
+            "prompt_tokens": {"type": "integer", "minimum": 0},
+            "completion_tokens": {"type": "integer", "minimum": 0},
+            "total_tokens": {"type": "integer", "minimum": 0},
+            "reasoning_tokens": {"type": "integer", "minimum": 0},
+            "measurement_scope": {"type": "string", "minLength": 1}
+          }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["observed_usd", "scope", "source", "list_price_snapshot"],
+          "properties": {
+            "observed_usd": {"type": "number", "minimum": 0},
+            "scope": {"type": "string", "minLength": 1},
+            "source": {"type": "string", "minLength": 1},
+            "list_price_snapshot": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["observed_at", "input_usd_per_million", "output_usd_per_million", "source_uri"],
+              "properties": {
+                "observed_at": {"type": "string", "format": "date-time"},
+                "input_usd_per_million": {"type": "number", "minimum": 0},
+                "output_usd_per_million": {"type": "number", "minimum": 0},
+                "source_uri": {"type": "string", "format": "uri"}
+              }
+            }
+          }
+        },
+        "cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cached_tokens", "cache_creation_tokens", "response_cache_hit"],
+          "properties": {
+            "cached_tokens": {"type": "integer", "minimum": 0},
+            "cache_creation_tokens": {"type": ["integer", "null"], "minimum": 0},
+            "response_cache_hit": {"type": ["boolean", "null"]},
+            "response_cache_hits": {"type": ["integer", "null"], "minimum": 0},
+            "measurement_scope": {"type": "string", "minLength": 1}
+          }
+        },
+        "contract_outcome": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["structured_contract_passed", "deterministic_validation_passed", "review_complete", "rejected_items"],
+          "properties": {
+            "structured_contract_passed": {"type": "boolean"},
+            "deterministic_validation_passed": {"type": "boolean"},
+            "review_complete": {"type": "boolean"},
+            "rejected_items": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "uri", "sha256"],
+      "properties": {
+        "role": {"type": "string", "minLength": 1},
+        "uri": {"type": "string", "format": "uri-reference"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

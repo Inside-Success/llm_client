@@ -93,3 +93,30 @@ then takes the connection lock in the normal write-path order. Tests and
 maintenance commands must call `io_log.close()` rather than closing
 `_db_conn` directly; this prevents lifecycle heartbeat writers from operating
 on a connection closed concurrently by teardown.
+
+## 2026-08-11 Amendment: Terminal Structured-Attempt Cost Evidence
+
+Plan 353 makes cost and success independent observability facts. Native
+structured execution may persist a failed logical-call row with numeric cost,
+cost source, and marginal cost when one or more provider responses returned and
+were priceable. The failed lifecycle classification and error record remain
+unchanged; a synthetic accounting result must never imply valid structured
+output.
+
+The public `LLMError` boundary carries additive `cost`, `cost_source`, and
+`cost_covers_all_attempts` fields. A reserved-concurrent lease settles from a
+terminal error only when coverage is explicitly true and the cost is finite and
+non-negative. Partial, pre-response, and cancelled paths release the lease, but
+any numeric cost persisted on their failed call row remains included in future
+budget-scope snapshots. No missing attempt cost is inferred, and no historical
+row is backfilled.
+
+## 2026-08-12 Amendment: Instructor Attempt Custody
+
+Plan 356 extends the same append-only structured-attempt contract to the
+Instructor execution path. Instructor receives `max_retries=1`; the shared
+retry kernel owns every retry and fallback so provider generations cannot be
+hidden inside the adapter. Successful attempts persist exact message content or
+one tool call's function arguments as the received bytes, never a reserialized
+parsed object. Metadata, raw-artifact, cost, and selected-attempt custody follow
+the existing privacy and fail-loud rules.

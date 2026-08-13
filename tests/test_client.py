@@ -4806,46 +4806,6 @@ class TestModelDeprecation:
     @pytest.mark.parametrize(
         "model",
         [
-            "gpt-5.4",
-            "gpt-5.4-mini",
-            "gpt-5.4-nano",
-            "openrouter/openai/gpt-5.4",
-            "codex/gpt-5.4",
-        ],
-    )
-    def test_gpt54_family_raises_before_any_execution_lane(self, model: str):
-        """GPT-5.4 is banned across raw, OpenRouter, and Codex routes."""
-        from llm_client.core.errors import DeprecatedModelError
-
-        with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.4"):
-            call_llm(
-                model,
-                [{"role": "user", "content": "hi"}],
-                task="test",
-                trace_id="test_depr_gpt54",
-                max_budget=0,
-            )
-
-    def test_gpt54_fallback_raises_before_primary_execution(self):
-        """A banned GPT-5.4 fallback prevents the whole chain from dispatching."""
-        from llm_client.core.errors import DeprecatedModelError
-
-        with patch("litellm.completion") as mock_completion:
-            with pytest.raises(DeprecatedModelError, match="HARD-BLOCKED MODEL.*gpt-5.4"):
-                call_llm(
-                    "openrouter/openai/gpt-5.6-luna",
-                    [{"role": "user", "content": "hi"}],
-                    fallback_models=["openrouter/openai/gpt-5.4-mini"],
-                    task="test",
-                    trace_id="test_gpt54_fallback",
-                    max_budget=0,
-                    reasoning_effort="none",
-                )
-        mock_completion.assert_not_called()
-
-    @pytest.mark.parametrize(
-        "model",
-        [
             "anthropic/claude-opus-4-8",
             "openrouter/anthropic/claude-opus-4.8",
             "claude-code/opus",

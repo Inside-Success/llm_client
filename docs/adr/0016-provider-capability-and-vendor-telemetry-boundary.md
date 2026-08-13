@@ -4,6 +4,21 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-08-05 Amendment: Provider Exclusion and Malformed-JSON Recovery
+
+Plan #349 adds `ignored_providers` to `OpenRouterRoutePolicyV1` and compiles it
+to OpenRouter's native `provider.ignore` field. Exclusions are explicit
+caller-owned routing intent, retained in call snapshots and replay identity;
+they do not create a shared endpoint-health database. Allowed and ignored
+provider sets must be non-empty, duplicate-free, and disjoint when supplied.
+
+A syntactically malformed structured response remains retryable only within the
+caller's existing retry, deadline, and budget bounds. The next attempt receives
+a concise instruction to return only valid JSON matching the supplied schema.
+This recovery does not retry a response that already satisfies the Pydantic
+contract, and therefore does not move application semantic judgment into the
+shared runtime.
+
 ## 2026-08-04 Amendment: GPT-5.4 Ban and Luna Default
 
 Plan #348 hard-blocks every GPT-5.4-family route before dispatch, including
@@ -194,9 +209,6 @@ Negative:
    defaults move to Sonnet.
 4. Callers cannot use account-side model selectors while the non-overridable
    local model ban is active; they must request an explicit model.
-5. GPT-5.4-family routes are denied before provider or agent dispatch, and
-   Luna is the shared default; callers needing another allowed route must
-   select and justify it explicitly.
 
 ## Testing Contract
 
@@ -212,3 +224,8 @@ Negative:
 5. Local observability tests remain unchanged and green.
 6. OpenRouter reasoning controls must set `provider.require_parameters=true`,
    preserve other provider-routing fields, and reject an explicit false value.
+
+Plan 354 changes only local structured terminal-lifecycle ownership. Provider
+selection, capability enforcement, OpenRouter policy, vendor telemetry, model
+allowlisting, and explicit reasoning behavior remain unchanged; composed
+sync/async structured controls pass.

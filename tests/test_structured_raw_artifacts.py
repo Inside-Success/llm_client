@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from llm_client import acall_llm_structured, call_llm_structured, io_log
 from llm_client.core.errors import LLMError
+from llm_client.observability import get_budget_scope_snapshot
 from llm_client.observability.raw_artifacts import (
     StructuredRawArtifactError,
     cleanup_structured_raw_artifacts,
@@ -201,6 +202,145 @@ def test_responses_api_validation_repair_retains_both_attempts_and_cost(
     assert get_runtime_selected_raw_content(
         result.logical_call_id
     ).raw_content == '{"action":"accept"}'
+
+
+# mock-ok: both paid provider responses are controlled while terminal failure,
+# failed-row persistence, and durable reservation settlement execute normally.
+@patch(
+    "llm_client.core.client.litellm.completion_cost",
+    side_effect=[0.001, 0.002],
+)
+@patch("llm_client.core.client.litellm.responses")
+def test_terminal_validation_failure_retains_and_settles_complete_attempt_cost(
+    responses: MagicMock, _cost: MagicMock
+) -> None:
+    """Exhausted repairs retain known spend without classifying as success."""
+
+    responses.side_effect = [_responses_response("{}"), _responses_response("{}")]
+
+    with pytest.raises(LLMError) as caught:
+        call_llm_structured(
+            "gpt-5.6-terra",
+            [{"role": "user", "content": "Choose"}],
+            response_model=_Decision,
+            task="raw-artifact.responses.terminal",
+            trace_id="trace-raw-responses-terminal",
+            max_budget=0.1,
+            num_retries=1,
+            base_delay=0,
+            max_delay=0,
+            budget_scope_trace_id="trace-raw-responses-terminal",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.01,
+        )
+
+    assert caught.value.cost == pytest.approx(0.003)
+    assert caught.value.cost_source == "attempt_aggregate"
+    assert caught.value.cost_covers_all_attempts is True
+    row = io_log._get_db().execute(
+        """SELECT cost, marginal_cost, cost_source, error, response
+           FROM llm_calls WHERE trace_id = ? ORDER BY id DESC LIMIT 1""",
+        ("trace-raw-responses-terminal",),
+    ).fetchone()
+    assert row[0] == pytest.approx(0.003)
+    assert row[1] == pytest.approx(0.003)
+    assert row[2] == "attempt_aggregate"
+    assert row[3]
+    assert row[4] == "{}"
+    snapshot = get_budget_scope_snapshot(
+        scope_trace_id="trace-raw-responses-terminal", max_budget=0.1
+    )
+    assert snapshot.settled_microusd == 3_000
+    assert snapshot.active_reserved_microusd == 0
+
+
+# mock-ok: async provider responses are controlled while the async runtime,
+# terminal persistence, and outer budget wrapper remain real.
+@pytest.mark.asyncio
+@patch(
+    "llm_client.core.client.litellm.completion_cost",
+    side_effect=[0.001, 0.002],
+)
+@patch("llm_client.core.client.litellm.aresponses", new_callable=AsyncMock)
+async def test_async_terminal_validation_failure_settles_complete_attempt_cost(
+    responses: AsyncMock, _cost: MagicMock
+) -> None:
+    """Async terminal validation failure has identical cost custody."""
+
+    responses.side_effect = [_responses_response("{}"), _responses_response("{}")]
+
+    with pytest.raises(LLMError) as caught:
+        await acall_llm_structured(
+            "gpt-5.6-terra",
+            [{"role": "user", "content": "Choose"}],
+            response_model=_Decision,
+            task="raw-artifact.responses.terminal.async",
+            trace_id="trace-raw-responses-terminal-async",
+            max_budget=0.1,
+            num_retries=1,
+            base_delay=0,
+            max_delay=0,
+            budget_scope_trace_id="trace-raw-responses-terminal-async",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.01,
+        )
+
+    assert caught.value.cost == pytest.approx(0.003)
+    assert caught.value.cost_covers_all_attempts is True
+    snapshot = get_budget_scope_snapshot(
+        scope_trace_id="trace-raw-responses-terminal-async", max_budget=0.1
+    )
+    assert snapshot.settled_microusd == 3_000
+    assert snapshot.active_reserved_microusd == 0
+
+
+# mock-ok: one priced response and one pre-response transport failure are
+# controlled while partial-cost persistence and release semantics stay real.
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.responses")
+def test_partial_terminal_attempt_cost_is_counted_without_settling_reservation(
+    responses: MagicMock, _cost: MagicMock
+) -> None:
+    """Known partial spend is retained while incomplete custody releases."""
+
+    responses.side_effect = [_responses_response("{}"), TimeoutError("provider timeout")]
+
+    with pytest.raises(LLMError) as caught:
+        call_llm_structured(
+            "gpt-5.6-terra",
+            [{"role": "user", "content": "Choose"}],
+            response_model=_Decision,
+            task="raw-artifact.responses.partial",
+            trace_id="trace-raw-responses-partial",
+            max_budget=0.1,
+            num_retries=1,
+            base_delay=0,
+            max_delay=0,
+            budget_scope_trace_id="trace-raw-responses-partial",
+            budget_scope_mode="reserved_concurrent",
+            budget_reservation=0.01,
+        )
+
+    assert caught.value.cost == pytest.approx(0.001)
+    assert caught.value.cost_covers_all_attempts is False
+    row = io_log._get_db().execute(
+        """SELECT cost, error FROM llm_calls
+           WHERE trace_id = ? ORDER BY id DESC LIMIT 1""",
+        ("trace-raw-responses-partial",),
+    ).fetchone()
+    assert row[0] == pytest.approx(0.001)
+    assert row[1]
+    reservation = io_log._get_db().execute(
+        """SELECT status, settled_cost_microusd FROM budget_reservations
+           WHERE scope_trace_id = ?""",
+        ("trace-raw-responses-partial",),
+    ).fetchone()
+    assert reservation == ("released_error", None)
+    snapshot = get_budget_scope_snapshot(
+        scope_trace_id="trace-raw-responses-partial", max_budget=0.1
+    )
+    assert snapshot.settled_microusd == 1_000
+    assert snapshot.active_reserved_microusd == 0
 
 
 # mock-ok: provider failure and response are controlled; fallback routing,
