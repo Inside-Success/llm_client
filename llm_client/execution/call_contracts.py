@@ -38,16 +38,17 @@ from llm_client.core.errors import (
     LLMEmptyResponseError,
     LLMModelNotFoundError,
 )
+from llm_client.core.model_detection import (
+    _base_model_name,
+    _is_responses_api_model,
+)
+from llm_client.inside_success_policy import INSIDE_SUCCESS_HARD_BLOCK_EXCEPTIONS
 from llm_client.observability.budget_reservations import (
     BudgetReservationLease,
     acquire_budget_reservation,
     release_tracked_budget_reservation,
     settle_tracked_budget_reservation,
     track_budget_reservation,
-)
-from llm_client.core.model_detection import (
-    _base_model_name,
-    _is_responses_api_model,
 )
 from llm_client.prompt_assets import parse_prompt_ref
 
@@ -112,6 +113,7 @@ class OpenRouterRoutePolicyV1(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     allowed_providers: tuple[str, ...] | None = None
+    ignored_providers: tuple[str, ...] | None = None
     data_collection: Literal["allow", "deny"] | None = None
     zero_data_retention: bool | None = None
     allow_provider_fallbacks: bool = True
@@ -120,9 +122,9 @@ class OpenRouterRoutePolicyV1(BaseModel):
     response_cache_mode: Literal["disabled", "enabled", "refresh"] = "disabled"
     response_cache_ttl_seconds: int | None = Field(default=None, gt=0, le=86_400)
 
-    @field_validator("allowed_providers")
+    @field_validator("allowed_providers", "ignored_providers")
     @classmethod
-    def normalize_allowed_providers(
+    def normalize_provider_names(
         cls, value: tuple[str, ...] | None
     ) -> tuple[str, ...] | None:
         if value is None:
@@ -134,17 +136,31 @@ class OpenRouterRoutePolicyV1(BaseModel):
 
     @model_validator(mode="after")
     def validate_constraints(self) -> "OpenRouterRoutePolicyV1":
-        if self.allowed_providers is not None:
-            if not self.allowed_providers:
-                raise ValueError("allowed_providers must not be empty when provided")
+        normalized_sets: dict[str, set[str]] = {}
+        for field_name, providers in (
+            ("allowed_providers", self.allowed_providers),
+            ("ignored_providers", self.ignored_providers),
+        ):
+            if providers is None:
+                continue
+            if not providers:
+                raise ValueError(f"{field_name} must not be empty when provided")
             normalized: set[str] = set()
-            for provider in self.allowed_providers:
+            for provider in providers:
                 if not isinstance(provider, str) or not provider.strip():
-                    raise ValueError("allowed_providers entries must be non-empty strings")
+                    raise ValueError(
+                        f"{field_name} entries must be non-empty strings"
+                    )
                 key = provider.casefold()
                 if key in normalized:
-                    raise ValueError("allowed_providers must not contain duplicates")
+                    raise ValueError(f"{field_name} must not contain duplicates")
                 normalized.add(key)
+            normalized_sets[field_name] = normalized
+        overlap = normalized_sets.get("allowed_providers", set()) & normalized_sets.get(
+            "ignored_providers", set()
+        )
+        if overlap:
+            raise ValueError("allowed_providers and ignored_providers must not overlap")
         if self.data_collection == "allow" and self.zero_data_retention is True:
             raise ValueError(
                 "data_collection='allow' conflicts with zero_data_retention=True"
@@ -994,6 +1010,10 @@ _DEPRECATED_MODEL_EXCEPTIONS: set[str] = {
     "gpt-4o-mini",  # has its own entry — prevent double-match from gpt-4o
     "gemini-2.0-flash-lite",  # NOT deprecated — cheapest Google model, no 2.5 equivalent
 }
+
+# Company-downstream policy: preserve Grounded Research's explicitly reviewed
+# seats without weakening the generic upstream's model retirement defaults.
+_DEPRECATED_MODEL_EXCEPTIONS.update(INSIDE_SUCCESS_HARD_BLOCK_EXCEPTIONS)
 
 
 def _check_model_deprecation(model: str) -> None:

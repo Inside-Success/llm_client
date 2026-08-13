@@ -52,6 +52,14 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 357 | [Nested Tool-Loop Model Justification](357_nested_tool_model_justification.md) | Critical | ✅ Complete | Open Web Retrieval agent-driven MVP M1 canary |
+| 356 | [Instructor Structured-Attempt Ledger](356_instructor_attempt_ledger.md) | Critical | ✅ Complete | `research_v3` Plan #25 evidence-complete Luna comparison |
+| 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | 🚧 Implemented (downstream adoption pending) | Agent Ecology 3 Plan #10 Luna Medium recovery gate |
+| 354 | [Single Structured-Call Terminal Lifecycle](354_single_structured_terminal.md) | Critical | ✅ Complete | `research_v3` Plan #25 trace validity |
+| 353 | [Terminal Structured-Attempt Cost Settlement](353_terminal_structured_attempt_cost_settlement.md) | Critical | ✅ Complete | Complete reserved-concurrent budget accounting for structured workloads |
+| 352 | [Monotonic Concurrent Budget-Cap Resume](352_monotonic_concurrent_budget_cap_resume.md) | Critical | ✅ Complete | Process Tracing Plan 038 full revolution-corpus adjudication |
+| 351 | [Cross-Project Model Experiment Records](351_cross_project_model_experiment_records.md) | High | ✅ Complete | Reusable evidence-based model routing across projects |
+| 349 | [Structured Recovery and Provider Exclusion](349_structured_recovery_and_provider_exclusion.md) | Critical | ✅ Complete | - |
 | 348 | [GPT-5.4 Ban and Luna Default](348_gpt54_ban_luna_default.md) | Critical | ✅ Complete | consistent ecosystem model selection |
 | 347 | [OpenRouter Response Cache Controls](347_openrouter_response_cache_controls.md) | Critical | ✅ Complete | cost-bounded Inside Success corpus preprocessing |
 | 346 | [Production LLM Call Receipt](346_production_llm_call_receipt.md) | Critical | 🚧 In Progress | Team-Brains Hermes observability adapter |
@@ -143,6 +151,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 335 | [Concurrent Root-Budget Reservations](335_concurrent-root-budget-reservations.md) | Critical | ✅ Complete | DIGIMON Plan #182 |
 | 337 | [Current Model Selection Evidence and GPT-5.5 Retirement](337_current-model-selection-evidence-and-gpt-5-5-retirement.md) | Critical | ✅ Complete | - |
 | 338 | [Observed Application-Run Lifecycle](338_observed_application_run_lifecycle.md) | Critical | ❓  | Process Tracing outer-run receipt |
+| 350 | [Tool Response Custody](350_tool_response_custody.md) | High | ✅ Complete | Agent Ecology 3 provider qualification and prescription ablation |
 
 
 ## Status Key

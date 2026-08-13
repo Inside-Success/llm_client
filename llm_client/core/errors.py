@@ -26,6 +26,12 @@ class LLMError(Exception):
     def __init__(self, message: str, original: Exception | None = None) -> None:
         super().__init__(message)
         self.original = original
+        self.cost: float | None = None
+        """Observed aggregate USD cost retained from a terminal failed call."""
+        self.cost_source: str | None = None
+        """How ``cost`` was determined, when terminal cost evidence exists."""
+        self.cost_covers_all_attempts: bool | None = None
+        """Whether ``cost`` covers every dispatched attempt in the failed call."""
 
 
 class LLMRateLimitError(LLMError):

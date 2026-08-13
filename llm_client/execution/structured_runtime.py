@@ -10,7 +10,6 @@ caller-facing signatures.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from importlib import import_module
 import queue
 import threading
@@ -28,6 +27,7 @@ from llm_client.core.config import ClientConfig
 from llm_client.core.errors import (
     LLMCapabilityError,
     LLMConfigurationError,
+    LLMError,
     LLMLogicalDeadlineError,
     _unwrap_instructor_retry,
 )
@@ -85,6 +85,9 @@ class _EmptyStructuredContentError(ValueError):
 _client: Any = import_module("llm_client.core.client")
 _structured_logger = _logging.getLogger("llm_client.structured_runtime")
 _INSTRUCTOR_INIT_LOCK = _threading.Lock()
+_INSTRUCTOR_CLIENT_CACHE: dict[Any, Any] = {}
+_INSTRUCTOR_FIRST_CALL_LOCK = _threading.Lock()
+_INSTRUCTOR_READY_CLIENT_IDS: set[int] = set()
 _ROUTE_CERTIFICATION_OBSERVATION_ENV = (
     "LLM_CLIENT_ROUTE_CERTIFICATION_OBSERVATION"
 )
@@ -107,18 +110,75 @@ def _provider_schema_name(response_model: type[BaseModel]) -> str:
 
 
 def _instructor_from_litellm(create_fn: Any) -> Any:
-    """Construct an Instructor client without racing global registration.
+    """Construct one reusable Instructor client without racing registration.
 
     Instructor client construction may lazily mutate process-global provider
-    registration. Serializing the public construction seam supports both the
-    declared 1.x dependency and newer implementations without importing
-    version-private registry modules.
+    registration. Serializing and caching the public construction seam prevents
+    concurrent structured calls from repeatedly rebuilding clients while that
+    shared registry is being initialized. This supports both the declared 1.x
+    dependency and newer implementations without importing version-private
+    registry modules.
     """
 
     import instructor
 
     with _INSTRUCTOR_INIT_LOCK:
-        return instructor.from_litellm(create_fn)
+        cached = _INSTRUCTOR_CLIENT_CACHE.get(create_fn)
+        if cached is None:
+            cached = instructor.from_litellm(create_fn)
+            _INSTRUCTOR_CLIENT_CACHE[create_fn] = cached
+        return cached
+
+
+def _invoke_instructor_sync(client: Any, call_kwargs: dict[str, Any]) -> Any:
+    """Serialize only one client's first lazy provider-handler initialization."""
+
+    client_id = id(client)
+    if client_id in _INSTRUCTOR_READY_CLIENT_IDS:
+        return client.chat.completions.create_with_completion(**call_kwargs)
+    with _INSTRUCTOR_FIRST_CALL_LOCK:
+        if client_id in _INSTRUCTOR_READY_CLIENT_IDS:
+            return client.chat.completions.create_with_completion(**call_kwargs)
+        result = client.chat.completions.create_with_completion(**call_kwargs)
+        _INSTRUCTOR_READY_CLIENT_IDS.add(client_id)
+        return result
+
+
+def _instructor_raw_content(completion_response: Any) -> str:
+    """Extract the exact structured bytes returned through Instructor's response.
+
+    Instructor's LiteLLM adapter normally uses a single tool call, so the
+    response-model payload lives in ``function.arguments`` rather than message
+    content.  Refuse to synthesize raw evidence from the parsed Pydantic object.
+    """
+
+    choices = getattr(completion_response, "choices", None)
+    if not isinstance(choices, (list, tuple)) or not choices:
+        raise StructuredRawArtifactError(
+            "Instructor completion lacks a first provider choice."
+        )
+    message = getattr(choices[0], "message", None)
+    content = getattr(message, "content", None)
+    if isinstance(content, str) and content.strip():
+        return content
+    tool_calls = getattr(message, "tool_calls", None)
+    if isinstance(tool_calls, (list, tuple)) and len(tool_calls) == 1:
+        function = getattr(tool_calls[0], "function", None)
+        arguments = getattr(function, "arguments", None)
+        if isinstance(arguments, str) and arguments.strip():
+            return arguments
+    raise StructuredRawArtifactError(
+        "Instructor completion lacks one exact structured content payload."
+    )
+
+
+def _instructor_failure_completion(error: Exception) -> Any | None:
+    """Return the final failed provider completion exposed by Instructor."""
+
+    failed_attempts = getattr(error, "failed_attempts", None)
+    if isinstance(failed_attempts, (list, tuple)) and failed_attempts:
+        return getattr(failed_attempts[-1], "completion", None)
+    return getattr(error, "last_completion", None)
 
 
 def _model_supports_native_schema(model: str) -> bool:
@@ -430,6 +490,36 @@ class _AttemptCostLedger:
             self._started == set(self._observed)
         )
 
+    def failure_result(
+        self,
+        *,
+        model: str,
+        content: str = "",
+    ) -> LLMCallResult | None:
+        """Build bounded terminal accounting without claiming output success."""
+
+        if not self._observed:
+            return None
+        result = LLMCallResult(
+            content=content,
+            usage={},
+            cost=0.0,
+            model=model,
+            resolved_model=model,
+            finish_reason="error",
+        )
+        self.apply(result)
+        return result
+
+    def bind_error(self, error: LLMError, result: LLMCallResult | None) -> None:
+        """Carry attempt-cost evidence through the public typed error boundary."""
+
+        if result is None:
+            return
+        error.cost = result.cost
+        error.cost_source = result.cost_source
+        error.cost_covers_all_attempts = result.cost_covers_all_attempts
+
 
 def _prepare_raw_artifact_store_for_runtime() -> None:
     """Make raw-artifact configuration failure terminal for this public call."""
@@ -474,6 +564,19 @@ def _build_validation_repair_message(exc: _StructuredValidationRetry) -> dict[st
     }
 
 
+def _build_parse_repair_message() -> dict[str, str]:
+    """Tell the next bounded attempt how to correct malformed JSON."""
+
+    return {
+        "role": "user",
+        "content": (
+            "Your previous response was not valid JSON. Return only valid JSON "
+            "that conforms to the supplied schema, with no markdown fences or "
+            "additional commentary."
+        ),
+    }
+
+
 def _validation_failure_class(error: ValidationError) -> AttemptFailureClass:
     """Classify missing required fields separately from other schema failures."""
 
@@ -493,7 +596,7 @@ def _attempt_event(
     model: str,
     schema_hash: str,
     event_type: AttemptEventType,
-    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
+    execution_path: Literal["native_schema", "responses_api", "instructor"] = "native_schema",
     raw_content: str | None = None,
     raw_artifact_ref: str | None = None,
     validation_error: ValidationError | None = None,
@@ -546,7 +649,7 @@ def _received_attempt_event(
     model: str,
     schema_hash: str,
     raw_content: str,
-    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
+    execution_path: Literal["native_schema", "responses_api", "instructor"] = "native_schema",
     persist_raw_artifact: bool = True,
 ) -> StructuredAttemptEvent:
     """Optionally persist raw bytes, then build their received metadata event."""
@@ -599,7 +702,7 @@ def _record_execution_failure(
     attempt: int,
     model: str,
     schema_hash: str,
-    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
+    execution_path: Literal["native_schema", "responses_api", "instructor"] = "native_schema",
 ) -> None:
     """Persist one bounded pre-response failure without message or body."""
 
@@ -771,7 +874,7 @@ def _record_response_parse_failure(
     attempt: int,
     model: str,
     schema_hash: str,
-    execution_path: Literal["native_schema", "responses_api"] = "native_schema",
+    execution_path: Literal["native_schema", "responses_api", "instructor"] = "native_schema",
 ) -> None:
     """Classify malformed received JSON as validation, not provider execution."""
 
@@ -976,7 +1079,6 @@ def _call_llm_structured_impl(
             logical_call_id=_logical_call_id,
             observability_content_policy=observability_content_policy,
         )
-        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="call_llm_structured",
@@ -1087,9 +1189,9 @@ def _call_llm_structured_impl(
                 model,
                 messages,
                 response_model,
-                # The legacy SDK annotation is integral, but its runtime accepts
-                # fractional seconds and the precise remaining cap must not round up.
-                timeout=cast(int, attempt_timeout),
+                # Agent adapters require whole seconds. Floor their inner timeout
+                # while the precise outer deadline retains the fractional cap.
+                timeout=_math.floor(attempt_timeout),
                 **public_kwargs,
             ),
             timeout=attempt_timeout,
@@ -1286,7 +1388,7 @@ def _call_llm_structured_impl(
                     )
                     pending_repair_message = None
                     logger.info(
-                        "call_llm_structured: appended validation repair message for responses attempt %d",
+                        "call_llm_structured: appended structured repair message for responses attempt %d",
                         attempt,
                     )
 
@@ -1370,6 +1472,7 @@ def _call_llm_structured_impl(
                             execution_path="responses_api",
                         )
                         responses_recovery_pending.add(logical_attempt)
+                        pending_repair_message = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error
@@ -1609,7 +1712,7 @@ def _call_llm_structured_impl(
                 if _pending_repair_message is not None:
                     base_kwargs["messages"] = list(base_kwargs["messages"]) + [_pending_repair_message]
                     _pending_repair_message = None
-                    logger.info("call_llm_structured: appended validation repair message for attempt %d", attempt)
+                    logger.info("call_llm_structured: appended structured repair message for attempt %d", attempt)
                 attempt_validated = False
 
                 def provider_call() -> Any:
@@ -1669,6 +1772,7 @@ def _call_llm_structured_impl(
                             schema_hash=_schema_hash,
                         )
                         _recovery_pending.add(logical_attempt)
+                        _pending_repair_message = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error
@@ -1831,6 +1935,8 @@ def _call_llm_structured_impl(
                 _native_schema_failed = True
 
         if not supports_schema or _native_schema_failed:
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             client = _instructor_from_litellm(litellm.completion)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -1842,101 +1948,275 @@ def _call_llm_structured_impl(
                 kwargs=public_kwargs,
                 warning_sink=_warnings,
             )
-            call_kwargs = {**base_kwargs, "response_model": response_model, "max_retries": 2}
+            # Keep one provider generation per shared retry-kernel attempt.  An
+            # Instructor-internal retry would otherwise be invisible to the
+            # shared attempt, cost, and recovery ledgers.
+            call_kwargs = {
+                **base_kwargs,
+                "response_model": response_model,
+                "max_retries": 1,
+            }
             _instructor_schema_hash = _hashlib.sha256(
                 _json.dumps(response_model.model_json_schema(), sort_keys=True).encode()
             ).hexdigest()[:16]
+            instructor_recovery_pending: set[int] = set()
+            instructor_attempt_ordinals: dict[int, int] = {}
+
+            def _instructor_attempt_ordinal(local_attempt: int) -> int:
+                """Assign one logical-call-global ordinal to an Instructor attempt."""
+
+                nonlocal next_structured_attempt_ordinal
+                if local_attempt not in instructor_attempt_ordinals:
+                    instructor_attempt_ordinals[local_attempt] = (
+                        next_structured_attempt_ordinal
+                    )
+                    next_structured_attempt_ordinal += 1
+                return instructor_attempt_ordinals[local_attempt]
+
+            def _record_instructor_recovery(
+                attempt: int,
+                _error: Exception,
+                decision: Literal["retry", "exhausted"],
+            ) -> None:
+                """Persist the shared retry kernel's Instructor disposition."""
+
+                logical_attempt = _instructor_attempt_ordinal(attempt)
+                if logical_attempt not in instructor_recovery_pending:
+                    return
+                instructor_recovery_pending.remove(logical_attempt)
+                recovery_decision: RecoveryDecision = decision
+                if decision == "exhausted" and model_idx < len(models) - 1:
+                    recovery_decision = "fallback"
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_instructor_schema_hash,
+                        event_type="recovery_decided",
+                        execution_path="instructor",
+                        recovery_decision=recovery_decision,
+                    )
+                )
 
             def _invoke_instructor_attempt(attempt: int) -> tuple[T, LLMCallResult]:
+                logical_attempt = _instructor_attempt_ordinal(attempt)
+                structured_attempt_costs.mark_started(logical_attempt)
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_instructor_schema_hash,
+                        event_type="started",
+                        execution_path="instructor",
+                    )
+                )
                 attempt_timeout, logical_cap = _attempt_timeout()
                 if attempt_timeout > 0:
                     call_kwargs["timeout"] = attempt_timeout
-                parsed, completion_response = _run_sync_with_deadline(
-                    lambda: client.chat.completions.create_with_completion(**call_kwargs),
-                    timeout=attempt_timeout,
-                    logical_cap=logical_cap,
-                )
+                try:
+                    parsed, completion_response = _run_sync_with_deadline(
+                        lambda: _invoke_instructor_sync(client, call_kwargs),
+                        timeout=attempt_timeout,
+                        logical_cap=logical_cap,
+                    )
+                except Exception as error:
+                    failed_completion = _instructor_failure_completion(error)
+                    if failed_completion is None:
+                        _record_execution_failure(
+                            error=error,
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_instructor_schema_hash,
+                            execution_path="instructor",
+                        )
+                    else:
+                        raw_content = _instructor_raw_content(failed_completion)
+                        record_structured_attempt_event(
+                            _received_attempt_event(
+                                logical_call_id=_logical_call_id,
+                                trace_id=trace_id,
+                                task=task,
+                                attempt=logical_attempt,
+                                model=current_model,
+                                schema_hash=_instructor_schema_hash,
+                                raw_content=raw_content,
+                                execution_path="instructor",
+                                persist_raw_artifact=persist_raw_artifacts,
+                            )
+                        )
+                        failed_cost, failed_cost_source = _parse_cost_result(
+                            _compute_cost(failed_completion)
+                        )
+                        structured_attempt_costs.record_response(
+                            logical_attempt,
+                            cost=failed_cost,
+                            cost_source=failed_cost_source,
+                        )
+                        record_structured_attempt_event(
+                            _attempt_event(
+                                logical_call_id=_logical_call_id,
+                                trace_id=trace_id,
+                                task=task,
+                                attempt=logical_attempt,
+                                model=current_model,
+                                schema_hash=_instructor_schema_hash,
+                                event_type="validation_failed",
+                                execution_path="instructor",
+                                failure_class="schema_validation",
+                                validation_issues=(
+                                    StructuredValidationIssue(
+                                        location=(),
+                                        code="instructor_validation_failed",
+                                        message=(
+                                            "Instructor rejected the provider response "
+                                            "against the requested schema."
+                                        ),
+                                    ),
+                                ),
+                            )
+                        )
+                    instructor_recovery_pending.add(logical_attempt)
+                    raise
 
-                usage = _extract_usage(completion_response)
-                cost, cost_source = _parse_cost_result(_compute_cost(completion_response))
-                completion_choice = _first_choice_or_empty_error(
-                    completion_response,
-                    model=current_model,
-                    provider="instructor_completion_structured",
-                )
-                finish_reason = completion_choice.finish_reason or ""
+                try:
+                    raw_content = _instructor_raw_content(completion_response)
+                    record_structured_attempt_event(
+                        _received_attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_instructor_schema_hash,
+                            raw_content=raw_content,
+                            execution_path="instructor",
+                            persist_raw_artifact=persist_raw_artifacts,
+                        )
+                    )
+                    usage = _extract_usage(completion_response)
+                    cost, cost_source = _parse_cost_result(
+                        _compute_cost(completion_response)
+                    )
+                    structured_attempt_costs.record_response(
+                        logical_attempt,
+                        cost=cost,
+                        cost_source=cost_source,
+                    )
+                    record_structured_attempt_event(
+                        _attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_instructor_schema_hash,
+                            event_type="validated",
+                            execution_path="instructor",
+                        )
+                    )
+                    completion_choice = _first_choice_or_empty_error(
+                        completion_response,
+                        model=current_model,
+                        provider="instructor_completion_structured",
+                    )
+                    finish_reason = completion_choice.finish_reason or ""
 
-                if attempt > 0:
-                    logger.info("call_llm_structured succeeded after %d retries", attempt)
+                    if attempt > 0:
+                        logger.info(
+                            "call_llm_structured succeeded after %d retries", attempt
+                        )
 
-                llm_result = _build_structured_call_result(
-                    parsed=parsed,
-                    usage=usage,
-                    cost=cost,
-                    cost_source=cost_source,
-                    current_model=current_model,
-                    finish_reason=finish_reason,
-                    raw_response=completion_response,
-                    warnings=_warnings,
-                    requested_model=model,
-                    attempted_models=models[:model_idx + 1],
-                    requested_api_base=api_base,
-                    effective_api_base=current_api_base,
-                    background_mode=background_mode,
-                    routing_policy=routing_policy,
-                    model_policy=model_policy_trace,
-                )
+                    llm_result = _build_structured_call_result(
+                        parsed=parsed,
+                        usage=usage,
+                        cost=cost,
+                        cost_source=cost_source,
+                        current_model=current_model,
+                        finish_reason=finish_reason,
+                        raw_response=completion_response,
+                        warnings=_warnings,
+                        requested_model=model,
+                        attempted_models=models[: model_idx + 1],
+                        requested_api_base=api_base,
+                        effective_api_base=current_api_base,
+                        background_mode=background_mode,
+                        routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
+                    )
+                    structured_attempt_costs.apply(llm_result)
 
-                if hooks and hooks.after_call:
-                    hooks.after_call(llm_result)
-                if cache is not None and key is not None:
-                    cache.set(key, llm_result)
-                _log_call_event(
-                    model=current_model,
-                    messages=messages,
-                    result=llm_result,
-                    latency_s=time.monotonic() - _log_t0,
+                    if hooks and hooks.after_call:
+                        hooks.after_call(llm_result)
+                    if cache is not None and key is not None:
+                        cache.set(key, llm_result)
+                    _log_call_event(
+                        model=current_model,
+                        messages=messages,
+                        result=llm_result,
+                        latency_s=time.monotonic() - _log_t0,
+                        caller="call_llm_structured",
+                        task=task,
+                        trace_id=trace_id,
+                        prompt_ref=prompt_ref,
+                        call_snapshot=call_snapshot,
+                        execution_path="instructor",
+                        retry_count=attempt,
+                        schema_hash=_instructor_schema_hash,
+                        response_format_type="instructor",
+                    )
+                    return parsed, llm_result
+                except Exception as error:
+                    raise _StructuredFinalizationFailure(error) from error
+
+            return cast(
+                tuple[T, LLMCallResult],
+                run_sync_with_retry(
                     caller="call_llm_structured",
-                    task=task,
-                    trace_id=trace_id,
-                    prompt_ref=prompt_ref,
-                    call_snapshot=call_snapshot,
-                    execution_path="instructor",
-                    retry_count=attempt,
-                    schema_hash=_instructor_schema_hash,
-                    response_format_type="instructor",
-                )
-                return parsed, llm_result
-
-            return cast(tuple[T, LLMCallResult], run_sync_with_retry(
-                caller="call_llm_structured",
-                model=current_model,
-                max_retries=r.max_retries,
-                invoke=_invoke_instructor_attempt,
-                should_retry=lambda exc: _check_retryable(exc, r),
-                compute_delay=lambda attempt, exc: _compute_retry_delay(
-                    attempt=attempt,
-                    error=exc,
-                    policy=r,
-                    backoff_fn=backoff_fn,
-                ),
-                warning_sink=_warnings,
-                logger=logger,
-                on_error=(hooks.on_error if hooks and hooks.on_error else None),
-                on_retry=r.on_retry,
-                deadline_at=deadline_at,
-                maybe_retry_hook=lambda exc, attempt, max_retries: _maybe_retry_with_openrouter_key_rotation(
-                    error=exc,
-                    attempt=attempt,
-                    max_retries=max_retries,
-                    current_model=current_model,
-                    current_api_base=current_api_base,
-                    user_kwargs=public_kwargs,
+                    model=current_model,
+                    max_retries=r.max_retries,
+                    invoke=_invoke_instructor_attempt,
+                    should_retry=lambda exc: not isinstance(
+                        exc, _StructuredFinalizationFailure
+                    )
+                    and _check_retryable(exc, r),
+                    compute_delay=lambda attempt, exc: _compute_retry_delay(
+                        attempt=attempt,
+                        error=exc,
+                        policy=r,
+                        backoff_fn=backoff_fn,
+                    ),
                     warning_sink=_warnings,
+                    logger=logger,
+                    on_error=(hooks.on_error if hooks and hooks.on_error else None),
                     on_retry=r.on_retry,
-                    caller="call_llm_structured",
+                    on_decision=_record_instructor_recovery,
+                    deadline_at=deadline_at,
+                    maybe_retry_hook=lambda exc, attempt, max_retries: (
+                        False
+                        if isinstance(exc, _StructuredFinalizationFailure)
+                        else _maybe_retry_with_openrouter_key_rotation(
+                            error=exc,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            current_model=current_model,
+                            current_api_base=current_api_base,
+                            user_kwargs=public_kwargs,
+                            warning_sink=_warnings,
+                            on_retry=r.on_retry,
+                            caller="call_llm_structured",
+                        )
+                    ),
                 ),
-            ))
+            )
 
         raise RuntimeError("call_llm_structured reached unexpected branch without return")
 
@@ -1954,9 +2234,16 @@ def _call_llm_structured_impl(
         ))
     except Exception as e:
         terminal_error = _unwrap_structured_finalization_failure(e)
+        public_error = wrap_error(terminal_error)
+        failure_result = structured_attempt_costs.failure_result(
+            model=last_model_attempted,
+            content=str(getattr(terminal_error, "raw_content", "") or ""),
+        )
+        structured_attempt_costs.bind_error(public_error, failure_result)
         _log_call_event(
             model=last_model_attempted,
             messages=messages,
+            result=failure_result,
             error=terminal_error,
             latency_s=time.monotonic() - _log_t0,
             caller="call_llm_structured",
@@ -1967,7 +2254,7 @@ def _call_llm_structured_impl(
             execution_path="error",
             retry_count=None,
         )
-        raise wrap_error(terminal_error) from terminal_error
+        raise public_error from terminal_error
 
 async def _acall_llm_structured_impl(
     model: str,
@@ -2079,7 +2366,6 @@ async def _acall_llm_structured_impl(
             logical_call_id=_logical_call_id,
             observability_content_policy=observability_content_policy,
         )
-        _io_log.record_call_lifecycle_event({"event_id": uuid4().hex, "timestamp": datetime.now(timezone.utc).isoformat(), "logical_call_id": _logical_call_id, "trace_id": trace_id, "task": task, "phase": "completed" if isinstance(result, LLMCallResult) else "failed", "requested_model": model, "resolved_model": result.model if isinstance(result, LLMCallResult) else None, "call_kind": "structured", "error_type": type(event["error"]).__name__ if event.get("error") is not None else None})
     timeout = _normalize_timeout(
         timeout,
         caller="acall_llm_structured",
@@ -2190,9 +2476,9 @@ async def _acall_llm_structured_impl(
                 model,
                 messages,
                 response_model,
-                # Preserve the precise remaining cap across the legacy integral
-                # SDK annotation; runtime timeout consumers accept fractional values.
-                timeout=cast(int, attempt_timeout),
+                # Agent adapters require whole seconds. Floor their inner timeout
+                # while the precise outer deadline retains the fractional cap.
+                timeout=_math.floor(attempt_timeout),
                 **public_kwargs,
             ),
             timeout=attempt_timeout,
@@ -2389,7 +2675,7 @@ async def _acall_llm_structured_impl(
                     )
                     pending_repair_message_async = None
                     logger.info(
-                        "acall_llm_structured: appended validation repair message for responses attempt %d",
+                        "acall_llm_structured: appended structured repair message for responses attempt %d",
                         attempt,
                     )
 
@@ -2477,6 +2763,7 @@ async def _acall_llm_structured_impl(
                             execution_path="responses_api",
                         )
                         responses_recovery_pending_async.add(logical_attempt)
+                        pending_repair_message_async = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error
@@ -2716,7 +3003,7 @@ async def _acall_llm_structured_impl(
                 if _pending_repair_message_async is not None:
                     base_kwargs["messages"] = list(base_kwargs["messages"]) + [_pending_repair_message_async]
                     _pending_repair_message_async = None
-                    logger.info("acall_llm_structured: appended validation repair message for attempt %d", attempt)
+                    logger.info("acall_llm_structured: appended structured repair message for attempt %d", attempt)
                 attempt_validated = False
                 async def provider_call() -> Any:
                     async with _rate_limit.aacquire(current_model):
@@ -2779,6 +3066,7 @@ async def _acall_llm_structured_impl(
                             schema_hash=_schema_hash_async,
                         )
                         _recovery_pending_async.add(logical_attempt)
+                        _pending_repair_message_async = _build_parse_repair_message()
                         raise _StructuredParseRetry(
                             "Provider response was not valid JSON."
                         ) from parse_error
@@ -2941,6 +3229,8 @@ async def _acall_llm_structured_impl(
                 _native_schema_failed = True
 
         if not supports_schema or _native_schema_failed:
+            if persist_raw_artifacts:
+                _prepare_raw_artifact_store_for_runtime()
             client = _instructor_from_litellm(litellm.acompletion)
             base_kwargs = _prepare_call_kwargs(
                 current_model,
@@ -2952,12 +3242,77 @@ async def _acall_llm_structured_impl(
                 kwargs=public_kwargs,
                 warning_sink=_warnings,
             )
-            call_kwargs = {**base_kwargs, "response_model": response_model, "max_retries": 2}
+            # Keep one provider generation per shared retry-kernel attempt.  An
+            # Instructor-internal retry would otherwise be invisible to the
+            # shared attempt, cost, and recovery ledgers.
+            call_kwargs = {
+                **base_kwargs,
+                "response_model": response_model,
+                "max_retries": 1,
+            }
             _instructor_schema_hash_async = _hashlib.sha256(
                 _json.dumps(response_model.model_json_schema(), sort_keys=True).encode()
             ).hexdigest()[:16]
+            instructor_recovery_pending_async: set[int] = set()
+            instructor_attempt_ordinals_async: dict[int, int] = {}
 
-            async def _invoke_instructor_attempt(attempt: int) -> tuple[T, LLMCallResult]:
+            def _instructor_attempt_ordinal_async(local_attempt: int) -> int:
+                """Assign one logical-call-global ordinal to an async Instructor attempt."""
+
+                nonlocal next_structured_attempt_ordinal
+                if local_attempt not in instructor_attempt_ordinals_async:
+                    instructor_attempt_ordinals_async[local_attempt] = (
+                        next_structured_attempt_ordinal
+                    )
+                    next_structured_attempt_ordinal += 1
+                return instructor_attempt_ordinals_async[local_attempt]
+
+            def _record_instructor_recovery_async(
+                attempt: int,
+                _error: Exception,
+                decision: Literal["retry", "exhausted"],
+            ) -> None:
+                """Persist the async retry kernel's Instructor disposition."""
+
+                logical_attempt = _instructor_attempt_ordinal_async(attempt)
+                if logical_attempt not in instructor_recovery_pending_async:
+                    return
+                instructor_recovery_pending_async.remove(logical_attempt)
+                recovery_decision: RecoveryDecision = decision
+                if decision == "exhausted" and model_idx < len(models) - 1:
+                    recovery_decision = "fallback"
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_instructor_schema_hash_async,
+                        event_type="recovery_decided",
+                        execution_path="instructor",
+                        recovery_decision=recovery_decision,
+                    )
+                )
+
+            async def _invoke_instructor_attempt(
+                attempt: int,
+            ) -> tuple[T, LLMCallResult]:
+                logical_attempt = _instructor_attempt_ordinal_async(attempt)
+                structured_attempt_costs.mark_started(logical_attempt)
+                record_structured_attempt_event(
+                    _attempt_event(
+                        logical_call_id=_logical_call_id,
+                        trace_id=trace_id,
+                        task=task,
+                        attempt=logical_attempt,
+                        model=current_model,
+                        schema_hash=_instructor_schema_hash_async,
+                        event_type="started",
+                        execution_path="instructor",
+                    )
+                )
+
                 async def instructor_call() -> Any:
                     return await _await_with_safety_ceiling(
                         client.chat.completions.create_with_completion(**call_kwargs),
@@ -2968,92 +3323,204 @@ async def _acall_llm_structured_impl(
                 attempt_timeout, logical_cap = _attempt_timeout()
                 if attempt_timeout > 0:
                     call_kwargs["timeout"] = attempt_timeout
-                parsed, completion_response = await _run_async_with_deadline(
-                    instructor_call,
-                    timeout=attempt_timeout,
-                    logical_cap=logical_cap,
-                )
+                try:
+                    parsed, completion_response = await _run_async_with_deadline(
+                        instructor_call,
+                        timeout=attempt_timeout,
+                        logical_cap=logical_cap,
+                    )
+                except Exception as error:
+                    failed_completion = _instructor_failure_completion(error)
+                    if failed_completion is None:
+                        _record_execution_failure(
+                            error=error,
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_instructor_schema_hash_async,
+                            execution_path="instructor",
+                        )
+                    else:
+                        raw_content = _instructor_raw_content(failed_completion)
+                        record_structured_attempt_event(
+                            _received_attempt_event(
+                                logical_call_id=_logical_call_id,
+                                trace_id=trace_id,
+                                task=task,
+                                attempt=logical_attempt,
+                                model=current_model,
+                                schema_hash=_instructor_schema_hash_async,
+                                raw_content=raw_content,
+                                execution_path="instructor",
+                                persist_raw_artifact=persist_raw_artifacts,
+                            )
+                        )
+                        failed_cost, failed_cost_source = _parse_cost_result(
+                            _compute_cost(failed_completion)
+                        )
+                        structured_attempt_costs.record_response(
+                            logical_attempt,
+                            cost=failed_cost,
+                            cost_source=failed_cost_source,
+                        )
+                        record_structured_attempt_event(
+                            _attempt_event(
+                                logical_call_id=_logical_call_id,
+                                trace_id=trace_id,
+                                task=task,
+                                attempt=logical_attempt,
+                                model=current_model,
+                                schema_hash=_instructor_schema_hash_async,
+                                event_type="validation_failed",
+                                execution_path="instructor",
+                                failure_class="schema_validation",
+                                validation_issues=(
+                                    StructuredValidationIssue(
+                                        location=(),
+                                        code="instructor_validation_failed",
+                                        message=(
+                                            "Instructor rejected the provider response "
+                                            "against the requested schema."
+                                        ),
+                                    ),
+                                ),
+                            )
+                        )
+                    instructor_recovery_pending_async.add(logical_attempt)
+                    raise
 
-                usage = _extract_usage(completion_response)
-                cost, cost_source = _parse_cost_result(_compute_cost(completion_response))
-                completion_choice = _first_choice_or_empty_error(
-                    completion_response,
-                    model=current_model,
-                    provider="instructor_completion_structured",
-                )
-                finish_reason = completion_choice.finish_reason or ""
+                try:
+                    raw_content = _instructor_raw_content(completion_response)
+                    record_structured_attempt_event(
+                        _received_attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_instructor_schema_hash_async,
+                            raw_content=raw_content,
+                            execution_path="instructor",
+                            persist_raw_artifact=persist_raw_artifacts,
+                        )
+                    )
+                    usage = _extract_usage(completion_response)
+                    cost, cost_source = _parse_cost_result(
+                        _compute_cost(completion_response)
+                    )
+                    structured_attempt_costs.record_response(
+                        logical_attempt,
+                        cost=cost,
+                        cost_source=cost_source,
+                    )
+                    record_structured_attempt_event(
+                        _attempt_event(
+                            logical_call_id=_logical_call_id,
+                            trace_id=trace_id,
+                            task=task,
+                            attempt=logical_attempt,
+                            model=current_model,
+                            schema_hash=_instructor_schema_hash_async,
+                            event_type="validated",
+                            execution_path="instructor",
+                        )
+                    )
+                    completion_choice = _first_choice_or_empty_error(
+                        completion_response,
+                        model=current_model,
+                        provider="instructor_completion_structured",
+                    )
+                    finish_reason = completion_choice.finish_reason or ""
 
-                if attempt > 0:
-                    logger.info("acall_llm_structured succeeded after %d retries", attempt)
+                    if attempt > 0:
+                        logger.info(
+                            "acall_llm_structured succeeded after %d retries", attempt
+                        )
 
-                llm_result = _build_structured_call_result(
-                    parsed=parsed,
-                    usage=usage,
-                    cost=cost,
-                    cost_source=cost_source,
-                    current_model=current_model,
-                    finish_reason=finish_reason,
-                    raw_response=completion_response,
-                    warnings=_warnings,
-                    requested_model=model,
-                    attempted_models=models[:model_idx + 1],
-                    requested_api_base=api_base,
-                    effective_api_base=current_api_base,
-                    background_mode=background_mode,
-                    routing_policy=routing_policy,
-                    model_policy=model_policy_trace,
-                )
+                    llm_result = _build_structured_call_result(
+                        parsed=parsed,
+                        usage=usage,
+                        cost=cost,
+                        cost_source=cost_source,
+                        current_model=current_model,
+                        finish_reason=finish_reason,
+                        raw_response=completion_response,
+                        warnings=_warnings,
+                        requested_model=model,
+                        attempted_models=models[: model_idx + 1],
+                        requested_api_base=api_base,
+                        effective_api_base=current_api_base,
+                        background_mode=background_mode,
+                        routing_policy=routing_policy,
+                        model_policy=model_policy_trace,
+                    )
+                    structured_attempt_costs.apply(llm_result)
 
-                if hooks and hooks.after_call:
-                    hooks.after_call(llm_result)
-                if cache is not None and key is not None:
-                    await _async_cache_set(cache, key, llm_result)
-                _log_call_event(
-                    model=current_model,
-                    messages=messages,
-                    result=llm_result,
-                    latency_s=time.monotonic() - _log_t0,
+                    if hooks and hooks.after_call:
+                        hooks.after_call(llm_result)
+                    if cache is not None and key is not None:
+                        await _async_cache_set(cache, key, llm_result)
+                    _log_call_event(
+                        model=current_model,
+                        messages=messages,
+                        result=llm_result,
+                        latency_s=time.monotonic() - _log_t0,
+                        caller="acall_llm_structured",
+                        task=task,
+                        trace_id=trace_id,
+                        prompt_ref=prompt_ref,
+                        call_snapshot=call_snapshot,
+                        execution_path="instructor",
+                        retry_count=attempt,
+                        schema_hash=_instructor_schema_hash_async,
+                        response_format_type="instructor",
+                    )
+                    return parsed, llm_result
+                except Exception as error:
+                    raise _StructuredFinalizationFailure(error) from error
+
+            return cast(
+                tuple[T, LLMCallResult],
+                await run_async_with_retry(
                     caller="acall_llm_structured",
-                    task=task,
-                    trace_id=trace_id,
-                    prompt_ref=prompt_ref,
-                    call_snapshot=call_snapshot,
-                    execution_path="instructor",
-                    retry_count=attempt,
-                    schema_hash=_instructor_schema_hash_async,
-                    response_format_type="instructor",
-                )
-                return parsed, llm_result
-
-            return cast(tuple[T, LLMCallResult], await run_async_with_retry(
-                caller="acall_llm_structured",
-                model=current_model,
-                max_retries=r.max_retries,
-                invoke=_invoke_instructor_attempt,
-                should_retry=lambda exc: _check_retryable(exc, r),
-                compute_delay=lambda attempt, exc: _compute_retry_delay(
-                    attempt=attempt,
-                    error=exc,
-                    policy=r,
-                    backoff_fn=backoff_fn,
-                ),
-                warning_sink=_warnings,
-                logger=logger,
-                on_error=(hooks.on_error if hooks and hooks.on_error else None),
-                on_retry=r.on_retry,
-                deadline_at=deadline_at,
-                maybe_retry_hook=lambda exc, attempt, max_retries: _maybe_retry_with_openrouter_key_rotation(
-                    error=exc,
-                    attempt=attempt,
-                    max_retries=max_retries,
-                    current_model=current_model,
-                    current_api_base=current_api_base,
-                    user_kwargs=public_kwargs,
+                    model=current_model,
+                    max_retries=r.max_retries,
+                    invoke=_invoke_instructor_attempt,
+                    should_retry=lambda exc: not isinstance(
+                        exc, _StructuredFinalizationFailure
+                    )
+                    and _check_retryable(exc, r),
+                    compute_delay=lambda attempt, exc: _compute_retry_delay(
+                        attempt=attempt,
+                        error=exc,
+                        policy=r,
+                        backoff_fn=backoff_fn,
+                    ),
                     warning_sink=_warnings,
+                    logger=logger,
+                    on_error=(hooks.on_error if hooks and hooks.on_error else None),
                     on_retry=r.on_retry,
-                    caller="acall_llm_structured",
+                    on_decision=_record_instructor_recovery_async,
+                    deadline_at=deadline_at,
+                    maybe_retry_hook=lambda exc, attempt, max_retries: (
+                        False
+                        if isinstance(exc, _StructuredFinalizationFailure)
+                        else _maybe_retry_with_openrouter_key_rotation(
+                            error=exc,
+                            attempt=attempt,
+                            max_retries=max_retries,
+                            current_model=current_model,
+                            current_api_base=current_api_base,
+                            user_kwargs=public_kwargs,
+                            warning_sink=_warnings,
+                            on_retry=r.on_retry,
+                            caller="acall_llm_structured",
+                        )
+                    ),
                 ),
-            ))
+            )
 
         raise RuntimeError("acall_llm_structured reached unexpected branch without return")
 
@@ -3074,9 +3541,16 @@ async def _acall_llm_structured_impl(
         # Unwrap InstructorRetryException to expose the underlying provider error
         # in the observability record (e.g. BadRequestError, RateLimitError).
         log_error = _unwrap_instructor_retry(terminal_error)
+        public_error = wrap_error(terminal_error)
+        failure_result = structured_attempt_costs.failure_result(
+            model=last_model_attempted,
+            content=str(getattr(log_error, "raw_content", "") or ""),
+        )
+        structured_attempt_costs.bind_error(public_error, failure_result)
         _log_call_event(
             model=last_model_attempted,
             messages=messages,
+            result=failure_result,
             error=log_error,
             latency_s=time.monotonic() - _log_t0,
             caller="acall_llm_structured",
@@ -3087,4 +3561,4 @@ async def _acall_llm_structured_impl(
             execution_path="error",
             retry_count=None,
         )
-        raise wrap_error(terminal_error) from terminal_error
+        raise public_error from terminal_error

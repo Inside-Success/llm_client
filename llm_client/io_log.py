@@ -430,6 +430,7 @@ def log_call(
         finish_reason = None
         warnings: list[str] | None = None
         n_tool_calls: int | None = None
+        response_tool_calls: list[Any] | None = None
         if result is not None:
             response_content = getattr(result, "content", None)
             usage_raw = getattr(result, "usage", None)
@@ -457,12 +458,16 @@ def log_call(
             tool_calls_raw = getattr(result, "tool_calls", None)
             if isinstance(tool_calls_raw, list):
                 n_tool_calls = len(tool_calls_raw)
+                response_tool_calls = json.loads(
+                    json.dumps(tool_calls_raw, default=str)
+                )
 
         timestamp = datetime.now(timezone.utc).isoformat()
         stored_messages = (
             None if metadata_only else _copy_messages_for_storage(messages)
         )
         stored_response = None if metadata_only else response_content
+        stored_response_tool_calls = None if metadata_only else response_tool_calls
         stored_usage = (
             _metadata_only_usage(usage) if metadata_only else usage
         )
@@ -476,6 +481,7 @@ def log_call(
             "model": model,
             "messages": stored_messages,
             "response": stored_response,
+            "response_tool_calls": stored_response_tool_calls,
             "usage": stored_usage,
             "cost": cost,
             "cost_source": cost_source,
@@ -510,6 +516,8 @@ def log_call(
             model=model,
             messages=stored_messages,
             response=stored_response,
+            response_tool_calls=stored_response_tool_calls,
+            n_tool_calls=n_tool_calls,
             usage=stored_usage,
             cost=cost,
             cost_source=cost_source,
@@ -780,6 +788,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     model TEXT NOT NULL,
     messages TEXT,
     response TEXT,
+    response_tool_calls TEXT,
+    n_tool_calls INTEGER,
     prompt_tokens INTEGER,
     completion_tokens INTEGER,
     total_tokens INTEGER,
@@ -1337,6 +1347,10 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
             "ALTER TABLE llm_calls ADD COLUMN "
             "content_persistence TEXT NOT NULL DEFAULT 'full'"
         )
+    if "response_tool_calls" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN response_tool_calls TEXT")
+    if "n_tool_calls" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN n_tool_calls INTEGER")
 
     lifecycle_cols = {
         row[1] for row in conn.execute("PRAGMA table_info(call_lifecycle_events)")
@@ -1851,6 +1865,8 @@ def _write_call_to_db(
     causal_parent_id: str | None = None,
     logical_call_id: str | None = None,
     content_persistence: Literal["full", "metadata_only"] = "full",
+    response_tool_calls: list[Any] | None = None,
+    n_tool_calls: int | None = None,
 ) -> None:
     """Insert a call record into SQLite. Never raises."""
     try:
@@ -1876,6 +1892,7 @@ def _write_call_to_db(
             db.execute(
                 """INSERT INTO llm_calls
                    (timestamp, project, model, messages, response,
+                    response_tool_calls, n_tool_calls,
                     prompt_tokens, completion_tokens, total_tokens,
                     reasoning_tokens, cached_tokens, cache_creation_tokens,
                     usage_details,
@@ -1885,11 +1902,15 @@ def _write_call_to_db(
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
                     causal_parent_id, logical_call_id, content_persistence)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, project, model,
                     json.dumps(messages, default=str) if messages else None,
                     response,
+                    json.dumps(response_tool_calls, default=str)
+                    if response_tool_calls is not None
+                    else None,
+                    n_tool_calls,
                     prompt_tokens, completion_tokens, total_tokens,
                     reasoning_tokens, cached_tokens, cache_creation_tokens,
                     usage_details,
@@ -2126,17 +2147,22 @@ def import_jsonl(jsonl_path: str | Path, table: str = "llm_calls") -> int:
             db.execute(
                 """INSERT INTO llm_calls
                    (timestamp, project, model, messages, response,
+                    response_tool_calls, n_tool_calls,
                     prompt_tokens, completion_tokens, total_tokens,
                     reasoning_tokens, cached_tokens, cache_creation_tokens,
                     usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
-                    call_fingerprint, call_snapshot)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    call_fingerprint, call_snapshot, content_persistence)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     r.get("timestamp"), project, r.get("model"),
                     json.dumps(r.get("messages"), default=str) if r.get("messages") else None,
                     r.get("response"),
+                    json.dumps(r.get("response_tool_calls"), default=str)
+                    if r.get("response_tool_calls") is not None
+                    else None,
+                    r.get("n_tool_calls"),
                     usage.get("prompt_tokens"), usage.get("completion_tokens"),
                     usage.get("total_tokens"),
                     _valid_token_count(usage.get("reasoning_tokens")),
@@ -2153,6 +2179,7 @@ def import_jsonl(jsonl_path: str | Path, table: str = "llm_calls") -> int:
                     r.get("caller"), r.get("task"), r.get("trace_id"), r.get("prompt_ref"),
                     r.get("call_fingerprint"),
                     json.dumps(r.get("call_snapshot"), default=str) if r.get("call_snapshot") is not None else None,
+                    r.get("content_persistence", "full"),
                 ),
             )
         else:  # embeddings

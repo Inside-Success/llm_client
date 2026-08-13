@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Literal, TypeVar
@@ -134,6 +135,33 @@ def _result_cost(result: Any) -> float:
     return 0.0 if raw_cost is None else float(raw_cost)
 
 
+def _fully_observed_error_cost(error: Exception) -> float | None:
+    """Return known failed-call cost only when every attempt is covered."""
+
+    if getattr(error, "cost_covers_all_attempts", None) is not True:
+        return None
+    raw_cost = getattr(error, "cost", None)
+    if not isinstance(raw_cost, (int, float)) or isinstance(raw_cost, bool):
+        return None
+    cost = float(raw_cost)
+    if not math.isfinite(cost) or cost < 0:
+        return None
+    return cost
+
+
+def _finalize_failed_budget_scope(
+    lease: str | BudgetReservationLease | None,
+    error: Exception,
+) -> None:
+    """Settle complete observed spend; release incomplete failure custody."""
+
+    settled_cost = _fully_observed_error_cost(error)
+    if settled_cost is None:
+        _release_budget_scope(lease)
+        return
+    _settle_budget_scope(lease, settled_cost=settled_cost)
+
+
 def _run_sync_public_call(
     *,
     model: str,
@@ -212,7 +240,7 @@ def _run_sync_public_call(
             progress_source=snapshot.progress_source,
             progress_event_count=snapshot.progress_event_count,
         )
-        _release_budget_scope(envelope.budget_scope_lease)
+        _finalize_failed_budget_scope(envelope.budget_scope_lease, exc)
         raise
     monitor.stop()
     elapsed_s = time.monotonic() - started_at
@@ -346,7 +374,7 @@ async def _run_async_public_call(
             progress_source=snapshot.progress_source,
             progress_event_count=snapshot.progress_event_count,
         )
-        _release_budget_scope(envelope.budget_scope_lease)
+        _finalize_failed_budget_scope(envelope.budget_scope_lease, exc)
         raise
     await monitor.stop()
     elapsed_s = time.monotonic() - started_at

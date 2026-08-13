@@ -2307,6 +2307,26 @@ class TestRouting:
             assert call_kwargs.kwargs.get("max_tool_calls") == 7
 
     @pytest.mark.asyncio
+    async def test_non_agent_with_mcp_routes_model_justification(self) -> None:
+        """Nested MCP turns retain local exact-model policy evidence."""
+        justification = "Exercise the reviewed agent-reasoning MCP route."
+        with patch("llm_client.agent.mcp_agent._acall_with_mcp") as mock_loop:
+            mock_loop.return_value = _make_llm_result(content="answer")
+
+            await acall_llm(
+                "openrouter/minimax/minimax-m3",
+                [{"role": "user", "content": "Q"}],
+                mcp_servers={"srv": {"command": "python", "args": ["s.py"]}},
+                reasoning_effort="low",
+                model_justification=justification,
+                task="test",
+                trace_id="test_non_agent_with_mcp_routes_model_justification",
+                max_budget=0,
+            )
+
+            assert mock_loop.call_args.kwargs["model_justification"] == justification
+
+    @pytest.mark.asyncio
     async def test_agent_model_with_mcp_skips_loop(self) -> None:
         """Agent model + mcp_servers → existing agent SDK path (not MCP loop)."""
         with (

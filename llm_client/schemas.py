@@ -55,6 +55,13 @@ class LLMCallResultSchema(BaseModel):
         default_factory=list,
         description="Tool calls if the model invoked tools, else empty list",
     )
+    codex_events: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Completed items exposed by direct Codex CLI JSONL in stream order, "
+            "else empty list"
+        ),
+    )
     finish_reason: str = Field(
         default="",
         description='Why the model stopped: "stop", "length", "tool_calls", "content_filter", etc.',

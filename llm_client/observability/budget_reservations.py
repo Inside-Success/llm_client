@@ -135,7 +135,8 @@ def _settled_microusd(db: sqlite3.Connection, scope_trace_id: str) -> int:
     llm_row = db.execute(
         """SELECT COALESCE(SUM(COALESCE(marginal_cost, cost)), 0)
            FROM llm_calls
-           WHERE error IS NULL AND (trace_id = ? OR trace_id LIKE ?)""",
+           WHERE COALESCE(marginal_cost, cost) IS NOT NULL
+             AND (trace_id = ? OR trace_id LIKE ?)""",
         params,
     ).fetchone()
     embedding_row = db.execute(
@@ -253,6 +254,60 @@ def get_budget_scope_snapshot(
             settled_microusd=settled,
             active_reserved_microusd=active,
             available_microusd=max(0, budget - settled - active),
+        )
+
+    return _transaction(operation)
+
+
+def raise_budget_scope_max_budget(
+    *,
+    scope_trace_id: str,
+    expected_max_budget: float,
+    new_max_budget: float,
+    now: datetime | None = None,
+) -> BudgetScopeSnapshot:
+    """Atomically raise an existing scope cap without discarding its ledger.
+
+    This is an explicit compare-and-set operation for resumable workloads. It
+    never creates a scope or permits a decrease. Repeating the same successful
+    request is idempotent, which makes recovery safe when a caller did not
+    receive the first response.
+    """
+
+    scope = _require_scope(scope_trace_id)
+    expected = normalize_budget_microusd(expected_max_budget)
+    replacement = normalize_budget_microusd(new_max_budget)
+    if replacement < expected:
+        raise ValueError("new_max_budget must not decrease the expected max_budget")
+    observed_at = _now(now)
+    observed_iso = _iso(observed_at)
+
+    def operation(db: sqlite3.Connection) -> BudgetScopeSnapshot:
+        existing = _scope_budget(db, scope)
+        if existing is None:
+            raise ValueError("budget scope does not exist")
+        if existing == expected:
+            if replacement != expected:
+                db.execute(
+                    """UPDATE budget_scopes
+                       SET max_budget_microusd = ?, updated_at = ?
+                       WHERE scope_trace_id = ? AND max_budget_microusd = ?""",
+                    (replacement, observed_iso, scope, expected),
+                )
+        elif existing != replacement:
+            raise ValueError(
+                "budget scope does not match expected max_budget or the "
+                "idempotent replacement"
+            )
+        _expire_leases(db, scope, observed_iso)
+        settled = _settled_microusd(db, scope)
+        active = _active_reserved_microusd(db, scope, observed_iso)
+        return BudgetScopeSnapshot(
+            scope_trace_id=scope,
+            max_budget_microusd=replacement,
+            settled_microusd=settled,
+            active_reserved_microusd=active,
+            available_microusd=max(0, replacement - settled - active),
         )
 
     return _transaction(operation)

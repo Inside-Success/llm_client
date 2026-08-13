@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-07-16
+Last verified: 2026-08-12 (Plan 124 agent-adapter logical-timeout maintenance)
 Verification context: The shared experiment substrate now serializes canonical
 run-start insertion before emitting JSONL evidence, preventing duplicate
 run_id starts from appearing as two attempts. Focused persistence and
@@ -115,3 +115,13 @@ without repeating generation or switching models.
 
 Plan 101 consumers pin the logical call identity returned by the same runtime
 result; trace-only lookup is diagnostic.
+
+Plan 354 reasserts public-wrapper ownership of the structured call's sole
+terminal lifecycle. Private runtimes still persist one terminal call row and
+structured-attempt events under the same logical call ID; composed sync/async
+controls prove the joined boundary.
+
+Plan 356 makes Instructor a first-class structured-attempt path without moving
+evaluation semantics into this substrate. The shared retry kernel owns retry
+count and disposition, and downstream evaluations may require the resulting
+attempt receipt before treating a model result as execution evidence.

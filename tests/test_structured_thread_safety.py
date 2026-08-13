@@ -11,7 +11,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import instructor
 
-from llm_client.execution.structured_runtime import _instructor_from_litellm
+from llm_client.execution.structured_runtime import (
+    _INSTRUCTOR_CLIENT_CACHE,
+    _INSTRUCTOR_READY_CLIENT_IDS,
+    _instructor_from_litellm,
+    _invoke_instructor_sync,
+)
 
 
 def test_instructor_construction_is_serialized(monkeypatch) -> None:
@@ -38,6 +43,66 @@ def test_instructor_construction_is_serialized(monkeypatch) -> None:
 
     assert results == values
     assert maximum_active == 1
+
+
+def test_concurrent_calls_reuse_one_instructor_client(monkeypatch) -> None:
+    """One LiteLLM callable maps to one fully initialized shared client."""
+
+    calls = 0
+    marker = object()
+
+    def create_fn() -> None:
+        return None
+
+    def fake_from_litellm(value: object) -> object:
+        nonlocal calls
+        calls += 1
+        time.sleep(0.01)
+        return marker
+
+    _INSTRUCTOR_CLIENT_CACHE.pop(create_fn, None)
+    monkeypatch.setattr(instructor, "from_litellm", fake_from_litellm)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(_instructor_from_litellm, [create_fn] * 12))
+
+    assert results == [marker] * 12
+    assert calls == 1
+
+
+def test_concurrent_first_use_initializes_provider_handler_once() -> None:
+    """The first request completes before later requests may enter in parallel."""
+
+    state_lock = threading.Lock()
+    calls = 0
+    active = 0
+    maximum_active = 0
+
+    class Completions:
+        def create_with_completion(self, **kwargs: object) -> int:
+            nonlocal calls, active, maximum_active
+            with state_lock:
+                calls += 1
+                active += 1
+                maximum_active = max(maximum_active, active)
+            time.sleep(0.01)
+            with state_lock:
+                active -= 1
+            return calls
+
+    class Chat:
+        completions = Completions()
+
+    class Client:
+        chat = Chat()
+
+    client = Client()
+    _INSTRUCTOR_READY_CLIENT_IDS.discard(id(client))
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda _: _invoke_instructor_sync(client, {}), range(12)))
+
+    assert calls == 12
+    assert maximum_active > 1
+    assert id(client) in _INSTRUCTOR_READY_CLIENT_IDS
 
 
 def test_runtime_does_not_depend_on_instructor_v2() -> None:

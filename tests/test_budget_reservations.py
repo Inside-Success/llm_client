@@ -21,6 +21,7 @@ from llm_client.observability.budget_reservations import (
     normalize_budget_microusd,
     normalize_reservation_microusd,
     normalize_settled_cost_microusd,
+    raise_budget_scope_max_budget,
     release_budget_reservation,
     renew_budget_reservation,
     settle_budget_reservation,
@@ -152,6 +153,69 @@ def test_scope_rejects_changed_root_budget(reservation_db: Path) -> None:
     )
     with pytest.raises(ValueError, match="different normalized max_budget"):
         get_budget_scope_snapshot(scope_trace_id="root/consistent", max_budget=2.0)
+
+
+def test_scope_cap_can_be_raised_explicitly_and_retried_idempotently(
+    reservation_db: Path,
+) -> None:
+    acquire_budget_reservation(
+        scope_trace_id="root/resume",
+        call_trace_id="root/resume/first",
+        max_budget=1.0,
+        reservation=0.8,
+    )
+
+    raised = raise_budget_scope_max_budget(
+        scope_trace_id="root/resume",
+        expected_max_budget=1.0,
+        new_max_budget=2.0,
+    )
+    retried = raise_budget_scope_max_budget(
+        scope_trace_id="root/resume",
+        expected_max_budget=1.0,
+        new_max_budget=2.0,
+    )
+
+    assert raised.max_budget_microusd == 2_000_000
+    assert raised.active_reserved_microusd == 800_000
+    assert retried == raised
+    acquire_budget_reservation(
+        scope_trace_id="root/resume",
+        call_trace_id="root/resume/second",
+        max_budget=2.0,
+        reservation=0.8,
+    )
+    with pytest.raises(ValueError, match="different normalized max_budget"):
+        get_budget_scope_snapshot(scope_trace_id="root/resume", max_budget=1.0)
+
+
+def test_scope_cap_raise_rejects_missing_stale_or_decreasing_scope(
+    reservation_db: Path,
+) -> None:
+    with pytest.raises(ValueError, match="does not exist"):
+        raise_budget_scope_max_budget(
+            scope_trace_id="root/missing",
+            expected_max_budget=1.0,
+            new_max_budget=2.0,
+        )
+    acquire_budget_reservation(
+        scope_trace_id="root/guarded",
+        call_trace_id="root/guarded/first",
+        max_budget=1.0,
+        reservation=0.1,
+    )
+    with pytest.raises(ValueError, match="must not decrease"):
+        raise_budget_scope_max_budget(
+            scope_trace_id="root/guarded",
+            expected_max_budget=1.0,
+            new_max_budget=0.9,
+        )
+    with pytest.raises(ValueError, match="expected max_budget"):
+        raise_budget_scope_max_budget(
+            scope_trace_id="root/guarded",
+            expected_max_budget=0.5,
+            new_max_budget=2.0,
+        )
 
 
 def test_money_normalization_is_conservative() -> None:

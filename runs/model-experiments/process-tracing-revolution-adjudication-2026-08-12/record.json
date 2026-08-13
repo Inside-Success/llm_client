@@ -1,0 +1,260 @@
+{
+  "schema_version": "model-experiment-record/v1",
+  "experiment_id": "process-tracing-revolution-adjudication-2026-08-12",
+  "recorded_at": "2026-08-12T02:45:35Z",
+  "project": "process_tracing",
+  "task": "process_tracing.revolution_candidate_adjudication_and_review",
+  "decision_question": "Should DeepSeek V4 Flash High replace Luna Medium for the full revolution-candidate adjudication route?",
+  "scope": {
+    "stage": "exploratory feasibility probe with independent execution sign-off",
+    "licensed_claim": "The retained eight-candidate evidence supports keeping Luna Medium and does not support switching the full-corpus route to DeepSeek V4 Flash High.",
+    "non_claims": [
+      "The eight reused candidates are not representative of all 3150 candidates.",
+      "Agreement with Luna does not establish historical truth.",
+      "This probe does not establish that Luna is globally better than DeepSeek.",
+      "This probe does not authorize the full-corpus dispatch.",
+      "List-price projections do not guarantee future provider billing or token volume."
+    ]
+  },
+  "dataset": {
+    "id": "process_tracing:revolution-study-v1:plan038-canary-v3",
+    "unit_of_analysis": "one frozen revolution discovery candidate",
+    "population": "3150 candidates in the frozen revolution-study discovery corpus",
+    "sample_size": 8,
+    "selection": "Structural canary spanning all three discovery surfaces and candidate kinds plus unavailable-link, redirect-lineage, and source-sparse controls."
+  },
+  "held_constant": [
+    "The same eight candidate IDs and frozen source packets.",
+    "Study design SHA-256 bcf5a90aaad7edff1ccb99bdc1b59602f4a49ba10f0c5af5f57110f3184e7b27.",
+    "Corpus manifest SHA-256 784c2a0aa08847bda0cc5d04212bd0541f10ef0bd5e1ff4de97eede9a1e9acd2.",
+    "Prompt SHA-256 26c0b80cd680dca0ea5605e205a5e09f2f8fafec55a3893dc31f4a201840176f.",
+    "Producer and hash-bound independent-review schemas.",
+    "Temperature 0.1 and maximum output of 12000 tokens."
+  ],
+  "conditions": [
+    {
+      "condition_id": "luna-medium",
+      "role": "baseline",
+      "requested_model": "openrouter/openai/gpt-5.6-luna",
+      "resolved_model": "openrouter/openai/gpt-5.6-luna",
+      "reasoning_effort": "medium",
+      "repository_revision": "70e097bc43167e9862e0343f00767a0a62f72f78",
+      "runtime_revision": "052ba48bebf6a7a93d44ceac2b1cd1a22f527034",
+      "calls": {
+        "logical": 2,
+        "provider_attempts": 2,
+        "retries": 0,
+        "terminal_errors": 0,
+        "latency_s": 39.776
+      },
+      "usage": {
+        "prompt_tokens": 143909,
+        "completion_tokens": 5284,
+        "total_tokens": 149193,
+        "reasoning_tokens": 1874,
+        "measurement_scope": "Successful logical-call records; no retries occurred."
+      },
+      "cost": {
+        "observed_usd": 0.021158875,
+        "scope": "Provider-reported aggregate across both successful logical calls and all provider attempts.",
+        "source": "llm_client retained call telemetry",
+        "list_price_snapshot": {
+          "observed_at": "2026-08-12T02:45:35Z",
+          "input_usd_per_million": 0.10,
+          "output_usd_per_million": 0.60,
+          "source_uri": "https://openrouter.ai/openai/gpt-5.6-luna-20260709"
+        }
+      },
+      "cache": {
+        "cached_tokens": 0,
+        "cache_creation_tokens": null,
+        "response_cache_hit": false
+      },
+      "contract_outcome": {
+        "structured_contract_passed": true,
+        "deterministic_validation_passed": true,
+        "review_complete": true,
+        "rejected_items": 0
+      }
+    },
+    {
+      "condition_id": "deepseek-v4-flash-high",
+      "role": "candidate",
+      "requested_model": "openrouter/deepseek/deepseek-v4-flash",
+      "resolved_model": "openrouter/deepseek/deepseek-v4-flash",
+      "reasoning_effort": "high",
+      "repository_revision": "f663e2b0a2781ae903d0d692352f7bbf82991785",
+      "runtime_revision": "052ba48bebf6a7a93d44ceac2b1cd1a22f527034",
+      "calls": {
+        "logical": 2,
+        "provider_attempts": 4,
+        "retries": 2,
+        "terminal_errors": 0,
+        "latency_s": 628.808
+      },
+      "usage": {
+        "prompt_tokens": 146060,
+        "completion_tokens": 8935,
+        "total_tokens": 154995,
+        "reasoning_tokens": 5858,
+        "measurement_scope": "Successful logical-call records; failed-attempt tokens are not exposed in the retained aggregate token fields, while cost covers all attempts."
+      },
+      "cost": {
+        "observed_usd": 0.0323990342,
+        "scope": "Provider-reported aggregate across both logical calls and all four provider attempts, including two producer retries.",
+        "source": "llm_client attempt-aggregate retained call telemetry",
+        "list_price_snapshot": {
+          "observed_at": "2026-08-12T02:45:35Z",
+          "input_usd_per_million": 0.0679,
+          "output_usd_per_million": 0.168,
+          "source_uri": "https://openrouter.ai/deepseek/deepseek-v4-flash-20260423"
+        }
+      },
+      "cache": {
+        "cached_tokens": 128,
+        "cache_creation_tokens": null,
+        "response_cache_hit": false
+      },
+      "contract_outcome": {
+        "structured_contract_passed": true,
+        "deterministic_validation_passed": true,
+        "review_complete": true,
+        "rejected_items": 0
+      }
+    }
+  ],
+  "comparison": {
+    "metrics": {
+      "eligibility_agreement_count": 8,
+      "eligibility_agreement_denominator": 8,
+      "outcome_agreement_count": 6,
+      "outcome_agreement_denominator": 8,
+      "exact_boundary_agreement_count": 2,
+      "exact_boundary_agreement_denominator": 8,
+      "exact_anchor_set_agreement_count": 1,
+      "exact_anchor_set_agreement_denominator": 8,
+      "deepseek_to_luna_observed_cost_ratio": 1.5312266933,
+      "deepseek_minus_luna_observed_cost_usd": 0.0112401592,
+      "deepseek_to_luna_call_latency_ratio": 15.8087288817
+    },
+    "item_results": [
+      {
+        "item_id": "candidate_coups_attempts_002ade3f7315cda2_1",
+        "baseline_eligibility": "likely_episode",
+        "candidate_eligibility": "likely_episode",
+        "baseline_outcome": "non_transformation",
+        "candidate_outcome": "non_transformation",
+        "outcome_agreement": true
+      },
+      {
+        "item_id": "candidate_coups_attempts_003e5ee07187717f_1",
+        "baseline_eligibility": "likely_episode",
+        "candidate_eligibility": "likely_episode",
+        "baseline_outcome": "revolutionary_transformation",
+        "candidate_outcome": "non_transformation",
+        "outcome_agreement": false
+      },
+      {
+        "item_id": "candidate_coups_attempts_00f4b92b63b43196_1",
+        "baseline_eligibility": "not_episode",
+        "candidate_eligibility": "not_episode",
+        "baseline_outcome": null,
+        "candidate_outcome": null,
+        "outcome_agreement": true
+      },
+      {
+        "item_id": "candidate_coups_attempts_069bf5a4f3e52357_1",
+        "baseline_eligibility": "likely_episode",
+        "candidate_eligibility": "likely_episode",
+        "baseline_outcome": "indeterminate",
+        "candidate_outcome": "non_transformation",
+        "outcome_agreement": false
+      },
+      {
+        "item_id": "candidate_coups_attempts_0e1d4f8b96057292_1",
+        "baseline_eligibility": "not_episode",
+        "candidate_eligibility": "not_episode",
+        "baseline_outcome": null,
+        "candidate_outcome": null,
+        "outcome_agreement": true
+      },
+      {
+        "item_id": "candidate_protests_21c_00c91afa9a295be9_1",
+        "baseline_eligibility": "ambiguous",
+        "candidate_eligibility": "ambiguous",
+        "baseline_outcome": "indeterminate",
+        "candidate_outcome": "indeterminate",
+        "outcome_agreement": true
+      },
+      {
+        "item_id": "candidate_revolutions_rebellions_0044a09b16549674_1",
+        "baseline_eligibility": "likely_episode",
+        "candidate_eligibility": "likely_episode",
+        "baseline_outcome": "non_transformation",
+        "candidate_outcome": "non_transformation",
+        "outcome_agreement": true
+      },
+      {
+        "item_id": "candidate_revolutions_rebellions_004a1772283b8ff8_1",
+        "baseline_eligibility": "likely_episode",
+        "candidate_eligibility": "likely_episode",
+        "baseline_outcome": "non_transformation",
+        "candidate_outcome": "non_transformation",
+        "outcome_agreement": true
+      }
+    ],
+    "interpretation": "DeepSeek completed the contract but was 53.1 percent more expensive and 15.8 times slower in summed logical-call latency because its producer required two retries. The two unresolved directional outcome disagreements prevent an unassisted route switch. Exact boundary and anchor-set agreement are descriptive disagreement measures, not accuracy scores."
+  },
+  "decision": {
+    "status": "signed_off",
+    "outcome": "Keep Luna Medium for the planned full-corpus route; do not promote DeepSeek or authorize the full dispatch from this probe.",
+    "rationale": "Both routes passed the bounded contract, but DeepSeek had higher observed retry-inclusive cost, much higher latency, and two unresolved outcome disagreements on a non-representative sample.",
+    "next_evidence": "Before any DeepSeek promotion, run a preregistered fresh representative held-out evaluation with blinded external adjudication or independent Luna escalation for disagreements, followed by a new execution-based sign-off."
+  },
+  "artifacts": [
+    {
+      "role": "luna_manifest",
+      "uri": "project-data://process_tracing/revolution_study/v1/adjudication_canary/plan038_slice_c_v3/manifest.json",
+      "sha256": "2251fc5f98d1cd353a1ca012d5aa84f263990ed120da868e10e026933d38a866"
+    },
+    {
+      "role": "luna_readout",
+      "uri": "project-data://process_tracing/revolution_study/v1/adjudication_canary/plan038_slice_c_v3/readout.json",
+      "sha256": "35d8888a65139855202dd73fa94c6792ac72129fb0f80ec409a035924bc44e80"
+    },
+    {
+      "role": "luna_trace_summary",
+      "uri": "project-data://process_tracing/revolution_study/v1/adjudication_canary/plan038_slice_c_v3/trace_summary.json",
+      "sha256": "70c89a5250eb7de797a36393ffae0f71c8eb9bc153f73d341366130fe4f13898"
+    },
+    {
+      "role": "deepseek_preregistration",
+      "uri": "project-data://process_tracing/revolution_study/v1/model_efficiency_canary/plan038_deepseek_v1/preregistration.json",
+      "sha256": "307fe7a0c9c01f7bf687aa902c34412e39fe2f855df7c7224c7fff0bce508bf9"
+    },
+    {
+      "role": "deepseek_readout",
+      "uri": "project-data://process_tracing/revolution_study/v1/model_efficiency_canary/plan038_deepseek_v1/readout.json",
+      "sha256": "04f72353a1e7f48dfaa22e48b5484b5eefd0bea6330ae76ba41642b8e712d152"
+    },
+    {
+      "role": "deepseek_trace_summary",
+      "uri": "project-data://process_tracing/revolution_study/v1/model_efficiency_canary/plan038_deepseek_v1/trace_summary.json",
+      "sha256": "becadf7b0e45f7a6e93d0d0e460074caf91895c2af1038541485af32db1c5edf"
+    },
+    {
+      "role": "independent_signoff",
+      "uri": "project-data://process_tracing/revolution_study/v1/model_efficiency_canary/plan038_deepseek_v1/eval_decision_signoff.md",
+      "sha256": "8fd450b1ad6ffc655194bf4c58315abb327b7f201a6278c2aa2256cbbde12dc6"
+    }
+  ],
+  "provenance": {
+    "repository": "https://github.com/BrianMills2718/process_tracing",
+    "retrospective_import": true,
+    "notes": [
+      "The Luna baseline manifest reports Process Tracing revision 70e097bc43167e9862e0343f00767a0a62f72f78; the DeepSeek condition reports f663e2b0a2781ae903d0d692352f7bbf82991785.",
+      "The DeepSeek preregistration describes the repository revision as held constant at f663e2b0a2781ae903d0d692352f7bbf82991785, which is inconsistent with the retained Luna manifest. The prompt, study design, corpus manifest, candidate set, schemas, and llm_client runtime digest match, but this record does not claim identical application revisions.",
+      "Shared experiment-run rows are a retrospective import of already completed, signed-off evidence; the owning artifacts and call telemetry remain authoritative."
+    ]
+  }
+}

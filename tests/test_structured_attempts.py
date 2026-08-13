@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -20,6 +21,7 @@ from llm_client import (
 )
 from llm_client.core.errors import LLMError
 from llm_client.core.errors import LLMCapabilityError
+from llm_client.execution import structured_runtime
 from llm_client.observability.selected_attempts import (
     get_runtime_selected_attempt_receipt,
 )
@@ -47,8 +49,12 @@ def _isolated_observability(tmp_path: Path):
     io_log._project = "attempt-test"
     io_log._db_path = tmp_path / "attempts.db"
     io_log._db_conn = None
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
     yield
     io_log.close()
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
     (
         io_log._enabled,
         io_log._data_root,
@@ -94,6 +100,17 @@ def _native_response(content: str, *, provider_cost: float | None = None) -> Mag
     return response
 
 
+def _instructor_response(arguments: str) -> MagicMock:
+    """Build one Instructor/LiteLLM tool response with exact raw arguments."""
+
+    response = _native_response("")
+    tool_call = MagicMock()
+    tool_call.function.arguments = arguments
+    response.choices[0].message.tool_calls = [tool_call]
+    response.choices[0].finish_reason = "tool_calls"
+    return response
+
+
 def _raise_finalization_timeout(_result: object) -> None:
     """Represent a local post-validation failure that generation cannot repair."""
 
@@ -105,6 +122,240 @@ def _history_for_trace(trace_id: str) -> list[tuple[int, str]]:
 
     history = next(iter(get_structured_attempt_histories(trace_id).values()))
     return [(event.attempt_ordinal, event.event_type) for event in history]
+
+
+# mock-ok: Instructor transport is controlled; public runtime, raw custody, and
+# strict selected-attempt join are real.
+@patch(
+    "llm_client.execution.structured_runtime._model_supports_native_schema",
+    return_value=False,
+)
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("instructor.from_litellm")
+def test_sync_instructor_attempt_is_receipted(
+    mock_from_litellm: MagicMock,
+    _mock_cost: MagicMock,
+    _mock_native: MagicMock,
+) -> None:
+    """Instructor success emits one exact started/received/validated attempt."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    raw = '{"action":"answer","rationale":"Exact Instructor bytes."}'
+    parsed = Decision.model_validate_json(raw)
+    instructor_client = MagicMock()
+    instructor_client.chat.completions.create_with_completion.return_value = (
+        parsed,
+        _instructor_response(raw),
+    )
+    mock_from_litellm.return_value = instructor_client
+
+    observed, result = call_llm_structured(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-sync-instructor-attempt",
+        max_budget=0,
+        num_retries=0,
+    )
+
+    assert observed == parsed
+    assert result.logical_call_id
+    history = get_structured_attempt_events(result.logical_call_id)
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "started"),
+        (0, "received"),
+        (0, "validated"),
+    ]
+    assert {event.execution_path for event in history} == {"instructor"}
+    assert history[1].raw_sha256 == hashlib.sha256(raw.encode()).hexdigest()
+    receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
+    assert receipt.raw_sha256 == history[1].raw_sha256
+    assert receipt.selected_attempt_ordinal == 0
+    assert (
+        instructor_client.chat.completions.create_with_completion.call_args.kwargs[
+            "max_retries"
+        ]
+        == 1
+    )
+
+
+# mock-ok: Instructor transport fails once then succeeds; shared retry,
+# append-only attempt custody, and the selected-attempt join remain real.
+@patch(
+    "llm_client.execution.structured_runtime._model_supports_native_schema",
+    return_value=False,
+)
+@patch("llm_client.core.client.time.sleep")
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("instructor.from_litellm")
+def test_sync_instructor_retry_is_owned_by_shared_kernel(
+    mock_from_litellm: MagicMock,
+    _mock_cost: MagicMock,
+    _mock_sleep: MagicMock,
+    _mock_native: MagicMock,
+) -> None:
+    """A transient Instructor failure is visible before shared-kernel recovery."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    raw = '{"action":"answer","rationale":"Recovered once."}'
+    parsed = Decision.model_validate_json(raw)
+    instructor_client = MagicMock()
+    instructor_client.chat.completions.create_with_completion.side_effect = [
+        Exception("service unavailable"),
+        (parsed, _instructor_response(raw)),
+    ]
+    mock_from_litellm.return_value = instructor_client
+
+    observed, result = call_llm_structured(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-sync-instructor-retry-custody",
+        max_budget=0,
+        num_retries=1,
+        base_delay=0,
+    )
+
+    assert observed == parsed
+    history = get_structured_attempt_events(result.logical_call_id)
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "started"),
+        (0, "execution_failed"),
+        (0, "recovery_decided"),
+        (1, "started"),
+        (1, "received"),
+        (1, "validated"),
+    ]
+    assert history[2].recovery_decision == "retry"
+    assert {event.execution_path for event in history} == {"instructor"}
+    assert instructor_client.chat.completions.create_with_completion.call_count == 2
+    assert {
+        call.kwargs["max_retries"]
+        for call in instructor_client.chat.completions.create_with_completion.call_args_list
+    } == {1}
+    receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
+    assert receipt.selected_attempt_ordinal == 1
+
+
+# mock-ok: Instructor transport succeeds once; public hooks and append-only
+# attempt evidence are real, proving local finalization cannot regenerate.
+@patch(
+    "llm_client.execution.structured_runtime._model_supports_native_schema",
+    return_value=False,
+)
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("instructor.from_litellm")
+def test_sync_instructor_postvalidation_failure_never_regenerates(
+    mock_from_litellm: MagicMock,
+    _mock_cost: MagicMock,
+    _mock_native: MagicMock,
+) -> None:
+    """A local failure after validation is terminal without another attempt."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    raw = '{"action":"answer","rationale":"Validated before hook."}'
+    parsed = Decision.model_validate_json(raw)
+    instructor_client = MagicMock()
+    instructor_client.chat.completions.create_with_completion.return_value = (
+        parsed,
+        _instructor_response(raw),
+    )
+    mock_from_litellm.return_value = instructor_client
+
+    with pytest.raises(LLMError, match="local finalization timed out"):
+        call_llm_structured(
+            "openrouter/deepseek/deepseek-v4-flash",
+            [{"role": "user", "content": "Choose"}],
+            response_model=Decision,
+            hooks=Hooks(after_call=_raise_finalization_timeout),
+            task="planner",
+            trace_id="trace-sync-instructor-finalization",
+            max_budget=0,
+            num_retries=1,
+            base_delay=0,
+        )
+
+    assert instructor_client.chat.completions.create_with_completion.call_count == 1
+    history = next(
+        iter(
+            get_structured_attempt_histories(
+                "trace-sync-instructor-finalization"
+            ).values()
+        )
+    )
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "started"),
+        (0, "received"),
+        (0, "validated"),
+    ]
+
+
+@pytest.mark.asyncio
+# mock-ok: Instructor transport is controlled; async runtime and ledgers are real.
+@patch(
+    "llm_client.execution.structured_runtime._model_supports_native_schema",
+    return_value=False,
+)
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("instructor.from_litellm")
+async def test_async_instructor_attempt_is_receipted(
+    mock_from_litellm: MagicMock,
+    _mock_cost: MagicMock,
+    _mock_native: MagicMock,
+) -> None:
+    """Async Instructor success preserves the same exact attempt evidence."""
+
+    class Decision(BaseModel):
+        action: str
+        rationale: str
+
+    raw = '{"action":"answer","rationale":"Exact async Instructor bytes."}'
+    parsed = Decision.model_validate_json(raw)
+    instructor_client = MagicMock()
+    instructor_client.chat.completions.create_with_completion = AsyncMock(
+        return_value=(parsed, _instructor_response(raw))
+    )
+    mock_from_litellm.return_value = instructor_client
+
+    observed, result = await acall_llm_structured(
+        "openrouter/deepseek/deepseek-v4-flash",
+        [{"role": "user", "content": "Choose"}],
+        response_model=Decision,
+        task="planner",
+        trace_id="trace-async-instructor-attempt",
+        max_budget=0,
+        num_retries=0,
+    )
+
+    assert observed == parsed
+    assert result.logical_call_id
+    history = get_structured_attempt_events(result.logical_call_id)
+    assert [(event.attempt_ordinal, event.event_type) for event in history] == [
+        (0, "started"),
+        (0, "received"),
+        (0, "validated"),
+    ]
+    assert {event.execution_path for event in history} == {"instructor"}
+    receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
+    assert receipt.raw_sha256 == history[1].raw_sha256
+    assert receipt.selected_attempt_ordinal == 0
+    assert (
+        instructor_client.chat.completions.create_with_completion.call_args.kwargs[
+            "max_retries"
+        ]
+        == 1
+    )
 
 
 # mock-ok: provider response is controlled; public retry/fallback and SQLite ledger are real.
