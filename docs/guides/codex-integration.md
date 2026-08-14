@@ -63,6 +63,10 @@ the policy still prevents that value being sent as a provider request timeout.
 Set `agent_hard_timeout` only to override that deadline (including `0` to opt
 out explicitly):
 
+For a process-wide override without changing downstream call sites, set
+`LLM_CLIENT_AGENT_HARD_TIMEOUT` to a whole number of seconds. An explicit
+`agent_hard_timeout` call argument takes precedence; `0` explicitly opts out.
+
 ```python
 result = call_llm(
     "codex",
