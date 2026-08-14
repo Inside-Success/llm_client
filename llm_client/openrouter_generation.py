@@ -175,6 +175,40 @@ def _response_text(response: Any, key: str) -> str:
     return value.strip()
 
 
+def _response_value(response: Any, key: str) -> Any:
+    """Read one provider response field without converting its structure."""
+
+    return response.get(key) if isinstance(response, dict) else getattr(response, key, None)
+
+
+def _inline_selected_endpoint(response: Any) -> str | None:
+    """Return the one router-selected upstream endpoint, when retained."""
+
+    metadata = _response_value(response, "openrouter_metadata")
+    if not isinstance(metadata, dict):
+        return None
+    endpoints = metadata.get("endpoints")
+    if not isinstance(endpoints, dict):
+        return None
+    available = endpoints.get("available")
+    if not isinstance(available, list):
+        return None
+    selected = [
+        item
+        for item in available
+        if isinstance(item, dict) and item.get("selected") is True
+    ]
+    if len(selected) != 1:
+        return None
+    provider = selected[0].get("provider")
+    model = selected[0].get("model")
+    if not isinstance(provider, str) or not provider.strip():
+        return None
+    if not isinstance(model, str) or not model.strip():
+        return None
+    return f"{provider.strip()}:{model.strip()}"
+
+
 def build_openrouter_inline_generation_evidence(
     response: Any,
     *,
@@ -194,7 +228,7 @@ def build_openrouter_inline_generation_evidence(
         generation_id=generation_id,
         model=model,
         provider_name=provider_name,
-        endpoint_id=None,
+        endpoint_id=_inline_selected_endpoint(response),
         upstream_id=None,
         retrieval_attempt_count=1,
         retrieved_at=retrieved_at or datetime.now(timezone.utc),

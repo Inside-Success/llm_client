@@ -98,6 +98,17 @@ def test_retained_inline_metadata_certifies_observed_provider() -> None:
             "id": "gen-1",
             "model": "openai/gpt-5.6-terra",
             "provider": "OpenAI",
+            "openrouter_metadata": {
+                "endpoints": {
+                    "available": [
+                        {
+                            "provider": "OpenAI",
+                            "model": "openai/gpt-5.6-terra-20260709",
+                            "selected": True,
+                        }
+                    ]
+                }
+            },
         },
         retrieved_at=observed_at,
     )
@@ -105,7 +116,7 @@ def test_retained_inline_metadata_certifies_observed_provider() -> None:
     assert evidence.generation_id == "gen-1"
     assert evidence.model == "openai/gpt-5.6-terra"
     assert evidence.provider_name == "OpenAI"
-    assert evidence.endpoint_id is None
+    assert evidence.endpoint_id == "OpenAI:openai/gpt-5.6-terra-20260709"
     assert (
         evidence.source_url
         == "openrouter://api/v1/chat/completions/inline-metadata?id=gen-1"

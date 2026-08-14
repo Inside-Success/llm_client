@@ -128,6 +128,17 @@ def test_observation_uses_retained_inline_provider_metadata_before_history_looku
             "id": "gen-1",
             "model": "x-ai/grok-4.5",
             "provider": "XAI",
+            "openrouter_metadata": {
+                "endpoints": {
+                    "available": [
+                        {
+                            "provider": "XAI",
+                            "model": "x-ai/grok-4.5-20260701",
+                            "selected": True,
+                        }
+                    ]
+                }
+            },
         }
     )
     monkeypatch.setattr(
@@ -151,7 +162,8 @@ def test_observation_uses_retained_inline_provider_metadata_before_history_looku
     )
 
     assert observation.upstream_provider_name == "XAI"
-    assert observation.upstream_provider_endpoint is None
+    assert observation.upstream_provider_endpoint == "XAI:x-ai/grok-4.5-20260701"
+    assert observation.transport_certifies is True
 
 
 def test_public_schema_helpers_match_the_runtime_provider_contract() -> None:
