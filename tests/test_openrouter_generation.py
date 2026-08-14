@@ -1,7 +1,7 @@
 """OpenRouter generation evidence retrieval and integrity tests."""
 
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -9,6 +9,7 @@ import pytest
 from llm_client.openrouter_generation import (
     OpenRouterGenerationEvidence,
     OpenRouterGenerationEvidenceStore,
+    build_openrouter_inline_generation_evidence,
     fetch_openrouter_generation_evidence,
 )
 
@@ -85,6 +86,38 @@ def test_missing_provider_name_fails_closed() -> None:
     with pytest.raises(ValueError, match="provider_name"):
         fetch_openrouter_generation_evidence(
             "gen-1", api_key="secret", client=client
+        )
+
+
+def test_retained_inline_metadata_certifies_observed_provider() -> None:
+    """A completion response can attest its selected provider without history API."""
+
+    observed_at = datetime(2026, 8, 14, tzinfo=UTC)
+    evidence = build_openrouter_inline_generation_evidence(
+        {
+            "id": "gen-1",
+            "model": "openai/gpt-5.6-terra",
+            "provider": "OpenAI",
+        },
+        retrieved_at=observed_at,
+    )
+
+    assert evidence.generation_id == "gen-1"
+    assert evidence.model == "openai/gpt-5.6-terra"
+    assert evidence.provider_name == "OpenAI"
+    assert evidence.endpoint_id is None
+    assert (
+        evidence.source_url
+        == "openrouter://api/v1/chat/completions/inline-metadata?id=gen-1"
+    )
+
+
+def test_inline_metadata_without_observed_provider_fails_closed() -> None:
+    """A generation ID and model alone cannot assert a selected provider."""
+
+    with pytest.raises(ValueError, match="provider"):
+        build_openrouter_inline_generation_evidence(
+            {"id": "gen-1", "model": "openai/gpt-5.6-terra"}
         )
 
 

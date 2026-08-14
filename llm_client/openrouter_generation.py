@@ -1,9 +1,10 @@
-"""Fetch and retain OpenRouter's provider identity for one generation.
+"""Retain observed OpenRouter provider identity for one generation.
 
-The completion response identifies the generation, while OpenRouter's
-authenticated generation endpoint identifies the actual upstream provider.
-Keeping those facts separate prevents a requested model prefix from being
-misrepresented as observed routing evidence.
+OpenRouter can return the selected provider directly on an authenticated
+completion response when router metadata is requested.  Its authenticated
+generation-history endpoint is useful enrichment when available, but is not
+available for every account or generation.  Both sources are retained as
+explicit provider evidence; neither infers the provider from a model prefix.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_core import to_jsonable_python
 
-
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _digest(payload: object) -> str:
 
 
 class OpenRouterGenerationEvidence(BaseModel):
-    """Authenticated OpenRouter metadata for one completed generation."""
+    """Observed OpenRouter provider metadata for one completed generation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -77,7 +77,7 @@ class OpenRouterGenerationEvidence(BaseModel):
         retrieval_attempt_count: int,
         retrieved_at: datetime,
         source_url: str,
-    ) -> "OpenRouterGenerationEvidence":
+    ) -> OpenRouterGenerationEvidence:
         """Build immutable evidence with deterministic identity and replay digest."""
 
         payload = {
@@ -101,7 +101,7 @@ class OpenRouterGenerationEvidence(BaseModel):
         )
 
     @model_validator(mode="after")
-    def _validate_replay(self) -> "OpenRouterGenerationEvidence":
+    def _validate_replay(self) -> OpenRouterGenerationEvidence:
         """Reject corrupted or self-inconsistent persisted evidence."""
 
         payload = self.model_dump(
@@ -164,6 +164,45 @@ def _required_text(data: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"OpenRouter generation metadata is missing {key}")
     return value.strip()
+
+
+def _response_text(response: Any, key: str) -> str:
+    """Read one required nonblank field from a retained provider response."""
+
+    value = response.get(key) if isinstance(response, dict) else getattr(response, key, None)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"OpenRouter inline metadata is missing {key}")
+    return value.strip()
+
+
+def build_openrouter_inline_generation_evidence(
+    response: Any,
+    *,
+    retrieved_at: datetime | None = None,
+) -> OpenRouterGenerationEvidence:
+    """Build provider evidence from OpenRouter's retained completion metadata.
+
+    This path requires the response's generation ID, resolved model, and
+    selected provider.  It deliberately fails closed if any are absent, so a
+    caller cannot certify a route from its requested model alone.
+    """
+
+    generation_id = _response_text(response, "id")
+    model = _response_text(response, "model")
+    provider_name = _response_text(response, "provider")
+    return OpenRouterGenerationEvidence.build(
+        generation_id=generation_id,
+        model=model,
+        provider_name=provider_name,
+        endpoint_id=None,
+        upstream_id=None,
+        retrieval_attempt_count=1,
+        retrieved_at=retrieved_at or datetime.now(timezone.utc),
+        source_url=(
+            "openrouter://api/v1/chat/completions/inline-metadata"
+            f"?id={generation_id}"
+        ),
+    )
 
 
 def _successful_endpoint_id(data: dict[str, Any]) -> str | None:
@@ -270,5 +309,6 @@ __all__ = [
     "OPENROUTER_API_BASE",
     "OpenRouterGenerationEvidence",
     "OpenRouterGenerationEvidenceStore",
+    "build_openrouter_inline_generation_evidence",
     "fetch_openrouter_generation_evidence",
 ]
