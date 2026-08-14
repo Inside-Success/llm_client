@@ -192,6 +192,7 @@ async def _acall_llm_impl(
     model_justification = kwargs.pop("model_justification", None)
     agent_retry_safe = kwargs.pop("agent_retry_safe", None)
     parent_trace_id: str | None = kwargs.pop("parent_trace_id", None)
+    requested_timeout = timeout
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm",
     )
@@ -202,6 +203,11 @@ async def _acall_llm_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
+    if model.startswith("codex") and "agent_hard_timeout" not in kwargs:
+        # The global policy applies to provider request timeouts. Retain the
+        # caller's deadline as a Codex CLI subprocess bound before that policy
+        # normalizes the provider timeout to zero.
+        kwargs["agent_hard_timeout"] = requested_timeout
     _check_budget(
         trace_id,
         max_budget,

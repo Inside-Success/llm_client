@@ -1065,6 +1065,7 @@ def _call_llm_structured_impl(
             "observability_content_policy must be an ObservabilityContentPolicy"
         )
     persist_raw_artifacts = observability_content_policy.mode == "full"
+    requested_timeout = timeout
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="call_llm_structured",
     )
@@ -1099,6 +1100,10 @@ def _call_llm_structured_impl(
         warning_sink=_entry_warnings,
     )
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    if model.startswith("codex") and "agent_hard_timeout" not in public_kwargs:
+        # Keep a killable Codex CLI deadline even when the provider timeout
+        # policy removes the request-level timeout below.
+        public_kwargs["agent_hard_timeout"] = requested_timeout
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy
     if logical_timeout is not None:
@@ -2352,6 +2357,7 @@ async def _acall_llm_structured_impl(
             "observability_content_policy must be an ObservabilityContentPolicy"
         )
     persist_raw_artifacts = observability_content_policy.mode == "full"
+    requested_timeout = timeout
     task, trace_id, max_budget, _entry_warnings = _require_tags(
         task, trace_id, max_budget, caller="acall_llm_structured",
     )
@@ -2386,6 +2392,9 @@ async def _acall_llm_structured_impl(
         warning_sink=_entry_warnings,
     )
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
+    if model.startswith("codex") and "agent_hard_timeout" not in public_kwargs:
+        # This is a local subprocess deadline, not a provider request timeout.
+        public_kwargs["agent_hard_timeout"] = requested_timeout
     snapshot_public_kwargs = dict(public_kwargs)
     snapshot_public_kwargs["model_policy"] = model_policy
     if logical_timeout is not None:
