@@ -1496,11 +1496,13 @@ class TestCodexCall:
         assert normalized == 0
         assert "TIMEOUT_DISABLED[test_agents_timeout]: timeout=42s ignored" in caplog.text
 
-    def test_timeout_policy_ban_auto_transport_prefers_cli_with_hard_timeout(
+    def test_timeout_policy_ban_auto_transport_preserves_requested_cli_hard_timeout(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Auto transport should choose CLI immediately when provider timeouts are disabled."""
+        """Auto transport retains a bounded CLI deadline when provider timeouts are disabled."""
+
+        calls: dict[str, object] = {}
 
         def _unexpected_sdk(
             model: str,
@@ -1520,7 +1522,8 @@ class TestCodexCall:
             fallback_warning: str | None = None,
             **kwargs: object,
         ) -> LLMCallResult:
-            del messages, output_schema, kwargs
+            del messages, output_schema
+            calls["agent_hard_timeout"] = kwargs.get("agent_hard_timeout")
             return LLMCallResult(
                 content=f"cli via auto {timeout}",
                 usage={},
@@ -1542,7 +1545,6 @@ class TestCodexCall:
             [{"role": "user", "content": "Hi"}],
             codex_transport="auto",
             timeout=99,
-            agent_hard_timeout=21,
             reasoning_effort="medium",
             task="test",
             trace_id="test_agent_timeout_ban_cli_auto",
@@ -1551,6 +1553,7 @@ class TestCodexCall:
 
         assert result.content == "cli via auto 0"
         assert result.raw_response == {"transport": "codex_cli"}
+        assert calls["agent_hard_timeout"] == 99
         assert any("CODEX_TRANSPORT_AUTO[sdk->cli]" in warning for warning in result.warnings)
 
 

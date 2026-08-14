@@ -688,6 +688,44 @@ def test_sync_timeout_ban_preserves_provider_safety_ceiling(
     assert mock_comp.call_args.kwargs["timeout"] == 300
 
 
+@patch("llm_client.sdk.agents._route_call_structured")
+def test_sync_timeout_ban_preserves_requested_codex_cli_deadline(
+    mock_agent_call: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The policy ban must not make the Codex CLI subprocess unbounded."""
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+    mock_agent_call.return_value = (
+        _BoundedCount(count=1),
+        LLMCallResult(
+            content='{"count":1}',
+            usage={},
+            cost=0.0,
+            model="codex/gpt-5.6-luna",
+            requested_model="codex/gpt-5.6-luna",
+            resolved_model="codex/gpt-5.6-luna",
+        ),
+    )
+
+    _call_llm_structured_impl(
+        "codex/gpt-5.6-luna",
+        [{"role": "user", "content": "Return one."}],
+        _BoundedCount,
+        timeout=60,
+        num_retries=0,
+        fallback_models=[],
+        reasoning_effort="medium",
+        model_justification="Exercise the exact approved Luna agent route.",
+        task="test",
+        trace_id="structured.runtime.sync.timeout-ban.codex-cli",
+        max_budget=0,
+    )
+
+    assert mock_agent_call.call_args.kwargs["timeout"] == 0
+    assert mock_agent_call.call_args.kwargs["agent_hard_timeout"] == 60
+
+
 @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
 @patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
 @patch("llm_client.core.client.litellm.acompletion", new_callable=AsyncMock)

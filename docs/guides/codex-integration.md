@@ -57,8 +57,11 @@ Three transport modes:
 - `codex_transport="cli"`: `codex exec` directly.
 - `codex_transport="auto"`: prefer SDK, fall back to CLI on failure.
 
-If timeouts are globally disabled (`LLM_CLIENT_TIMEOUT_POLICY=ban`), pair
-auto transport with `agent_hard_timeout`:
+If timeouts are globally disabled (`LLM_CLIENT_TIMEOUT_POLICY=ban`), Codex
+continues to use the caller's `timeout` as a killable CLI subprocess deadline;
+the policy still prevents that value being sent as a provider request timeout.
+Set `agent_hard_timeout` only to override that deadline (including `0` to opt
+out explicitly):
 
 ```python
 result = call_llm(
