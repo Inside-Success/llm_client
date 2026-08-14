@@ -1100,7 +1100,11 @@ def _call_llm_structured_impl(
         warning_sink=_entry_warnings,
     )
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
-    if model.startswith("codex") and "agent_hard_timeout" not in public_kwargs:
+    if (
+        model.startswith("codex")
+        and "agent_hard_timeout" not in public_kwargs
+        and "LLM_CLIENT_AGENT_HARD_TIMEOUT" not in _os.environ
+    ):
         # Keep a killable Codex CLI deadline even when the provider timeout
         # policy removes the request-level timeout below.
         public_kwargs["agent_hard_timeout"] = requested_timeout
@@ -2392,7 +2396,11 @@ async def _acall_llm_structured_impl(
         warning_sink=_entry_warnings,
     )
     public_kwargs = _client._strip_llm_internal_kwargs(dict(kwargs))
-    if model.startswith("codex") and "agent_hard_timeout" not in public_kwargs:
+    if (
+        model.startswith("codex")
+        and "agent_hard_timeout" not in public_kwargs
+        and "LLM_CLIENT_AGENT_HARD_TIMEOUT" not in _os.environ
+    ):
         # This is a local subprocess deadline, not a provider request timeout.
         public_kwargs["agent_hard_timeout"] = requested_timeout
     snapshot_public_kwargs = dict(public_kwargs)

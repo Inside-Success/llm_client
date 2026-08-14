@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import hashlib as _hashlib
 import json as _json
+import os as _os
 from importlib import import_module
 from typing import Any, Callable, cast
 
@@ -203,7 +204,11 @@ async def _acall_llm_impl(
         logger=logger,
         log_policy_once_enabled=True,
     )
-    if model.startswith("codex") and "agent_hard_timeout" not in kwargs:
+    if (
+        model.startswith("codex")
+        and "agent_hard_timeout" not in kwargs
+        and "LLM_CLIENT_AGENT_HARD_TIMEOUT" not in _os.environ
+    ):
         # The global policy applies to provider request timeouts. Retain the
         # caller's deadline as a Codex CLI subprocess bound before that policy
         # normalizes the provider timeout to zero.

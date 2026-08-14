@@ -1556,6 +1556,54 @@ class TestCodexCall:
         assert calls["agent_hard_timeout"] == 99
         assert any("CODEX_TRANSPORT_AUTO[sdk->cli]" in warning for warning in result.warnings)
 
+    def test_agent_hard_timeout_env_overrides_requested_deadline(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A process-level Codex bound protects downstreams without code changes."""
+
+        calls: dict[str, object] = {}
+
+        def _fake_cli(
+            model: str,
+            messages: list[dict[str, object]],
+            *,
+            timeout: int = 300,
+            output_schema: dict[str, object] | None = None,
+            fallback_warning: str | None = None,
+            **kwargs: object,
+        ) -> LLMCallResult:
+            del messages, output_schema
+            calls["agent_hard_timeout"] = kwargs.get("agent_hard_timeout")
+            return LLMCallResult(
+                content=f"cli via auto {timeout}",
+                usage={},
+                cost=0.0,
+                model=model,
+                finish_reason="stop",
+                warnings=[fallback_warning] if fallback_warning else [],
+                raw_response={"transport": "codex_cli"},
+            )
+
+        monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+        monkeypatch.setenv("LLM_CLIENT_AGENT_HARD_TIMEOUT", "180")
+        monkeypatch.setattr(agents_mod, "_call_codex_via_cli", _fake_cli)
+        monkeypatch.setattr(agents_codex_mod, "_call_codex_via_cli", _fake_cli)
+        result = call_llm(
+            "codex",
+            [{"role": "user", "content": "Hi"}],
+            codex_transport="auto",
+            timeout=60,
+            reasoning_effort="medium",
+            task="test",
+            trace_id="test_agent_hard_timeout_env",
+            max_budget=0,
+        )
+
+        assert result.content == "cli via auto 0"
+        assert calls["agent_hard_timeout"] == 180
+        assert any("agent_hard_timeout=180s" in warning for warning in result.warnings)
+
 
 # ---------------------------------------------------------------------------
 # Codex structured (mocked)

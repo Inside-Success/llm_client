@@ -68,6 +68,7 @@ _CODEX_PROCESS_START_METHOD_ENV = "LLM_CLIENT_CODEX_PROCESS_START_METHOD"
 _CODEX_PROCESS_GRACE_ENV = "LLM_CLIENT_CODEX_PROCESS_GRACE_S"
 _CODEX_ALLOW_MINIMAL_EFFORT_ENV = "LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT"
 _CODEX_TRANSPORT_ENV = "LLM_CLIENT_CODEX_TRANSPORT"
+_CODEX_AGENT_HARD_TIMEOUT_ENV = "LLM_CLIENT_AGENT_HARD_TIMEOUT"
 
 
 def _agents_mod() -> Any:
@@ -132,11 +133,15 @@ def _agent_hard_timeout(kwargs: dict[str, Any], default_timeout: int) -> int:
 
     raw = kwargs.get("agent_hard_timeout")
     if raw is None:
+        raw = os.environ.get(_CODEX_AGENT_HARD_TIMEOUT_ENV)
+    if raw is None or str(raw).strip() == "":
         return max(0, int(default_timeout))
     try:
         parsed = int(raw)
-    except (TypeError, ValueError):
-        return max(0, int(default_timeout))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{_CODEX_AGENT_HARD_TIMEOUT_ENV} must be a whole number of seconds, got {raw!r}"
+        ) from exc
     return max(0, parsed)
 
 
