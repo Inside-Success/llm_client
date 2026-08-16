@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "document_type": "codebase_wiki_source_manifest",
+  "project_id": "llm_client",
+  "repository": "BrianMills2718/llm_client",
+  "owner_class": "personal",
+  "revision": "f194028cec906fac8f3e3eef48ad30d84e8cf5bb",
+  "tree_revision": "187ec3635a9f04d4cbdc999beba2d478f5c27c46",
+  "capsule": {
+    "capsule_id": "sha256:a2584ec1eec33473155366cec8e4e59fff0d022bc3473fb333c1a0f93832aad9",
+    "file_sha256": "29de4d0140178d0aa7aa415e0c3085c3c84b541f2d9363aefd0ac0e517f1ea88",
+    "project_meta_revision": "88d5a47fd04ac57d5ef9834e67d1bc1e8bc3a683",
+    "path": "generated/repository_capsules/llm_client/a2584ec1eec33473155366cec8e4e59fff0d022bc3473fb333c1a0f93832aad9.json"
+  },
+  "authority_sources": [
+    {
+      "path": "CLAUDE.md",
+      "sha256": "71425db69d4b9f66319b15bb5338faf458fe2f308f0b796ed8dfd46fd57deb33"
+    },
+    {
+      "path": "docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md",
+      "sha256": "a9d2be465aa89bf198debe3b772fe3ca434a535b3cefec96408808dfc482ff91"
+    },
+    {
+      "path": "docs/ops/CAPABILITY_DECOMPOSITION.md",
+      "sha256": "b420bedb50824d98fd4fd927c9670592496ffc3cab22b7f213ce40788be64d6d"
+    },
+    {
+      "path": "docs/plans/105_inside_success_fork_reconciliation.md",
+      "sha256": "770f51cda895babda42a3d87a3fdd6587f642fb5c421506a7e6f3bd0440e0c7f"
+    }
+  ]
+}

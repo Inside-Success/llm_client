@@ -38,6 +38,9 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 ## Current Execution
 
+- **Completed documentation vertical:** Plan #358 compiles the revision-bound
+  `llm_client` capsule and exact source into a Karpathy-style codebase wiki and
+  proves wiki-first navigation back to native source.
 - **Canonical main:** `5a3369e` (verified 2026-07-25; 1,948 passed, 3 skipped,
   12 deselected).
 - **Merged, awaiting downstream acceptance:** Plans #121, #122, #124, and
@@ -52,6 +55,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 358 | [Revision-Grounded Karpathy Codebase Wiki](358_llm_client_karpathy_codebase_wiki.md) | Critical | ✅ Complete | Fresh-session wiki-first architecture navigation |
 | 357 | [Nested Tool-Loop Model Justification](357_nested_tool_model_justification.md) | Critical | ✅ Complete | Open Web Retrieval agent-driven MVP M1 canary |
 | 356 | [Instructor Structured-Attempt Ledger](356_instructor_attempt_ledger.md) | Critical | ✅ Complete | `research_v3` Plan #25 evidence-complete Luna comparison |
 | 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | 🚧 Implemented (downstream adoption pending) | Agent Ecology 3 Plan #10 Luna Medium recovery gate |

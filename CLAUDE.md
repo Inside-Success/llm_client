@@ -56,6 +56,11 @@ details scoped below the repository root.
 6. **Fail loud** -- No silent fallbacks, no `except: pass`. Errors surface with context.
 7. **Programs A-D complete** -- Do not invent new cleanup slices without fresh evidence. The roadmap tracks what remains.
 8. **API reference is generated** -- Run `python scripts/meta/generate_api_reference.py --write` after changing the public surface or docstrings.
+9. **Wiki-first architecture questions** -- Start unfamiliar architecture,
+   workflow, or ownership questions at `roadmap/codebase/wiki/index.md`. Use the
+   wiki for orientation, then reopen the linked native source before making an
+   exact implementation claim. The revision-bound capsule is an input to the
+   wiki, not a substitute for it.
 
 ## Workflow
 
@@ -84,6 +89,7 @@ details scoped below the repository root.
 | `docs/plans/01_master-roadmap.md` | Master roadmap (Programs A-E) |
 | `docs/plans/CLAUDE.md` | Plan index |
 | `docs/API_REFERENCE.md` | Generated API reference |
+| `roadmap/codebase/wiki/index.md` | Interlinked codebase orientation and source-backed reading paths |
 | `docs/adr/README.md` | Architecture decision records index |
 | `scripts/relationships.yaml` | Source-doc coupling and read-gate config |
 | `scripts/CLAUDE.md` | Scripts directory reference |
