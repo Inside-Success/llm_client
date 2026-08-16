@@ -4,7 +4,7 @@ title: Whole-Repository Package Map
 description: Package-level coverage of all 155 Python modules represented by the revision-bound capsule.
 created: 2026-08-16
 updated: 2026-08-16
-sources: [../sources/revision-f194028.md, ../../../../llm_client]
+sources: [../sources/revision-c2f3693.md, ../../../../llm_client]
 confidence: high
 ---
 
@@ -33,12 +33,12 @@ changes, start in `core/`; for an agent or MCP behavior, start in `agent/` and
 transport.
 
 This table covers the entire source capsule at package level. The
-[source-ingest page](../sources/revision-f194028.md) records exact counts and
+[source-ingest page](../sources/revision-c2f3693.md) records exact counts and
 limits; detailed symbol signatures and docstrings remain in the capsule rather
 than being duplicated into 1,079 Markdown entries.
 
 # Citations
 
-1. [Exact source tree](https://github.com/BrianMills2718/llm_client/tree/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client)
-2. [Capsule coverage and provenance](../sources/revision-f194028.md)
+1. [Exact source tree](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client)
+2. [Capsule coverage and provenance](../sources/revision-c2f3693.md)
 3. [Runtime architecture](../architecture.md)

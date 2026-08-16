@@ -42,6 +42,6 @@ routing evidence returned and stored.
 
 # Citations
 
-1. [`resolve_model_selection`, lines 38–68](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/core/model_selection.py#L38-L68)
-2. [`_resolve_call_plan`, lines 101–166](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/core/client_dispatch.py#L101-L166)
-3. [Shared retry/fallback kernel](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/execution_kernel.py#L72-L290)
+1. [`resolve_model_selection`, lines 38–68](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/model_selection.py#L38-L68)
+2. [`_resolve_call_plan`, lines 101–166](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/client_dispatch.py#L101-L166)
+3. [Shared retry/fallback kernel](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/execution_kernel.py#L72-L290)

@@ -33,6 +33,6 @@ call envelope.
 
 # Citations
 
-1. [`render_prompt`, lines 57–128](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/prompts.py#L57-L128)
-2. [`resolve_prompt_asset`, lines 160–217](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/prompt_assets.py#L160-L217)
-3. [Prompt-assets directory at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/prompt_assets)
+1. [`render_prompt`, lines 57–128](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/prompts.py#L57-L128)
+2. [`resolve_prompt_asset`, lines 160–217](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/prompt_assets.py#L160-L217)
+3. [Prompt-assets directory at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/prompt_assets)

@@ -39,6 +39,6 @@ for the evidence boundaries.
 
 # Citations
 
-1. [`call_llm_structured`, lines 596–718](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/core/client.py#L596-L718)
-2. [Structured runtime module and route responsibilities](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/structured_runtime.py#L1-L80)
-3. [Exact raw structured-artifact custody](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/observability/raw_artifacts.py)
+1. [`call_llm_structured`, lines 596–718](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/client.py#L596-L718)
+2. [Structured runtime module and route responsibilities](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/structured_runtime.py#L1-L80)
+3. [Exact raw structured-artifact custody](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/raw_artifacts.py)

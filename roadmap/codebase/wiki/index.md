@@ -2,7 +2,7 @@
 
 Start here for architecture and code-navigation questions. This is a compiled,
 interlinked explanation of the complete Python repository at revision
-`f194028cec906fac8f3e3eef48ad30d84e8cf5bb`. It is derived orientation: follow
+`c2f3693a7a8f1f2e211368c189a64df69dcb381f`. It is derived orientation: follow
 its links, then reopen native source before changing code or making an exact
 claim.
 
@@ -28,7 +28,8 @@ claim.
 
 ## Source and maintenance
 
-- [Revision `f194028` source ingest](sources/revision-f194028.md) — capsule coverage, provenance, and known limits.
+- [Revision `c2f3693` source ingest](sources/revision-c2f3693.md) — current source, capsule verification, provenance, and limits.
+- [Revision `f194028` base capsule](sources/revision-f194028.md) — accepted Project Meta capsule retained as prior source evidence.
 - [Update log](log.md) — ingests, queries filed back, and lint results.
 
 The wiki indexes the full repository at package level and deepens the most

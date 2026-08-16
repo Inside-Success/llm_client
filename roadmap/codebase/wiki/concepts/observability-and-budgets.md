@@ -37,6 +37,6 @@ attempt-specific evidence.
 
 # Citations
 
-1. [Budget/lifecycle envelope](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/call_wrappers.py#L65-L271)
-2. [`ObservedRun`, lines 219–429](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/observability/observed_runs.py#L219-L429)
-3. [`get_trace_tree`, lines 254–313](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/observability/query.py#L254-L313)
+1. [Budget/lifecycle envelope](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/call_wrappers.py#L65-L271)
+2. [`ObservedRun`, lines 219–429](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/observed_runs.py#L219-L429)
+3. [`get_trace_tree`, lines 262–321](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/query.py#L262-L321)

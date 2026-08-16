@@ -4,7 +4,7 @@ title: llm_client Overview
 description: The repository's role, main capabilities, boundaries, and shortest useful reading paths.
 created: 2026-08-16
 updated: 2026-08-16
-sources: [../../../CLAUDE.md, ../../../docs/ops/CAPABILITY_DECOMPOSITION.md, sources/revision-f194028.md]
+sources: [../../../CLAUDE.md, ../../../docs/ops/CAPABILITY_DECOMPOSITION.md, sources/revision-c2f3693.md]
 confidence: high
 ---
 
@@ -20,7 +20,7 @@ streaming, batching, and embeddings.
 
 It is deliberately not an application-specific retrieval system, an evaluation
 rubric engine, or the owner of ecosystem governance. Those boundaries are
-maintained in the [capability decomposition at the pinned revision](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/docs/ops/CAPABILITY_DECOMPOSITION.md)
+maintained in the [capability decomposition at the pinned revision](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/docs/ops/CAPABILITY_DECOMPOSITION.md)
 and summarized in [Architecture](architecture.md).
 
 ## Mental model
@@ -42,11 +42,11 @@ or [structured](workflows/structured-call-lifecycle.md) execution path. Use the
 # Authority boundary
 
 This page is derived from source and repository authority at revision
-`f194028`. Runtime availability, current provider behavior, deployed versions,
+`c2f3693`. Runtime availability, current provider behavior, deployed versions,
 and database contents require fresh observation and are not established here.
 
 # Citations
 
-1. [`llm_client/__init__.py` public-facade description at `f194028`](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/__init__.py#L1-L62)
-2. [Repository capability ownership at `f194028`](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/docs/ops/CAPABILITY_DECOMPOSITION.md)
-3. [Pinned capsule ingest](sources/revision-f194028.md)
+1. [`llm_client/__init__.py` public-facade description at `c2f3693`](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/__init__.py#L1-L62)
+2. [Repository capability ownership at `c2f3693`](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/docs/ops/CAPABILITY_DECOMPOSITION.md)
+3. [Pinned current source ingest](sources/revision-c2f3693.md)

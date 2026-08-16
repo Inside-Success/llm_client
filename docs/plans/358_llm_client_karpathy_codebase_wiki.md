@@ -19,10 +19,12 @@ before making an implementation claim.
 
 ## Sources and authority
 
-- Source repository: `BrianMills2718/llm_client` at
-  `f194028cec906fac8f3e3eef48ad30d84e8cf5bb`.
-- Revision-bound capsule: Project Meta capsule
-  `sha256:a2584ec1eec33473155366cec8e4e59fff0d022bc3473fb333c1a0f93832aad9`.
+- Current source repository: `BrianMills2718/llm_client` at
+  `c2f3693a7a8f1f2e211368c189a64df69dcb381f`.
+- Capsule lineage: accepted Project Meta base capsule
+  `sha256:a2584ec1eec33473155366cec8e4e59fff0d022bc3473fb333c1a0f93832aad9`
+  at `f194028`, followed by an exact current-tree verification capsule
+  `sha256:8f7e46e598f7865d0d8a8273571d2ef3fb8ec1d1fc0eb904eaf8cc8d649aced1`.
 - Architecture authority: `docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md` and
   `docs/ops/CAPABILITY_DECOMPOSITION.md`.
 - Personal/company lineage authority: Plan 105 plus Project Meta repository
@@ -50,8 +52,9 @@ before making an implementation claim.
   names.
 - No provider call, deployment, package release, or Inside Success repository
   mutation is authorized.
-- Do not duplicate the capsule. `raw/source-manifest.json` pins its one
-  maintained copy and the exact Git tree.
+- Do not duplicate the accepted capsule. `raw/source-manifest.json` pins its
+  maintained Project Meta copy, the exact current Git tree, and the unpublished
+  current-tree verification receipt.
 
 ## Canonical example
 
@@ -71,7 +74,7 @@ observability seams, with links that reopen the exact revision.
 - Deterministic lint reports no missing type, broken internal link, orphan, or
   index-drift finding.
 - The canonical example is answered from the wiki and each exact claim is
-  confirmed against source at revision `f194028`.
+  confirmed against source at revision `c2f3693`.
 - Root `AGENTS.md` is regenerated from the canonical `CLAUDE.md` and passes its
   sync check.
 
@@ -93,14 +96,15 @@ available; no runtime or remote-history transition is involved.
 
 Completed 2026-08-16.
 
-- The bundle contains 13 typed content pages plus `index.md` and `log.md`,
+- The bundle contains 14 typed content pages plus `index.md` and `log.md`,
   covering all ten capsule package groups and the two critical call workflows.
 - Karpathy structural lint reports `100/100` with no missing type, broken link,
   orphan, thin-page, stale-page, or index-drift finding.
-- A source-reopen probe resolved all 36 pinned GitHub source references against
-  commit `f194028`, checked every cited line range, reloaded the capsule from
-  Project Meta commit `88d5a47f`, and confirmed 155 files, 1,079 symbols, and
-  zero omissions.
+- A source-reopen probe resolved the pinned current GitHub source references
+  against commit `c2f3693` and checked every cited line range. The maintained
+  generator was rerun after `main` advanced and confirmed 155 files, 1,079
+  symbols, and zero omissions at the current tree; the accepted `f194028`
+  Project Meta capsule remains separately recoverable.
 - The canonical `call_llm` query resolves through the wiki to the public facade,
   call envelope, route plan, retry/fallback kernel, transport adapters, result
   finalization, and observability/budget seams. Each exact statement links to

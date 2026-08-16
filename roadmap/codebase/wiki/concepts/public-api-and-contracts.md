@@ -39,6 +39,6 @@ editing a cross-cutting call path.
 
 # Citations
 
-1. [Package public facade](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/__init__.py#L1-L62)
-2. [`call_llm` contract](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/core/client.py#L454-L585)
-3. [Public-call envelope](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/call_wrappers.py#L65-L127)
+1. [Package public facade](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/__init__.py#L1-L62)
+2. [`call_llm` contract](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/client.py#L454-L585)
+3. [Public-call envelope](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/call_wrappers.py#L65-L127)

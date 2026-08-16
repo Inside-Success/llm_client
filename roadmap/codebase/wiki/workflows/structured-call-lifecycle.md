@@ -53,6 +53,6 @@ for the surrounding evidence lifecycle.
 
 # Citations
 
-1. [`call_llm_structured`, lines 596–718](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/core/client.py#L596-L718)
-2. [Structured runtime implementation](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/structured_runtime.py#L974-L2266)
-3. [Structured-attempt evidence contracts](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/observability/structured_attempts.py)
+1. [`call_llm_structured`, lines 596–718](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/client.py#L596-L718)
+2. [Structured runtime implementation](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/structured_runtime.py#L974-L2266)
+3. [Structured-attempt evidence contracts](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/structured_attempts.py)

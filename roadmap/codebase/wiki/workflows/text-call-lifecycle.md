@@ -50,7 +50,7 @@ call_llm
 
 # Citations
 
-1. [`call_llm`, lines 454–585](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/core/client.py#L454-L585)
-2. [Public sync wrapper, lines 165–271](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/call_wrappers.py#L165-L271)
-3. [Text sync bridge and async runtime](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/text_runtime.py#L64-L623)
-4. [Shared execution kernel](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/execution_kernel.py#L72-L290)
+1. [`call_llm`, lines 454–585](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/client.py#L454-L585)
+2. [Public sync wrapper, lines 165–271](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/call_wrappers.py#L165-L271)
+3. [Text sync bridge and async runtime](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/text_runtime.py#L64-L623)
+4. [Shared execution kernel](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/execution_kernel.py#L72-L290)

@@ -35,12 +35,12 @@ through shared retry/fallback primitives. See the
 `llm_client` is the substrate beneath application projects and evaluation
 systems. It owns dispatch and evidence, while consumers own domain decisions.
 The maintained boundary contract is
-[`docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md` at `f194028`](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md).
+[`docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md` at `c2f3693`](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/docs/ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md).
 Repository ownership is separate from runtime architecture; see
 [personal/company lineage](lineage/personal-and-inside-success.md).
 
 # Citations
 
-1. [`call_llm` facade, lines 454–585](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/core/client.py#L454-L585)
-2. [Public-call envelope and lifecycle wrapper](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/call_wrappers.py#L65-L271)
-3. [Text runtime implementation](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/execution/text_runtime.py#L64-L623)
+1. [`call_llm` facade, lines 454–585](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/client.py#L454-L585)
+2. [Public-call envelope and lifecycle wrapper](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/call_wrappers.py#L65-L271)
+3. [Text runtime implementation](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/text_runtime.py#L64-L623)

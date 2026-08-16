@@ -34,6 +34,6 @@ systems live in `workflow/`; see the [package map](../packages/package-map.md).
 
 # Citations
 
-1. [Agent package at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/agent)
-2. [`callable_to_openai_tool`, lines 457–538](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/tools/tool_utils.py#L457-L538)
-3. [Typed tool-call observability](https://github.com/BrianMills2718/llm_client/blob/f194028cec906fac8f3e3eef48ad30d84e8cf5bb/llm_client/observability/tool_calls.py#L1-L161)
+1. [Agent package at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/agent)
+2. [`callable_to_openai_tool`, lines 457–538](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/tools/tool_utils.py#L457-L538)
+3. [Typed tool-call observability](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/tool_calls.py#L1-L161)
