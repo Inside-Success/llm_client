@@ -84,8 +84,15 @@ an authoritative repository document, or the pinned capsule source summary.
 Run:
 
 ```bash
+make codebase-wiki-check
 python3 "${PROJECTS_ROOT:-$HOME/code/active}/agent-skills/skills/karpathy-wiki/scripts/lint.py" roadmap/codebase/wiki
 ```
+
+The offline freshness check is part of `make check`. When Project Meta and
+network access are available, also run `make codebase-wiki-check-full`; it
+reopens the exact capsule blobs from Project Meta Git and compares the declared
+company default-branch pin with the live remote. A failed remote observation is
+a visible failure and never falls back to a stale tracking ref.
 
 Then inspect source-backed consistency manually. Every finding receives either
 an immediate fix or an explicit owner and next source event.

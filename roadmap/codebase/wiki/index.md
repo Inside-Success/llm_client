@@ -29,6 +29,7 @@ claim.
 ## Source and maintenance
 
 - [Revision `c2f3693` source ingest](sources/revision-c2f3693.md) — current source, capsule verification, provenance, and limits.
+- [Inside Success revision `f4a08fe` source ingest](sources/inside-success-f4a08fe.md) — separate company capsule, exact downstream differences, and provenance limits.
 - [Revision `f194028` base capsule](sources/revision-f194028.md) — accepted Project Meta capsule retained as prior source evidence.
 - [Update log](log.md) — ingests, queries filed back, and lint results.
 

@@ -27,6 +27,8 @@ required-reading edges are authored in `scripts/relationships.yaml`.
 make test                    # Full test suite
 make test-quick              # Tests, minimal output
 make check                   # Tests + type check + lint
+make codebase-wiki-check     # Fail when code/wiki source bindings drift
+make codebase-wiki-check-full # Also verify external capsules and company remote
 
 # Observability
 make cost                    # Total LLM spend (DAYS=7)
@@ -79,6 +81,11 @@ read `CLAUDE.md` directly.
    wiki for orientation, then reopen the linked native source before making an
    exact implementation claim. The revision-bound capsule is an input to the
    wiki, not a substitute for it.
+10. **Wiki freshness is enforced** -- `make check` validates the current
+    `llm_client` Python/config surface and its canonical authority inputs against
+    the active immutable wiki manifest. Use `make codebase-wiki-check-full` when
+    Project Meta and network access are available to authenticate external
+    capsules and the company-downstream revision as well.
 
 ### Workflow
 

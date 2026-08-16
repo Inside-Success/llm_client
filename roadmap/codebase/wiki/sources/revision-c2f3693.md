@@ -4,7 +4,7 @@ title: Revision c2f3693 Source Ingest
 description: Current source binding, exact capsule verification, and the relationship to the previously accepted base capsule.
 created: 2026-08-16
 updated: 2026-08-16
-sources: [../../raw/source-manifest.json, revision-f194028.md]
+sources: [../../raw/source-manifest.json, ../../raw/source-manifest-fc5ee7f-company-f4a08fe.json, revision-f194028.md]
 confidence: high
 ---
 
@@ -34,6 +34,12 @@ The earlier content-addressed
 [revision `f194028` capsule](revision-f194028.md) remains the accepted Project
 Meta artifact and provenance base. It is not mislabeled as current.
 
+Plan 359's [dual-lineage manifest](../../raw/source-manifest-fc5ee7f-company-f4a08fe.json)
+supersedes the original manifest for current freshness checks. It confirms that
+the selected personal Python/config surface still matches this exact source
+revision while adding current authority hashes and the separate company
+capsule. The original manifest remains immutable evidence of this ingest.
+
 # Limits
 
 Capsules contain definitions, signatures, docstrings, typing state, and source
@@ -47,3 +53,4 @@ without changing this authority boundary.
 1. [Current source tree](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
 2. [Current trace query source](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/query.py)
 3. [`source-manifest.json`](../../raw/source-manifest.json)
+4. [Current dual-lineage manifest](../../raw/source-manifest-fc5ee7f-company-f4a08fe.json)

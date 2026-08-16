@@ -2,6 +2,12 @@
 
 ## 2026-08-16
 
+- **Ingest** | Added the separately owned Inside Success downstream at
+  `f4a08fe` from maintained capsule `sha256:8ea32e7f...cb0be6a`; updated the
+  lineage page with the exact diverged ancestry and nine-path source delta.
+- **Maintenance** | Added immutable manifest 1.1 and deterministic freshness
+  checks for the personal code surface, canonical authorities, exact Project
+  Meta capsule blobs, and optional live company-remote verification.
 - **Creation** | Created the repo-local codebase wiki after Brian clarified
   that the intended result was a Karpathy-style interlinked knowledge layer,
   not a symbol viewer.
