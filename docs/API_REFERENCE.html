@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-12T19:19:27Z -->
+<!-- Generated: 2026-08-16T20:45:31Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1426,6 +1426,15 @@ Install the optional dependency::
 
 <h4>Functions</h4>
 
+<details class="symbol" id="module-llm_client-langfuse_callbacks-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.langfuse_callbacks</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-langfuse_callbacks-configure_langfuse_callbacks">
   <summary><code>configure_langfuse_callbacks</code> <span class="sig">() -&gt; llm_client.langfuse_callbacks.LangfuseCallbackConfig</span></summary>
   <div class="symbol-body">
@@ -2585,17 +2594,31 @@ where post-processing silently drops content.</pre>
 </details>
 
 <details class="module" id="module-llm_client-openrouter_generation">
-  <summary><span class="module-name">llm_client.openrouter_generation</span> <span class="module-summary">Fetch and retain OpenRouter&#x27;s provider identity for one generation.</span></summary>
+  <summary><span class="module-name">llm_client.openrouter_generation</span> <span class="module-summary">Retain observed OpenRouter provider identity for one generation.</span></summary>
   <div class="module-body">
-    <p class="summary">Fetch and retain OpenRouter&#x27;s provider identity for one generation.</p>
-<pre class="doc">Fetch and retain OpenRouter&#x27;s provider identity for one generation.
+    <p class="summary">Retain observed OpenRouter provider identity for one generation.</p>
+<pre class="doc">Retain observed OpenRouter provider identity for one generation.
 
-The completion response identifies the generation, while OpenRouter&#x27;s
-authenticated generation endpoint identifies the actual upstream provider.
-Keeping those facts separate prevents a requested model prefix from being
-misrepresented as observed routing evidence.</pre>
+OpenRouter can return the selected provider directly on an authenticated
+completion response when router metadata is requested.  Its authenticated
+generation-history endpoint is useful enrichment when available, but is not
+available for every account or generation.  Both sources are retained as
+explicit provider evidence; neither infers the provider from a model prefix.</pre>
 
 <h4>Functions</h4>
+
+<details class="symbol" id="module-llm_client-openrouter_generation-build_openrouter_inline_generation_evidence">
+  <summary><code>build_openrouter_inline_generation_evidence</code> <span class="sig">(response: Any, *, retrieved_at: datetime.datetime | None = None) -&gt; llm_client.openrouter_generation.OpenRouterGenerationEvidence</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Build provider evidence from OpenRouter&#x27;s retained completion metadata.</p>
+    <p class="meta">Source: <code>llm_client.openrouter_generation</code> functions</p>
+    <pre class="doc">Build provider evidence from OpenRouter&#x27;s retained completion metadata.
+
+This path requires the response&#x27;s generation ID, resolved model, and
+selected provider.  It deliberately fails closed if any are absent, so a
+caller cannot certify a route from its requested model alone.</pre>
+  </div>
+</details>
 
 <details class="symbol" id="module-llm_client-openrouter_generation-fetch_openrouter_generation_evidence">
   <summary><code>fetch_openrouter_generation_evidence</code> <span class="sig">(generation_id: str, *, api_key: str | None = None, api_base: str = &#x27;https://openrouter.ai/api/v1&#x27;, client: httpx.Client | None = None, retrieved_at: datetime.datetime | None = None, max_attempts: int = 5, initial_retry_delay_seconds: float = 0.5) -&gt; llm_client.openrouter_generation.OpenRouterGenerationEvidence</span></summary>
@@ -2618,14 +2641,14 @@ a provider.</pre>
 <details class="symbol class-symbol" id="module-llm_client-openrouter_generation-OpenRouterGenerationEvidence">
   <summary><code>OpenRouterGenerationEvidence</code> <span class="sig">(*, schema_version: Literal[&#x27;openrouter-generation-evidence-v1&#x27;] = &#x27;openrouter-generation-evidence-v1&#x27;, evidence_id: Annotated[str, _PydanticGeneralMetadata(pattern=&#x27;^orgen1_[0-9a-f]{24}$&#x27;)], generation_id: Annotated[str, MinLen(min_length=1)], model: Annotated[str, MinLen(min_length=1)], provider_name: Annotated[str, MinLen(min_length=1)], endpoint_id: Annotated[str | None, MinLen(min_length=1)] = None, upstream_id: Annotated[str | None, MinLen(min_length=1)] = None, retrieval_attempt_count: Annotated[int, Ge(ge=1)], retrieved_at: datetime.datetime, source_url: Annotated[str, MinLen(min_length=1)], record_digest: Annotated[str, _PydanticGeneralMetadata(pattern=&#x27;^[0-9a-f]{64}$&#x27;)]) -&gt; None</span></summary>
   <div class="symbol-body">
-    <p class="summary">Authenticated OpenRouter metadata for one completed generation.</p>
+    <p class="summary">Observed OpenRouter provider metadata for one completed generation.</p>
     <p class="meta">Source: <code>llm_client.openrouter_generation</code> class</p>
-    <pre class="doc">Authenticated OpenRouter metadata for one completed generation.</pre>
+    <pre class="doc">Observed OpenRouter provider metadata for one completed generation.</pre>
 
     <h4>Methods</h4>
 
 <details class="symbol" id="module-llm_client-openrouter_generation-build">
-  <summary><code>build</code> <span class="sig">(*, generation_id: str, model: str, provider_name: str, endpoint_id: str | None, upstream_id: str | None, retrieval_attempt_count: int, retrieved_at: datetime.datetime, source_url: str) -&gt; &#x27;OpenRouterGenerationEvidence&#x27;</span></summary>
+  <summary><code>build</code> <span class="sig">(*, generation_id: str, model: str, provider_name: str, endpoint_id: str | None, upstream_id: str | None, retrieval_attempt_count: int, retrieved_at: datetime.datetime, source_url: str) -&gt; llm_client.openrouter_generation.OpenRouterGenerationEvidence</span></summary>
   <div class="symbol-body">
     <p class="summary">Build immutable evidence with deterministic identity and replay digest.</p>
     <p class="meta">Source: <code>llm_client.openrouter_generation</code> method</p>
@@ -3433,9 +3456,13 @@ schema digest to retained runtime evidence.</pre>
 <details class="symbol" id="module-llm_client-route_certification_runtime-observe_openrouter_native_success">
   <summary><code>observe_openrouter_native_success</code> <span class="sig">(*, result: llm_client.core.data_types.LLMCallResult, provider_schema: dict[str, typing.Any], schema_class: str, llm_client_revision: str, generation_store: llm_client.openrouter_generation.OpenRouterGenerationEvidenceStore, certification_store: llm_client.route_certification.RouteCertificationStore, api_key: str | None = None, client: httpx.Client | None = None) -&gt; llm_client.route_certification.RouteCertificationObservation</span></summary>
   <div class="symbol-body">
-    <p class="summary">Fetch, verify, and persist one successful OpenRouter native-schema route.</p>
+    <p class="summary">Verify and persist one successful OpenRouter native-schema route.</p>
     <p class="meta">Source: <code>llm_client.route_certification_runtime</code> functions</p>
-    <pre class="doc">Fetch, verify, and persist one successful OpenRouter native-schema route.</pre>
+    <pre class="doc">Verify and persist one successful OpenRouter native-schema route.
+
+Prefer exact provider/model metadata retained on the authenticated
+completion itself.  Older/provider-minimal responses fall back to the
+authenticated generation-history endpoint.</pre>
   </div>
 </details>
 
@@ -5340,6 +5367,15 @@ auto-injected into every turn&#x27;s context so the agent always sees where it i
 Plan 19: Agent Planning and Working Memory.</pre>
 
 <h4>Functions</h4>
+
+<details class="symbol" id="module-llm_client-agent-agent_planning-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.agent.agent_planning</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
 
 <details class="symbol" id="module-llm_client-agent-agent_planning-build_plan_tools">
   <summary><code>build_plan_tools</code> <span class="sig">(plan_state: llm_client.agent.agent_planning.PlanState, config: llm_client.agent.agent_planning.PlanningConfig) -&gt; list[dict[str, typing.Any]]</span></summary>
@@ -7723,6 +7759,15 @@ Returns:
   </div>
 </details>
 
+<details class="symbol" id="module-llm_client-core-client-boundary">
+  <summary><code>boundary</code> <span class="sig">(**kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No-op boundary decorator when data_contracts is unavailable.</p>
+    <p class="meta">Source: <code>llm_client.core.client</code> functions</p>
+    <pre class="doc">No-op boundary decorator when data_contracts is unavailable.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-core-client-call_llm">
   <summary><code>call_llm</code> <span class="sig">(model: str, messages: list[dict[str, typing.Any]], *, timeout: int = 60, num_retries: int = 2, reasoning_effort: str | None = None, api_base: str | None = None, base_delay: float = 1.0, max_delay: float = 30.0, retry_on: list[str] | None = None, on_retry: Optional[Callable[[int, Exception, float], NoneType]] = None, cache: llm_client.core.data_types.CachePolicy | None = None, retry: llm_client.execution.retry.RetryPolicy | None = None, fallback_models: list[str] | None = None, on_fallback: Optional[Callable[[str, Exception, str], NoneType]] = None, hooks: llm_client.execution.retry.Hooks | None = None, execution_mode: Literal[&#x27;text&#x27;, &#x27;structured&#x27;, &#x27;workspace_agent&#x27;, &#x27;workspace_tools&#x27;] = &#x27;text&#x27;, config: llm_client.core.config.ClientConfig | None = None, openrouter_route_policy: llm_client.execution.call_contracts.OpenRouterRoutePolicyV1 | None = None, parent_trace_id: str | None = None, budget_scope_trace_id: str | None = None, budget_scope_mode: Literal[&#x27;sequential&#x27;, &#x27;reserved_concurrent&#x27;] = &#x27;sequential&#x27;, budget_reservation: float = 0.0, **kwargs: Any) -&gt; llm_client.core.data_types.LLMCallResult</span></summary>
   <div class="symbol-body">
@@ -8056,6 +8101,19 @@ Useful when calling call_llm() and parsing JSON manually:
   <div class="module-body">
     <p class="summary">Typed runtime configuration for llm_client.</p>
 <pre class="doc">Typed runtime configuration for llm_client.</pre>
+
+<h4>Functions</h4>
+
+<details class="symbol" id="module-llm_client-core-config-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.core.config</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
+
+
 
 <h4>Classes</h4>
 
@@ -9262,6 +9320,15 @@ Args:
     <p class="summary">Implementation for acall_llm_structured_batch extracted from facade.</p>
     <p class="meta">Source: <code>llm_client.execution.batch_runtime</code> functions</p>
     <pre class="doc">Implementation for acall_llm_structured_batch extracted from facade.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-execution-batch_runtime-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.execution.batch_runtime</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
   </div>
 </details>
 
@@ -11268,7 +11335,7 @@ Non-terminal calls from a demonstrably live local process are reported as
 </details>
 
 <details class="symbol" id="module-llm_client-observability-query-summarize_trace">
-  <summary><code>summarize_trace</code> <span class="sig">(trace_id: str) -&gt; dict[str, typing.Any] | None</span></summary>
+  <summary><code>summarize_trace</code> <span class="sig">(trace_id: str, *, rooted: bool = False) -&gt; dict[str, typing.Any] | None</span></summary>
   <div class="symbol-body">
     <p class="summary">Return one compact cross-table summary for a trace.</p>
     <p class="meta">Source: <code>llm_client.observability.query</code> functions</p>
@@ -11277,7 +11344,10 @@ Non-terminal calls from a demonstrably live local process are reported as
 The goal is diagnosis, not replay fidelity. The summary answers the common
 questions that surfaced during grounded-research benchmark debugging:
 which LLM calls ran, which tool calls ran, what failed, and what completed
-last without requiring bespoke SQL each time.</pre>
+last without requiring bespoke SQL each time. Set ``rooted=True`` when
+``trace_id`` is the exact trace-family root. That path uses the trace index;
+the compatibility default also finds a trace segment nested below an
+unknown ancestor and may require a full scan.</pre>
   </div>
 </details>
 
