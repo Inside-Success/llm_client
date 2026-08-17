@@ -179,7 +179,7 @@ def test_sync_instructor_attempt_is_receipted(
         instructor_client.chat.completions.create_with_completion.call_args.kwargs[
             "max_retries"
         ]
-        == 1
+        == 0
     )
 
 
@@ -240,7 +240,7 @@ def test_sync_instructor_retry_is_owned_by_shared_kernel(
     assert {
         call.kwargs["max_retries"]
         for call in instructor_client.chat.completions.create_with_completion.call_args_list
-    } == {1}
+    } == {0}
     receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
     assert receipt.selected_attempt_ordinal == 1
 
@@ -354,7 +354,7 @@ async def test_async_instructor_attempt_is_receipted(
         instructor_client.chat.completions.create_with_completion.call_args.kwargs[
             "max_retries"
         ]
-        == 1
+        == 0
     )
 
 

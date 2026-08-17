@@ -1954,7 +1954,7 @@ def _call_llm_structured_impl(
             call_kwargs = {
                 **base_kwargs,
                 "response_model": response_model,
-                "max_retries": 1,
+                "max_retries": 0,
             }
             _instructor_schema_hash = _hashlib.sha256(
                 _json.dumps(response_model.model_json_schema(), sort_keys=True).encode()
@@ -3248,7 +3248,7 @@ async def _acall_llm_structured_impl(
             call_kwargs = {
                 **base_kwargs,
                 "response_model": response_model,
-                "max_retries": 1,
+                "max_retries": 0,
             }
             _instructor_schema_hash_async = _hashlib.sha256(
                 _json.dumps(response_model.model_json_schema(), sort_keys=True).encode()
