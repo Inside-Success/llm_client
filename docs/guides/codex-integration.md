@@ -50,6 +50,25 @@ export LLM_CLIENT_CODEX_PROCESS_START_METHOD=fork
 export LLM_CLIENT_CODEX_PROCESS_GRACE_S=3.0
 ```
 
+## Dedicated asynchronous canary
+
+Bounded trusted-private asynchronous work may use the explicit
+`codex_subscription_async` route through `CodexCanaryQueue`. Construct it with
+`CodexCanaryQueue.for_trusted_async_work(CodexCanaryConfig(...))`; the route is
+fixed to `codex/gpt-5.6-luna`, admits one worker per account, and applies a
+bounded queue, hard timeout, quota, and durable queue-level JSONL receipts.
+
+Fallback is disabled unless both a fallback provider/model and a positive
+`fallback_spend_ceiling_usd` are configured. Every fallback receipt is tagged
+`explicit_fallback:<provider>`. This lane is for bounded internal async work;
+production, synchronous, high-concurrency, CI/deploy, contract-sensitive, and
+provider-diverse workloads remain on explicit OpenAI API or OpenRouter routes.
+
+The shared llm_client observability store remains authoritative for the child
+provider call and outer `ObservedRun`; the JSONL receipt records queue
+admission, route, fallback, quota, latency, cancellation, and terminal error
+evidence. Account rotation to evade limits is not supported.
+
 ## Transport fallback
 
 Three transport modes:
