@@ -22,10 +22,10 @@ REASONING_EFFORTS: frozenset[str] = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 )
 
-# Compatible sustained agentic workloads use the reviewed Codex subscription
-# route by default. Every other allowlisted route, including OpenRouter, must
-# carry an explicit model_justification in the routing trace.
-DEFAULT_EXECUTION_MODEL = "codex/gpt-5.6-luna"
+# Compatibility fallback for callers that have not adopted the declared
+# workload-routing contract yet. New code must use resolve_workload_route()
+# rather than treating a provider route as universally suitable.
+DEFAULT_EXECUTION_MODEL = "openrouter/openai/gpt-5.6-luna"
 
 # Exact canonical routes only. Provider aliases are canonicalized before this
 # list is evaluated. Adding a route is a reviewed source change, not a project

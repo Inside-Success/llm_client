@@ -29,16 +29,22 @@ and replaces GPT-5.4 on maintained Codex workflow surfaces. When Luna cannot
 satisfy a required execution contract, callers must select and justify an
 explicit non-GPT-5.4 route; they may not silently revive GPT-5.4.
 
-## 2026-08-16 Amendment: Codex Subscription Default
+## 2026-08-17 Amendment: Compatibility-Aware Workload Routing
 
-The shared execution default is `codex/gpt-5.6-luna`, the reviewed
-subscription-backed Codex route. This applies only when the Codex subscription
-route is compatible with the workload and its explicit reasoning contract.
-Every other allowlisted route, including OpenRouter, remains selectable only
-with a non-empty `model_justification`; the justification is retained in the
-routing trace and replayable call snapshot. This does not remove OpenRouter
-fallbacks or assert that Codex is suitable for model-breadth, low-volume,
-shared-access, or unavailable-capability cases.
+Plan #361 replaces the unsafe global Codex subscription default with an
+explicit `WorkloadRouteContext` and `resolve_workload_route()` contract. Codex
+subscription capacity is chosen only for a declared compatible interactive or
+trusted-private workload with supported subscription authentication and known
+available included capacity. Managed automation, service/API requirements, and
+unsupported subscription authentication select the direct OpenAI API route.
+
+OpenRouter remains an explicit edge route: a required router capability
+(including non-OpenAI model access, multi-provider routing, or provider
+controls) or a current recorded value comparison can select it. Subscription
+exhaustion fails locally until the caller records whether paid Codex credits,
+direct OpenAI API, or OpenRouter won the live comparison; it is never automatic
+OpenRouter overflow. The legacy `DEFAULT_EXECUTION_MODEL` remains only for
+unmigrated callers and does not express the new workload-routing policy.
 
 ## 2026-07-31 Amendment: OpenRouter Exact-Response Cache Policy
 

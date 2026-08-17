@@ -43,8 +43,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
   proves wiki-first navigation back to native source.
 - **Completed wiki maintenance vertical:** Plan #359 enforces source freshness
   and ingests the separately owned Inside Success downstream capsule.
-- **Canonical main:** `5a3369e` (verified 2026-07-25; 1,948 passed, 3 skipped,
-  12 deselected).
+- **Canonical main:** current `main` (verify its revision at integration time).
 - **Merged, awaiting downstream acceptance:** Plans #121, #122, #124, and
   #334. Plan #124's shared implementation is verified locally; its remaining
   acceptance is one governed Process Tracing replay.
@@ -59,7 +58,8 @@ adversarial-review checkpoints, test commands, and completion criteria.
 |---|------|----------|--------|--------|
 | 359 | [Codebase Wiki Freshness and Dual-Lineage Ingest](359_codebase_wiki_freshness_and_dual_lineage.md) | Critical | ✅ Complete | Trustworthy ongoing personal/company wiki navigation |
 | 358 | [Revision-Grounded Karpathy Codebase Wiki](358_llm_client_karpathy_codebase_wiki.md) | Critical | ✅ Complete | Fresh-session wiki-first architecture navigation |
-| 360 | [Codex Subscription Default](360_codex_subscription_default.md) | High | 🚧 Implemented (focused verification) | visible, justification-backed OpenRouter exceptions |
+| 361 | [Compatibility-Aware Workload Route Selection](361_workload_route_selection.md) | High | ✅ Complete | explicit Codex/API/OpenRouter provider selection |
+| 360 | [Codex Subscription Default](360_codex_subscription_default.md) | High | Superseded by Plan #361 | compatibility-aware route selection |
 | 357 | [Nested Tool-Loop Model Justification](357_nested_tool_model_justification.md) | Critical | ✅ Complete | Open Web Retrieval agent-driven MVP M1 canary |
 | 356 | [Instructor Structured-Attempt Ledger](356_instructor_attempt_ledger.md) | Critical | ✅ Complete | `research_v3` Plan #25 evidence-complete Luna comparison |
 | 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | 🚧 Implemented (downstream adoption pending) | Agent Ecology 3 Plan #10 Luna Medium recovery gate |
