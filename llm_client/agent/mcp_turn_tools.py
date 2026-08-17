@@ -354,8 +354,18 @@ async def _process_tool_calls_turn(
             tool_name = str(tc.get("function", {}).get("name", "")).strip()
             tc_id = tc.get("id", "")
             parsed_args = _extract_tool_call_args(tc) or {}
+            terminal_mode = str(parsed_args.get("terminal_mode") or "").strip().lower()
+            is_validated_no_answer_terminal = terminal_mode in {
+                "evidence_exhausted",
+                "abstain",
+                "abstention",
+            }
 
-            if tool_name == "submit_answer" and submit_requires_new_evidence:
+            if (
+                tool_name == "submit_answer"
+                and submit_requires_new_evidence
+                and not is_validated_no_answer_terminal
+            ):
                 if (
                     submit_evidence_digest_at_last_failure is not None
                     and current_evidence_digest != submit_evidence_digest_at_last_failure
@@ -396,7 +406,11 @@ async def _process_tool_calls_turn(
                     )
                     continue
 
-            if tool_name == "submit_answer" and submit_requires_todo_progress:
+            if (
+                tool_name == "submit_answer"
+                and submit_requires_todo_progress
+                and not is_validated_no_answer_terminal
+            ):
                 if (
                     submit_todo_status_at_last_failure is not None
                     and last_todo_status_line is not None

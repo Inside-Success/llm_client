@@ -479,6 +479,11 @@ async def _agent_loop(
     )
     control_loop_suppressed_calls = 0
     last_budget_remaining: int | None = None
+    submit_budget_grace_turns = 0
+    submit_budget_grace_turn_limit = 2
+    submit_terminal_repair_turns = 0
+    submit_terminal_repair_turn_limit = 1
+    validated_terminal_available: str | None = None
     rejected_missing_reasoning_calls = 0
     tool_call_turns_total = 0
     tool_call_empty_text_turns = 0
@@ -761,15 +766,93 @@ async def _agent_loop(
             budgeted_calls_used = _count_budgeted_records(agent_result.tool_calls)
             remaining_tool_calls = max_tool_calls - budgeted_calls_used
             if remaining_tool_calls <= 0:
-                force_final_reason = "max_tool_calls"
-                logger.warning(
-                    "Agent loop exhausted max_tool_calls=%d after %d turns (%d budgeted, %d total tool calls); forcing final answer",
-                    max_tool_calls,
-                    turn,
-                    budgeted_calls_used,
-                    len(agent_result.tool_calls),
-                )
-                break
+                if (
+                    requires_submit_answer
+                    and not submit_answer_succeeded
+                    and submit_budget_grace_turns < submit_budget_grace_turn_limit
+                ):
+                    submit_budget_grace_turns += 1
+                    grace_msg = {
+                        "role": "user",
+                        "content": (
+                            "[SYSTEM: Retrieval-tool budget is exhausted. This is a "
+                            "budget-exempt terminal grace turn. Do not call retrieval tools. "
+                            f"You may use only: {', '.join(sorted(BUDGET_EXEMPT_TOOL_NAMES))}. "
+                            "Commit any already-validated TODO result, then call submit_answer. "
+                            "If the submit schema offers an evidence_exhausted or abstain terminal "
+                            "and bounded evidence cannot resolve a pending item, use that validated "
+                            "no-answer terminal now instead of retrying a factual answer. "
+                            "Never invent missing evidence.]"
+                        ),
+                    }
+                    messages.append(grace_msg)
+                    agent_result.conversation_trace.append(grace_msg)
+                    last_budget_remaining = 0
+                    logger.warning(
+                        "SUBMIT_BUDGET_GRACE_TURN: allowing budget-exempt terminal turn %d/%d "
+                        "after %d/%d retrieval calls",
+                        submit_budget_grace_turns,
+                        submit_budget_grace_turn_limit,
+                        budgeted_calls_used,
+                        max_tool_calls,
+                    )
+                elif (
+                    requires_submit_answer
+                    and not submit_answer_succeeded
+                    and validated_terminal_available
+                    and submit_terminal_repair_turns < submit_terminal_repair_turn_limit
+                ):
+                    submit_terminal_repair_turns += 1
+                    terminal_repair_msg = {
+                        "role": "user",
+                        "content": (
+                            "[SYSTEM: The validator exposed the immediately legal terminal mode "
+                            f"'{validated_terminal_available}' after the last rejected submit. "
+                            "This is a one-shot, budget-exempt terminal repair turn. Call "
+                            "submit_answer now using that exact terminal_mode and the validator's "
+                            "repair guidance. For a no-answer terminal, use answer='' and a concise "
+                            "summary of the inspected evidence gap. Do not call any other tool and "
+                            "do not retry a factual answer.]"
+                        ),
+                    }
+                    messages.append(terminal_repair_msg)
+                    agent_result.conversation_trace.append(terminal_repair_msg)
+                    last_budget_remaining = 0
+                    logger.warning(
+                        "SUBMIT_TERMINAL_REPAIR_TURN: allowing validator-directed terminal "
+                        "repair %d/%d for mode=%s after %d/%d retrieval calls",
+                        submit_terminal_repair_turns,
+                        submit_terminal_repair_turn_limit,
+                        validated_terminal_available,
+                        budgeted_calls_used,
+                        max_tool_calls,
+                    )
+                elif (
+                    requires_submit_answer
+                    and not submit_answer_succeeded
+                    and not accept_forced_answer_on_max_tool_calls
+                ):
+                    logger.warning(
+                        "Agent loop exhausted max_tool_calls=%d after %d turns "
+                        "(%d budgeted, %d total tool calls); required submit remains "
+                        "unaccepted and forced-answer adoption is disabled, so no "
+                        "plain-text forced-final call will be made",
+                        max_tool_calls,
+                        turn,
+                        budgeted_calls_used,
+                        len(agent_result.tool_calls),
+                    )
+                    break
+                else:
+                    force_final_reason = "max_tool_calls"
+                    logger.warning(
+                        "Agent loop exhausted max_tool_calls=%d after %d turns (%d budgeted, %d total tool calls); forcing final answer",
+                        max_tool_calls,
+                        turn,
+                        budgeted_calls_used,
+                        len(agent_result.tool_calls),
+                    )
+                    break
             if remaining_tool_calls != last_budget_remaining:
                 budget_msg = {
                     "role": "user",
@@ -1061,6 +1144,8 @@ async def _agent_loop(
             turn_outcome.submit_todo_status_at_last_failure
         )
         submit_retry_guidance = turn_outcome.submit_retry_guidance
+        if turn_outcome.validated_terminal_available is not None:
+            validated_terminal_available = turn_outcome.validated_terminal_available
         evidence_pointer_count = turn_outcome.evidence_pointer_count
         evidence_digest_change_count += (
             turn_outcome.evidence_digest_change_count_delta
@@ -1254,7 +1339,7 @@ async def _agent_loop(
             })
 
         if submit_answer_succeeded:
-            final_content = submitted_answer_value or (result.content or "").strip() or "submitted"
+            final_content = submitted_answer_value or final_content.strip() or "submitted"
             final_finish_reason = "submitted"
             logger.info(
                 "Agent loop: submit_answer succeeded on turn %d/%d",
@@ -1533,4 +1618,11 @@ async def _agent_loop(
     agent_result.metadata["submit_progress_stall_streak_max"] = (
         submit_progress_stall_streak_max
     )
+    agent_result.metadata["submit_budget_grace_turns"] = submit_budget_grace_turns
+    agent_result.metadata["submit_budget_grace_turn_limit"] = submit_budget_grace_turn_limit
+    agent_result.metadata["submit_terminal_repair_turns"] = submit_terminal_repair_turns
+    agent_result.metadata["submit_terminal_repair_turn_limit"] = (
+        submit_terminal_repair_turn_limit
+    )
+    agent_result.metadata["validated_terminal_available"] = validated_terminal_available
     return final_content, final_finish_reason
