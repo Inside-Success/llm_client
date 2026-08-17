@@ -479,6 +479,8 @@ async def _agent_loop(
     )
     control_loop_suppressed_calls = 0
     last_budget_remaining: int | None = None
+    submit_budget_grace_turns = 0
+    submit_budget_grace_turn_limit = 2
     rejected_missing_reasoning_calls = 0
     tool_call_turns_total = 0
     tool_call_empty_text_turns = 0
@@ -761,15 +763,43 @@ async def _agent_loop(
             budgeted_calls_used = _count_budgeted_records(agent_result.tool_calls)
             remaining_tool_calls = max_tool_calls - budgeted_calls_used
             if remaining_tool_calls <= 0:
-                force_final_reason = "max_tool_calls"
-                logger.warning(
-                    "Agent loop exhausted max_tool_calls=%d after %d turns (%d budgeted, %d total tool calls); forcing final answer",
-                    max_tool_calls,
-                    turn,
-                    budgeted_calls_used,
-                    len(agent_result.tool_calls),
-                )
-                break
+                if (
+                    requires_submit_answer
+                    and not submit_answer_succeeded
+                    and submit_budget_grace_turns < submit_budget_grace_turn_limit
+                ):
+                    submit_budget_grace_turns += 1
+                    grace_msg = {
+                        "role": "user",
+                        "content": (
+                            "[SYSTEM: Retrieval-tool budget is exhausted. This is a "
+                            "budget-exempt terminal grace turn. Do not call retrieval tools. "
+                            f"You may use only: {', '.join(sorted(BUDGET_EXEMPT_TOOL_NAMES))}. "
+                            "Commit any already-validated TODO result, then call submit_answer. "
+                            "Never invent missing evidence.]"
+                        ),
+                    }
+                    messages.append(grace_msg)
+                    agent_result.conversation_trace.append(grace_msg)
+                    last_budget_remaining = 0
+                    logger.warning(
+                        "SUBMIT_BUDGET_GRACE_TURN: allowing budget-exempt terminal turn %d/%d "
+                        "after %d/%d retrieval calls",
+                        submit_budget_grace_turns,
+                        submit_budget_grace_turn_limit,
+                        budgeted_calls_used,
+                        max_tool_calls,
+                    )
+                else:
+                    force_final_reason = "max_tool_calls"
+                    logger.warning(
+                        "Agent loop exhausted max_tool_calls=%d after %d turns (%d budgeted, %d total tool calls); forcing final answer",
+                        max_tool_calls,
+                        turn,
+                        budgeted_calls_used,
+                        len(agent_result.tool_calls),
+                    )
+                    break
             if remaining_tool_calls != last_budget_remaining:
                 budget_msg = {
                     "role": "user",
@@ -1533,4 +1563,6 @@ async def _agent_loop(
     agent_result.metadata["submit_progress_stall_streak_max"] = (
         submit_progress_stall_streak_max
     )
+    agent_result.metadata["submit_budget_grace_turns"] = submit_budget_grace_turns
+    agent_result.metadata["submit_budget_grace_turn_limit"] = submit_budget_grace_turn_limit
     return final_content, final_finish_reason
