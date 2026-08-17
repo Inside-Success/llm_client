@@ -481,6 +481,12 @@ def _process_turn_outcomes(
         and updated_last_todo_status_line is not None
         and updated_last_todo_status_line != submit_todo_status_at_last_failure
     ):
+        # A pending-atoms rejection couples the TODO-progress and fresh-evidence
+        # gates. A successful TODO transition may validate already-cached typed
+        # evidence without adding a new pointer, so that state change must clear
+        # both gates and allow the submit validator to re-check the terminal.
+        submit_requires_new_evidence = False
+        submit_evidence_digest_at_last_failure = None
         submit_requires_todo_progress = False
         submit_todo_status_at_last_failure = None
         submit_retry_guidance = None
