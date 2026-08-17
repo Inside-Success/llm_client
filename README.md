@@ -56,13 +56,26 @@ pip install -e "~/projects/llm_client[structured]"  # + instructor for Pydantic 
 ## Quick start
 
 ```python
-from llm_client import DEFAULT_EXECUTION_MODEL, call_llm
+from llm_client import WorkloadRouteContext, call_llm, resolve_workload_route
+
+route = resolve_workload_route(
+    WorkloadRouteContext(
+        codex_compatible=True,
+        environment="trusted_private_automation",
+        subscription_auth_supported=True,
+        subscription_capacity="available",
+        requires_openai_api_contract=False,
+        requires_openrouter_features=False,
+        openrouter_is_live_best_value=False,
+    )
+)
 
 result = call_llm(
-    DEFAULT_EXECUTION_MODEL,
+    route.model,
     [{"role": "user", "content": "Summarize this note"}],
-    reasoning_effort="medium",
+    reasoning_effort=route.reasoning_effort,
     model_policy="enforce_allowlist",
+    model_justification=route.model_justification,
     task="extraction",
     trace_id="demo/basic",
     max_budget=1.00,

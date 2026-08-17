@@ -44,8 +44,8 @@ def test_default_route_needs_no_justification_but_requires_reasoning_policy() ->
     assert decision.reasoning_policy.effort == "medium"
 
 
-def test_codex_subscription_luna_is_the_shared_default() -> None:
-    assert DEFAULT_EXECUTION_MODEL == "codex/gpt-5.6-luna"
+def test_legacy_default_is_not_the_workload_routing_policy() -> None:
+    assert DEFAULT_EXECUTION_MODEL == "openrouter/openai/gpt-5.6-luna"
 
 
 def test_allowed_alternate_requires_and_records_justification() -> None:
@@ -130,13 +130,14 @@ def test_allowed_alternate_without_justification_fails() -> None:
         )
 
 
-def test_openrouter_luna_requires_an_explicit_exception_reason() -> None:
-    with pytest.raises(LLMConfigurationError, match="require model_justification"):
-        evaluate_model_execution_policy(
-            ["openrouter/openai/gpt-5.6-luna"],
-            mode="enforce_allowlist",
-            reasoning_effort="medium",
-        )
+def test_legacy_openrouter_default_remains_compatible_for_unmigrated_callers() -> None:
+    decision = evaluate_model_execution_policy(
+        ["openrouter/openai/gpt-5.6-luna"],
+        mode="enforce_allowlist",
+        reasoning_effort="medium",
+    )
+
+    assert decision.uses_only_default is True
 
 
 @pytest.mark.parametrize(

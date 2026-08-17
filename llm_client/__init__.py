@@ -221,8 +221,11 @@ from llm_client.core.models import (
 from llm_client.core.model_selection import (
     ResolvedModelChain,
     ResolvedModelSelection,
+    ResolvedWorkloadRoute,
+    WorkloadRouteContext,
     resolve_model_chain,
     resolve_model_selection,
+    resolve_workload_route,
     strict_model_policy,
 )
 from llm_client.core.model_execution_policy import (
