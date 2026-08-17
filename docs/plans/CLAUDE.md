@@ -59,6 +59,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 |---|------|----------|--------|--------|
 | 359 | [Codebase Wiki Freshness and Dual-Lineage Ingest](359_codebase_wiki_freshness_and_dual_lineage.md) | Critical | ✅ Complete | Trustworthy ongoing personal/company wiki navigation |
 | 358 | [Revision-Grounded Karpathy Codebase Wiki](358_llm_client_karpathy_codebase_wiki.md) | Critical | ✅ Complete | Fresh-session wiki-first architecture navigation |
+| 360 | [Codex Subscription Default](360_codex_subscription_default.md) | High | 🚧 Implemented (focused verification) | visible, justification-backed OpenRouter exceptions |
 | 357 | [Nested Tool-Loop Model Justification](357_nested_tool_model_justification.md) | Critical | ✅ Complete | Open Web Retrieval agent-driven MVP M1 canary |
 | 356 | [Instructor Structured-Attempt Ledger](356_instructor_attempt_ledger.md) | Critical | ✅ Complete | `research_v3` Plan #25 evidence-complete Luna comparison |
 | 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | 🚧 Implemented (downstream adoption pending) | Agent Ecology 3 Plan #10 Luna Medium recovery gate |

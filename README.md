@@ -61,7 +61,7 @@ from llm_client import DEFAULT_EXECUTION_MODEL, call_llm
 result = call_llm(
     DEFAULT_EXECUTION_MODEL,
     [{"role": "user", "content": "Summarize this note"}],
-    reasoning_effort="none",
+    reasoning_effort="medium",
     model_policy="enforce_allowlist",
     task="extraction",
     trace_id="demo/basic",

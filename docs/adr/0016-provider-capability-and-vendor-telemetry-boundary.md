@@ -29,6 +29,17 @@ and replaces GPT-5.4 on maintained Codex workflow surfaces. When Luna cannot
 satisfy a required execution contract, callers must select and justify an
 explicit non-GPT-5.4 route; they may not silently revive GPT-5.4.
 
+## 2026-08-16 Amendment: Codex Subscription Default
+
+The shared execution default is `codex/gpt-5.6-luna`, the reviewed
+subscription-backed Codex route. This applies only when the Codex subscription
+route is compatible with the workload and its explicit reasoning contract.
+Every other allowlisted route, including OpenRouter, remains selectable only
+with a non-empty `model_justification`; the justification is retained in the
+routing trace and replayable call snapshot. This does not remove OpenRouter
+fallbacks or assert that Codex is suitable for model-breadth, low-volume,
+shared-access, or unavailable-capability cases.
+
 ## 2026-07-31 Amendment: OpenRouter Exact-Response Cache Policy
 
 Plan #347 extends `OpenRouterRoutePolicyV1` with an explicit, default-off
