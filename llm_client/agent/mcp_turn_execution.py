@@ -776,6 +776,9 @@ async def _agent_loop(
                             "budget-exempt terminal grace turn. Do not call retrieval tools. "
                             f"You may use only: {', '.join(sorted(BUDGET_EXEMPT_TOOL_NAMES))}. "
                             "Commit any already-validated TODO result, then call submit_answer. "
+                            "If the submit schema offers an evidence_exhausted or abstain terminal "
+                            "and bounded evidence cannot resolve a pending item, use that validated "
+                            "no-answer terminal now instead of retrying a factual answer. "
                             "Never invent missing evidence.]"
                         ),
                     }
@@ -790,6 +793,22 @@ async def _agent_loop(
                         budgeted_calls_used,
                         max_tool_calls,
                     )
+                elif (
+                    requires_submit_answer
+                    and not submit_answer_succeeded
+                    and not accept_forced_answer_on_max_tool_calls
+                ):
+                    logger.warning(
+                        "Agent loop exhausted max_tool_calls=%d after %d turns "
+                        "(%d budgeted, %d total tool calls); required submit remains "
+                        "unaccepted and forced-answer adoption is disabled, so no "
+                        "plain-text forced-final call will be made",
+                        max_tool_calls,
+                        turn,
+                        budgeted_calls_used,
+                        len(agent_result.tool_calls),
+                    )
+                    break
                 else:
                     force_final_reason = "max_tool_calls"
                     logger.warning(
@@ -1284,7 +1303,7 @@ async def _agent_loop(
             })
 
         if submit_answer_succeeded:
-            final_content = submitted_answer_value or (result.content or "").strip() or "submitted"
+            final_content = submitted_answer_value or final_content.strip() or "submitted"
             final_finish_reason = "submitted"
             logger.info(
                 "Agent loop: submit_answer succeeded on turn %d/%d",
