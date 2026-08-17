@@ -43,6 +43,7 @@ class AgentTurnOutcomeResult:
     submit_requires_todo_progress: bool
     submit_todo_status_at_last_failure: str | None
     submit_retry_guidance: str | None
+    validated_terminal_available: str | None
     evidence_pointer_count: int
     evidence_digest_change_count_delta: int
     evidence_turns_total_delta: int
@@ -154,6 +155,7 @@ def _process_turn_outcomes(
     submit_errors: list[str] = []
     submit_needs_new_evidence_signal = False
     submit_requires_forced_terminal_signal = False
+    validated_terminal_available: str | None = None
 
     evidence_digest_before_turn = _evidence_digest(evidence_pointer_labels)
     for record in executed_records:
@@ -270,9 +272,10 @@ def _process_turn_outcomes(
                 submit_requires_new_evidence=submit_requires_new_evidence,
                 submit_evidence_digest_at_last_failure=submit_evidence_digest_at_last_failure,
                 submit_requires_todo_progress=submit_requires_todo_progress,
-                submit_todo_status_at_last_failure=submit_todo_status_at_last_failure,
-                submit_retry_guidance=submit_retry_guidance,
-                evidence_pointer_count=evidence_pointer_count,
+                    submit_todo_status_at_last_failure=submit_todo_status_at_last_failure,
+                    submit_retry_guidance=submit_retry_guidance,
+                    validated_terminal_available=None,
+                    evidence_pointer_count=evidence_pointer_count,
                 evidence_digest_change_count_delta=evidence_digest_change_count_delta,
                 evidence_turns_total_delta=evidence_turns_total_delta,
                 evidence_turns_with_new_evidence_delta=evidence_turns_with_new_evidence_delta,
@@ -348,6 +351,9 @@ def _process_turn_outcomes(
                     raw_guidance = recovery_policy.get("repair_guidance")
                     if isinstance(raw_guidance, str) and raw_guidance.strip():
                         repair_guidance = raw_guidance.strip()
+                    raw_terminal = recovery_policy.get("validated_terminal_available")
+                    if isinstance(raw_terminal, str) and raw_terminal.strip():
+                        validated_terminal_available = raw_terminal.strip()
                 if isinstance(validation_payload, dict):
                     reason_code = str(validation_payload.get("reason_code", "")).strip()
                     detail = str(validation_payload.get("message", "")).strip()
@@ -565,6 +571,7 @@ def _process_turn_outcomes(
         submit_requires_todo_progress=submit_requires_todo_progress,
         submit_todo_status_at_last_failure=submit_todo_status_at_last_failure,
         submit_retry_guidance=submit_retry_guidance,
+        validated_terminal_available=validated_terminal_available,
         evidence_pointer_count=evidence_pointer_count,
         evidence_digest_change_count_delta=evidence_digest_change_count_delta,
         evidence_turns_total_delta=evidence_turns_total_delta,
