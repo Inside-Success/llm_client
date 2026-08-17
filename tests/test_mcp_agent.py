@@ -1209,6 +1209,132 @@ class TestAcallWithMcp:
         assert agent_result.metadata["submit_validator_accepted"] is True
         assert agent_result.metadata["submit_completion_mode"] == "grounded_submit"
 
+    async def test_validator_terminal_repair_gets_one_turn_after_grace_is_consumed(self) -> None:
+        """A late terminal repair contract must remain executable after generic grace."""
+        from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
+
+        llm_results = [
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_search",
+                    "function": {"name": "search", "arguments": "{}"},
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_todo",
+                    "function": {"name": "todo_write", "arguments": "{}"},
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_answer",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": json.dumps({
+                            "reasoning": "unsupported candidate",
+                            "answer": "guess",
+                            "terminal_mode": "answer",
+                        }),
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_exhausted",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": json.dumps({
+                            "reasoning": "bounded evidence gap",
+                            "answer": "",
+                            "terminal_mode": "evidence_exhausted",
+                        }),
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        async def mock_executor(tool_calls, max_len):
+            records = []
+            messages = []
+            for tool_call in tool_calls:
+                tool_name = tool_call["function"]["name"]
+                arguments = json.loads(tool_call["function"].get("arguments") or "{}")
+                if tool_name == "submit_answer" and arguments.get("terminal_mode") == "answer":
+                    result = json.dumps({
+                        "status": "rejected",
+                        "validation_error": {
+                            "reason_code": "evidence_exhausted_available",
+                            "message": "Use the validated no-answer terminal.",
+                        },
+                        "recovery_policy": {
+                            "new_evidence_required_before_retry": False,
+                            "validated_terminal_available": "evidence_exhausted",
+                            "repair_guidance": (
+                                "Call submit_answer with answer='', "
+                                "terminal_mode='evidence_exhausted'."
+                            ),
+                        },
+                    })
+                elif tool_name == "submit_answer":
+                    result = json.dumps({
+                        "status": "submitted",
+                        "terminal_mode": "evidence_exhausted",
+                        "answer": "",
+                    })
+                else:
+                    result = json.dumps({"status": "ok"})
+                records.append(MCPToolCallRecord(
+                    server="srv",
+                    tool=tool_name,
+                    arguments=arguments,
+                    result=result,
+                ))
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": result,
+                })
+            return records, messages
+
+        agent_result = MCPAgentResult()
+        with patch("llm_client.agent.mcp_agent._inner_acall_llm", side_effect=llm_results):
+            content, finish = await _agent_loop(
+                "test-model",
+                [{"role": "user", "content": "q"}],
+                [
+                    {"type": "function", "function": {"name": "search"}},
+                    {"type": "function", "function": {"name": "todo_write"}},
+                    {"type": "function", "function": {"name": "submit_answer"}},
+                ],
+                agent_result,
+                mock_executor,
+                8,
+                1,
+                False,
+                50000,
+                max_message_chars=60,
+                timeout=60,
+                kwargs={"accept_forced_answer_on_max_tool_calls": False},
+            )
+
+        assert content == "submitted"
+        assert finish == "submitted"
+        assert [record.tool for record in agent_result.tool_calls] == [
+            "search", "todo_write", "submit_answer", "submit_answer"
+        ]
+        assert agent_result.metadata["submit_budget_grace_turns"] == 2
+        assert agent_result.metadata["submit_terminal_repair_turns"] == 1
+        assert agent_result.metadata["validated_terminal_available"] == "evidence_exhausted"
+        assert any(
+            "one-shot, budget-exempt terminal repair turn" in str(message.get("content") or "")
+            for message in agent_result.conversation_trace
+        )
+
     async def test_submit_required_budget_exhaustion_skips_plain_forced_final_when_disabled(self) -> None:
         """A failed validated terminal must not trigger a provider-only guessed answer call."""
         from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop

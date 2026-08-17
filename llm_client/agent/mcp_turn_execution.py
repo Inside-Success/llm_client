@@ -481,6 +481,9 @@ async def _agent_loop(
     last_budget_remaining: int | None = None
     submit_budget_grace_turns = 0
     submit_budget_grace_turn_limit = 2
+    submit_terminal_repair_turns = 0
+    submit_terminal_repair_turn_limit = 1
+    validated_terminal_available: str | None = None
     rejected_missing_reasoning_calls = 0
     tool_call_turns_total = 0
     tool_call_empty_text_turns = 0
@@ -790,6 +793,37 @@ async def _agent_loop(
                         "after %d/%d retrieval calls",
                         submit_budget_grace_turns,
                         submit_budget_grace_turn_limit,
+                        budgeted_calls_used,
+                        max_tool_calls,
+                    )
+                elif (
+                    requires_submit_answer
+                    and not submit_answer_succeeded
+                    and validated_terminal_available
+                    and submit_terminal_repair_turns < submit_terminal_repair_turn_limit
+                ):
+                    submit_terminal_repair_turns += 1
+                    terminal_repair_msg = {
+                        "role": "user",
+                        "content": (
+                            "[SYSTEM: The validator exposed the immediately legal terminal mode "
+                            f"'{validated_terminal_available}' after the last rejected submit. "
+                            "This is a one-shot, budget-exempt terminal repair turn. Call "
+                            "submit_answer now using that exact terminal_mode and the validator's "
+                            "repair guidance. For a no-answer terminal, use answer='' and a concise "
+                            "summary of the inspected evidence gap. Do not call any other tool and "
+                            "do not retry a factual answer.]"
+                        ),
+                    }
+                    messages.append(terminal_repair_msg)
+                    agent_result.conversation_trace.append(terminal_repair_msg)
+                    last_budget_remaining = 0
+                    logger.warning(
+                        "SUBMIT_TERMINAL_REPAIR_TURN: allowing validator-directed terminal "
+                        "repair %d/%d for mode=%s after %d/%d retrieval calls",
+                        submit_terminal_repair_turns,
+                        submit_terminal_repair_turn_limit,
+                        validated_terminal_available,
                         budgeted_calls_used,
                         max_tool_calls,
                     )
@@ -1110,6 +1144,8 @@ async def _agent_loop(
             turn_outcome.submit_todo_status_at_last_failure
         )
         submit_retry_guidance = turn_outcome.submit_retry_guidance
+        if turn_outcome.validated_terminal_available is not None:
+            validated_terminal_available = turn_outcome.validated_terminal_available
         evidence_pointer_count = turn_outcome.evidence_pointer_count
         evidence_digest_change_count += (
             turn_outcome.evidence_digest_change_count_delta
@@ -1584,4 +1620,9 @@ async def _agent_loop(
     )
     agent_result.metadata["submit_budget_grace_turns"] = submit_budget_grace_turns
     agent_result.metadata["submit_budget_grace_turn_limit"] = submit_budget_grace_turn_limit
+    agent_result.metadata["submit_terminal_repair_turns"] = submit_terminal_repair_turns
+    agent_result.metadata["submit_terminal_repair_turn_limit"] = (
+        submit_terminal_repair_turn_limit
+    )
+    agent_result.metadata["validated_terminal_available"] = validated_terminal_available
     return final_content, final_finish_reason
