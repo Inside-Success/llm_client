@@ -1022,6 +1022,84 @@ class TestAcallWithMcp:
             assert result.raw_response.turns == 2  # 1 loop + 1 forced final
             assert len(result.raw_response.tool_calls) == 1
 
+    async def test_submit_answer_gets_budget_exempt_turn_after_last_retrieval(self) -> None:
+        """Consuming the last retrieval call must not preempt an explicit validated submit."""
+        from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
+
+        llm_results = [
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_search",
+                    "function": {"name": "search", "arguments": "{}"},
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_submit",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": '{"reasoning":"from chunk_1","answer":"grounded"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        async def mock_executor(tool_calls, max_len):
+            records = []
+            messages = []
+            for tool_call in tool_calls:
+                function = tool_call.get("function", {})
+                tool_name = function.get("name", "")
+                tool_call_id = tool_call.get("id", "")
+                if tool_name == "submit_answer":
+                    result = '{"status":"submitted","answer":"grounded"}'
+                    arguments = {"reasoning": "from chunk_1", "answer": "grounded"}
+                else:
+                    result = '{"chunks":[{"chunk_id":"chunk_1","text":"grounded"}]}'
+                    arguments = {}
+                records.append(
+                    MCPToolCallRecord(
+                        server="srv",
+                        tool=tool_name,
+                        arguments=arguments,
+                        result=result,
+                    )
+                )
+                messages.append(
+                    {"role": "tool", "tool_call_id": tool_call_id, "content": result}
+                )
+            return records, messages
+
+        agent_result = MCPAgentResult()
+        with patch("llm_client.agent.mcp_agent._inner_acall_llm", side_effect=llm_results):
+            content, finish = await _agent_loop(
+                "test-model",
+                [{"role": "user", "content": "q"}],
+                [
+                    {"type": "function", "function": {"name": "search"}},
+                    {"type": "function", "function": {"name": "submit_answer"}},
+                ],
+                agent_result,
+                mock_executor,
+                5,
+                1,
+                False,
+                50000,
+                max_message_chars=60,
+                timeout=60,
+                kwargs={"accept_forced_answer_on_max_tool_calls": False},
+            )
+
+        assert content == "grounded"
+        assert finish == "submitted"
+        assert [record.tool for record in agent_result.tool_calls] == ["search", "submit_answer"]
+        assert agent_result.metadata["submit_budget_grace_turns"] == 1
+        assert agent_result.metadata["submit_forced_accept_on_budget_exhaustion"] is False
+
     async def test_forced_final_llm_exception_preserves_tool_history(self) -> None:
         """Forced-final provider failure should keep prior tool trace instead of raising."""
         mock_session = AsyncMock()
