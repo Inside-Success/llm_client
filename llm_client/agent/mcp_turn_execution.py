@@ -1339,6 +1339,10 @@ async def _agent_loop(
             })
 
         if submit_answer_succeeded:
+            # ``result`` belongs to the turn-model stage and is intentionally
+            # not available here after tool execution.  The accepted submit
+            # payload is the canonical terminal answer; retain the prior
+            # turn content only as a bounded fallback.
             final_content = submitted_answer_value or final_content.strip() or "submitted"
             final_finish_reason = "submitted"
             logger.info(

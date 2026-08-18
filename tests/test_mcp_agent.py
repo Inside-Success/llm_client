@@ -3605,7 +3605,7 @@ class TestAgentDiagnostics:
         assert agent_result.metadata["context_tool_result_cleared_chars"] > 0
 
     async def test_submit_answer_enforced_when_tool_available(self) -> None:
-        """When submit_answer exists, plain-text response is nudged into explicit submission."""
+        """An accepted submit records its answer without dereferencing turn-local state."""
         from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
 
         llm_results = [
