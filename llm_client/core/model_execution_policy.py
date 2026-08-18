@@ -57,6 +57,7 @@ ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "codex/gpt-5.6-terra",
         "claude-code",
         "claude-code/sonnet",
+        "claude-code/haiku",
     }
 )
 
