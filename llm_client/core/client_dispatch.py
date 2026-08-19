@@ -163,6 +163,29 @@ def _resolve_call_plan(
             normalized = str(event.get("to", "")).strip()
             if raw and normalized and raw != normalized:
                 logger.info("ROUTE_MODEL: %s -> %s", raw, normalized)
+
+    # Governance events (ExactAliasRule, prefix templates, etc.) can pin a
+    # model to a specific route_class/provider/bill. This is a billing-
+    # relevant decision even when the model string itself is unchanged
+    # (e.g. a bare alias forced onto a certified direct-provider route
+    # instead of the default OpenRouter proxy). Log it loudly at WARNING
+    # so a silent provider/bill switch is never invisible in the logs.
+    provider_governance_events = plan.routing_trace.get("provider_governance_events")
+    if isinstance(provider_governance_events, list):
+        for event in provider_governance_events:
+            if not isinstance(event, dict):
+                continue
+            raw = str(event.get("from", "")).strip()
+            canonical = str(event.get("to", "")).strip()
+            route_class = event.get("route_class")
+            reason = event.get("reason")
+            logger.warning(
+                "ROUTE_PROVIDER_GOVERNANCE: model=%r canonical=%r route_class=%s reason=%s",
+                raw,
+                canonical,
+                route_class,
+                reason,
+            )
     return plan
 
 
