@@ -2709,3 +2709,206 @@ class TestCodexMcpServers:
         from llm_client.sdk.agents import _cleanup_tmp
 
         _cleanup_tmp("/tmp/this_does_not_exist_12345")  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Best-effort agent session diagnostics (reads the claude CLI's own session
+# transcript to summarize what happened during a failed agent-SDK call)
+# ---------------------------------------------------------------------------
+
+
+class TestAgentSessionDiagnosticsUnit:
+    """Direct unit tests of the transcript-reading summarizer, independent of
+    any real SDK call."""
+
+    def test_slug_replaces_path_separators_with_hyphens(self) -> None:
+        from llm_client.sdk.agents_claude import _agent_session_project_dir
+
+        result = _agent_session_project_dir("/home/brian/code/ac15")
+        assert result.name == "-home-brian-code-ac15"
+
+    def test_summarizes_multiple_attempts_from_a_real_transcript(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cwd = "/fake/project/dir"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-project-dir"
+        project_dir.mkdir(parents=True)
+        transcript = project_dir / "session-1.jsonl"
+        entries = [
+            {"type": "last-prompt", "leafUuid": "leaf-1"},
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "thinking", "thinking": "x" * 100}]},
+            },
+            {"type": "last-prompt", "leafUuid": "leaf-2"},
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "thinking", "thinking": "y" * 50},
+                        {"type": "tool_use", "name": "StructuredOutput", "input": {}},
+                    ]
+                },
+            },
+        ]
+        transcript.write_text(
+            "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+        )
+
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        result = _summarize_failed_agent_session(cwd, now, now)
+
+        assert result is not None
+        assert "attempts=2" in result
+        assert "attempt1(thinking_chars=100, answered=False)" in result
+        assert "attempt2(thinking_chars=50, answered=True)" in result
+
+    def test_returns_none_when_no_project_dir_exists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        assert _summarize_failed_agent_session("/nowhere", now, now) is None
+
+    def test_returns_none_when_no_file_matches_the_time_window(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cwd = "/fake/project"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-project"
+        project_dir.mkdir(parents=True)
+        (project_dir / "old-session.jsonl").write_text(
+            json.dumps({"type": "last-prompt", "leafUuid": "leaf-1"}) + "\n",
+            encoding="utf-8",
+        )
+        import os
+        from datetime import datetime, timedelta, timezone
+
+        # Push the file's mtime well outside the +/-5s matching window.
+        old_time = (datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()
+        os.utime(project_dir / "old-session.jsonl", (old_time, old_time))
+
+        now = datetime.now(timezone.utc)
+        assert _summarize_failed_agent_session(cwd, now, now) is None
+
+    def test_never_raises_on_malformed_transcript_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Diagnostic capture must degrade to None, never propagate its own
+        exception -- it must never be the reason a real call fails."""
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cwd = "/fake/project"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-project"
+        project_dir.mkdir(parents=True)
+        (project_dir / "bad-session.jsonl").write_text(
+            "not json at all\n{also not json\n", encoding="utf-8"
+        )
+
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        assert _summarize_failed_agent_session(cwd, now, now) is None
+
+
+class TestAgentSessionDiagnosticsOnFailure:
+    """End-to-end: a failing structured agent call must attach the summary as
+    an exception note, without changing the raised exception type."""
+
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    @pytest.mark.asyncio
+    async def test_structured_call_failure_gets_diagnostic_note(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        class _Answer(BaseModel):
+            x: int
+
+        async def _raising_query(prompt, options=None):
+            raise RuntimeError(
+                "Claude Code returned an error result: Failed to provide valid "
+                "structured output after 5 attempts"
+            )
+            yield  # pragma: no cover - unreachable; keeps this an async generator
+
+        monkeypatch.setattr(sys.modules["claude_agent_sdk"], "query", _raising_query)
+
+        cwd = "/fake/proj"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-proj"
+        project_dir.mkdir(parents=True)
+        transcript = project_dir / "session.jsonl"
+        transcript.write_text(
+            "\n".join(
+                json.dumps(e)
+                for e in [
+                    {"type": "last-prompt", "leafUuid": "leaf-1"},
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [{"type": "thinking", "thinking": "z" * 42}]
+                        },
+                    },
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(RuntimeError) as excinfo:
+            await acall_llm_structured(
+                "claude-code/sonnet",
+                [{"role": "user", "content": "hi"}],
+                response_model=_Answer,
+                task="test",
+                trace_id="test_diagnostics_on_failure",
+                max_budget=0,
+                cwd=cwd,
+            )
+
+        notes = getattr(excinfo.value, "__notes__", [])
+        assert any("agent_session_diagnostics" in n for n in notes), notes
+        assert any("thinking_chars=42" in n for n in notes), notes
+
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    @pytest.mark.asyncio
+    async def test_structured_call_failure_without_transcript_still_raises_cleanly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No matching transcript on disk -> no note attached, but the
+        original failure still propagates unchanged."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        class _Answer(BaseModel):
+            x: int
+
+        async def _raising_query(prompt, options=None):
+            raise RuntimeError("boom")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr(sys.modules["claude_agent_sdk"], "query", _raising_query)
+
+        with pytest.raises(RuntimeError, match="boom") as excinfo:
+            await acall_llm_structured(
+                "claude-code/sonnet",
+                [{"role": "user", "content": "hi"}],
+                response_model=_Answer,
+                task="test",
+                trace_id="test_diagnostics_missing_transcript",
+                max_budget=0,
+                cwd="/fake/nowhere",
+            )
+
+        assert not getattr(excinfo.value, "__notes__", [])
