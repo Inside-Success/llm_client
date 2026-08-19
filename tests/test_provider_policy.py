@@ -26,6 +26,8 @@ def test_policy_declares_forced_reroute_and_block_rules() -> None:
     assert policy.exact_aliases["gpt-5.6"].route_class == "direct_provider"
     assert get_provider_runtime_policy("google").shared_limit == 4
     assert get_provider_runtime_policy("google").cooldown_floor_s == 15.0
+    assert get_provider_runtime_policy("openrouter").route_class == "openrouter"
+    assert get_provider_runtime_policy("openrouter").cooldown_floor_s == 15.0
 
     blocked_policy = policy.model_copy(
         update={

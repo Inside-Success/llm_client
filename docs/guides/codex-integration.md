@@ -50,6 +50,25 @@ export LLM_CLIENT_CODEX_PROCESS_START_METHOD=fork
 export LLM_CLIENT_CODEX_PROCESS_GRACE_S=3.0
 ```
 
+## Dedicated asynchronous canary
+
+Bounded trusted-private asynchronous work may use the explicit
+`codex_subscription_async` route through `CodexCanaryQueue`. Construct it with
+`CodexCanaryQueue.for_trusted_async_work(CodexCanaryConfig(...))`; the route is
+fixed to `codex/gpt-5.6-luna`, admits one worker per account, and applies a
+bounded queue, hard timeout, quota, and durable queue-level JSONL receipts.
+
+Fallback is disabled unless both a fallback provider/model and a positive
+`fallback_spend_ceiling_usd` are configured. Every fallback receipt is tagged
+`explicit_fallback:<provider>`. This lane is for bounded internal async work;
+production, synchronous, high-concurrency, CI/deploy, contract-sensitive, and
+provider-diverse workloads remain on explicit OpenAI API or OpenRouter routes.
+
+The shared llm_client observability store remains authoritative for the child
+provider call and outer `ObservedRun`; the JSONL receipt records queue
+admission, route, fallback, quota, latency, cancellation, and terminal error
+evidence. Account rotation to evade limits is not supported.
+
 ## Transport fallback
 
 Three transport modes:
@@ -57,8 +76,15 @@ Three transport modes:
 - `codex_transport="cli"`: `codex exec` directly.
 - `codex_transport="auto"`: prefer SDK, fall back to CLI on failure.
 
-If timeouts are globally disabled (`LLM_CLIENT_TIMEOUT_POLICY=ban`), pair
-auto transport with `agent_hard_timeout`:
+If timeouts are globally disabled (`LLM_CLIENT_TIMEOUT_POLICY=ban`), Codex
+continues to use the caller's `timeout` as a killable CLI subprocess deadline;
+the policy still prevents that value being sent as a provider request timeout.
+Set `agent_hard_timeout` only to override that deadline (including `0` to opt
+out explicitly):
+
+For a process-wide override without changing downstream call sites, set
+`LLM_CLIENT_AGENT_HARD_TIMEOUT` to a whole number of seconds. An explicit
+`agent_hard_timeout` call argument takes precedence; `0` explicitly opts out.
 
 ```python
 result = call_llm(

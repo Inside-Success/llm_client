@@ -290,6 +290,10 @@ def get_provider_governance_policy() -> ProviderGovernancePolicy:
                 shared_limit=4,
                 cooldown_floor_s=15.0,
             ),
+            "openrouter": ProviderRuntimePolicy(
+                route_class="openrouter",
+                cooldown_floor_s=15.0,
+            ),
         },
     )
 

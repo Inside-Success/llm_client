@@ -23,6 +23,9 @@ REASONING_EFFORTS: frozenset[str] = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 )
 
+# Compatibility fallback for callers that have not adopted the declared
+# workload-routing contract yet. New code must use resolve_workload_route()
+# rather than treating a provider route as universally suitable.
 DEFAULT_EXECUTION_MODEL = "openrouter/openai/gpt-5.6-luna"
 
 # Exact canonical routes only. Provider aliases are canonicalized before this
@@ -55,6 +58,7 @@ ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "codex/gpt-5.6-terra",
         "claude-code",
         "claude-code/sonnet",
+        "claude-code/haiku",
     }
 ) | INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
 

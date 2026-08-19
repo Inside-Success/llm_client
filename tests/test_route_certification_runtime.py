@@ -11,10 +11,10 @@ from llm_client.observability.structured_attempts import StructuredAttemptEvent
 from llm_client.openrouter_generation import OpenRouterGenerationEvidence
 from llm_client.route_certification_runtime import (
     compile_openrouter_native_success,
+    observe_openrouter_native_success,
     openrouter_native_provider_schema,
     route_schema_sha256,
 )
-
 
 SCHEMA = {
     "type": "object",
@@ -117,21 +117,72 @@ def test_compiles_exact_openrouter_route_from_three_bound_sources() -> None:
     assert observation.selected_attempt_receipt_digest == "c" * 64
 
 
+def test_observation_uses_retained_inline_provider_metadata_before_history_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """History unavailability does not discard exact provider evidence in the call."""
+
+    result = _result(
+        raw_response={
+            "id": "gen-1",
+            "model": "x-ai/grok-4.5",
+            "provider": "XAI",
+            "openrouter_metadata": {
+                "endpoints": {
+                    "available": [
+                        {
+                            "provider": "XAI",
+                            "model": "x-ai/grok-4.5-20260701",
+                            "selected": True,
+                        }
+                    ]
+                }
+            },
+        }
+    )
+    monkeypatch.setattr(
+        "llm_client.route_certification_runtime.get_runtime_selected_attempt_receipt",
+        lambda logical_call_id: _receipt(),
+    )
+    monkeypatch.setattr(
+        "llm_client.route_certification_runtime.fetch_openrouter_generation_evidence",
+        lambda *args, **kwargs: pytest.fail("history lookup should not run"),
+    )
+    from llm_client.openrouter_generation import OpenRouterGenerationEvidenceStore
+    from llm_client.route_certification import RouteCertificationStore
+
+    observation = observe_openrouter_native_success(
+        result=result,
+        provider_schema=SCHEMA,
+        schema_class="answer-v1",
+        llm_client_revision="revision-1",
+        generation_store=OpenRouterGenerationEvidenceStore(tmp_path / "generations"),
+        certification_store=RouteCertificationStore(tmp_path / "observations"),
+    )
+
+    assert observation.upstream_provider_name == "XAI"
+    assert observation.upstream_provider_endpoint == "XAI:x-ai/grok-4.5-20260701"
+    assert observation.transport_certifies is True
+
+
 def test_public_schema_helpers_match_the_runtime_provider_contract() -> None:
     schema = openrouter_native_provider_schema(Answer)
     assert schema["additionalProperties"] is False
     assert schema["required"] == ["answer"]
     assert len(route_schema_sha256(schema)) == 64
 
-    from llm_client import (  # noqa: PLC0415
+    from llm_client import (
         openrouter_native_provider_schema as public_schema,
+    )
+    from llm_client import (
         route_schema_sha256 as public_digest,
     )
 
     assert public_schema(Answer) == schema
     assert public_digest(schema) == route_schema_sha256(schema)
 
-    from llm_client.execution.structured_runtime import (  # noqa: PLC0415
+    from llm_client.execution.structured_runtime import (
         _native_provider_schema,
     )
 

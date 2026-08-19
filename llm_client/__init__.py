@@ -221,8 +221,11 @@ from llm_client.core.models import (
 from llm_client.core.model_selection import (
     ResolvedModelChain,
     ResolvedModelSelection,
+    ResolvedWorkloadRoute,
+    WorkloadRouteContext,
     resolve_model_chain,
     resolve_model_selection,
+    resolve_workload_route,
     strict_model_policy,
 )
 from llm_client.core.model_execution_policy import (
@@ -362,6 +365,13 @@ from llm_client.parsing_utils import (
     safe_json_loads,
     strip_control_chars,
 )
+from llm_client.codex_canary import (
+    CanaryTelemetry,
+    CodexCanaryConfig,
+    CodexCanaryJob,
+    CodexCanaryQueue,
+    CodexCanaryReceipt,
+)
 
 # Apply IPv4 forcing if configured (prevents Gemini WSL2 IPv6 hangs)
 from llm_client.execution.timeout_policy import force_ipv4_if_configured as _force_ipv4
@@ -375,6 +385,11 @@ from llm_client.rubric_registry import (
 )
 
 _CORE_SUBSTRATE_EXPORTS: tuple[str, ...] = (
+    "CanaryTelemetry",
+    "CodexCanaryConfig",
+    "CodexCanaryJob",
+    "CodexCanaryQueue",
+    "CodexCanaryReceipt",
     "DeprecatedModelError",
     "LLMAuthError",
     "LLMConfigurationError",
