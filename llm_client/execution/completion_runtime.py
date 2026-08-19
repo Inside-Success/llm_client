@@ -23,7 +23,11 @@ from llm_client.core.data_types import LLMCallResult
 from llm_client.core.model_detection import _is_responses_api_model
 from llm_client.execution.retry import _EMPTY_POLICY_FINISH_REASONS, _EMPTY_TOOL_PROTOCOL_FINISH_REASONS
 from llm_client.execution.timeout_policy import safety_timeout_s as _safety_timeout_s
-from llm_client.utils.openrouter import _enable_openrouter_inline_metadata
+from llm_client.utils.openrouter import (
+    _enable_openrouter_inline_metadata,
+    _is_openrouter_call,
+    _openrouter_key_candidates_from_env,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +65,17 @@ def _prepare_call_kwargs(
         call_kwargs["timeout"] = _safety_timeout_s()
     if api_base is not None:
         call_kwargs["api_base"] = api_base
+        # LiteLLM's own provider-prefix auto-detection for openrouter/ models
+        # does not reliably fire once api_base is also explicitly set -- the
+        # request goes out with no Authorization header at all, which
+        # OpenRouter reports back as an opaque "No cookie auth credentials
+        # found" 401. An explicit api_base always requires an explicit
+        # api_key alongside it for this provider. Per ADR-0002 (explicit
+        # call/site config wins), never override a caller-supplied api_key.
+        if "api_key" not in call_kwargs and _is_openrouter_call(model, api_base):
+            openrouter_keys = _openrouter_key_candidates_from_env()
+            if openrouter_keys:
+                call_kwargs["api_key"] = openrouter_keys[0]
 
     if reasoning_effort:
         call_kwargs["reasoning_effort"] = reasoning_effort
