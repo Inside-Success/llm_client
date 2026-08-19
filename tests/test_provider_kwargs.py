@@ -7,6 +7,8 @@ kwargs must stay JSON-serializable and must not receive those private values.
 
 from __future__ import annotations
 
+import os
+
 import litellm
 import pytest
 
@@ -320,6 +322,102 @@ def test_explicit_openrouter_api_base_rejects_bare_auto_model() -> None:
             api_base="https://openrouter.ai/api/v1",
             kwargs={},
         )
+
+
+def _clear_openrouter_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEYS", raising=False)
+    for name in list(os.environ):
+        if name.startswith("OPENROUTER_API_KEY_"):
+            monkeypatch.delenv(name, raising=False)
+
+
+def test_explicit_openrouter_api_base_attaches_env_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LiteLLM's own provider auto-detection does not fire once api_base is
+    explicit -- the request goes out with no Authorization header at all.
+    An explicit api_base must carry an explicit api_key alongside it."""
+
+    _clear_openrouter_key_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test-key")
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-terra",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base="https://openrouter.ai/api/v1",
+        kwargs={},
+    )
+
+    assert call_kwargs["api_key"] == "sk-or-v1-test-key"
+
+
+def test_explicit_openrouter_api_base_never_overrides_caller_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit call/site config always wins (ADR-0002) -- a caller-supplied
+    api_key must never be silently replaced by the environment key."""
+
+    _clear_openrouter_key_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-env-key")
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-terra",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base="https://openrouter.ai/api/v1",
+        kwargs={"api_key": "caller-supplied-key"},
+    )
+
+    assert call_kwargs["api_key"] == "caller-supplied-key"
+
+
+def test_openrouter_api_key_omitted_when_no_env_key_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No configured key anywhere means no explicit override -- fall back to
+    LiteLLM's own auto-detection rather than injecting an empty value."""
+
+    _clear_openrouter_key_env(monkeypatch)
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-terra",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base="https://openrouter.ai/api/v1",
+        kwargs={},
+    )
+
+    assert "api_key" not in call_kwargs
+
+
+def test_non_openrouter_call_never_receives_explicit_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A direct-provider call (no api_base override) must keep relying on
+    LiteLLM's normal auto-detection -- this fix is OpenRouter-specific."""
+
+    _clear_openrouter_key_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-should-not-leak")
+
+    call_kwargs = _prepare_call_kwargs(
+        "gpt-5.6-terra",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={},
+    )
+
+    assert "api_key" not in call_kwargs
 
 
 def test_openrouter_responses_requests_inline_route_metadata() -> None:
