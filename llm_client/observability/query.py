@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import llm_client.io_log as _io_log
+from llm_client.core.errors import LLMBudgetReservationStoreError
 from llm_client.observability.call_receipts import (
     LLMCallReceiptV1,
     derive_started_at,
@@ -214,10 +215,22 @@ def get_cost(
         raise ValueError(
             "At least one filter (trace_id, trace_prefix, task, project, since) is required."
         )
+    # get_cost() backs check_budget()'s enforcement gate (llm_client/execution/
+    # call_contracts.py). A silent 0.0 fallback here means "no spend recorded",
+    # which check_budget() reads as "budget not exceeded" — i.e. an unreachable
+    # or corrupted observability DB would silently disable every cost cap that
+    # depends on it (the 2026-08-18 llm_observability.db corruption window is
+    # exactly this case: "database disk image is malformed"). Fail loud instead
+    # of failing open: a cost check that can't verify spend must refuse to
+    # report a number, not report zero.
     try:
         db = _io_log._get_db()
-    except Exception:
-        return 0.0
+    except Exception as exc:
+        raise LLMBudgetReservationStoreError(
+            "cannot verify budget/spend: observability database is unavailable "
+            "(missing, locked, or corrupted); refusing to report cost as $0",
+            original=exc,
+        ) from exc
 
     total = 0.0
     for table in ("llm_calls", "embeddings"):
@@ -250,11 +263,18 @@ def get_cost(
         # ``check_same_thread=False`` permits sharing the connection but does
         # not make overlapping statements safe. Use the writer lock for every
         # statement on the shared connection.
-        with _io_log._db_write_lock:
-            row = db.execute(
-                f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
-                params,
-            ).fetchone()
+        try:
+            with _io_log._db_write_lock:
+                row = db.execute(
+                    f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
+                    params,
+                ).fetchone()
+        except Exception as exc:
+            raise LLMBudgetReservationStoreError(
+                "cannot verify budget/spend: observability database query "
+                f"failed against table {table!r}; refusing to report cost as $0",
+                original=exc,
+            ) from exc
         total += row[0] if row else 0.0
     return total
 

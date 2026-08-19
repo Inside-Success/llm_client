@@ -1310,6 +1310,52 @@ class TestGetCostTracePrefix:
             io_log.get_cost(trace_id="a", trace_prefix="b")
 
 
+class TestGetCostFailsClosedOnDbError:
+    """Regression test for the 2026-08-18 llm_observability.db corruption
+    incident: a caller reading "database disk image is malformed" (or any
+    other DB-open failure) must not have get_cost() silently return 0.0.
+    check_budget() treats a 0.0 spend as "budget not exceeded", so a silent
+    fallback here would have disabled every cost cap that depends on it for
+    the entire corruption window without anyone noticing."""
+
+    def test_get_cost_raises_when_db_connection_unavailable(self, monkeypatch):
+        from llm_client.core.errors import LLMBudgetReservationStoreError
+
+        def _boom():
+            raise sqlite3.DatabaseError("database disk image is malformed")
+
+        monkeypatch.setattr(io_log, "_get_db", _boom)
+
+        with pytest.raises(LLMBudgetReservationStoreError, match="cannot verify budget"):
+            io_log.get_cost(trace_id="anything")
+
+    def test_get_cost_raises_when_query_fails_after_connect(self, monkeypatch, tmp_path):
+        from llm_client.core.errors import LLMBudgetReservationStoreError
+
+        class _ExplodingConnection:
+            def execute(self, *args, **kwargs):
+                raise sqlite3.DatabaseError("database disk image is malformed")
+
+        monkeypatch.setattr(io_log, "_get_db", lambda: _ExplodingConnection())
+
+        with pytest.raises(LLMBudgetReservationStoreError, match="cannot verify budget"):
+            io_log.get_cost(trace_id="anything")
+
+    def test_check_budget_fails_closed_when_spend_cannot_be_verified(self, monkeypatch):
+        """The actual enforcement gate (check_budget) must propagate the
+        failure rather than treating an unverifiable spend as $0 spent."""
+        from llm_client.core.errors import LLMBudgetReservationStoreError
+        from llm_client.execution.call_contracts import check_budget
+
+        def _boom():
+            raise sqlite3.DatabaseError("database disk image is malformed")
+
+        monkeypatch.setattr(io_log, "_get_db", _boom)
+
+        with pytest.raises(LLMBudgetReservationStoreError):
+            check_budget("some-trace", max_budget=5.0)
+
+
 # ---------------------------------------------------------------------------
 # get_trace_tree
 # ---------------------------------------------------------------------------
