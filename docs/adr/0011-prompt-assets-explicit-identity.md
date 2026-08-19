@@ -2,7 +2,14 @@
 
 Status: Accepted  
 Date: 2026-03-17  
-Last verified: 2026-04-09
+Last verified: 2026-08-19
+Verification context: `render_prompt()` now measures caller-supplied context
+against an optional sibling `<template>.contract.yaml` before rendering. This
+is a size contract only -- it does not resolve, substitute, or override prompt
+content, so deterministic resolution (decision 6) and prompt asset identity
+(decision 3) are unchanged. The sibling file is discovered by an explicit,
+documented naming convention rather than implicit override lookup, which keeps
+decision 5 intact.
 
 ## Context
 

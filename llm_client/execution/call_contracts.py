@@ -10,7 +10,8 @@ agent SDK dispatch happens:
 5. retry-safety policy is derived consistently for agent SDK calls,
 6. execution-mode and model/kwargs capability validation,
 7. unsupported-param coercion, agent-only kwargs filtering,
-8. model deprecation warnings and empty-response error classification.
+8. model deprecation warnings and empty-response error classification,
+9. declared prompt-size ceilings are measured before dispatch.
 
 These checks belong to the runtime substrate itself, not to any one transport
 backend. Keeping them in one module makes the boundary easier to reason about
@@ -37,6 +38,7 @@ from llm_client.core.errors import (
     LLMCapabilityError,
     LLMEmptyResponseError,
     LLMModelNotFoundError,
+    LLMPromptBudgetExceededError,
 )
 from llm_client.observability.budget_reservations import (
     BudgetReservationLease,
@@ -1087,3 +1089,129 @@ def _check_model_deprecation(model: str) -> None:
             logger.warning(warning_msg)
             _warnings.warn(warning_msg, UserWarning, stacklevel=3)
             return
+
+
+PROMPT_SIZE_STRICT_ENV = "LLM_CLIENT_PROMPT_SIZE_STRICT"
+
+_CHARS_PER_TOKEN_ESTIMATE = 4
+"""Shared heuristic with ``llm_client.agent.context_budget``.
+
+Exact tokenization is model-specific and would require a per-provider
+tokenizer. This contract exists to catch payloads that are multiples of their
+declared ceiling, where a 4-chars-per-token estimate is amply precise.
+
+Measured against one real stored payload (process_tracing.central_claim_review,
+615,835 provider-reported prompt tokens) this estimate returned 788,548 -- it
+over-counted by ~28% on JSON-heavy content. Treat the number as an order-of-
+magnitude signal for contract breaches, never as a billing or context-window
+figure; ``prompt_tokens`` on the observability row is the authority for those.
+"""
+
+_TASK_PROMPT_BUDGETS: dict[str, int] = {}
+_TASK_PROMPT_BUDGETS_LOCK = threading.Lock()
+
+
+def register_task_prompt_budget(task: str, max_prompt_tokens: int) -> None:
+    """Declare the prompt-size ceiling for one task.
+
+    Consumers register their own ceilings at import time; ``llm_client`` owns
+    the mechanism and never hard-codes any consumer's task names. This keeps
+    the shared substrate free of project-specific policy while still applying
+    one enforcement path to every project.
+
+    Registration is idempotent for an identical value and fails loud on a
+    conflicting re-registration, so two modules cannot silently disagree about
+    the same task's ceiling.
+    """
+
+    normalized = str(task).strip()
+    if not normalized:
+        raise ValueError("task must be a non-empty string")
+    if not isinstance(max_prompt_tokens, int) or isinstance(max_prompt_tokens, bool):
+        raise TypeError(f"max_prompt_tokens must be an int, got {max_prompt_tokens!r}")
+    if max_prompt_tokens <= 0:
+        raise ValueError("max_prompt_tokens must be positive")
+
+    with _TASK_PROMPT_BUDGETS_LOCK:
+        existing = _TASK_PROMPT_BUDGETS.get(normalized)
+        if existing is not None and existing != max_prompt_tokens:
+            raise ValueError(
+                f"conflicting prompt budget for task {normalized!r}: "
+                f"{existing} already registered, refusing to overwrite with "
+                f"{max_prompt_tokens}"
+            )
+        _TASK_PROMPT_BUDGETS[normalized] = max_prompt_tokens
+
+
+def get_task_prompt_budget(task: str | None) -> int | None:
+    """Return the registered prompt ceiling for a task, if any."""
+
+    if not task:
+        return None
+    with _TASK_PROMPT_BUDGETS_LOCK:
+        return _TASK_PROMPT_BUDGETS.get(str(task).strip())
+
+
+def prompt_size_strict_mode() -> bool:
+    """Whether an over-budget prompt raises instead of warning.
+
+    Warn-by-default is deliberate. These calls are frequently made inside
+    long-running repair and review loops; hard-failing one by default would
+    convert a cost problem into an availability problem. CI and benchmark runs
+    opt into strict mode, matching ``tags_strict_mode``.
+    """
+
+    if truthy_env(os.environ.get(PROMPT_SIZE_STRICT_ENV)):
+        return True
+    return truthy_env(os.environ.get("CI"))
+
+
+def estimate_prompt_tokens(serialized_prompt: str) -> int:
+    """Estimate prompt tokens from an already-serialized payload."""
+
+    return len(serialized_prompt) // _CHARS_PER_TOKEN_ESTIMATE
+
+
+def check_prompt_size(
+    task: str,
+    serialized_prompt: str,
+    *,
+    max_prompt_tokens: int | None = None,
+    warning_sink: list[str] | None = None,
+) -> int:
+    """Measure a serialized prompt against its declared ceiling.
+
+    Resolution order for the ceiling: the explicit ``max_prompt_tokens``
+    argument, then the value registered for ``task``, then no ceiling. With no
+    ceiling the payload is still measured and returned so callers and
+    observability can record it -- measurement is unconditional, enforcement is
+    opt-in.
+
+    The payload is never truncated to fit. Silently trimming a caller's prompt
+    would change the model's inputs behind its back; this substrate reports the
+    breach and lets the caller decide.
+
+    Returns:
+        The estimated prompt tokens for ``serialized_prompt``.
+
+    Raises:
+        LLMPromptBudgetExceededError: When over budget and strict mode is on.
+    """
+
+    estimated = estimate_prompt_tokens(serialized_prompt)
+    ceiling = max_prompt_tokens if max_prompt_tokens is not None else get_task_prompt_budget(task)
+    if ceiling is None or estimated <= ceiling:
+        return estimated
+
+    overage = estimated / ceiling
+    message = (
+        f"Prompt size contract exceeded for task {task!r}: "
+        f"~{estimated:,} estimated prompt tokens > {ceiling:,} declared ceiling "
+        f"({overage:.1f}x). The payload was not truncated."
+    )
+    if prompt_size_strict_mode():
+        raise LLMPromptBudgetExceededError(message)
+    logger.warning(message)
+    if warning_sink is not None:
+        warning_sink.append(f"PROMPT_SIZE: {estimated} > {ceiling} ({overage:.1f}x)")
+    return estimated

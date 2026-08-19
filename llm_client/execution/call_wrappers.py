@@ -19,6 +19,7 @@ from typing import Any, Awaitable, Callable, Literal, TypeVar
 
 from llm_client.execution.call_contracts import (
     acquire_budget_scope as _acquire_budget_scope,
+    check_prompt_size as _check_prompt_size,
     normalize_prompt_ref as _normalize_prompt_ref,
     release_budget_scope as _release_budget_scope,
     settle_budget_scope as _settle_budget_scope,
@@ -60,6 +61,9 @@ class PreparedPublicCallEnvelope:
     # Optional for callers constructing a test/compatibility envelope directly;
     # production preparation always supplies the acquired lease.
     budget_scope_lease: str | BudgetReservationLease | None = None
+    # Measured from the same serialization used for ``prompt_sha256``.
+    # Defaults to 0 for directly-constructed test/compatibility envelopes.
+    estimated_prompt_tokens: int = 0
 
 
 def _prepare_public_call_envelope(
@@ -94,11 +98,23 @@ def _prepare_public_call_envelope(
         budget_scope_mode=budget_scope_mode,
     )
     effective_provider_timeout = _provider_timeout_for_lifecycle(timeout)
+    # One serialization serves both the identity digest and the prompt-size
+    # contract, so measuring costs a len() rather than a second full dump.
+    serialized_prompt = json.dumps(
+        messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str
+    )
     prompt_sha256 = "sha256:" + hashlib.sha256(
-        json.dumps(messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+        serialized_prompt.encode("utf-8")
     ).hexdigest()
+    estimated_prompt_tokens = _check_prompt_size(
+        resolved_task,
+        serialized_prompt,
+        max_prompt_tokens=kwargs.get("max_prompt_tokens"),
+    )
 
     runtime_kwargs = dict(kwargs)
+    # Client control field: never forwarded to the provider.
+    runtime_kwargs.pop("max_prompt_tokens", None)
     runtime_kwargs.pop("budget_reservation", None)
     runtime_kwargs.pop("budget_scope_trace_id", None)
     runtime_kwargs.pop("budget_scope_mode", None)
@@ -114,6 +130,7 @@ def _prepare_public_call_envelope(
     return PreparedPublicCallEnvelope(
         normalized_prompt_ref=normalized_prompt_ref,
         prompt_sha256=prompt_sha256,
+        estimated_prompt_tokens=estimated_prompt_tokens,
         resolved_task=resolved_task,
         resolved_trace_id=resolved_trace_id,
         resolved_max_budget=resolved_max_budget,

@@ -37,6 +37,10 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateNotFound
 from llm_client.prompt_assets import resolve_prompt_asset
+from llm_client.prompt_context_contract import (
+    enforce_contract,
+    prompt_context_strict_mode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +82,8 @@ def render_prompt(
         yaml.YAMLError: If YAML is malformed.
         jinja2.UndefinedError: If a template variable is missing from context.
         ValueError: If the render request or YAML structure is invalid.
+        PromptContextContractError: If a sibling ``<template>.contract.yaml``
+            declares budgets this context breaches and strict mode is on.
     """
     if (template_path is None) == (prompt_ref is None):
         raise ValueError("Provide exactly one of template_path or prompt_ref.")
@@ -93,6 +99,13 @@ def render_prompt(
 
     if not path.exists():
         raise FileNotFoundError(f"Prompt template not found: {path}")
+
+    # Measure the caller-supplied context against this template's declared
+    # per-variable budgets before rendering. This is the only point in the
+    # stack where context variables still have names: once rendered, the
+    # payload is flat text and an oversized prompt can no longer be attributed
+    # to the variable responsible for it.
+    enforce_contract(path, context, strict=prompt_context_strict_mode())
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
 

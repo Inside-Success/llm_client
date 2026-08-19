@@ -117,6 +117,14 @@ class LLMBudgetReservationStoreError(LLMError):
     """Durable reservation storage is unavailable or cannot be updated."""
 
 
+class LLMObservabilityUnavailableError(LLMError):
+    """Observability storage cannot be read, so an assessment must not report a clean result."""
+
+
+class LLMPromptBudgetExceededError(LLMError):
+    """A call's prompt exceeded the prompt-size ceiling declared for its task."""
+
+
 class LLMCapabilityError(LLMError):
     """Requested execution mode/capabilities are incompatible with model/kwargs."""
 

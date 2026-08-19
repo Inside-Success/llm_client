@@ -32,6 +32,12 @@ cost-by-task:  ## Spend per task (DAYS=7, PROJECT= optional)
 	@$(PYTHON) -m llm_client cost --group-by task --days $(DAYS) \
 		$(if $(PROJECT),--project $(PROJECT))
 
+prompt-drift:  ## Tasks whose prompt size grew past their own baseline (RECENT_DAYS/BASELINE_DAYS)
+	@$(PYTHON) -m llm_client prompt-drift \
+		--recent-days $(or $(RECENT_DAYS),7) \
+		--baseline-days $(or $(BASELINE_DAYS),30) \
+		$(if $(PROJECT),--project $(PROJECT))
+
 errors:  ## Error breakdown by model (DAYS=7, PROJECT= optional)
 	@$(PYTHON) -c "\
 	import sqlite3, os; \
