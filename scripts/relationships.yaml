@@ -92,4 +92,15 @@ couplings:
   - docs/adr/0011-prompt-assets-explicit-identity.md
   type: validated
   description: Prompt asset identity, explicit rendering, and provenance constraints.
+- sources:
+  - workbench/frontend/**
+  - workbench/backend/**
+  docs:
+  - ui/registry.yaml
+  description: A UI-serving file is about to be created or changed. Read ui/registry.yaml
+    first -- this repo has one real surface (llm-client-observability-workbench);
+    a change is very unlikely to need a second one.
+  why: ui-continuity-policy was prose-only (agents voluntarily reading the registry
+    via the /ui skill); this makes it a real edit-time gate, matching the pattern
+    piloted in cybernetic_influence_v3.
 overrides: {}
