@@ -6,6 +6,7 @@ import time
 from typing import TYPE_CHECKING, Any, cast
 
 import llm_client.core.client as _client_mod
+from llm_client.core.errors import LLMConfigurationError
 
 _client: Any = _client_mod
 
@@ -34,6 +35,11 @@ def _resolve_embedding_route(
             cfg,
         )
         return resolved_model, resolved_api_base
+    except LLMConfigurationError:
+        # A policy/governance rejection (e.g. model not in the execution
+        # allowlist) must fail loud, matching chat-completion routes -- not
+        # silently fall back to the raw unrouted model string.
+        raise
     except Exception:
         return model, api_base
 

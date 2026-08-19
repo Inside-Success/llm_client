@@ -11,6 +11,7 @@ from llm_client.core.data_types import _cache_key
 from llm_client.core.errors import LLMConfigurationError
 from llm_client.core.model_execution_policy import (
     ALLOWED_EXECUTION_MODELS,
+    DEFAULT_EXECUTION_EMBEDDING_MODEL,
     DEFAULT_EXECUTION_MODEL,
     REASONING_CAPABILITIES,
     evaluate_model_execution_policy,
@@ -46,6 +47,38 @@ def test_default_route_needs_no_justification_but_requires_reasoning_policy() ->
 
 def test_legacy_default_is_not_the_workload_routing_policy() -> None:
     assert DEFAULT_EXECUTION_MODEL == "openrouter/openai/gpt-5.6-luna"
+
+
+def test_embedding_default_needs_no_justification() -> None:
+    # embed() has no model_justification parameter -- callers cannot supply
+    # one, so the embedding default must be exempt the same way the chat
+    # default is.
+    decision = evaluate_model_execution_policy(
+        [DEFAULT_EXECUTION_EMBEDDING_MODEL],
+        mode="enforce_allowlist",
+    )
+
+    assert decision.enforced is True
+    assert decision.uses_only_default is True
+    assert decision.justification is None
+    assert DEFAULT_EXECUTION_EMBEDDING_MODEL == "openrouter/openai/text-embedding-3-small"
+    assert DEFAULT_EXECUTION_EMBEDDING_MODEL in ALLOWED_EXECUTION_MODELS
+    assert DEFAULT_EXECUTION_EMBEDDING_MODEL not in REASONING_CAPABILITIES
+
+
+def test_embedding_route_resolution_fails_loud_for_disallowed_model() -> None:
+    # Regression: _resolve_embedding_route previously caught every exception
+    # from _resolve_call_plan, including a real execution-allowlist
+    # rejection, and silently fell back to dispatching the raw unrouted
+    # model string. A policy rejection must propagate like it does for
+    # chat-completion routes, not disappear into a direct-provider fallback.
+    from llm_client.execution.embedding_runtime import _resolve_embedding_route
+
+    with pytest.raises(LLMConfigurationError, match="execution allowlist"):
+        _resolve_embedding_route(
+            model="text-embedding-not-a-real-allowlisted-model",
+            api_base=None,
+        )
 
 
 def test_allowed_alternate_requires_and_records_justification() -> None:

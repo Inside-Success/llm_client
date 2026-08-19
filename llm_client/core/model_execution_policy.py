@@ -27,12 +27,20 @@ REASONING_EFFORTS: frozenset[str] = frozenset(
 # rather than treating a provider route as universally suitable.
 DEFAULT_EXECUTION_MODEL = "openrouter/openai/gpt-5.6-luna"
 
+# embed() has no model_justification parameter (it is a chat-completion-only
+# concept; see evaluate_model_execution_policy) and callers cannot supply
+# one. This is a second, embedding-scoped no-justification default,
+# analogous to DEFAULT_EXECUTION_MODEL, so callers can route embedding calls
+# through OpenRouter without inventing new call-time API surface on embed().
+DEFAULT_EXECUTION_EMBEDDING_MODEL = "openrouter/openai/text-embedding-3-small"
+
 # Exact canonical routes only. Provider aliases are canonicalized before this
 # list is evaluated. Adding a route is a reviewed source change, not a project
 # configuration option.
 ALLOWED_EXECUTION_MODELS: frozenset[str] = frozenset(
     {
         DEFAULT_EXECUTION_MODEL,
+        DEFAULT_EXECUTION_EMBEDDING_MODEL,
         "openrouter/deepseek/deepseek-v4-flash",
         "openrouter/deepseek/deepseek-chat",
         "openrouter/inception/mercury-2",
@@ -335,7 +343,10 @@ def evaluate_model_execution_policy(
     if not selected or any(not model for model in selected):
         raise LLMConfigurationError("model execution policy requires a model")
 
-    uses_only_default = all(model == DEFAULT_EXECUTION_MODEL for model in selected)
+    uses_only_default = all(
+        model in (DEFAULT_EXECUTION_MODEL, DEFAULT_EXECUTION_EMBEDDING_MODEL)
+        for model in selected
+    )
     disallowed = [model for model in selected if model not in ALLOWED_EXECUTION_MODELS]
     if disallowed:
         raise LLMConfigurationError(
