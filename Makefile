@@ -116,7 +116,7 @@ tool-usage-report:  ## Report agent tool usage (SURFACE=codebase-memory)
 
 # ─── Development ─────────────────────────────────────────────────────────────
 
-.PHONY: test test-verbose test-integration lint typecheck check install dead-code dead-code-audit dead-code-validate
+.PHONY: test test-verbose test-integration lint typecheck check install dead-code dead-code-audit dead-code-validate codebase-wiki-check codebase-wiki-check-full
 
 test:  ## Run all tests
 	python -m pytest tests/ -q
@@ -136,7 +136,15 @@ lint:  ## Run ruff linter
 typecheck:  ## Run mypy type checking
 	mypy --strict llm_client/
 
-check: lint typecheck test  ## Run all quality checks
+codebase-wiki-check:  ## Fail when the compiled codebase wiki is stale
+	@$(PYTHON) scripts/meta/check_codebase_wiki_freshness.py
+
+codebase-wiki-check-full:  ## Also authenticate Project Meta capsules and company remote state
+	@$(PYTHON) scripts/meta/check_codebase_wiki_freshness.py \
+		--external-repository "project-meta=$${PROJECTS_ROOT:-$$HOME/code/active}/project-meta" \
+		--require-external --network
+
+check: codebase-wiki-check lint typecheck test  ## Run all quality checks
 
 install:  ## Install in editable mode with dev deps
 	$(PYTHON) -m pip install -e ".[dev]"

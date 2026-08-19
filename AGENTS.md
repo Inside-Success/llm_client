@@ -4,7 +4,7 @@
 <!-- generated_by: scripts/meta/render_agents_md.py -->
 <!-- canonical_claude: CLAUDE.md -->
 <!-- canonical_relationships: scripts/relationships.yaml -->
-<!-- canonical_relationships_sha256: 49880a038659 -->
+<!-- canonical_relationships_sha256: da60fc3ad171 -->
 <!-- sync_check: python scripts/meta/check_agents_sync.py --check -->
 
 This file is a generated Codex-oriented projection of repo governance.
@@ -27,6 +27,8 @@ required-reading edges are authored in `scripts/relationships.yaml`.
 make test                    # Full test suite
 make test-quick              # Tests, minimal output
 make check                   # Tests + type check + lint
+make codebase-wiki-check     # Fail when code/wiki source bindings drift
+make codebase-wiki-check-full # Also verify external capsules and company remote
 
 # Observability
 make cost                    # Total LLM spend (DAYS=7)
@@ -74,6 +76,16 @@ read `CLAUDE.md` directly.
 6. **Fail loud** -- No silent fallbacks, no `except: pass`. Errors surface with context.
 7. **Programs A-D complete** -- Do not invent new cleanup slices without fresh evidence. The roadmap tracks what remains.
 8. **API reference is generated** -- Run `python scripts/meta/generate_api_reference.py --write` after changing the public surface or docstrings.
+9. **Wiki-first architecture questions** -- Start unfamiliar architecture,
+   workflow, or ownership questions at `roadmap/codebase/wiki/index.md`. Use the
+   wiki for orientation, then reopen the linked native source before making an
+   exact implementation claim. The revision-bound capsule is an input to the
+   wiki, not a substitute for it.
+10. **Wiki freshness is enforced** -- `make check` validates the current
+    `llm_client` Python/config surface and its canonical authority inputs against
+    the active immutable wiki manifest. Use `make codebase-wiki-check-full` when
+    Project Meta and network access are available to authenticate external
+    capsules and the company-downstream revision as well.
 
 ### Workflow
 
@@ -102,6 +114,7 @@ read `CLAUDE.md` directly.
 | `docs/plans/01_master-roadmap.md` | Master roadmap (Programs A-E) |
 | `docs/plans/CLAUDE.md` | Plan index |
 | `docs/API_REFERENCE.md` | Generated API reference |
+| `roadmap/codebase/wiki/index.md` | Interlinked codebase orientation and source-backed reading paths |
 | `docs/adr/README.md` | Architecture decision records index |
 | `scripts/relationships.yaml` | Source-doc coupling and read-gate config |
 | `scripts/CLAUDE.md` | Scripts directory reference |

@@ -35,13 +35,17 @@ def test_default_route_needs_no_justification_but_requires_reasoning_policy() ->
     decision = evaluate_model_execution_policy(
         [DEFAULT_EXECUTION_MODEL],
         mode="enforce_allowlist",
-        reasoning_effort="NONE",
+        reasoning_effort="medium",
     )
 
     assert decision.enforced is True
     assert decision.uses_only_default is True
     assert decision.justification is None
-    assert decision.reasoning_policy.effort == "none"
+    assert decision.reasoning_policy.effort == "medium"
+
+
+def test_legacy_default_is_not_the_workload_routing_policy() -> None:
+    assert DEFAULT_EXECUTION_MODEL == "openrouter/openai/gpt-5.6-luna"
 
 
 def test_allowed_alternate_requires_and_records_justification() -> None:
@@ -79,7 +83,6 @@ def test_openrouter_sol_requires_explicit_justification_and_reasoning() -> None:
 @pytest.mark.parametrize(
     "model",
     [
-        "codex/gpt-5.6-luna",
         "codex/gpt-5.6-sol",
         "codex/gpt-5.6-terra",
     ],
@@ -125,6 +128,16 @@ def test_allowed_alternate_without_justification_fails() -> None:
             mode="enforce_allowlist",
             reasoning_effort="low",
         )
+
+
+def test_legacy_openrouter_default_remains_compatible_for_unmigrated_callers() -> None:
+    decision = evaluate_model_execution_policy(
+        ["openrouter/openai/gpt-5.6-luna"],
+        mode="enforce_allowlist",
+        reasoning_effort="medium",
+    )
+
+    assert decision.uses_only_default is True
 
 
 @pytest.mark.parametrize(

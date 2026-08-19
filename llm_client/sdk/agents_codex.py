@@ -68,6 +68,7 @@ _CODEX_PROCESS_START_METHOD_ENV = "LLM_CLIENT_CODEX_PROCESS_START_METHOD"
 _CODEX_PROCESS_GRACE_ENV = "LLM_CLIENT_CODEX_PROCESS_GRACE_S"
 _CODEX_ALLOW_MINIMAL_EFFORT_ENV = "LLM_CLIENT_CODEX_ALLOW_MINIMAL_EFFORT"
 _CODEX_TRANSPORT_ENV = "LLM_CLIENT_CODEX_TRANSPORT"
+_CODEX_AGENT_HARD_TIMEOUT_ENV = "LLM_CLIENT_AGENT_HARD_TIMEOUT"
 
 
 def _agents_mod() -> Any:
@@ -132,11 +133,15 @@ def _agent_hard_timeout(kwargs: dict[str, Any], default_timeout: int) -> int:
 
     raw = kwargs.get("agent_hard_timeout")
     if raw is None:
+        raw = os.environ.get(_CODEX_AGENT_HARD_TIMEOUT_ENV)
+    if raw is None or str(raw).strip() == "":
         return max(0, int(default_timeout))
     try:
         parsed = int(raw)
-    except (TypeError, ValueError):
-        return max(0, int(default_timeout))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{_CODEX_AGENT_HARD_TIMEOUT_ENV} must be a whole number of seconds, got {raw!r}"
+        ) from exc
     return max(0, parsed)
 
 
@@ -911,7 +916,15 @@ async def _acall_codex(
     **kwargs: Any,
 ) -> LLMCallResult:
     """Call Codex SDK and return an LLMCallResult."""
+    requested_timeout = timeout
     timeout = _normalize_timeout(timeout, caller="_acall_codex", logger=logger)
+    # A banned provider timeout must not erase the independent CLI subprocess
+    # deadline. Preserve an explicit agent_hard_timeout (including zero), or
+    # derive it from the caller's original request before policy normalization.
+    kwargs = {
+        **kwargs,
+        "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
+    }
     transport = _codex_transport(kwargs)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
@@ -965,7 +978,14 @@ def _call_codex(
     **kwargs: Any,
 ) -> LLMCallResult:
     """Sync wrapper for _acall_codex."""
+    requested_timeout = timeout
     timeout = _normalize_timeout(timeout, caller="_call_codex", logger=logger)
+    # See _acall_codex: this is a local process deadline, not a provider
+    # request timeout, so it remains bounded under TIMEOUT_POLICY=ban.
+    kwargs = {
+        **kwargs,
+        "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
+    }
     transport = _codex_transport(kwargs)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
@@ -1080,7 +1100,14 @@ async def _acall_codex_structured(
     **kwargs: Any,
 ) -> tuple[BaseModel, LLMCallResult]:
     """Call Codex SDK with structured output (JSON schema)."""
+    requested_timeout = timeout
     timeout = _normalize_timeout(timeout, caller="_acall_codex_structured", logger=logger)
+    # The CLI owns a killable subprocess, so preserve the requested deadline
+    # independently from the provider timeout policy.
+    kwargs = {
+        **kwargs,
+        "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
+    }
     transport = _codex_transport(kwargs)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
@@ -1158,7 +1185,13 @@ def _call_codex_structured(
     **kwargs: Any,
 ) -> tuple[BaseModel, LLMCallResult]:
     """Sync wrapper for _acall_codex_structured."""
+    requested_timeout = timeout
     timeout = _normalize_timeout(timeout, caller="_call_codex_structured", logger=logger)
+    # Keep the process deadline even when provider request timeouts are banned.
+    kwargs = {
+        **kwargs,
+        "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
+    }
     transport = _codex_transport(kwargs)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
