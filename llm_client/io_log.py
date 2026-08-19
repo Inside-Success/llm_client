@@ -203,6 +203,43 @@ def glob_jsonl_files(directory: Path, stem: str) -> list[Path]:
     return files
 
 
+def _billing_attribution(model: str | None) -> tuple[str | None, str | None]:
+    """Return ``(billing_account, openrouter_key_fingerprint)`` for one call.
+
+    Recorded so the account split can be audited rather than trusted. Both are
+    NULL when they cannot be established: a NULL means "unknown", and must not
+    be read as though the call had been attributed to the default account.
+
+    Attribution is telemetry, not a control. It never raises into the calling
+    path -- the gate that actually prevents mis-billing is key selection in
+    llm_client.utils.openrouter, which does fail loud.
+    """
+
+    account: str | None = None
+    fingerprint: str | None = None
+    try:
+        from llm_client.utils.openrouter_accounts import resolve_account
+
+        account = resolve_account()
+    except Exception as exc:  # noqa: BLE001 - telemetry must not break a call
+        logger.debug("billing account unresolved: %s: %s", type(exc).__name__, exc)
+
+    if model and str(model).startswith("openrouter/"):
+        try:
+            from llm_client.utils.openrouter import (
+                _mask_api_key,
+                _openrouter_key_candidates_from_env,
+            )
+
+            candidates = _openrouter_key_candidates_from_env()
+            if candidates:
+                fingerprint = _mask_api_key(candidates[0])
+        except Exception as exc:  # noqa: BLE001 - telemetry must not break a call
+            logger.debug("openrouter key fingerprint unresolved: %s: %s", type(exc).__name__, exc)
+
+    return account, fingerprint
+
+
 def _get_project() -> str:
     """Resolve a stable project name so observability rows group by repo, not worktree."""
     global _project
@@ -1306,6 +1343,20 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN marginal_cost REAL")
     if "cache_hit" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN cache_hit INTEGER DEFAULT 0")
+    if "billing_account" not in llm_cols:
+        # Which credential account owns this spend. NULL means unknown -- rows
+        # written before account routing, and rows backfilled from JSONL, must
+        # not be read as though they were attributed to the default account.
+        #
+        # Deliberately not indexed. ADD COLUMN is an O(1) metadata change, but
+        # this table is already ~25M rows / 28GB in practice, so building an
+        # index here would stall the first call after upgrade behind a
+        # multi-minute locking write -- to index a column that is NULL for every
+        # pre-existing row. Attribution queries filter by time or project first,
+        # which are indexed. Add one later if a real query needs it, out of band.
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN billing_account TEXT")
+    if "openrouter_key_fingerprint" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN openrouter_key_fingerprint TEXT")
     if "prompt_ref" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN prompt_ref TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref)")
@@ -1881,6 +1932,7 @@ def _write_call_to_db(
         usage_details = _bounded_usage_details(usage)
 
         project = _get_project() or "unknown"
+        billing_account, openrouter_key_fingerprint = _billing_attribution(model)
         bucket_start = datetime.fromisoformat(timestamp).replace(
             minute=0, second=0, microsecond=0
         ).isoformat()
@@ -1897,12 +1949,13 @@ def _write_call_to_db(
                     reasoning_tokens, cached_tokens, cache_creation_tokens,
                     usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
+                    billing_account, openrouter_key_fingerprint,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
                     causal_parent_id, logical_call_id, content_persistence)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, project, model,
                     json.dumps(messages, default=str) if messages else None,
@@ -1915,6 +1968,7 @@ def _write_call_to_db(
                     reasoning_tokens, cached_tokens, cache_creation_tokens,
                     usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
+                    billing_account, openrouter_key_fingerprint,
                     finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint,
                     json.dumps(call_snapshot, default=str) if call_snapshot is not None else None,
