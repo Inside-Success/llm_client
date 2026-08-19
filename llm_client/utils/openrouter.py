@@ -21,6 +21,11 @@ from typing import Any, Callable
 from llm_client.core.errors import LLMConfigurationError
 from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
 from llm_client.execution.retry import _error_status_code
+from llm_client.utils.openrouter_accounts import (
+    ACCOUNT_KEY_ENV,
+    account_api_key,
+    resolve_account,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +93,23 @@ def _split_api_keys(raw: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _routed_account_key() -> tuple[str, str | None] | None:
+    """Return ``(account, key_or_None)`` when per-account credentials are configured.
+
+    Account routing stays entirely dormant until at least one per-account
+    credential exists, so the routing table is never consulted -- and can never
+    break key resolution -- for a process that has not adopted it. Once adopted,
+    a routing table that cannot be trusted raises rather than guessing which
+    account to bill. Whether a missing credential for the owning account is fatal
+    depends on what else is in the ring, so that decision belongs to the caller.
+    """
+
+    if not any(os.environ.get(env_name, "").strip() for env_name in ACCOUNT_KEY_ENV.values()):
+        return None
+    account = resolve_account()
+    return account, account_api_key(account)
+
+
 def _openrouter_key_sources_from_env() -> tuple[_OpenRouterKeySource, ...]:
     """Collect non-empty OpenRouter credential sources before deduplication."""
     sources: list[_OpenRouterKeySource] = []
@@ -133,7 +155,77 @@ def _openrouter_key_sources_from_env() -> tuple[_OpenRouterKeySource, ...]:
         )
         for index, value in numbered
     )
-    return tuple(sources)
+    return _apply_account_routing(tuple(sources))
+
+
+def _apply_account_routing(
+    sources: tuple[_OpenRouterKeySource, ...],
+) -> tuple[_OpenRouterKeySource, ...]:
+    """Constrain the key ring to the account that owns this repository's spend.
+
+    The rule is that the ring never crosses billing accounts -- not that rotation
+    stops. Rotating between several keys belonging to the same account is
+    legitimate and is preserved; rotating from one account onto another would
+    move spend somewhere nobody chose, so a foreign account's credential is
+    dropped from the ring instead of being failed over to.
+    """
+
+    routed = _routed_account_key()
+    if routed is None:
+        return sources
+    account, routed_key = routed
+
+    foreign_keys = {
+        key
+        for other, env_name in ACCOUNT_KEY_ENV.items()
+        if other != account
+        for key in (_normalize_api_key_value(os.environ.get(env_name)),)
+        if key
+    }
+
+    retained: list[_OpenRouterKeySource] = []
+    for source in sources:
+        kept = tuple(value for value in source.values if value not in foreign_keys)
+        if not kept:
+            logger.info(
+                "OpenRouter account routing: dropped %s; it belongs to another billing account "
+                "and this repository bills %s.",
+                source.name,
+                account,
+            )
+            continue
+        retained.append(
+            _OpenRouterKeySource(name=source.name, values=kept, rotation_source=source.rotation_source)
+        )
+
+    if not retained:
+        # Nothing configured for this account, or everything present belonged to
+        # another one. Use the owning account's own credential.
+        if routed_key is None:
+            raise LLMConfigurationError(
+                f"OpenRouter account {account!r} owns this repository's spend but "
+                f"{ACCOUNT_KEY_ENV[account]} is not set, and every other configured key "
+                f"belongs to a different billing account. Set {ACCOUNT_KEY_ENV[account]}, "
+                f"or set LLM_CLIENT_OPENROUTER_ACCOUNT to bill a different account deliberately."
+            )
+        return (
+            _OpenRouterKeySource(
+                name=f"{ACCOUNT_KEY_ENV[account]} (account={account})",
+                values=(routed_key,),
+                rotation_source=False,
+            ),
+        )
+
+    if routed_key is None or routed_key not in {value for source in retained for value in source.values}:
+        # Keys survived that match no configured account. They cannot be proven
+        # to belong to the owning account, so say so rather than bill silently.
+        logger.warning(
+            "OpenRouter account routing: this repository bills %s, but the configured key ring "
+            "contains no key matching %s. Verify which account is being charged.",
+            account,
+            ACCOUNT_KEY_ENV[account],
+        )
+    return tuple(retained)
 
 
 def _openrouter_key_candidates_from_env() -> tuple[str, ...]:
