@@ -1155,15 +1155,26 @@ def get_task_prompt_budget(task: str | None) -> int | None:
 def prompt_size_strict_mode() -> bool:
     """Whether an over-budget prompt raises instead of warning.
 
-    Warn-by-default is deliberate. These calls are frequently made inside
-    long-running repair and review loops; hard-failing one by default would
-    convert a cost problem into an availability problem. CI and benchmark runs
-    opt into strict mode, matching ``tags_strict_mode``.
+    Strict mode is opt-in through one explicit environment variable and is
+    **never inferred** -- not from ``CI``, not from the task name, not from any
+    other ambient signal. This deliberately breaks symmetry with
+    ``tags_strict_mode``, and the asymmetry is the point.
+
+    A missing ``task`` tag is a coding error: it is the same on every run, and
+    failing it in CI catches it once and cheaply. Prompt size is not like
+    that. It is a property of the *input*, so the same correct code passes on
+    one document and breaches on a longer one. A ceiling that silently becomes
+    fatal wherever ``CI`` happens to be set converts "this input is big" into
+    an opaque failure in the environment with the least context to debug it,
+    and an outer retry loop will then re-run the same doomed call until
+    somebody works out that the limit was self-imposed rather than the
+    provider's.
+
+    A prompt ceiling should therefore only ever become fatal because a human
+    decided this specific pipeline has a real invariant worth enforcing.
     """
 
-    if truthy_env(os.environ.get(PROMPT_SIZE_STRICT_ENV)):
-        return True
-    return truthy_env(os.environ.get("CI"))
+    return truthy_env(os.environ.get(PROMPT_SIZE_STRICT_ENV))
 
 
 def estimate_prompt_tokens(serialized_prompt: str) -> int:
@@ -1204,10 +1215,19 @@ def check_prompt_size(
         return estimated
 
     overage = estimated / ceiling
+    # The expensive part of a self-imposed limit is not the failure, it is the
+    # time spent discovering that the limit was self-imposed. Say so, and say
+    # how to tell drift apart from a legitimately large input, in the message
+    # itself.
     message = (
         f"Prompt size contract exceeded for task {task!r}: "
         f"~{estimated:,} estimated prompt tokens > {ceiling:,} declared ceiling "
-        f"({overage:.1f}x). The payload was not truncated."
+        f"({overage:.1f}x). This is a locally declared ceiling, not a provider "
+        f"or context-window limit, and the payload was not truncated. "
+        f"If this input is legitimately large, raise or remove the ceiling via "
+        f"register_task_prompt_budget({task!r}, ...). To check whether this is "
+        f"drift rather than a big input, compare against this task's own "
+        f"history: python -m llm_client prompt-drift --task {task}"
     )
     if prompt_size_strict_mode():
         raise LLMPromptBudgetExceededError(message)

@@ -495,3 +495,87 @@ def test_envelope_measures_prompt_and_enforces_registered_ceiling(monkeypatch) -
             },
             messages=[{"role": "user", "content": "x" * 10_000}],
         )
+
+
+# --------------------------------------------------------------------------
+# Strict mode must never be inferred
+# --------------------------------------------------------------------------
+
+
+def test_ci_does_not_make_a_prompt_ceiling_fatal(monkeypatch) -> None:
+    """A ceiling must not silently become fatal just because CI is set.
+
+    Prompt size is a property of the input, so the same correct code passes on
+    a short document and breaches on a long one. Turning that into a hard
+    failure in CI produces an opaque build break in the environment with the
+    least context to debug it, and an outer retry loop will re-run the doomed
+    call until somebody discovers the limit was self-imposed.
+    """
+    from llm_client.execution.call_contracts import prompt_size_strict_mode
+
+    monkeypatch.delenv("LLM_CLIENT_PROMPT_SIZE_STRICT", raising=False)
+    monkeypatch.setenv("CI", "1")
+    assert prompt_size_strict_mode() is False
+
+    register_task_prompt_budget("demo.ci", 100)
+    # Warns, returns the measurement, does not raise.
+    assert check_prompt_size("demo.ci", "x" * 40_000) == 10_000
+
+
+def test_ci_does_not_make_a_context_contract_fatal(tmp_path: Path, monkeypatch) -> None:
+    from llm_client.prompt_context_contract import prompt_context_strict_mode
+
+    monkeypatch.delenv("LLM_CLIENT_PROMPT_CONTEXT_STRICT", raising=False)
+    monkeypatch.setenv("CI", "1")
+    assert prompt_context_strict_mode() is False
+
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 100\n',
+    )
+    breaches = enforce_contract(
+        template, {"artifacts_json": "x" * 5000}, strict=prompt_context_strict_mode()
+    )
+    assert breaches, "the breach should still be reported"
+
+
+def test_strict_mode_requires_its_own_explicit_variable(monkeypatch) -> None:
+    from llm_client.execution.call_contracts import prompt_size_strict_mode
+    from llm_client.prompt_context_contract import prompt_context_strict_mode
+
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_SIZE_STRICT", "1")
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_CONTEXT_STRICT", "1")
+    assert prompt_size_strict_mode() is True
+    assert prompt_context_strict_mode() is True
+
+
+def test_breach_message_says_the_limit_is_self_imposed(monkeypatch) -> None:
+    """The costly part of a self-imposed limit is discovering that it is one."""
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_SIZE_STRICT", "1")
+    register_task_prompt_budget("demo.diagnose", 100)
+
+    with pytest.raises(LLMPromptBudgetExceededError) as excinfo:
+        check_prompt_size("demo.diagnose", "x" * 40_000)
+
+    message = str(excinfo.value)
+    assert "not a provider" in message
+    assert "register_task_prompt_budget" in message
+    assert "prompt-drift" in message
+
+
+def test_context_breach_message_warns_against_budgeting_source_material(
+    tmp_path: Path,
+) -> None:
+    """Budget what should not grow with the input; never the input itself."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  evidence_json:\n    max_bytes: 100\n',
+    )
+
+    with pytest.raises(PromptContextContractError) as excinfo:
+        enforce_contract(template, {"evidence_json": "x" * 5000}, strict=True)
+
+    message = str(excinfo.value)
+    assert "not provider limits" in message
+    assert "should NOT grow with the input" in message

@@ -25,6 +25,59 @@ tokens cached) while a 615,835-token call cost **$0.3109** -- the call sending
 twice as much looked 11x cheaper. Ranked by cost, the worst offender is
 invisible. Everything here measures **prompt tokens**, never cost.
 
+## The rule that keeps this from becoming a patch
+
+A size ceiling is a **detector**, not a fix. The failure it is built to catch
+is *redundancy* -- the same bytes twice, or an artifact nobody reads -- and the
+actual repair for that is always structural: stop sending it. If a ceiling ever
+becomes the thing keeping a pipeline honest, the real bug is still there and
+now it has a tripwire in front of it.
+
+That distinction has one practical consequence, and it is the most important
+rule here:
+
+> **Budget only context that should not grow with the input.**
+
+Split every prompt's context in two:
+
+| kind | example from the reference case | share | budget it? |
+|---|---|---|---|
+| **input-proportional** -- scales with the document/corpus being processed | `evidence_json` (the source material) | 2.9% | **no** |
+| **input-independent** -- fixed-shape computed artifacts, schemas, instructions | `analysis_artifacts_json` (pipeline artifacts) | 96.8% | **yes** |
+
+Budgeting the artifacts is safe: they should be roughly the same size whether
+the source document is two pages or two hundred, so a breach genuinely means
+something grew that should not have.
+
+Budgeting the source material is the trap. The same correct code then passes on
+a short document and fails on a long one, which is not a defect -- it is the job.
+Worse, the failure looks like a limit the model imposed rather than one the
+pipeline imposed, so it typically costs a debugging session to discover, and an
+outer retry loop will re-run the doomed call in the meantime.
+
+Concretely, in the case this was built for: the correct ceiling is on
+`analysis_artifacts_json`, and there should be **no ceiling at all** on
+`evidence_json`. A ceiling on the total prompt cannot express that difference,
+which is why Component C exists and why it, not Component B, is the one to
+reach for first.
+
+### Corollaries
+
+1. **Never infer strict mode.** Neither component treats `CI` (or a task name,
+   or any other ambient signal) as opting into hard failure. A ceiling becomes
+   fatal only when a human sets its explicit environment variable, because a
+   ceiling that silently turns fatal in the environment with the least context
+   is the worst place to discover a self-imposed limit.
+2. **A breach must be self-diagnosing.** Both components say in the message
+   that the limit is locally declared rather than a provider limit, and how to
+   tell drift apart from a legitimately large input.
+3. **Never truncate to fit.** Silently trimming would change the model's
+   inputs behind the caller's back and produce a quietly wrong answer instead
+   of a loud one.
+4. **Prefer the detector.** Component A needs no ceiling at all: it compares a
+   task against its own history, so it adapts as inputs change and cannot
+   misfire on a legitimately large document.
+
 ## Component A -- retrospective drift detection
 
 ```bash

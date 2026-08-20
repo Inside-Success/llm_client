@@ -54,16 +54,17 @@ SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.0"})
 def prompt_context_strict_mode() -> bool:
     """Whether a contract breach raises instead of warning.
 
-    Warn-by-default matches the rest of the prompt-size stack: adopting a
-    contract should surface a problem, not take a working pipeline down. CI
-    opts into strict mode so a breach fails the build.
+    Opt-in through one explicit environment variable, never inferred from
+    ``CI`` or any other ambient signal. A context budget is a statement about
+    input size, so the same correct code can satisfy it on one document and
+    breach it on a longer one; making that fatal wherever ``CI`` happens to be
+    set turns a large input into an opaque build failure. See
+    ``llm_client.execution.call_contracts.prompt_size_strict_mode`` for the
+    full reasoning.
     """
 
     value = str(os.environ.get(PROMPT_CONTEXT_STRICT_ENV, "")).strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    ci = str(os.environ.get("CI", "")).strip().lower()
-    return ci in {"1", "true", "yes", "on"}
+    return value in {"1", "true", "yes", "on"}
 
 
 class PromptContextContractError(Exception):
@@ -221,7 +222,13 @@ def enforce_contract(
         return []
 
     detail = "; ".join(breaches)
-    message = f"Prompt context contract violated for {template_path.name}: {detail}"
+    message = (
+        f"Prompt context contract violated for {template_path.name}: {detail}. "
+        f"These are locally declared budgets in {template_path.stem}{CONTRACT_SUFFIX}, "
+        f"not provider limits. Budget only context that should NOT grow with the "
+        f"input; if an over-budget variable carries the source material itself, "
+        f"the budget is wrong, not the input."
+    )
     if strict:
         raise PromptContextContractError(message)
     logger.warning(message)
