@@ -41,6 +41,7 @@ from llm_client.prompt_context_contract import (
     enforce_contract,
     prompt_context_strict_mode,
 )
+from llm_client.prompt_inspection import report_duplicated_content
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,8 @@ def render_prompt(
         ValueError: If the render request or YAML structure is invalid.
         PromptContextContractError: If a sibling ``<template>.contract.yaml``
             declares budgets this context breaches and strict mode is on.
+        DuplicateContentError: If the context repeats large content and
+            ``LLM_CLIENT_PROMPT_DUPLICATE_STRICT`` is set.
     """
     if (template_path is None) == (prompt_ref is None):
         raise ValueError("Provide exactly one of template_path or prompt_ref.")
@@ -106,6 +109,11 @@ def render_prompt(
     # payload is flat text and an oversized prompt can no longer be attributed
     # to the variable responsible for it.
     enforce_contract(path, context, strict=prompt_context_strict_mode())
+
+    # Independent of any declared budget: content repeated inside this prompt is
+    # waste whether or not the total is within its ceiling, and needs no contract
+    # to be written before it can be found.
+    report_duplicated_content(context, label=path.name)
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
 

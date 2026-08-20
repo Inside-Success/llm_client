@@ -2,14 +2,16 @@
 
 Status: Accepted  
 Date: 2026-03-17  
-Last verified: 2026-08-19
-Verification context: `render_prompt()` now measures caller-supplied context
-against an optional sibling `<template>.contract.yaml` before rendering. This
-is a size contract only -- it does not resolve, substitute, or override prompt
-content, so deterministic resolution (decision 6) and prompt asset identity
-(decision 3) are unchanged. The sibling file is discovered by an explicit,
-documented naming convention rather than implicit override lookup, which keeps
-decision 5 intact.
+Last verified: 2026-08-20
+Verification context: `render_prompt()` now performs two read-only inspections
+of caller-supplied context before rendering. It measures the context against an
+optional sibling `<template>.contract.yaml`, and it reports content repeated
+within the context. Both observe; neither resolves, substitutes, reorders, or
+overrides prompt content, so deterministic resolution (decision 6) and prompt
+asset identity (decision 3) are unchanged, and a rendered prompt is byte-for-byte
+what it would have been without them. The contract file is discovered by an
+explicit, documented naming convention rather than implicit override lookup, and
+duplicate reporting needs no file at all, so decision 5 is intact either way.
 
 ## Context
 
