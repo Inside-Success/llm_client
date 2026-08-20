@@ -1,0 +1,83 @@
+name: prompt_context_quality
+version: "1.0"
+description: >-
+  Judge whether the context assembled into a prompt is the right context for the
+  task. Scored against a structural digest - per-variable sizes, shares,
+  repeated content and short samples - rather than the prompt itself, because
+  the questions here are about proportion, and a prompt truncated to fit a judge
+  destroys exactly the proportion it was meant to show.
+dimensions:
+  - name: proportionality
+    description: >-
+      Does the material the task is actually about dominate the prompt, or does
+      supporting machinery? A review of historical evidence whose evidence is a
+      few percent of the payload is disproportionate however well-formed it is.
+    weight: 1.0
+    scale: categorical
+    categories:
+      - name: proportionate
+        description: "The content central to the task holds the largest share, or a share consistent with its role"
+        score: 1.0
+      - name: skewed
+        description: "Supporting material rivals the central content without a clear reason"
+        score: 0.5
+      - name: inverted
+        description: "Supporting material dominates while the central content is a small fraction"
+        score: 0.0
+
+  - name: necessity
+    description: >-
+      Is every variable plausibly usable for this task? A variable the task has
+      no way to use is pure cost, and its presence often means context was
+      assembled by habit rather than by need.
+    weight: 1.0
+    scale: categorical
+    categories:
+      - name: all_usable
+        description: "Every variable has a plausible role in producing the requested output"
+        score: 1.0
+      - name: some_unused
+        description: "At least one variable has no evident use for this task"
+        score: 0.5
+      - name: largely_unused
+        description: "Much of the payload has no evident bearing on the task"
+        score: 0.0
+
+  - name: non_redundancy
+    description: >-
+      Is anything sent more than once? Repeated content costs tokens and adds no
+      information. The digest reports duplication deterministically; this
+      dimension is about whether what remains is substantively repetitive - the
+      same facts restated across variables in different forms.
+    weight: 0.8
+    scale: categorical
+    categories:
+      - name: distinct
+        description: "No repetition, and no variable substantively restates another"
+        score: 1.0
+      - name: overlapping
+        description: "Variables overlap in substance even if not byte-identical"
+        score: 0.5
+      - name: duplicated
+        description: "Substantial content is sent more than once"
+        score: 0.0
+
+  - name: sufficiency
+    description: >-
+      Could the task be done well with what is here, or is something it needs
+      missing? This is the dimension that catches starvation, and it matters
+      most when context is supplied by a mechanism that filters: a prompt that
+      is too small fails quietly as slightly worse reasoning, where a prompt
+      that is too large fails loudly as cost.
+    weight: 1.0
+    scale: categorical
+    categories:
+      - name: sufficient
+        description: "Everything the task plausibly needs to produce a grounded answer is present"
+        score: 1.0
+      - name: thin
+        description: "The task is doable but something that would materially help appears absent"
+        score: 0.5
+      - name: starved
+        description: "Something the task requires is missing; the answer would have to be guessed"
+        score: 0.0

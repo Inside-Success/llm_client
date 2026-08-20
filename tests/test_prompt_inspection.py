@@ -229,3 +229,81 @@ def test_prose_without_json_yields_nothing_rather_than_erroring() -> None:
     from llm_client.prompt_inspection import find_duplicated_content_in_text
 
     assert find_duplicated_content_in_text("just prose, no structure at all") == []
+
+
+# --------------------------------------------------------------------------
+# The digest a judge reads instead of the prompt
+# --------------------------------------------------------------------------
+
+
+def test_digest_preserves_proportion_which_truncation_destroys() -> None:
+    """The reason a judge is shown a digest and not the prompt.
+
+    Truncating a large prompt to fit a judge's window keeps the first N bytes,
+    which is exactly the wrong sample: it discards the shares that the question
+    is about while looking like it preserved the content.
+    """
+    from llm_client.prompt_inspection import build_prompt_digest
+
+    context = {
+        "evidence_json": json.dumps({"e": "x" * 80_000}),
+        "artifacts_json": json.dumps({"a": "y" * 2_900_000}),
+    }
+
+    digest = build_prompt_digest(context)
+
+    assert "artifacts_json" in digest and "evidence_json" in digest
+    assert "96." in digest or "97." in digest, digest[:400]
+    assert len(digest) < 5_000, "a digest that needs truncating defeats the point"
+
+
+def test_digest_reports_duplication_it_found() -> None:
+    from llm_client.prompt_inspection import build_prompt_digest
+
+    audit = _audit(BIG)
+    digest = build_prompt_digest(
+        {"artifacts_json": json.dumps({"x": audit, "y": audit})}
+    )
+
+    assert "Repeated content:" in digest
+    assert "sent more than once" in digest
+
+
+def test_digest_says_so_when_nothing_repeats() -> None:
+    """Absence of a finding must be stated, not left ambiguous."""
+    from llm_client.prompt_inspection import build_prompt_digest
+
+    digest = build_prompt_digest({"a_json": json.dumps({"a": "x" * 40_000})})
+
+    assert "Repeated content: none found." in digest
+
+
+def test_digest_samples_each_variable_so_relevance_is_judgeable() -> None:
+    """Sizes answer proportion; samples are what make relevance answerable."""
+    from llm_client.prompt_inspection import build_prompt_digest
+
+    digest = build_prompt_digest(
+        {"evidence_json": "EVIDENCE-MARKER" + "x" * 50_000}, sample_chars=100
+    )
+
+    assert "EVIDENCE-MARKER" in digest
+    assert "..." in digest, "a truncated sample should be marked as truncated"
+
+
+def test_digest_of_an_empty_context_is_still_well_formed() -> None:
+    from llm_client.prompt_inspection import build_prompt_digest
+
+    assert "0 bytes total" in build_prompt_digest({})
+
+
+def test_the_shipped_rubric_matches_the_digest_it_scores() -> None:
+    """The rubric asks only questions the digest actually supports."""
+    from llm_client.rubric_registry import load_rubric
+
+    rubric = load_rubric("prompt_context_quality")
+    names = {dimension.name for dimension in rubric.dimensions}
+
+    assert names == {"proportionality", "necessity", "non_redundancy", "sufficiency"}
+    # sufficiency is the one that catches starvation, which is the failure a
+    # context-supplying mechanism introduces and the only one that is silent.
+    assert "sufficiency" in names

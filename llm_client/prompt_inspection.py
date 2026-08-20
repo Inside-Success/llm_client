@@ -313,3 +313,66 @@ def report_duplicated_content(
         raise DuplicateContentError(message)
     logger.warning(message)
     return findings
+
+
+DEFAULT_SAMPLE_CHARS = 400
+
+
+def build_prompt_digest(
+    context: dict[str, Any],
+    *,
+    sample_chars: int = DEFAULT_SAMPLE_CHARS,
+    min_duplicate_bytes: int = DEFAULT_MIN_DUPLICATE_BYTES,
+) -> str:
+    """Compress an assembled prompt into something a judge can actually read.
+
+    A judge cannot assess a three megabyte prompt by being shown it. Truncating
+    to fit a context window is worse than useless here, because the question is
+    about proportion - which variable dominates, what is never used, what is
+    sent twice - and a truncated prompt destroys exactly that information while
+    looking like it preserved it.
+
+    So the deterministic layer answers the structural questions first and hands
+    the judge a few hundred tokens describing shape rather than content: what
+    each variable is, how big, what share of the whole, whether anything
+    repeats, and a short sample so the judge can tell what kind of thing it is.
+    Judging proportion needs the sizes; judging relevance needs the sample.
+
+    This is the division of labour the whole inspection stack is built on.
+    Measurement, duplication and attribution are decidable and cheap, so they
+    are computed. Whether the mix is *appropriate for the task* is not
+    decidable, so it is asked.
+    """
+
+    sizes = summarize_context(context)
+    duplicates = find_duplicated_content(context, min_bytes=min_duplicate_bytes)
+    total = sum(item.size_bytes for item in sizes)
+
+    lines = [f"Assembled prompt: {len(sizes)} context variables, {total:,} bytes total.", ""]
+    lines.append("Size by variable:")
+    for item in sizes:
+        lines.append(f"  {item.name}: {item.size_bytes:,} bytes ({item.share * 100:.1f}%)")
+
+    if duplicates:
+        wasted = sum(item.wasted_bytes for item in duplicates)
+        lines.append("")
+        lines.append(
+            f"Repeated content: {wasted:,} bytes are sent more than once "
+            f"({wasted / total * 100:.1f}% of the prompt)."
+        )
+        for item in duplicates:
+            lines.append(f"  {item.describe()}")
+    else:
+        lines.append("")
+        lines.append("Repeated content: none found.")
+
+    lines.append("")
+    lines.append(f"Sample of each variable (first {sample_chars} characters):")
+    for item in sizes:
+        raw = context[item.name]
+        text = raw if isinstance(raw, str) else str(raw)
+        sample = text[:sample_chars]
+        suffix = "..." if len(text) > sample_chars else ""
+        lines.append(f"  --- {item.name} ---")
+        lines.append(f"  {sample}{suffix}")
+    return "\n".join(lines)

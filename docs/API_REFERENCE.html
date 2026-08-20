@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-20T16:34:21Z -->
+<!-- Generated: 2026-08-20T16:57:23Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -3288,6 +3288,32 @@ them buries the finding that matters under its own consequences.</pre>
 
 <h4>Functions</h4>
 
+<details class="symbol" id="module-llm_client-prompt_inspection-build_prompt_digest">
+  <summary><code>build_prompt_digest</code> <span class="sig">(context: dict[str, typing.Any], *, sample_chars: int = 400, min_duplicate_bytes: int = 10000) -&gt; str</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Compress an assembled prompt into something a judge can actually read.</p>
+    <p class="meta">Source: <code>llm_client.prompt_inspection</code> functions</p>
+    <pre class="doc">Compress an assembled prompt into something a judge can actually read.
+
+A judge cannot assess a three megabyte prompt by being shown it. Truncating
+to fit a context window is worse than useless here, because the question is
+about proportion - which variable dominates, what is never used, what is
+sent twice - and a truncated prompt destroys exactly that information while
+looking like it preserved it.
+
+So the deterministic layer answers the structural questions first and hands
+the judge a few hundred tokens describing shape rather than content: what
+each variable is, how big, what share of the whole, whether anything
+repeats, and a short sample so the judge can tell what kind of thing it is.
+Judging proportion needs the sizes; judging relevance needs the sample.
+
+This is the division of labour the whole inspection stack is built on.
+Measurement, duplication and attribution are decidable and cheap, so they
+are computed. Whether the mix is *appropriate for the task* is not
+decidable, so it is asked.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-prompt_inspection-duplicate_strict_mode">
   <summary><code>duplicate_strict_mode</code> <span class="sig">() -&gt; bool</span></summary>
   <div class="symbol-body">
@@ -3449,6 +3475,7 @@ finished prompt, which also contains the template&#x27;s own prose.</pre>
   </thead>
   <tbody>
     <tr><td><code>DEFAULT_MIN_DUPLICATE_BYTES</code></td><td><code>10000</code></td><td>int</td></tr>
+<tr><td><code>DEFAULT_SAMPLE_CHARS</code></td><td><code>400</code></td><td>int</td></tr>
 <tr><td><code>DUPLICATE_STRICT_ENV</code></td><td><code>&#x27;LLM_CLIENT_PROMPT_DUPLICATE_STRICT&#x27;</code></td><td>str</td></tr>
   </tbody>
 </table>
@@ -13753,7 +13780,7 @@ historical single-key behaviour untouched.</pre>
   <tbody>
     <tr><td><code>ACCOUNT_KEY_ENV</code></td><td><code>{&#x27;inside_success&#x27;: &#x27;OPENROUTER_API_KEY_INSIDE_SUCCESS&#x27;, &#x27;personal&#x27;: &#x27;OPENROUTER_API_KEY_PERSONAL&#x27;}</code></td><td>dict</td></tr>
 <tr><td><code>ACCOUNT_OVERRIDE_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ACCOUNT&#x27;</code></td><td>str</td></tr>
-<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/prompt-size-attribution/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
+<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/prompt-quality-rubric/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
 <tr><td><code>INSIDE_SUCCESS_ACCOUNT</code></td><td><code>&#x27;inside_success&#x27;</code></td><td>str</td></tr>
 <tr><td><code>PERSONAL_ACCOUNT</code></td><td><code>&#x27;personal&#x27;</code></td><td>str</td></tr>
 <tr><td><code>ROUTING_PATH_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ROUTING_FILE&#x27;</code></td><td>str</td></tr>
