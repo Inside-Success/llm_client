@@ -28,9 +28,12 @@ from llm_client.execution.call_contracts import (
 )
 from llm_client.prompt_context_contract import (
     PromptContextContractError,
+    contract_breach_summary,
     contract_path_for,
     enforce_contract,
+    format_contract_breach_summary,
     load_contract,
+    reset_contract_breach_tally,
 )
 
 
@@ -659,3 +662,111 @@ def test_a_variable_still_needs_one_of_the_two(tmp_path: Path) -> None:
 
     with pytest.raises(PromptContextContractError, match="unbounded: true"):
         load_contract(template)
+
+
+# --------------------------------------------------------------------------
+# Run-scoped breach tally: the report a human actually sees
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def _clean_tally():
+    """The tally is process-global by design; keep tests independent."""
+    reset_contract_breach_tally()
+    yield
+    reset_contract_breach_tally()
+
+
+def _tight_contract(tmp_path: Path) -> Path:
+    return _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 100\n',
+    )
+
+
+def test_clean_run_reports_nothing(tmp_path: Path, _clean_tally) -> None:
+    """A summary that always prints something is a summary people stop reading."""
+    template = _tight_contract(tmp_path)
+    enforce_contract(template, {"artifacts_json": "x" * 10}, strict=False)
+
+    assert contract_breach_summary() == []
+    assert format_contract_breach_summary() is None
+
+
+def test_tally_counts_breaching_renders_against_total(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """The finding this exists for: 45 of 74 renders over budget, unnoticed.
+
+    The ratio is the point. A count of breaches alone cannot distinguish one
+    pathological input from a payload that has drifted for the whole run.
+    """
+    template = _tight_contract(tmp_path)
+    for _ in range(3):
+        enforce_contract(template, {"artifacts_json": "x" * 10}, strict=False)
+    for _ in range(2):
+        enforce_contract(template, {"artifacts_json": "x" * 500}, strict=False)
+
+    (summary,) = contract_breach_summary()
+    assert summary.template_name == "demo.yaml"
+    assert summary.renders == 5
+    assert summary.breaching_renders == 2
+
+
+def test_tally_keeps_the_worst_size_seen_not_the_last(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """A run is judged by its worst payload; the last one is an accident of order."""
+    template = _tight_contract(tmp_path)
+    enforce_contract(template, {"artifacts_json": "x" * 900}, strict=False)
+    enforce_contract(template, {"artifacts_json": "x" * 200}, strict=False)
+
+    (summary,) = contract_breach_summary()
+    (worst,) = summary.worst
+    assert worst.variable == "artifacts_json"
+    assert worst.observed_bytes == 900
+    assert worst.budget_bytes == 100
+
+    report = format_contract_breach_summary()
+    assert report is not None
+    assert "2 of 2 renders over budget" in report
+    assert "900" in report
+
+
+def test_strict_mode_still_counts_before_it_raises(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """The breach happened whether or not the caller chose to make it fatal."""
+    template = _tight_contract(tmp_path)
+
+    with pytest.raises(PromptContextContractError):
+        enforce_contract(template, {"artifacts_json": "x" * 500}, strict=True)
+
+    (summary,) = contract_breach_summary()
+    assert summary.breaching_renders == 1
+
+
+def test_undeclared_variable_is_counted_too(tmp_path: Path, _clean_tally) -> None:
+    """An undeclared variable is how the payload grew unnoticed in the first place."""
+    template = _tight_contract(tmp_path)
+    enforce_contract(
+        template,
+        {"artifacts_json": "x" * 10, "smuggled_json": "y" * 50},
+        strict=False,
+    )
+
+    (summary,) = contract_breach_summary()
+    (worst,) = summary.worst
+    assert worst.variable == "smuggled_json"
+    assert worst.undeclared
+
+
+def test_template_without_a_contract_is_not_counted_as_a_render(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """Only governed templates have a budget to be measured against."""
+    template = tmp_path / "ungoverned.yaml"
+    template.write_text("messages: []\n", encoding="utf-8")
+    enforce_contract(template, {"anything": "x" * 10_000}, strict=False)
+
+    assert contract_breach_summary() == []
