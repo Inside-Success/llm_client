@@ -121,7 +121,7 @@
       "intelligence": 38,
       "litellm_id": "openrouter/openai/gpt-5.6-luna",
       "name": "gpt-5.6-luna-openrouter",
-      "native_structured_output": false,
+      "native_structured_output": true,
       "provider": "openrouter",
       "speed": 192,
       "structured_output": true,
