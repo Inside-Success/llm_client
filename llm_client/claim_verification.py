@@ -561,6 +561,9 @@ def verify_claims(
     Returns:
         :class:`ClaimVerificationResult` with the gated status.
     """
+    from llm_client.claim_verification_policy import (
+        assert_sanctioned_claim_verification,
+    )
     from llm_client.core.client import call_llm_structured
 
     resolved_policy = policy or SeverityPolicy.default()
@@ -576,6 +579,9 @@ def verify_claims(
         bases={b.name for b in support_bases},
         severities=resolved_policy.tier_names,
     )
+    # Fail closed before spending anything: a caller that has swapped in its own
+    # report model is running an unreviewed judge, not this one.
+    assert_sanctioned_claim_verification(response_model, task=task)
     report, _result = call_llm_structured(
         model,
         messages,
