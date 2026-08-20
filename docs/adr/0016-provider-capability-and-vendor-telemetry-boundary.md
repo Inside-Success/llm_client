@@ -4,6 +4,39 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-08-20 Amendment: A Bounded Probe Result Is Not a Route Capability
+
+`openrouter/openai/gpt-5.6-luna` returns to `native_structured_output: true`,
+restoring the state Plan #339 delivered in `21735e0` and that `0a7c87c`
+reverted for Luna alone on 2026-08-07 without recorded evidence.
+
+The reverted setting is the failure mode this ADR exists to prevent, in the
+opposite direction from Plan #110's ban work: a single large Process Tracing
+schema found no accepting endpoint on 2026-07-29, and that bounded result was
+generalized into a permanent route-level capability denial. Plan #339's Gap
+section had already named this exact conversion as the defect.
+
+Re-probed 2026-08-20 against the Inside Success bounded-extraction schema:
+OpenRouter accepts Luna's native request and returns
+`response_format.json_schema` with `strict=true`, `additionalProperties=false`,
+`finish_reason=stop`, and valid JSON across five consecutive pipeline calls.
+
+The denial was not conservative. Downgrading to Instructor sends the schema as a
+non-enforced hint (`strict=None`, `response_format=null`), and an unenforced
+schema let the model append array items until the 65,536-token output ceiling
+truncated the JSON mid-string — output that can never validate, at ~14x the cost
+of a healthy call. **A capability denial that silently selects an unenforced
+transport is a correctness change, not a safe default**, and must carry evidence
+of the same standard as a capability claim.
+
+Standing rule: record capability findings at the granularity observed. A
+schema-specific rejection belongs to that schema, not to the route. Where a
+route's capability is genuinely uncertain, prefer failing loudly
+(`StructuredOutputPolicy(mode="require_native_json_schema")`) over silently
+routing to an unenforced transport.
+
+Verified 2026-08-20.
+
 ## 2026-08-05 Amendment: Provider Exclusion and Malformed-JSON Recovery
 
 Plan #349 adds `ignored_providers` to `OpenRouterRoutePolicyV1` and compiles it
