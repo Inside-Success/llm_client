@@ -284,3 +284,35 @@ universal route availability.
   and `1`; permanent quota and no-compatible-route controls remained terminal.
 - Shared-client publication and the unchanged non-mocked Process Tracing replay
   remain required before this plan can advance beyond in progress.
+
+## Outcome note — 2026-08-20: Luna native route restored again
+
+This plan's Target was to "preserve Luna and Sol as explicit structured-work
+candidates and route their current OpenRouter identities through provider-native
+JSON Schema", delivered by `21735e0` ("Restore OpenRouter GPT-5.6 native schema
+routes").
+
+That was reverted for Luna alone on 2026-08-07 by `0a7c87c` ("Route OpenRouter
+Luna structured calls through Instructor"), setting
+`native_structured_output=false` again. Sol and Terra kept the native route. The
+revert carried no recorded evidence, and it reintroduced exactly the
+over-generalization this plan's Gap section names: converting one bounded
+Process Tracing result into a general route setting.
+
+Re-probed 2026-08-20 against the Inside Success bounded-extraction schema.
+OpenRouter accepts Luna's native request and returns
+`response_format.json_schema` with `strict=true`,
+`additionalProperties=false`, `finish_reason=stop` and valid JSON, over five
+consecutive pipeline calls at $0.0052–$0.0088 each.
+
+The Instructor transport was measurably unsafe for this schema, not just
+slower. Unenforced, the model put whole transcript passages into a short `name`
+field and appended array items until the 65,536-token output ceiling truncated
+the JSON mid-string — output that can never validate. One such call cost
+$0.0813 against $0.0057 for a healthy one and poisoned the next call with a
+75,896-token prompt.
+
+`native_structured_output` for `openrouter/openai/gpt-5.6-luna` is therefore set
+back to `true`. The bounded-claim discipline this plan established still holds:
+per-schema variation is real, and the large Process Tracing schema remains a
+separate replay question. Verified 2026-08-20.
