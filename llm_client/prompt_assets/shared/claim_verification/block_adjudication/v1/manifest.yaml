@@ -1,0 +1,11 @@
+id: shared.claim_verification.block_adjudication
+version: 1
+kind: chat_prompt
+status: canonical
+description: >-
+  Rules on whether one blocking judgment from a claim-verification judge is
+  defensible — whether it identifies a real error, or is a wording objection
+  dressed as a substantive one.
+template_path: template.yaml
+input_schema: llm_client.block_adjudication_input.v1
+output_schema: llm_client.block_adjudication_verdict.v1
