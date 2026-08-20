@@ -1,5 +1,5 @@
 # API Reference
-<!-- Generated: 2026-08-20T22:13:04Z -->
+<!-- Generated: 2026-08-20T22:26:29Z -->
 
 Generated from package docstrings and typed signatures.
 

@@ -30,11 +30,15 @@ dimensions:
         score: 0.9
       - name: unattributed_computed_claim
         description: >-
-          A real and correct result computed by the pipeline (a posterior, rank,
-          threshold, matrix cell, or gate outcome) asserted without attribution
-          to the artifact that produced it. The content is right; the provenance
-          record is missing. Repair by attaching the artifact locator, not by
-          rewriting the prose.
+          DERIVED, NOT JUDGED — do not return this tier. A real and correct
+          computed result (a posterior, rank, threshold, matrix cell, or gate
+          outcome) asserted without attribution to the artifact that produced
+          it. Code assigns this when a computed support carries no locator, or
+          one that does not resolve, because that is a fact rather than a
+          judgment: a judge asked to rule on it is simultaneously required to
+          supply the very attribution it is ruling on, so the tier can never
+          honestly apply to its own output. Repair by attaching the artifact
+          locator, not by rewriting the prose.
         score: 0.6
       - name: composite_claim
         description: >-

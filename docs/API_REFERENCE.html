@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-20T22:13:04Z -->
+<!-- Generated: 2026-08-20T22:26:29Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -570,6 +570,18 @@ Returns:
   </div>
 </details>
 
+<details class="symbol" id="module-llm_client-claim_verification-derive_severity">
+  <summary><code>derive_severity</code> <span class="sig">(claim: llm_client.claim_verification.VerifiedClaim, *, artifacts: dict[str, typing.Any], computed_bases: set[str]) -&gt; str | None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return a derived severity for this claim, or None if none applies.</p>
+    <p class="meta">Source: <code>llm_client.claim_verification</code> functions</p>
+    <pre class="doc">Return a derived severity for this claim, or None if none applies.
+
+A computed result whose artifact reference is missing or does not resolve is
+unattributed, as a matter of fact rather than judgment.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-claim_verification-load_severity_rubric">
   <summary><code>load_severity_rubric</code> <span class="sig">() -&gt; llm_client.rubric_registry.Rubric</span></summary>
   <div class="symbol-body">
@@ -643,7 +655,7 @@ Returns:
 </details>
 
 <details class="symbol" id="module-llm_client-claim_verification-verify_report">
-  <summary><code>verify_report</code> <span class="sig">(report: llm_client.claim_verification.ClaimVerificationReport, *, evidence_ids: set[str], artifacts: dict[str, typing.Any], policy: llm_client.claim_verification.SeverityPolicy, citation_errors_block: bool = True) -&gt; llm_client.claim_verification.ClaimVerificationResult</span></summary>
+  <summary><code>verify_report</code> <span class="sig">(report: llm_client.claim_verification.ClaimVerificationReport, *, evidence_ids: set[str], artifacts: dict[str, typing.Any], policy: llm_client.claim_verification.SeverityPolicy, citation_errors_block: bool = True, computed_bases: set[str] | None = None) -&gt; llm_client.claim_verification.ClaimVerificationResult</span></summary>
   <div class="symbol-body">
     <p class="summary">Check a judge&#x27;s report against the real evidence corpus and artifacts.</p>
     <p class="meta">Source: <code>llm_client.claim_verification</code> functions</p>
@@ -661,6 +673,9 @@ Args:
     policy: Severity policy supplying the gate.
     citation_errors_block: When true (default), any citation error forces a
         blocked status regardless of the judged tiers.
+    computed_bases: Support bases meaning &quot;this run computed it&quot;. A claim
+        resting on one of these without a resolving locator is assigned a
+        derived severity. Defaults to ``{&quot;computed_artifact&quot;}``.
 
 Returns:
     :class:`ClaimVerificationResult` with the gated status and any errors.</pre>
@@ -816,6 +831,7 @@ Raises:
   <tbody>
     <tr><td><code>CLAIM_VERIFICATION_PROMPT_REF</code></td><td><code>&#x27;shared.claim_verification.graduated_severity@1&#x27;</code></td><td>str</td></tr>
 <tr><td><code>DEFAULT_SUPPORT_BASES</code></td><td><code>&lt;tuple&gt;</code></td><td>tuple</td></tr>
+<tr><td><code>DERIVED_SEVERITIES</code></td><td><code>frozenset({&#x27;unattributed_computed_claim&#x27;})</code></td><td>frozenset</td></tr>
 <tr><td><code>SEVERITY_DIMENSION</code></td><td><code>&#x27;claim_severity&#x27;</code></td><td>str</td></tr>
 <tr><td><code>SEVERITY_RUBRIC_NAME</code></td><td><code>&#x27;claim_verification_severity&#x27;</code></td><td>str</td></tr>
   </tbody>
@@ -14474,7 +14490,7 @@ historical single-key behaviour untouched.</pre>
   <tbody>
     <tr><td><code>ACCOUNT_KEY_ENV</code></td><td><code>{&#x27;inside_success&#x27;: &#x27;OPENROUTER_API_KEY_INSIDE_SUCCESS&#x27;, &#x27;personal&#x27;: &#x27;OPENROUTER_API_KEY_PERSONAL&#x27;}</code></td><td>dict</td></tr>
 <tr><td><code>ACCOUNT_OVERRIDE_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ACCOUNT&#x27;</code></td><td>str</td></tr>
-<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/block-adjudication/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
+<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/derive-unattributed-tier/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
 <tr><td><code>INSIDE_SUCCESS_ACCOUNT</code></td><td><code>&#x27;inside_success&#x27;</code></td><td>str</td></tr>
 <tr><td><code>PERSONAL_ACCOUNT</code></td><td><code>&#x27;personal&#x27;</code></td><td>str</td></tr>
 <tr><td><code>ROUTING_PATH_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ROUTING_FILE&#x27;</code></td><td>str</td></tr>

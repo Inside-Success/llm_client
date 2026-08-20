@@ -18,6 +18,7 @@ from llm_client.claim_verification import (
     SeverityPolicy,
     VerifiedClaim,
     build_claim_verification_messages,
+    build_report_model,
     load_severity_rubric,
     pointer_repair_hints,
     resolve_json_pointer,
@@ -477,3 +478,125 @@ def test_build_report_model_requires_vocabularies():
         build_report_model(artifact_refs=set(), bases=set(), severities=["grounded"])
     with pytest.raises(ValueError, match="severity tier"):
         build_report_model(artifact_refs=set(), bases={"source_evidence"}, severities=[])
+
+
+# ---------------------------------------------------------------------------
+# Derived severity
+# ---------------------------------------------------------------------------
+
+
+def _computed_claim(severity: str, locator: ArtifactLocator | None, claim_id="c1"):
+    return VerifiedClaim(
+        claim_id=claim_id,
+        claim_text="a computed conclusion",
+        severity=severity,
+        supports=[
+            ClaimSupport(
+                basis="computed_artifact",
+                covers="the whole claim",
+                artifact_locators=[locator] if locator else [],
+                evidence_ids=[] if locator else ["evi_planning"],
+            )
+        ],
+        reasoning="reasoning of sufficient length",
+    )
+
+
+def _verify(claim):
+    return verify_report(
+        _report(claim),
+        evidence_ids=EVIDENCE_IDS,
+        artifacts={"bayesian": BAYESIAN},
+        policy=SeverityPolicy.default(),
+        citation_errors_block=False,
+    )
+
+
+def test_the_undecidable_tier_is_not_offered_to_the_judge():
+    """It asks whether a computed result names its artifact — while the judge is
+    required to supply that attribution. Measured on a real run: six claims
+    tagged with it all carried resolving locators."""
+    policy = SeverityPolicy.default()
+    assert "unattributed_computed_claim" in policy.tier_names
+    assert "unattributed_computed_claim" not in policy.judged_tier_names
+
+    model = build_report_model(
+        artifact_refs={"bayesian"},
+        bases={"computed_artifact"},
+        severities=policy.judged_tier_names,
+    )
+    with pytest.raises(ValidationError):
+        model.model_validate(
+            {
+                "claims": [
+                    {
+                        "claim_id": "c1",
+                        "claim_text": "x",
+                        "severity": "unattributed_computed_claim",
+                        "reasoning": "reasoning of sufficient length",
+                        "supports": [
+                            {
+                                "basis": "computed_artifact",
+                                "covers": "all",
+                                "artifact_locators": [
+                                    {"artifact_ref": "bayesian", "json_pointer": ""}
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "overall_assessment": "An assessment sentence of sufficient length.",
+            }
+        )
+
+
+def test_a_computed_claim_without_a_locator_is_derived_as_unattributed():
+    result = _verify(_computed_claim("grounded", None))
+    assert result.report.claims[0].severity == "unattributed_computed_claim"
+    assert result.outcomes["c1"] == "repairable"
+
+
+def test_a_computed_claim_whose_locator_does_not_resolve_is_derived_too():
+    bad = ArtifactLocator(artifact_ref="bayesian", json_pointer="/nope")
+    assert _verify(_computed_claim("grounded", bad)).report.claims[0].severity == (
+        "unattributed_computed_claim"
+    )
+
+
+def test_a_resolving_locator_leaves_the_judged_tier_alone():
+    good = ArtifactLocator(artifact_ref="bayesian", json_pointer="/hypotheses/0/posterior")
+    assert _verify(_computed_claim("grounded", good)).report.claims[0].severity == "grounded"
+
+
+def test_derivation_never_makes_a_claim_less_severe():
+    """A judge that found a real problem said something stronger; keep it."""
+    result = _verify(_computed_claim("substantive_overstatement", None))
+    assert result.report.claims[0].severity == "substantive_overstatement"
+    assert result.outcomes["c1"] == "blocked"
+
+
+def test_source_evidence_claims_are_untouched_by_derivation():
+    claim = _claim("c1", "grounded")
+    assert _verify(claim).report.claims[0].severity == "grounded"
+
+
+def test_derivation_can_be_pointed_at_a_projects_own_basis_name():
+    claim = VerifiedClaim(
+        claim_id="c1",
+        claim_text="a computed conclusion",
+        severity="grounded",
+        supports=[
+            ClaimSupport(
+                basis="pipeline_artifact", covers="all", evidence_ids=["evi_planning"]
+            )
+        ],
+        reasoning="reasoning of sufficient length",
+    )
+    result = verify_report(
+        _report(claim),
+        evidence_ids=EVIDENCE_IDS,
+        artifacts={},
+        policy=SeverityPolicy.default(),
+        computed_bases={"pipeline_artifact"},
+    )
+    assert result.report.claims[0].severity == "unattributed_computed_claim"

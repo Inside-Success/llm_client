@@ -15,6 +15,9 @@ messages:
       {% endfor %}
 
       Choose the **least severe tier that honestly describes the divergence**.
+      These are every tier available to you. If a computed result is missing its
+      artifact attribution, that is recorded for you from the locators you
+      supply — do not try to express it through a tier.
       Descriptive, evaluative, or intensifying wording that leaves the
       substantive claim intact is `stylistic_gloss`, not an overstatement: a
       claim is not more severe merely because an adjective is absent from the

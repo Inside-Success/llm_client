@@ -55,6 +55,16 @@ logger = logging.getLogger(__name__)
 SEVERITY_RUBRIC_NAME = "claim_verification_severity"
 SEVERITY_DIMENSION = "claim_severity"
 
+#: Tiers the code determines rather than the judge. `unattributed_computed_claim`
+#: asks whether a computed result names the artifact it came from — but the judge
+#: is simultaneously required to *supply* that attribution in `supports`, so once
+#: it emits a locator the tier can never honestly apply. Asked to judge it anyway,
+#: a real run returned six claims tagged `unattributed_computed_claim` that all
+#: carried resolving locators, indistinguishable from eleven tagged `grounded`:
+#: one structural signature, two labels, so the boundary was decided arbitrarily.
+#: Whether a locator resolves is something :func:`verify_report` already computes.
+DERIVED_SEVERITIES: frozenset[str] = frozenset({"unattributed_computed_claim"})
+
 _PACKAGE_RUBRICS_DIR = Path(__file__).resolve().parent.parent / "rubrics"
 
 Outcome = Literal["accepted", "repairable", "blocked"]
@@ -233,6 +243,11 @@ class SeverityPolicy(BaseModel):
         assert dim is not None  # guaranteed by _thresholds_ordered
         return [c.name for c in dim.categories]
 
+    @property
+    def judged_tier_names(self) -> list[str]:
+        """Tiers the judge may return, excluding the ones code derives."""
+        return [t for t in self.tier_names if t not in DERIVED_SEVERITIES]
+
     def tier_score(self, severity: str) -> float:
         """Score for a tier name.
 
@@ -370,6 +385,33 @@ class ClaimVerificationResult(BaseModel):
         return [cid for cid, o in self.outcomes.items() if o == "blocked"]
 
 
+def derive_severity(
+    claim: VerifiedClaim,
+    *,
+    artifacts: dict[str, Any],
+    computed_bases: set[str],
+) -> str | None:
+    """Return a derived severity for this claim, or None if none applies.
+
+    A computed result whose artifact reference is missing or does not resolve is
+    unattributed, as a matter of fact rather than judgment.
+    """
+    for support in claim.supports:
+        if support.basis not in computed_bases:
+            continue
+        if not support.artifact_locators:
+            return "unattributed_computed_claim"
+        for locator in support.artifact_locators:
+            artifact = artifacts.get(locator.artifact_ref)
+            if artifact is None:
+                return "unattributed_computed_claim"
+            try:
+                resolve_json_pointer(artifact, locator.json_pointer)
+            except ValueError:
+                return "unattributed_computed_claim"
+    return None
+
+
 def verify_report(
     report: ClaimVerificationReport,
     *,
@@ -377,6 +419,7 @@ def verify_report(
     artifacts: dict[str, Any],
     policy: SeverityPolicy,
     citation_errors_block: bool = True,
+    computed_bases: set[str] | None = None,
 ) -> ClaimVerificationResult:
     """Check a judge's report against the real evidence corpus and artifacts.
 
@@ -392,6 +435,9 @@ def verify_report(
         policy: Severity policy supplying the gate.
         citation_errors_block: When true (default), any citation error forces a
             blocked status regardless of the judged tiers.
+        computed_bases: Support bases meaning "this run computed it". A claim
+            resting on one of these without a resolving locator is assigned a
+            derived severity. Defaults to ``{"computed_artifact"}``.
 
     Returns:
         :class:`ClaimVerificationResult` with the gated status and any errors.
@@ -437,6 +483,26 @@ def verify_report(
                             ),
                         )
                     )
+
+    # Derivation may only make a claim more severe. A judge that already found
+    # a substantive problem has said something stronger than "unattributed", and
+    # overwriting that would lose the finding.
+    bases = computed_bases if computed_bases is not None else {"computed_artifact"}
+    claims: list[VerifiedClaim] = []
+    for claim in report.claims:
+        derived = derive_severity(claim, artifacts=artifacts, computed_bases=bases)
+        if derived is not None and policy.tier_score(derived) < policy.tier_score(
+            claim.severity
+        ):
+            logger.info(
+                "claim %s severity %s -> %s (derived: computed support does not resolve)",
+                claim.claim_id,
+                claim.severity,
+                derived,
+            )
+            claim = claim.model_copy(update={"severity": derived})
+        claims.append(claim)
+    report = report.model_copy(update={"claims": claims})
 
     outcomes = {c.claim_id: policy.outcome(c.severity) for c in report.claims}
     status = policy.status([c.severity for c in report.claims])
@@ -577,7 +643,7 @@ def verify_claims(
     response_model = build_report_model(
         artifact_refs=set(artifacts),
         bases={b.name for b in support_bases},
-        severities=resolved_policy.tier_names,
+        severities=resolved_policy.judged_tier_names,
     )
     # Fail closed before spending anything: a caller that has swapped in its own
     # report model is running an unreviewed judge, not this one.
