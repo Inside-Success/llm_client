@@ -420,6 +420,118 @@ def test_non_openrouter_call_never_receives_explicit_api_key(
     assert "api_key" not in call_kwargs
 
 
+def test_openrouter_luna_gets_a_default_bedrock_exclusion() -> None:
+    """Amazon Bedrock does not support structured_outputs/response_format for
+    this model (verified against OpenRouter's own endpoint capability data)
+    -- exclude it by default rather than trusting require_parameters alone."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={},
+    )
+
+    assert call_kwargs["provider"] == {
+        "require_parameters": True,
+        "ignore": ["amazon-bedrock"],
+    }
+
+
+def test_openrouter_terra_gets_a_default_bedrock_exclusion() -> None:
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-terra",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={},
+    )
+
+    assert call_kwargs["provider"] == {
+        "require_parameters": True,
+        "ignore": ["amazon-bedrock"],
+    }
+
+
+def test_caller_openrouter_route_policy_overrides_the_bedrock_default() -> None:
+    """Explicit call/site config always wins (ADR-0002)."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={
+            "openrouter_route_policy": OpenRouterRoutePolicyV1(
+                ignored_providers=("azure",)
+            )
+        },
+    )
+
+    assert call_kwargs["provider"] == {
+        "require_parameters": True,
+        "ignore": ["azure"],
+    }
+
+
+def test_raw_provider_kwarg_is_not_overridden_by_the_bedrock_default() -> None:
+    """A caller-owned raw provider dict is left exactly as the caller set it
+    (aside from the pre-existing require_parameters merge) -- the default
+    never injects a competing typed policy on top of it."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={"provider": {"sort": "throughput"}},
+    )
+
+    assert call_kwargs["provider"] == {"sort": "throughput"}
+
+
+def test_bare_direct_terra_does_not_get_an_openrouter_route_policy() -> None:
+    """The bare, direct-to-OpenAI route must never receive a provider policy
+    -- that combination is rejected outright as a non-OpenRouter route."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "gpt-5.6-terra",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={},
+    )
+
+    assert "provider" not in call_kwargs
+
+
+def test_other_openrouter_models_do_not_get_the_bedrock_default() -> None:
+    """The default is scoped to the two verified-affected models only."""
+
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/anthropic/claude-opus-5",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={},
+    )
+
+    assert "provider" not in call_kwargs
+
+
 def test_openrouter_responses_requests_inline_route_metadata() -> None:
     """The Responses transport should use the same inline evidence policy."""
 

@@ -30,6 +30,55 @@ from llm_client.utils.openrouter_accounts import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Known-bad OpenRouter backends for specific models
+# ---------------------------------------------------------------------------
+
+# Verified 2026-08-19 against OpenRouter's own GET /models/{id}/endpoints:
+# both openai/gpt-5.6-luna and openai/gpt-5.6-terra are served by OpenAI,
+# Azure, and Amazon Bedrock. OpenAI and Azure both list `structured_outputs`
+# and `response_format` in supported_parameters; Amazon Bedrock lists
+# neither -- a genuine capability gap, not a reliability guess. This is the
+# most plausible mechanical explanation for the "Luna/OpenRouter repeatedly
+# returned retained malformed structured responses" finding recorded in
+# deploy/vps/run_bounded_governed_source.py (brians-2nd-brain-integration-work),
+# which is why that pipeline moved off OpenRouter entirely.
+# `provider.require_parameters=true` (always sent, see
+# _enable_openrouter_inline_metadata below) should already exclude Bedrock
+# for a structured-output request; this constant lets a caller-independent
+# default additionally exclude it explicitly rather than relying solely on
+# the remote provider's own enforcement.
+_OPENROUTER_MODELS_WITHOUT_BEDROCK_STRUCTURED_OUTPUT = frozenset(
+    {"gpt-5.6-luna", "gpt-5.6-terra"}
+)
+_OPENROUTER_BEDROCK_PROVIDER_TAG = "amazon-bedrock"
+
+
+def _default_openrouter_route_policy_for_model(
+    model: str,
+    api_base: str | None,
+) -> OpenRouterRoutePolicyV1 | None:
+    """Return a safe routing default for models with a known-bad backend.
+
+    Only ever narrows the provider set already implied by
+    `require_parameters=true`; never widens it. A caller-supplied
+    `openrouter_route_policy` always takes precedence (ADR-0002) -- this is
+    consulted only when the caller passed none at all. Must never fire for a
+    non-OpenRouter call (e.g. the bare, direct-to-OpenAI `gpt-5.6-terra`
+    route): a route policy on a non-OpenRouter leg is rejected outright by
+    _validate_openrouter_route_policy_model.
+    """
+
+    if not _is_openrouter_call(model, api_base):
+        return None
+    base_name = model.strip().lower().rsplit("/", 1)[-1]
+    if base_name not in _OPENROUTER_MODELS_WITHOUT_BEDROCK_STRUCTURED_OUTPUT:
+        return None
+    return OpenRouterRoutePolicyV1(
+        ignored_providers=(_OPENROUTER_BEDROCK_PROVIDER_TAG,)
+    )
+
+
+# ---------------------------------------------------------------------------
 # Constants (also defined in client.py — canonical home is here)
 # ---------------------------------------------------------------------------
 
@@ -444,6 +493,12 @@ def _enable_openrouter_inline_metadata(
         policy_value = OpenRouterRoutePolicyV1.model_validate(policy_value)
     if policy_value is not None and not isinstance(policy_value, OpenRouterRoutePolicyV1):
         raise TypeError("openrouter_route_policy must be an OpenRouterRoutePolicyV1")
+    if policy_value is None and call_kwargs.get("provider") is None:
+        default_api_base = call_kwargs.get("api_base")
+        policy_value = _default_openrouter_route_policy_for_model(
+            model,
+            str(default_api_base) if default_api_base is not None else None,
+        )
     _apply_openrouter_route_policy(model, call_kwargs, policy_value)
 
     api_base = call_kwargs.get("api_base")
