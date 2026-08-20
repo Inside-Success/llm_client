@@ -153,10 +153,17 @@ variables:
   target_json:
     max_bytes: 10000
   evidence_json:
-    max_bytes: 400000
+    unbounded: true          # source material: declared, deliberately not budgeted
   analysis_artifacts_json:
     max_bytes: 200000
 ```
+
+A variable is declared with **either** `max_bytes` **or** `unbounded: true`,
+never both and never neither. `unbounded` is how the rule above is written down:
+input-proportional content stays inside the contract, so a genuinely new
+variable is still caught, but no ceiling is placed on content whose size is a
+property of the document rather than of the pipeline. Forgetting a budget is an
+error rather than a silent exemption.
 
 `render_prompt()` checks the caller's context against it and names the
 offender:

@@ -579,3 +579,83 @@ def test_context_breach_message_warns_against_budgeting_source_material(
     message = str(excinfo.value)
     assert "not provider limits" in message
     assert "should NOT grow with the input" in message
+
+
+# --------------------------------------------------------------------------
+# Deliberately unbounded variables
+# --------------------------------------------------------------------------
+
+
+def test_unbounded_variable_never_breaches(tmp_path: Path) -> None:
+    """Source material is declared, and deliberately not budgeted.
+
+    A ceiling on input-proportional content fails on a long document and passes
+    on a short one, which is the job working rather than a defect. Declaring it
+    unbounded keeps it inside the contract so the choice is reviewable.
+    """
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "variables:\n"
+        "  evidence_json:\n    unbounded: true\n"
+        "  artifacts_json:\n    max_bytes: 200000\n",
+    )
+
+    assert enforce_contract(
+        template,
+        {"evidence_json": "x" * 50_000_000, "artifacts_json": "y" * 1000},
+        strict=True,
+    ) == []
+
+
+def test_unbounded_does_not_excuse_its_neighbours(tmp_path: Path) -> None:
+    """The exemption is per variable, not a way to disable the contract."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "variables:\n"
+        "  evidence_json:\n    unbounded: true\n"
+        "  artifacts_json:\n    max_bytes: 100\n",
+    )
+
+    with pytest.raises(PromptContextContractError, match="artifacts_json"):
+        enforce_contract(
+            template,
+            {"evidence_json": "x" * 1_000_000, "artifacts_json": "y" * 5000},
+            strict=True,
+        )
+
+
+def test_unbounded_still_requires_declaration(tmp_path: Path) -> None:
+    """An unbounded variable is declared; an unknown one is still rejected."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  evidence_json:\n    unbounded: true\n',
+    )
+
+    with pytest.raises(PromptContextContractError, match="not declared"):
+        enforce_contract(
+            template, {"evidence_json": "x", "surprise_json": "y"}, strict=True
+        )
+
+
+def test_declaring_both_a_budget_and_unbounded_is_rejected(tmp_path: Path) -> None:
+    """Ambiguity here would silently drop a real budget."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "variables:\n  evidence_json:\n    unbounded: true\n    max_bytes: 100\n",
+    )
+
+    with pytest.raises(PromptContextContractError, match="both max_bytes and unbounded"):
+        load_contract(template)
+
+
+def test_a_variable_still_needs_one_of_the_two(tmp_path: Path) -> None:
+    """Forgetting a budget must not silently become unbounded."""
+    template = _write_contract(
+        tmp_path, 'schema_version: "1.0"\nvariables:\n  evidence_json: {}\n'
+    )
+
+    with pytest.raises(PromptContextContractError, match="unbounded: true"):
+        load_contract(template)

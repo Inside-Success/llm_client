@@ -73,10 +73,22 @@ class PromptContextContractError(Exception):
 
 @dataclass(frozen=True)
 class VariableBudget:
-    """Declared ceiling for one context variable."""
+    """Declared ceiling for one context variable.
+
+    ``max_bytes`` is None when the variable is declared ``unbounded``. That is a
+    positive statement, not a missing value: this variable carries content whose
+    size is a property of the input, so a ceiling on it would fail on a long
+    document and pass on a short one, which is the job working rather than a
+    defect. Declaring it keeps it inside the contract, so it is reviewable and
+    a genuinely new variable is still caught.
+    """
 
     name: str
-    max_bytes: int
+    max_bytes: int | None
+
+    @property
+    def unbounded(self) -> bool:
+        return self.max_bytes is None
 
 
 @dataclass(frozen=True)
@@ -109,6 +121,8 @@ class PromptContextContract:
                             ),
                         )
                     )
+                continue
+            if budget.unbounded:
                 continue
             size = _measured_bytes(value)
             if size > budget.max_bytes:
@@ -181,10 +195,25 @@ def load_contract(template_path: Path) -> PromptContextContract | None:
             raise PromptContextContractError(
                 f"variable {name!r} must map to a mapping in {path}"
             )
+        unbounded = spec.get("unbounded", False)
+        if not isinstance(unbounded, bool):
+            raise PromptContextContractError(
+                f"variable {name!r} has a non-boolean unbounded in {path}"
+            )
         max_bytes = spec.get("max_bytes")
+        # Exactly one of the two, so that an unbounded variable is always a
+        # decision somebody wrote down rather than a budget somebody forgot.
+        if unbounded and max_bytes is not None:
+            raise PromptContextContractError(
+                f"variable {name!r} declares both max_bytes and unbounded in {path}"
+            )
+        if unbounded:
+            variables[str(name)] = VariableBudget(name=str(name), max_bytes=None)
+            continue
         if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes <= 0:
             raise PromptContextContractError(
-                f"variable {name!r} needs a positive integer max_bytes in {path}"
+                f"variable {name!r} needs a positive integer max_bytes, "
+                f"or unbounded: true, in {path}"
             )
         variables[str(name)] = VariableBudget(name=str(name), max_bytes=max_bytes)
 
