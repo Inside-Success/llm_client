@@ -162,3 +162,70 @@ def test_render_prompt_reports_duplication(tmp_path: Path, monkeypatch) -> None:
 
 def test_default_threshold_is_documented_value() -> None:
     assert DEFAULT_MIN_DUPLICATE_BYTES == 10_000
+
+
+# --------------------------------------------------------------------------
+# Size attribution and reading a rendered prompt
+# --------------------------------------------------------------------------
+
+
+def test_size_attribution_names_the_variable_that_owns_the_prompt() -> None:
+    """Total size was never the mystery; which variable owns it is."""
+    from llm_client.prompt_inspection import summarize_context
+
+    sizes = summarize_context(
+        {"evidence_json": "e" * 87_830, "artifacts_json": "a" * 2_917_684, "target_json": "t" * 1_536}
+    )
+
+    assert [item.name for item in sizes] == ["artifacts_json", "evidence_json", "target_json"]
+    assert sizes[0].share > 0.96
+    assert sizes[1].share < 0.03
+
+
+def test_size_attribution_of_an_empty_context_does_not_divide_by_zero() -> None:
+    from llm_client.prompt_inspection import format_context_summary, summarize_context
+
+    assert summarize_context({}) == []
+    assert format_context_summary([]) == "(no context variables)"
+
+
+def test_json_is_recovered_from_a_rendered_prompt() -> None:
+    """A stored prompt is flat text; the structure has to be recovered."""
+    from llm_client.prompt_inspection import extract_json_spans
+
+    payload = {"big": [{"v": "x" * 300} for _ in range(60)]}
+    rendered = f"## Heading\n\n{json.dumps(payload, indent=2)}\n\ntrailing prose"
+
+    spans = extract_json_spans(rendered)
+
+    assert len(spans) == 1
+    assert spans[0] == payload
+
+
+def test_duplication_is_found_in_a_rendered_prompt() -> None:
+    """The retrospective path: audit a call that already happened."""
+    from llm_client.prompt_inspection import find_duplicated_content_in_text
+
+    audit = _audit(BIG)
+    # Indent differs between the two copies once nested, which is exactly why
+    # text scanning fails and structural recovery is required.
+    rendered = "## Artifacts\n\n" + json.dumps(
+        {"resolution": {"attempts": [{"audit": audit}], "final_audit": audit}}, indent=2
+    )
+
+    findings = find_duplicated_content_in_text(rendered)
+
+    assert len(findings) == 1
+    assert findings[0].wasted_bytes > 40_000
+
+
+def test_small_inline_json_is_not_worth_parsing() -> None:
+    from llm_client.prompt_inspection import extract_json_spans
+
+    assert extract_json_spans('prose {"a": 1} more prose') == []
+
+
+def test_prose_without_json_yields_nothing_rather_than_erroring() -> None:
+    from llm_client.prompt_inspection import find_duplicated_content_in_text
+
+    assert find_duplicated_content_in_text("just prose, no structure at all") == []

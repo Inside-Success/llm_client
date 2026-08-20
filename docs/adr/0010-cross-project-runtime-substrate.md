@@ -2,11 +2,15 @@
 
 Status: Accepted
 Date: 2026-03-17
-Last verified: 2026-08-12 (Plan 124 agent-adapter logical-timeout maintenance)
-Verification context: The shared experiment substrate now serializes canonical
-run-start insertion before emitting JSONL evidence, preventing duplicate
-run_id starts from appearing as two attempts. Focused persistence and
-observability controls pass.
+Last verified: 2026-08-20 (prompt inspection CLI surface)
+Verification context: The substrate gains a read-only `prompt-show` CLI over
+already-persisted calls, alongside `prompt-drift`. Both query the shared
+observability store and neither adds a sink, a persisted field, a route, or a
+provider interaction, so the execution and packaging guarantees this ADR makes
+are unchanged and the addition is confined to the public surface it already
+owns. The earlier verification still holds: the shared experiment substrate
+serializes canonical run-start insertion before emitting JSONL evidence,
+preventing duplicate run_id starts from appearing as two attempts.
 
 Plan 94 adds shared authenticated OpenRouter generation evidence, an immutable
 exact route-certification registry, and a provider-free query CLI. Semantic

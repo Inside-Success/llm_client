@@ -167,6 +167,111 @@ def find_duplicated_content(
     return kept
 
 
+def extract_json_spans(text: str, *, min_bytes: int = DEFAULT_MIN_DUPLICATE_BYTES) -> list[Any]:
+    """Recover the JSON values embedded in an already-rendered prompt.
+
+    At render time the context variables are still separate values and can be
+    walked directly. A *stored* prompt is one flat string, and text-level
+    scanning cannot find duplication inside it - the copies are indented
+    differently, so their bytes never match. Pulling the JSON back out restores
+    the structure that makes the comparison possible, which is what lets a
+    historical call be audited rather than only a live one.
+
+    Only spans at least ``min_bytes`` long are returned; small inline objects
+    are not where waste hides and parsing every brace is not worth the time.
+    """
+
+    decoder = json.JSONDecoder()
+    found: list[Any] = []
+    index = 0
+    length = len(text)
+    while index < length:
+        candidates = [pos for pos in (text.find("{", index), text.find("[", index)) if pos != -1]
+        if not candidates:
+            break
+        start = min(candidates)
+        try:
+            value, end = decoder.raw_decode(text, start)
+        except ValueError:
+            index = start + 1
+            continue
+        if end - start >= min_bytes:
+            found.append(value)
+            index = end
+        else:
+            index = start + 1
+    return found
+
+
+def find_duplicated_content_in_text(
+    text: str,
+    *,
+    min_bytes: int = DEFAULT_MIN_DUPLICATE_BYTES,
+) -> list[DuplicatedContent]:
+    """Find repeated content in a rendered prompt by recovering its JSON."""
+
+    spans = extract_json_spans(text, min_bytes=min_bytes)
+    if not spans:
+        return []
+    context = {f"json[{i}]": value for i, value in enumerate(spans)}
+    return find_duplicated_content(context, min_bytes=min_bytes)
+
+
+@dataclass(frozen=True)
+class VariableSize:
+    """How much of an assembled prompt one context variable accounts for."""
+
+    name: str
+    size_bytes: int
+    share: float
+
+    def describe(self) -> str:
+        return f"{self.name}: {self.size_bytes:,} bytes ({self.share * 100:.1f}%)"
+
+
+def summarize_context(context: dict[str, Any]) -> list[VariableSize]:
+    """Attribute prompt size to the variables that produced it, largest first.
+
+    Total prompt size was never the mystery - it is on every observability row
+    as ``prompt_tokens``. What nothing recorded was *which variable owned the
+    bytes*, and that is the number that tells you what to do about it. On the
+    payload this was built from, one variable held 96.8% of the prompt while the
+    evidence the task was actually about held 2.9%.
+
+    Sizes are of the rendered values, so they sum to slightly less than the
+    finished prompt, which also contains the template's own prose.
+    """
+
+    sizes = [
+        VariableSize(
+            name=name,
+            size_bytes=len((value if isinstance(value, str) else str(value)).encode("utf-8")),
+            share=0.0,
+        )
+        for name, value in context.items()
+    ]
+    total = sum(item.size_bytes for item in sizes)
+    if total:
+        sizes = [
+            VariableSize(name=item.name, size_bytes=item.size_bytes, share=item.size_bytes / total)
+            for item in sizes
+        ]
+    sizes.sort(key=lambda item: item.size_bytes, reverse=True)
+    return sizes
+
+
+def format_context_summary(sizes: list[VariableSize]) -> str:
+    """Render a size attribution as an aligned table."""
+
+    if not sizes:
+        return "(no context variables)"
+    width = max(len(item.name) for item in sizes)
+    total = sum(item.size_bytes for item in sizes)
+    lines = [f"{item.name:<{width}}  {item.size_bytes:>12,}  {item.share * 100:>5.1f}%" for item in sizes]
+    lines.append(f"{'TOTAL':<{width}}  {total:>12,}  100.0%")
+    return "\n".join(lines)
+
+
 def duplicate_strict_mode() -> bool:
     """Whether duplicated content raises instead of warning.
 

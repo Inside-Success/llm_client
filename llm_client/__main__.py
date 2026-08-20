@@ -4,6 +4,7 @@ Usage:
     python -m llm_client cost
     python -m llm_client models {list,show,tasks}
     python -m llm_client prompt-drift
+    python -m llm_client prompt-show <call_id>
     python -m llm_client traces
     python -m llm_client scores
     python -m llm_client experiments
@@ -31,6 +32,7 @@ from llm_client.cli.json_schema_call import (
 )
 from llm_client.cli.models import register_parser as register_models_parser
 from llm_client.cli.prompt_drift import register_parser as register_prompt_drift_parser
+from llm_client.cli.prompt_show import register_parser as register_prompt_show_parser
 from llm_client.cli.provider_limits import register_parser as register_provider_limits_parser
 from llm_client.cli.replay import register_parser as register_replay_parser
 from llm_client.cli.route_certification import (
@@ -58,6 +60,7 @@ def main() -> None:
     register_duet_parser(subparsers)
     register_models_parser(subparsers)
     register_prompt_drift_parser(subparsers)
+    register_prompt_show_parser(subparsers)
     register_provider_limits_parser(subparsers)
     register_replay_parser(subparsers)
     register_route_certification_parser(subparsers)
