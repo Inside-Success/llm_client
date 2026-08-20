@@ -68,14 +68,21 @@ CREATION_BLOCKING_HEALTH_ISSUES = {
 DEFAULT_HEARTBEAT_STALE_MINUTES = 120
 CLAIM_WRITE_STAGING_MAX_AGE_SECONDS = 300
 _LEGACY_CLAIM_TEMP_PATTERN = re.compile(r"^\..+\.ya?ml\.[A-Za-z0-9_-]+\.tmp$")
+# CLAUDE_SESSION_ID is never set by the Claude Code runtime (it only appears
+# as an unresolved ${...} template substitution in skill prompts).
+# CLAUDE_CODE_SSE_PORT is shared by every concurrent Claude Code session the
+# CLI server spawns on one machine, so keying identity off it collides
+# multiple sessions onto the same claim identity. CLAUDE_CODE_SESSION_ID is
+# the genuine per-conversation UUID Claude Code actually sets in Bash-tool
+# and hook subprocess environments; it must be checked first.
 SESSION_ENV_KEYS = {
     "codex": ("CODEX_THREAD_ID",),
-    "claude-code": ("CLAUDE_SESSION_ID", "CLAUDE_CODE_SSE_PORT"),
+    "claude-code": ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SSE_PORT"),
     "openclaw": ("OPENCLAW_SESSION_ID", "OPENCLAW_RUN_ID"),
 }
 STRICT_NATIVE_SESSION_ENV_KEYS = {
     "codex": "CODEX_THREAD_ID",
-    "claude-code": "CLAUDE_SESSION_ID",
+    "claude-code": "CLAUDE_CODE_SESSION_ID",
     "openclaw": "OPENCLAW_SESSION_ID",
 }
 
