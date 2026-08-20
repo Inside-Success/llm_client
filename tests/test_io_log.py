@@ -1783,6 +1783,13 @@ class TestBackgroundModeAdoption:
         assert summary["total_records"] == 0
         assert summary["records_considered"] == 0
 
+    def test_default_path_honors_llm_client_data_root_env_var(self, tmp_path, monkeypatch):
+        """No explicit experiments_path -> default resolves under $LLM_CLIENT_DATA_ROOT."""
+        monkeypatch.setenv("LLM_CLIENT_DATA_ROOT", str(tmp_path))
+        summary = io_log.get_background_mode_adoption()
+        assert summary["experiments_path"] == str(tmp_path / "task_graph" / "experiments.jsonl")
+        assert summary["exists"] is False
+
 
 class TestConfigure:
     def test_configure_db_path(self, tmp_path):

@@ -761,9 +761,13 @@ def get_background_mode_adoption(
 
     The log format is the task-graph `ExperimentRecord` JSONL, where
     `dimensions.reasoning_effort` and `dimensions.background_mode` are recorded.
+
+    experiments_path defaults to $LLM_CLIENT_DATA_ROOT/task_graph/experiments.jsonl
+    (LLM_CLIENT_DATA_ROOT defaults to ~/projects/data).
     """
     if experiments_path is None:
-        path = Path.home() / "projects" / "data" / "task_graph" / "experiments.jsonl"
+        data_root = Path(os.environ.get("LLM_CLIENT_DATA_ROOT", str(Path.home() / "projects" / "data")))
+        path = data_root / "task_graph" / "experiments.jsonl"
     else:
         path = Path(experiments_path)
 
