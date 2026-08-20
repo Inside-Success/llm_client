@@ -70,12 +70,20 @@ CLAIM_WRITE_STAGING_MAX_AGE_SECONDS = 300
 _LEGACY_CLAIM_TEMP_PATTERN = re.compile(r"^\..+\.ya?ml\.[A-Za-z0-9_-]+\.tmp$")
 SESSION_ENV_KEYS = {
     "codex": ("CODEX_THREAD_ID",),
-    "claude-code": ("CLAUDE_SESSION_ID", "CLAUDE_CODE_SSE_PORT"),
+    # CLAUDE_CODE_SESSION_ID is the real per-conversation UUID Claude Code sets
+    # in Bash-tool/hook subprocess environments. CLAUDE_SESSION_ID (no
+    # "_CODE_") is never actually set by the runtime -- it only exists as a
+    # skill-prompt ${...} template substitution -- so every session fell
+    # through to CLAUDE_CODE_SSE_PORT, shared by every session the CLI
+    # server spawns on one machine. See project-meta policy_friction.md
+    # 2026-08-20 (worktree-per-branch / prewrite-claim-gate); fixed
+    # upstream in project-meta PR #449 -- this is a vendored copy.
+    "claude-code": ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SSE_PORT"),
     "openclaw": ("OPENCLAW_SESSION_ID", "OPENCLAW_RUN_ID"),
 }
 STRICT_NATIVE_SESSION_ENV_KEYS = {
     "codex": "CODEX_THREAD_ID",
-    "claude-code": "CLAUDE_SESSION_ID",
+    "claude-code": "CLAUDE_CODE_SESSION_ID",
     "openclaw": "OPENCLAW_SESSION_ID",
 }
 
