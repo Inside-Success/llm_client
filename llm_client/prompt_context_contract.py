@@ -37,6 +37,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -92,6 +94,41 @@ class VariableBudget:
 
 
 @dataclass(frozen=True)
+class ContextBreach:
+    """One context variable over its declared budget, or undeclared."""
+
+    variable: str
+    observed_bytes: int
+    budget_bytes: int | None
+    contract_name: str
+
+    @property
+    def undeclared(self) -> bool:
+        """Whether the variable has no budget at all rather than an exceeded one."""
+
+        return self.budget_bytes is None
+
+    @property
+    def severity(self) -> float:
+        """How far over budget, for ordering. Undeclared sorts worst."""
+
+        if self.budget_bytes is None:
+            return float("inf")
+        return self.observed_bytes / self.budget_bytes
+
+    def describe(self) -> str:
+        if self.budget_bytes is None:
+            return (
+                f"{self.variable!r} is not declared in "
+                f"{self.contract_name} (allow_undeclared is false)"
+            )
+        return (
+            f"{self.variable!r} is {self.observed_bytes:,} bytes, over its "
+            f"{self.budget_bytes:,} byte budget ({self.severity:.1f}x)"
+        )
+
+
+@dataclass(frozen=True)
 class PromptContextContract:
     """Declared context budget for one prompt template."""
 
@@ -99,26 +136,29 @@ class PromptContextContract:
     variables: dict[str, VariableBudget]
     allow_undeclared: bool
 
-    def violations(self, context: dict[str, Any]) -> list[str]:
-        """Report every breach for one render, ordered worst first.
+    def violation_records(self, context: dict[str, Any]) -> list[ContextBreach]:
+        """Report every breach for one render as data, ordered worst first.
 
         All breaches are reported rather than the first, so a caller fixing an
         oversized prompt sees the whole picture instead of discovering the next
         offender only after fixing this one.
+
+        Records rather than messages, because a breach is counted across a run
+        as well as printed once. Aggregating parsed log strings is how a
+        breached budget stays invisible.
         """
 
-        breaches: list[tuple[float, str]] = []
+        breaches: list[ContextBreach] = []
         for name, value in context.items():
             budget = self.variables.get(name)
             if budget is None:
                 if not self.allow_undeclared:
                     breaches.append(
-                        (
-                            float("inf"),
-                            (
-                                f"{name!r} is not declared in "
-                                f"{self.source.name} (allow_undeclared is false)"
-                            ),
+                        ContextBreach(
+                            variable=name,
+                            observed_bytes=_measured_bytes(value),
+                            budget_bytes=None,
+                            contract_name=self.source.name,
                         )
                     )
                 continue
@@ -126,18 +166,21 @@ class PromptContextContract:
                 continue
             size = _measured_bytes(value)
             if size > budget.max_bytes:
-                ratio = size / budget.max_bytes
                 breaches.append(
-                    (
-                        ratio,
-                        (
-                            f"{name!r} is {size:,} bytes, over its "
-                            f"{budget.max_bytes:,} byte budget ({ratio:.1f}x)"
-                        ),
+                    ContextBreach(
+                        variable=name,
+                        observed_bytes=size,
+                        budget_bytes=budget.max_bytes,
+                        contract_name=self.source.name,
                     )
                 )
-        breaches.sort(key=lambda item: item[0], reverse=True)
-        return [message for _, message in breaches]
+        breaches.sort(key=lambda breach: breach.severity, reverse=True)
+        return breaches
+
+    def violations(self, context: dict[str, Any]) -> list[str]:
+        """Human-readable form of :meth:`violation_records`, worst first."""
+
+        return [breach.describe() for breach in self.violation_records(context)]
 
 
 def _measured_bytes(value: Any) -> int:
@@ -246,10 +289,12 @@ def enforce_contract(
     if contract is None:
         return []
 
-    breaches = contract.violations(context)
-    if not breaches:
+    records = contract.violation_records(context)
+    _TALLY.record(template_path.name, records)
+    if not records:
         return []
 
+    breaches = [record.describe() for record in records]
     detail = "; ".join(breaches)
     message = (
         f"Prompt context contract violated for {template_path.name}: {detail}. "
@@ -262,3 +307,112 @@ def enforce_contract(
         raise PromptContextContractError(message)
     logger.warning(message)
     return breaches
+
+
+class _BreachTally:
+    """Process-wide count of contract breaches, for one report at end of run.
+
+    ``enforce_contract`` warns once per breaching render. That is the right
+    behaviour at the moment of the breach and the wrong one as the only
+    behaviour: a long run emits the warning among everything else it prints,
+    and nobody reads the 45th copy. Measured on a real
+    ``process_tracing.central_claim_review`` run, ``analysis_artifacts_json``
+    was over its declared ceiling on 45 of 74 large calls, at up to 1.7x, and
+    the drift was found months later by querying stored prompts rather than by
+    anyone seeing a warning.
+
+    So the warning stays and a count accumulates beside it, for a caller to
+    print once at a point a human is actually looking. This deliberately holds
+    process-global state: the thing being measured is a property of the run,
+    not of any one render, and threading a counter through every call site is
+    how the report would fail to exist.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._renders: dict[str, int] = defaultdict(int)
+        self._breaching: dict[str, int] = defaultdict(int)
+        self._worst: dict[tuple[str, str], ContextBreach] = {}
+
+    def record(self, template_name: str, breaches: list[ContextBreach]) -> None:
+        with self._lock:
+            self._renders[template_name] += 1
+            if not breaches:
+                return
+            self._breaching[template_name] += 1
+            for breach in breaches:
+                key = (template_name, breach.variable)
+                seen = self._worst.get(key)
+                if seen is None or breach.observed_bytes > seen.observed_bytes:
+                    self._worst[key] = breach
+
+    def reset(self) -> None:
+        with self._lock:
+            self._renders.clear()
+            self._breaching.clear()
+            self._worst.clear()
+
+    def summary(self) -> list[TemplateBreachSummary]:
+        with self._lock:
+            return [
+                TemplateBreachSummary(
+                    template_name=name,
+                    renders=self._renders[name],
+                    breaching_renders=count,
+                    worst=tuple(
+                        breach
+                        for (template, _), breach in sorted(self._worst.items())
+                        if template == name
+                    ),
+                )
+                for name, count in sorted(self._breaching.items())
+                if count
+            ]
+
+
+@dataclass(frozen=True)
+class TemplateBreachSummary:
+    """What one template did to its budget over a whole run."""
+
+    template_name: str
+    renders: int
+    breaching_renders: int
+    worst: tuple[ContextBreach, ...]
+
+    def describe(self) -> str:
+        worst = "; ".join(breach.describe() for breach in self.worst)
+        return (
+            f"{self.template_name}: {self.breaching_renders} of {self.renders} "
+            f"renders over budget. Worst seen - {worst}"
+        )
+
+
+_TALLY = _BreachTally()
+
+
+def contract_breach_summary() -> list[TemplateBreachSummary]:
+    """Per-template breach counts since process start or the last reset."""
+
+    return _TALLY.summary()
+
+
+def reset_contract_breach_tally() -> None:
+    """Forget everything counted so far. For tests and for per-run scoping."""
+
+    _TALLY.reset()
+
+
+def format_contract_breach_summary() -> str | None:
+    """One block a caller can print at end of run, or None when clean.
+
+    ``None`` rather than "no breaches" so a caller can print this
+    unconditionally without adding a line to every clean run - a summary that
+    always prints something is a summary people stop reading.
+    """
+
+    summaries = contract_breach_summary()
+    if not summaries:
+        return None
+    lines = ["prompt context contract breaches:"]
+    lines.extend(f"  {summary.describe()}" for summary in summaries)
+    return "\n".join(lines)

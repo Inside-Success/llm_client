@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-20T17:17:16Z -->
+<!-- Generated: 2026-08-20T18:23:46Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -3463,6 +3463,15 @@ Format::
 
 <h4>Functions</h4>
 
+<details class="symbol" id="module-llm_client-prompt_context_contract-contract_breach_summary">
+  <summary><code>contract_breach_summary</code> <span class="sig">() -&gt; list[llm_client.prompt_context_contract.TemplateBreachSummary]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Per-template breach counts since process start or the last reset.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> functions</p>
+    <pre class="doc">Per-template breach counts since process start or the last reset.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-prompt_context_contract-contract_path_for">
   <summary><code>contract_path_for</code> <span class="sig">(template_path: pathlib.Path) -&gt; pathlib.Path</span></summary>
   <div class="symbol-body">
@@ -3481,6 +3490,19 @@ Format::
 
 Returns the breach messages (empty when compliant) so callers and tests can
 assert on attribution rather than parsing log output.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-prompt_context_contract-format_contract_breach_summary">
+  <summary><code>format_contract_breach_summary</code> <span class="sig">() -&gt; str | None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">One block a caller can print at end of run, or None when clean.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> functions</p>
+    <pre class="doc">One block a caller can print at end of run, or None when clean.
+
+``None`` rather than &quot;no breaches&quot; so a caller can print this
+unconditionally without adding a line to every clean run - a summary that
+always prints something is a summary people stop reading.</pre>
   </div>
 </details>
 
@@ -3514,9 +3536,40 @@ full reasoning.</pre>
   </div>
 </details>
 
+<details class="symbol" id="module-llm_client-prompt_context_contract-reset_contract_breach_tally">
+  <summary><code>reset_contract_breach_tally</code> <span class="sig">() -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Forget everything counted so far. For tests and for per-run scoping.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> functions</p>
+    <pre class="doc">Forget everything counted so far. For tests and for per-run scoping.</pre>
+  </div>
+</details>
+
 
 
 <h4>Classes</h4>
+
+<details class="symbol class-symbol" id="module-llm_client-prompt_context_contract-ContextBreach">
+  <summary><code>ContextBreach</code> <span class="sig">(variable: str, observed_bytes: int, budget_bytes: int | None, contract_name: str) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">One context variable over its declared budget, or undeclared.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> class</p>
+    <pre class="doc">One context variable over its declared budget, or undeclared.</pre>
+
+    <h4>Methods</h4>
+
+<details class="symbol" id="module-llm_client-prompt_context_contract-describe">
+  <summary><code>describe</code> <span class="sig">(self) -&gt; str</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> method</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
+
+
+  </div>
+</details>
 
 <details class="symbol class-symbol" id="module-llm_client-prompt_context_contract-PromptContextContract">
   <summary><code>PromptContextContract</code> <span class="sig">(source: pathlib.Path, variables: dict[str, llm_client.prompt_context_contract.VariableBudget], allow_undeclared: bool) -&gt; None</span></summary>
@@ -3527,16 +3580,29 @@ full reasoning.</pre>
 
     <h4>Methods</h4>
 
-<details class="symbol" id="module-llm_client-prompt_context_contract-violations">
-  <summary><code>violations</code> <span class="sig">(self, context: dict[str, typing.Any]) -&gt; list[str]</span></summary>
+<details class="symbol" id="module-llm_client-prompt_context_contract-violation_records">
+  <summary><code>violation_records</code> <span class="sig">(self, context: dict[str, typing.Any]) -&gt; list[llm_client.prompt_context_contract.ContextBreach]</span></summary>
   <div class="symbol-body">
-    <p class="summary">Report every breach for one render, ordered worst first.</p>
+    <p class="summary">Report every breach for one render as data, ordered worst first.</p>
     <p class="meta">Source: <code>llm_client.prompt_context_contract</code> method</p>
-    <pre class="doc">Report every breach for one render, ordered worst first.
+    <pre class="doc">Report every breach for one render as data, ordered worst first.
 
 All breaches are reported rather than the first, so a caller fixing an
 oversized prompt sees the whole picture instead of discovering the next
-offender only after fixing this one.</pre>
+offender only after fixing this one.
+
+Records rather than messages, because a breach is counted across a run
+as well as printed once. Aggregating parsed log strings is how a
+breached budget stays invisible.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-prompt_context_contract-violations">
+  <summary><code>violations</code> <span class="sig">(self, context: dict[str, typing.Any]) -&gt; list[str]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Human-readable form of :meth:`violation_records`, worst first.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> method</p>
+    <pre class="doc">Human-readable form of :meth:`violation_records`, worst first.</pre>
   </div>
 </details>
 
@@ -3550,6 +3616,28 @@ offender only after fixing this one.</pre>
     <p class="summary">A prompt context contract is malformed or was violated.</p>
     <p class="meta">Source: <code>llm_client.prompt_context_contract</code> class</p>
     <pre class="doc">A prompt context contract is malformed or was violated.</pre>
+
+  </div>
+</details>
+
+<details class="symbol class-symbol" id="module-llm_client-prompt_context_contract-TemplateBreachSummary">
+  <summary><code>TemplateBreachSummary</code> <span class="sig">(template_name: str, renders: int, breaching_renders: int, worst: tuple[llm_client.prompt_context_contract.ContextBreach, ...]) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">What one template did to its budget over a whole run.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> class</p>
+    <pre class="doc">What one template did to its budget over a whole run.</pre>
+
+    <h4>Methods</h4>
+
+<details class="symbol" id="module-llm_client-prompt_context_contract-describe">
+  <summary><code>describe</code> <span class="sig">(self) -&gt; str</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.prompt_context_contract</code> method</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
+
 
   </div>
 </details>
@@ -14118,7 +14206,7 @@ historical single-key behaviour untouched.</pre>
   <tbody>
     <tr><td><code>ACCOUNT_KEY_ENV</code></td><td><code>{&#x27;inside_success&#x27;: &#x27;OPENROUTER_API_KEY_INSIDE_SUCCESS&#x27;, &#x27;personal&#x27;: &#x27;OPENROUTER_API_KEY_PERSONAL&#x27;}</code></td><td>dict</td></tr>
 <tr><td><code>ACCOUNT_OVERRIDE_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ACCOUNT&#x27;</code></td><td>str</td></tr>
-<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/claim-verification-severity/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
+<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/contract-breach-tally/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
 <tr><td><code>INSIDE_SUCCESS_ACCOUNT</code></td><td><code>&#x27;inside_success&#x27;</code></td><td>str</td></tr>
 <tr><td><code>PERSONAL_ACCOUNT</code></td><td><code>&#x27;personal&#x27;</code></td><td>str</td></tr>
 <tr><td><code>ROUTING_PATH_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ROUTING_FILE&#x27;</code></td><td>str</td></tr>
