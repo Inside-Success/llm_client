@@ -122,7 +122,7 @@ tool-usage-report:  ## Report agent tool usage (SURFACE=codebase-memory)
 
 # ─── Development ─────────────────────────────────────────────────────────────
 
-.PHONY: test test-verbose test-integration lint typecheck check install dead-code dead-code-audit dead-code-validate codebase-wiki-check codebase-wiki-check-full
+.PHONY: test test-verbose test-integration lint typecheck check install dead-code dead-code-audit dead-code-validate codebase-wiki-check codebase-wiki-check-full reachability reachability-check reachability-baseline repo-stats
 
 test:  ## Run all tests
 	python -m pytest tests/ -q
@@ -163,6 +163,18 @@ dead-code-audit:  ## Refresh reviewed dead-code audit file
 
 dead-code-validate:  ## Validate reviewed dead-code dispositions
 	@$(PYTHON) scripts/meta/validate_dead_code_audit.py
+
+reachability:  ## Report module reachability across llm_client/scripts/tests/enforced_planning
+	@$(PYTHON) scripts/meta/check_reachability.py --project-root .
+
+reachability-check:  ## Fail if any module became unreachable since the baseline
+	@$(PYTHON) scripts/meta/check_reachability.py --project-root . --check
+
+reachability-baseline:  ## Lower the ratchet after retiring modules
+	@$(PYTHON) scripts/meta/check_reachability.py --project-root . --write-baseline
+
+repo-stats:  ## Print repetition counters for session start
+	@$(PYTHON) scripts/meta/repo_stats_block.py --project-root .
 
 # ─── Maintenance ─────────────────────────────────────────────────────────────
 

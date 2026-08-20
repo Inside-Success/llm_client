@@ -156,4 +156,18 @@ if git rev-parse --verify "$REMOTE" >/dev/null 2>&1; then
     fi
 fi
 
+# Reachability ratchet: the orphaned-module count may fall, never rise.
+# A module nobody imports is work that was finished and never wired to
+# anything. Catching it at commit is the only point where the author still
+# knows whether it was meant to be wired or meant to be deleted.
+echo "Checking module reachability..."
+if [ -f scripts/meta/check_reachability.py ]; then
+    if ! python3 scripts/meta/check_reachability.py --project-root . --check; then
+        echo ""
+        echo "Bypass with: REACHABILITY_RATCHET=off git commit ..."
+        [ "${REACHABILITY_RATCHET:-on}" = "off" ] || exit 1
+        echo "REACHABILITY_RATCHET=off - regression recorded but not blocked."
+    fi
+fi
+
 echo "Pre-commit checks passed!"

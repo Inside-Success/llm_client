@@ -49,6 +49,37 @@ meta_process:
       - scripts
       whitelist: .vulture_whitelist.py
       audit_file: dead_code_audit.json
+    reachability:
+      enabled: true
+      # No product_entrypoints: packages mixes product code (llm_client) with
+      # governance tooling (scripts/, tests/, enforced_planning/) -- a
+      # product-share measurement across that mix would be diluted by tooling
+      # code never reachable from llm_client/__init__.py in the first place.
+      # The orphaned-module ratchet (module-level, complementary to the
+      # existing vulture symbol-level dead_code check above) is the one that
+      # applies here.
+      packages: [llm_client, scripts, tests, enforced_planning]
+      entrypoints:
+        - scripts/*.py
+        - scripts/meta/*.py
+        - scripts/meta/worktree-coordination/*.py
+        - tests/*.py
+        - llm_client/__init__.py
+        # The real `llm-cost` console-script entrypoint (pyproject.toml
+        # [project.scripts]); statically imports every llm_client/cli/*.py
+        # submodule, so this alone resolves 5 of the first-run findings.
+        - llm_client/__main__.py
+      dynamic: []
+      ignore:
+        # Deliberate Plan #16 backward-compat shim: nothing inside this repo
+        # needs to import it (the real code moved to sdk/agents_codex_runtime.py),
+        # but external consumers still importing the old
+        # llm_client.agents_codex_runtime path depend on it. Reachability
+        # analysis only sees inside this repo, so this is a structural blind
+        # spot, not dead code -- exempt rather than let it ratchet as a false
+        # "orphan" every run.
+        - llm_client/agents_codex_runtime.py
+      baseline: reachability_baseline.json
   acceptance_gates:
     enabled: false
   messaging:

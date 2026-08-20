@@ -1,0 +1,9 @@
+{
+  "note": "Ratchet baseline. This count may fall, never rise.",
+  "unreachable_count": 2,
+  "product_share": 0.9957,
+  "unreachable": [
+    "enforced_planning/coordination_consistency.py",
+    "enforced_planning/prewrite_claim_gate.py"
+  ]
+}
