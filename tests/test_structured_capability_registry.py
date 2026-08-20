@@ -132,9 +132,23 @@ class TestSupportsStructuredOutput:
                 supports_native_structured_output("openrouter/x/malformed")
 
     def test_openrouter_gpt56_native_transport_matches_current_route_evidence(self):
-        """Luna stays structured-capable but uses its observed Instructor transport."""
+        """All three GPT-5.6 OpenRouter routes are native-schema capable.
 
-        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is False
+        Luna was pinned to Instructor on 2026-08-07 after a single Process
+        Tracing schema found no accepting endpoint. That was schema-specific,
+        as `docs/guides/model-selection.md` recorded at the time ("not a
+        general route rejection"). Re-probed 2026-08-20 against the Inside
+        Success bounded-extraction schema: OpenRouter accepted the native
+        request and returned `response_format.json_schema` with `strict=true`,
+        `additionalProperties=false`, `finish_reason=stop` and valid JSON.
+
+        The Instructor transport was not merely slower, it was unsafe: with the
+        schema unenforced the model appended array items until the 65536-token
+        output ceiling truncated the JSON mid-string, producing output that can
+        never validate at ~14x the cost of a healthy call.
+        """
+
+        assert supports_native_structured_output("openrouter/openai/gpt-5.6-luna") is True
         assert supports_native_structured_output("openrouter/openai/gpt-5.6-sol") is True
         assert supports_native_structured_output("openrouter/openai/gpt-5.6-terra") is True
 
