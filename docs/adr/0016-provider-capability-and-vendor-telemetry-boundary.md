@@ -4,6 +4,44 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-08-21 Amendment: A Schema Rejection Is Not a Route Denial at Runtime
+
+The amendment below states the rule for how capability findings are *recorded*:
+a schema-specific rejection belongs to that schema, not to the route. The
+runtime violated the same rule in the opposite direction, and the 2026-08-20
+capability restoration is what exposed it.
+
+`_raise_if_unsupported_gpt5_structured_schema` ran from all four structured-call
+exception handlers without consulting `StructuredOutputPolicy`. On the
+native-schema path it fired immediately before the
+`_is_schema_error(exc) -> _NativeSchemaFallback` hand-off, so a provider saying
+"this schema is invalid" was converted into a terminal, route-level
+`LLMCapabilityError` — exactly the schema-to-route generalization this ADR
+forbids — and it preempted the machinery implementing the documented `auto`
+contract, "preserves the historical native-schema-to-Instructor routing".
+
+The failure only became reachable when Luna became native-schema capable.
+Callers on the default `auto` policy were silently migrated onto the native path,
+and any whose response model was not strict-safe went from working to terminal
+failure. Inside Success's meeting-analysis stage did exactly that at
+2026-08-20T23:58Z: ~770 failed calls per day against a schema Instructor had
+been handling without complaint, reported as a transport incompatibility.
+
+Standing rule: **a capability guard may only be terminal where no recovery
+exists.** Where the caller's policy permits a downgrade and the path can perform
+one, a schema rejection must remain recoverable. The guard now applies at the
+native-schema sites only under a non-strict policy and only for errors the path
+will genuinely convert into `_NativeSchemaFallback`; the responses-API sites keep
+raising, because no Instructor downgrade exists there.
+
+Corollary for capability changes generally: marking a route native-capable is not
+an isolated registry edit. It re-routes every call site that relies on the
+default policy. Enumerate those call sites and check each response model for
+strict-mode safety before deploying — a green test on the call site that
+motivated the change proves nothing about its siblings.
+
+Verified 2026-08-21.
+
 ## 2026-08-20 Amendment: A Bounded Probe Result Is Not a Route Capability
 
 `openrouter/openai/gpt-5.6-luna` returns to `native_structured_output: true`,
