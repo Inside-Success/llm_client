@@ -923,15 +923,29 @@ def _raise_if_unsupported_gpt5_structured_schema(
     model: str,
     error: Exception,
     caller: str,
+    recoverable_by_fallback: bool,
 ) -> None:
     """Raise a typed capability error for unsupported GPT-5 structured schema paths.
 
     GPT-5 family models can be selected for structured workloads, but some
     direct/provider-specific JSON-schema transports reject the supplied schema at
-    request-validation time. When that happens, callers need a clear,
-    non-retryable capability failure rather than a vague provider error or a
-    fallback that obscures the real incompatibility.
+    request-validation time. When nothing downstream can recover from that,
+    callers need a clear, non-retryable capability failure rather than a vague
+    provider error or a fallback that obscures the real incompatibility.
+
+    ``recoverable_by_fallback`` says the opposite is true for this call site: the
+    error is one the native-schema path will turn into ``_NativeSchemaFallback``,
+    and the caller's ``StructuredOutputPolicy`` permits that downgrade. When no
+    downgrade will actually happen the typed capability error is still the most
+    useful outcome, so this stays narrow. ``auto`` is documented as preserving
+    "the historical native-schema-to-Instructor routing", so raising here would
+    preempt the ``_NativeSchemaFallback`` machinery that implements exactly that.
+    Doing so unconditionally turned every auto-policy caller of a GPT-5-family
+    model into a hard failure the moment that model became native-schema capable,
+    with an error blaming routing rather than the caller's own schema.
     """
+    if recoverable_by_fallback:
+        return
     if not _is_gpt5_family_model(model) or not _is_invalid_json_schema_error(error):
         return
     _raise_gpt5_structured_schema_capability_error(model=model, error=error, caller=caller)
@@ -946,8 +960,12 @@ def _raise_gpt5_structured_schema_capability_error(
     """Raise the canonical GPT-5 structured-schema compatibility error."""
     raise LLMCapabilityError(
         f"{caller}: provider rejected structured JSON-schema output for GPT-5-family model "
-        f"{model}. llm_client does not currently support this transport/schema combination "
-        "reliably. Use a different task/model, or change routing/provider strategy.",
+        f"{model}, and no Instructor downgrade was available for this call. The provider "
+        "reports the response schema itself as invalid, so check the response model before "
+        "the route: strict structured output requires additionalProperties=false and every "
+        "property listed in required, and rejects keywords such as minItems/maxItems, "
+        "minLength/maxLength, minimum/maximum, default, and free-form object fields. "
+        "Otherwise use a different task/model, or change routing/provider strategy.",
         original=error,
     ) from error
 
@@ -1561,6 +1579,7 @@ def _call_llm_structured_impl(
                         model=current_model,
                         error=exc,
                         caller="call_llm_structured",
+                        recoverable_by_fallback=False,
                     )
                     raise
 
@@ -1865,6 +1884,10 @@ def _call_llm_structured_impl(
                         model=current_model,
                         error=exc,
                         caller="call_llm_structured",
+                        recoverable_by_fallback=(
+                            not require_native_json_schema
+                            and _is_schema_error(exc)
+                        ),
                     )
                     if _is_schema_error(exc):
                         raise _NativeSchemaFallback(str(exc)) from exc
@@ -2852,6 +2875,7 @@ async def _acall_llm_structured_impl(
                         model=current_model,
                         error=exc,
                         caller="acall_llm_structured",
+                        recoverable_by_fallback=False,
                     )
                     raise
 
@@ -3159,6 +3183,10 @@ async def _acall_llm_structured_impl(
                         model=current_model,
                         error=exc,
                         caller="acall_llm_structured",
+                        recoverable_by_fallback=(
+                            not require_native_json_schema
+                            and _is_schema_error(exc)
+                        ),
                     )
                     if _is_schema_error(exc):
                         raise _NativeSchemaFallback(str(exc)) from exc
