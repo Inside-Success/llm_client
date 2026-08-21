@@ -145,8 +145,27 @@ if git rev-parse --verify "$REMOTE" >/dev/null 2>&1; then
         echo "  Local commits not on remote: $LOCAL_ONLY"
         echo "  Remote commits not local: $REMOTE_ONLY"
         echo ""
-        echo "Resolution: git pull --rebase origin $BRANCH"
-        echo "Bypass with: git commit --no-verify (not recommended)"
+        # `git pull --rebase` refuses outright when the index has staged changes, which
+        # is always true here: this is a pre-commit hook, so the caller is mid-commit
+        # with a populated index. Printing the bare rebase left the caller deadlocked --
+        # the hook demanding a rebase, the rebase demanding a clean index -- and the
+        # only escape on offer, --no-verify, lands the unrebased commit this check
+        # exists to prevent. Prescribe the sequence that can actually run.
+        if git diff --cached --quiet; then
+            echo "Resolution:"
+            echo "  git pull --rebase origin $BRANCH"
+        else
+            echo "Resolution (your index has staged changes, so rebase must be"
+            echo "unblocked first -- a bare 'git pull --rebase' will refuse):"
+            echo "  git stash push -m pre-commit-rebase"
+            echo "  git pull --rebase origin $BRANCH"
+            echo "  git stash pop --index    # --index preserves what you had staged"
+            echo "  # then re-run your commit"
+        fi
+        echo ""
+        echo "Bypass with: git commit --no-verify"
+        echo "  This does NOT resolve the divergence -- it commits on top of a stale"
+        echo "  base and pushes the conflict downstream. Prefer the resolution above."
         exit 1
     fi
 
