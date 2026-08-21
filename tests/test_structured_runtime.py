@@ -976,6 +976,58 @@ def test_structured_runtime_sync_raises_capability_error_for_gpt5_schema_rejecti
         )
 
 
+@patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
+@patch("llm_client.core.client.litellm.supports_response_schema", return_value=True)
+@patch(
+    "llm_client.core.client.litellm.completion",
+    side_effect=litellm.BadRequestError(
+        message=(
+            "litellm.BadRequestError: Invalid schema for response_format 'City': "
+            "'additionalProperties' is required to be supplied and to be false. "
+            "(invalid_json_schema)"
+        ),
+        model="openai/gpt-5",
+        llm_provider="openai",
+    ),
+)
+def test_gpt5_native_schema_rejection_falls_back_to_instructor_under_auto_policy(
+    _mock_comp: MagicMock,
+    _mock_supports_schema: MagicMock,
+    _mock_cost: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auto policy must downgrade a GPT-5 native-schema rejection, not fail terminally.
+
+    Regression test for the Inside Success meeting-analysis outage: marking
+    ``openrouter/openai/gpt-5.6-luna`` native-schema capable flipped every
+    default-policy caller onto the native path, and the GPT-5 capability guard
+    then raised terminally instead of letting ``_NativeSchemaFallback`` reach
+    Instructor. ``StructuredOutputPolicy`` documents ``auto`` as preserving
+    native-schema-to-Instructor routing, so this call must still return a value.
+    """
+    import instructor
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create_with_completion.return_value = (
+        _City(name="Tokyo"),
+        _mock_structured_response(),
+    )
+    monkeypatch.setattr(instructor, "from_litellm", lambda _completion: fake_client)
+
+    parsed, _result = _call_llm_structured_impl(
+        "openai/gpt-5",
+        [{"role": "user", "content": "Name a city"}],
+        _City,
+        num_retries=0,
+        task="test",
+        trace_id="structured.runtime.sync.gpt5_schema.auto_fallback",
+        max_budget=0,
+    )
+
+    assert parsed.name == "Tokyo"
+    assert fake_client.chat.completions.create_with_completion.called
+
+
 @pytest.mark.asyncio
 @patch(
     "llm_client.core.client.litellm.aresponses",

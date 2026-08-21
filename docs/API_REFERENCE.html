@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-20T22:26:29Z -->
+<!-- Generated: 2026-08-21T13:29:51Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -2171,6 +2171,15 @@ Install the optional dependency::
     pip install llm-client[langfuse]</pre>
 
 <h4>Functions</h4>
+
+<details class="symbol" id="module-llm_client-langfuse_callbacks-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.langfuse_callbacks</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
 
 <details class="symbol" id="module-llm_client-langfuse_callbacks-configure_langfuse_callbacks">
   <summary><code>configure_langfuse_callbacks</code> <span class="sig">() -&gt; llm_client.langfuse_callbacks.LangfuseCallbackConfig</span></summary>
@@ -6598,6 +6607,15 @@ Plan 19: Agent Planning and Working Memory.</pre>
 
 <h4>Functions</h4>
 
+<details class="symbol" id="module-llm_client-agent-agent_planning-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.agent.agent_planning</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-agent-agent_planning-build_plan_tools">
   <summary><code>build_plan_tools</code> <span class="sig">(plan_state: llm_client.agent.agent_planning.PlanState, config: llm_client.agent.agent_planning.PlanningConfig) -&gt; list[dict[str, typing.Any]]</span></summary>
   <div class="symbol-body">
@@ -9037,6 +9055,15 @@ Returns:
   </div>
 </details>
 
+<details class="symbol" id="module-llm_client-core-client-boundary">
+  <summary><code>boundary</code> <span class="sig">(**kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No-op boundary decorator when data_contracts is unavailable.</p>
+    <p class="meta">Source: <code>llm_client.core.client</code> functions</p>
+    <pre class="doc">No-op boundary decorator when data_contracts is unavailable.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-core-client-call_llm">
   <summary><code>call_llm</code> <span class="sig">(model: str, messages: list[dict[str, typing.Any]], *, timeout: int = 60, num_retries: int = 2, reasoning_effort: str | None = None, api_base: str | None = None, base_delay: float = 1.0, max_delay: float = 30.0, retry_on: list[str] | None = None, on_retry: Optional[Callable[[int, Exception, float], NoneType]] = None, cache: llm_client.core.data_types.CachePolicy | None = None, retry: llm_client.execution.retry.RetryPolicy | None = None, fallback_models: list[str] | None = None, on_fallback: Optional[Callable[[str, Exception, str], NoneType]] = None, hooks: llm_client.execution.retry.Hooks | None = None, execution_mode: Literal[&#x27;text&#x27;, &#x27;structured&#x27;, &#x27;workspace_agent&#x27;, &#x27;workspace_tools&#x27;] = &#x27;text&#x27;, config: llm_client.core.config.ClientConfig | None = None, openrouter_route_policy: llm_client.execution.call_contracts.OpenRouterRoutePolicyV1 | None = None, parent_trace_id: str | None = None, budget_scope_trace_id: str | None = None, budget_scope_mode: Literal[&#x27;sequential&#x27;, &#x27;reserved_concurrent&#x27;] = &#x27;sequential&#x27;, budget_reservation: float = 0.0, **kwargs: Any) -&gt; llm_client.core.data_types.LLMCallResult</span></summary>
   <div class="symbol-body">
@@ -9370,6 +9397,19 @@ Useful when calling call_llm() and parsing JSON manually:
   <div class="module-body">
     <p class="summary">Typed runtime configuration for llm_client.</p>
 <pre class="doc">Typed runtime configuration for llm_client.</pre>
+
+<h4>Functions</h4>
+
+<details class="symbol" id="module-llm_client-core-config-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.core.config</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
+  </div>
+</details>
+
+
 
 <h4>Classes</h4>
 
@@ -10635,6 +10675,15 @@ Args:
     <p class="summary">Implementation for acall_llm_structured_batch extracted from facade.</p>
     <p class="meta">Source: <code>llm_client.execution.batch_runtime</code> functions</p>
     <pre class="doc">Implementation for acall_llm_structured_batch extracted from facade.</pre>
+  </div>
+</details>
+
+<details class="symbol" id="module-llm_client-execution-batch_runtime-boundary">
+  <summary><code>boundary</code> <span class="sig">(*args, **kwargs)</span></summary>
+  <div class="symbol-body">
+    <p class="summary">No docstring available.</p>
+    <p class="meta">Source: <code>llm_client.execution.batch_runtime</code> functions</p>
+    <pre class="doc">No docstring available.</pre>
   </div>
 </details>
 
@@ -14490,7 +14539,7 @@ historical single-key behaviour untouched.</pre>
   <tbody>
     <tr><td><code>ACCOUNT_KEY_ENV</code></td><td><code>{&#x27;inside_success&#x27;: &#x27;OPENROUTER_API_KEY_INSIDE_SUCCESS&#x27;, &#x27;personal&#x27;: &#x27;OPENROUTER_API_KEY_PERSONAL&#x27;}</code></td><td>dict</td></tr>
 <tr><td><code>ACCOUNT_OVERRIDE_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ACCOUNT&#x27;</code></td><td>str</td></tr>
-<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/derive-unattributed-tier/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
+<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/llm_client/worktrees/fix-gpt5-schema-guard-auto-fallback/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
 <tr><td><code>INSIDE_SUCCESS_ACCOUNT</code></td><td><code>&#x27;inside_success&#x27;</code></td><td>str</td></tr>
 <tr><td><code>PERSONAL_ACCOUNT</code></td><td><code>&#x27;personal&#x27;</code></td><td>str</td></tr>
 <tr><td><code>ROUTING_PATH_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ROUTING_FILE&#x27;</code></td><td>str</td></tr>
