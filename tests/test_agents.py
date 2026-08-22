@@ -2260,6 +2260,29 @@ class TestCodexFallback:
         assert 'model_reasoning_effort="high"' in command
         assert stdin_payload == "Reply with OK only."
 
+    def test_build_codex_cli_command_forwards_network_and_search(self, tmp_path) -> None:
+        """CLI fallback should retain explicitly requested agent capabilities."""
+
+        command, _env, _stdin_payload = _build_codex_cli_command(
+            "codex",
+            "Research one public source.",
+            output_schema=None,
+            kwargs={
+                "working_directory": str(tmp_path),
+                "approval_policy": "never",
+                "sandbox_mode": "workspace-write",
+                "model_reasoning_effort": "medium",
+                "network_access_enabled": True,
+                "web_search_enabled": True,
+            },
+            output_path=str(tmp_path / "last.txt"),
+            schema_path=None,
+        )
+
+        assert "sandbox_workspace_write.network_access=true" in command
+        assert "--search" in command
+        assert command[command.index("-s") + 1] == "workspace-write"
+
     def test_build_codex_cli_command_yolo_mode_sets_skip_git_repo_check(self, tmp_path) -> None:
         """yolo_mode should enable Codex's trusted-repo bypass convenience flag."""
 
