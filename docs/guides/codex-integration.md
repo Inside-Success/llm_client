@@ -76,6 +76,11 @@ Three transport modes:
 - `codex_transport="cli"`: `codex exec` directly.
 - `codex_transport="auto"`: prefer SDK, fall back to CLI on failure.
 
+Both transports honor explicit `network_access_enabled=True` and
+`web_search_enabled=True`. The CLI route enables network access within the
+workspace-write sandbox and forwards web search through Codex's native
+`tools.web_search` configuration; neither capability is enabled implicitly.
+
 If timeouts are globally disabled (`LLM_CLIENT_TIMEOUT_POLICY=ban`), Codex
 continues to use the caller's `timeout` as a killable CLI subprocess deadline;
 the policy still prevents that value being sent as a provider request timeout.

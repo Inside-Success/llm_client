@@ -661,6 +661,10 @@ def _build_codex_cli_command(
         # Codex CLI 0.144 removed the old `-a` flag. A config override retains
         # non-interactive approval semantics without discarding `--sandbox`.
         command.extend(["-c", f"approval_policy={_json.dumps(approval_policy)}"])
+    if kwargs.get("network_access_enabled") and sandbox_mode == "workspace-write":
+        command.extend(["-c", "sandbox_workspace_write.network_access=true"])
+    if kwargs.get("web_search_enabled"):
+        command.extend(["-c", "tools.web_search=true"])
     if kwargs.get("skip_git_repo_check"):
         command.append("--skip-git-repo-check")
     if underlying_model:
