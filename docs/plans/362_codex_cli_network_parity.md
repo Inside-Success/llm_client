@@ -1,6 +1,6 @@
 # Plan #362: Codex CLI Network Parity
 
-**Status:** In Progress
+**Status:** ✅ Complete
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -67,11 +67,12 @@ agent runs.
 
 ## Acceptance Criteria
 
-- [ ] `network_access_enabled=True` renders the workspace-write network setting.
-- [ ] `web_search_enabled=True` renders the native search flag.
-- [ ] Existing focused Codex adapter tests pass.
-- [ ] A CLI-fallback agent can obtain a successful retained USAspending receipt.
-- [ ] No danger-full-access mode or metered fallback is introduced.
+- [x] `network_access_enabled=True` renders the workspace-write network setting.
+- [x] `web_search_enabled=True` renders the native web-search config.
+- [x] Existing focused Codex adapter tests pass (10 focused tests).
+- [x] A CLI-fallback agent obtained six successful retained USAspending receipts
+  in `research_v3` run `run_20260822-5`.
+- [x] No danger-full-access mode or metered fallback was introduced.
 
 ---
 
@@ -79,3 +80,8 @@ agent runs.
 
 This is transport propagation only. It does not alter capability defaults:
 callers must still explicitly request network access or web search.
+
+Implementation began through the sanctioned light-work fallback because this
+repository had no configured plan-readiness query command. The work remained
+in an isolated claimed worktree and was verified by the downstream authentic
+canary before integration.
