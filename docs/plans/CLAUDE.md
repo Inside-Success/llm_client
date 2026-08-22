@@ -160,6 +160,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 337 | [Current Model Selection Evidence and GPT-5.5 Retirement](337_current-model-selection-evidence-and-gpt-5-5-retirement.md) | Critical | ✅ Complete | - |
 | 338 | [Observed Application-Run Lifecycle](338_observed_application_run_lifecycle.md) | Critical | ❓  | Process Tracing outer-run receipt |
 | 350 | [Tool Response Custody](350_tool_response_custody.md) | High | ✅ Complete | Agent Ecology 3 provider qualification and prescription ablation |
+| 362 | [Codex CLI Network Parity](362_codex_cli_network_parity.md) | High | 🚧 In Progress | research_v3 Plan #38 subscription-agent OSINT vertical |
 
 
 ## Status Key
