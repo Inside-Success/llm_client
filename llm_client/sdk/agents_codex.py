@@ -664,7 +664,7 @@ def _build_codex_cli_command(
     if kwargs.get("network_access_enabled") and sandbox_mode == "workspace-write":
         command.extend(["-c", "sandbox_workspace_write.network_access=true"])
     if kwargs.get("web_search_enabled"):
-        command.append("--search")
+        command.extend(["-c", "tools.web_search=true"])
     if kwargs.get("skip_git_repo_check"):
         command.append("--skip-git-repo-check")
     if underlying_model:

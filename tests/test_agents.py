@@ -2280,7 +2280,7 @@ class TestCodexFallback:
         )
 
         assert "sandbox_workspace_write.network_access=true" in command
-        assert "--search" in command
+        assert "tools.web_search=true" in command
         assert command[command.index("-s") + 1] == "workspace-write"
 
     def test_build_codex_cli_command_yolo_mode_sets_skip_git_repo_check(self, tmp_path) -> None:

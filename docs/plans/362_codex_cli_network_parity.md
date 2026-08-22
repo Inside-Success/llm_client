@@ -17,7 +17,7 @@ government API request inside a network-restricted sandbox.
 
 **Target:** The CLI command maps network access to Codex's
 `sandbox_workspace_write.network_access` setting and maps web search to the
-native `--search` flag, while retaining workspace-write filesystem isolation.
+native `tools.web_search` config, while retaining workspace-write filesystem isolation.
 
 **Why:** Subscription-agent consumers need the same declared capabilities on
 SDK and CLI transports; silently dropping them creates misleading successful
