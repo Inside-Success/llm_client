@@ -210,6 +210,7 @@ _AGENT_KWARGS = frozenset({
     "codex_home", "mcp_servers",
     # Codex transport controls
     "codex_transport", "codex_cli_path", "agent_hard_timeout",
+    "codex_session_mode", "codex_session_id",
     # Codex runtime isolation controls
     "codex_process_isolation", "codex_process_start_method", "codex_process_grace_s",
 })

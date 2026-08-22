@@ -76,6 +76,50 @@ Three transport modes:
 - `codex_transport="cli"`: `codex exec` directly.
 - `codex_transport="auto"`: prefer SDK, fall back to CLI on failure.
 
+### Exact session continuation
+
+The CLI transport can resume the exact session that produced an earlier
+receipt, or fork it into a new session:
+
+```python
+result = call_llm(
+    "codex/gpt-5.6-luna",
+    messages,
+    execution_mode="workspace_agent",
+    task="repair_component",
+    trace_id="repair_component/agent",
+    max_budget=2.00,
+    reasoning_effort="medium",
+    codex_transport="cli",
+    codex_session_mode="resume",  # fresh | resume | fork
+    codex_session_id=prior_session_id,
+    codex_home="/path/to/dedicated-session-home",
+)
+```
+
+`fresh` is the default and requires `codex_session_id` to be omitted. `resume`
+and `fork` require one explicit session ID; `--last` is deliberately not
+supported because it cannot prove role/session routing. An explicit session
+mode fails before dispatch unless `codex_transport="cli"`, because the current
+SDK route does not expose this receipt contract. The returned session identity remains available
+at `result.raw_response["session_id"]`; a resume should preserve it, while a
+fork should return a new identity.
+
+Explicitly setting any session mode, including `fresh`, also requires a stable,
+caller-owned `codex_home` whose `.codex/` directory already exists. Reuse that
+dedicated home for the whole fresh/resume/fork lineage; the caller owns its
+sanitized configuration and lifecycle. This avoids the temporary isolated home
+used by ordinary one-shot calls, which is intentionally deleted after the call.
+The receipt exposes opaque `codex_home_sha256` and `codex_home_persistence`
+fields so an orchestrator can prove that continuation used the expected session
+store without logging its path. The parser reads the current
+`thread.started.thread_id` JSONL receipt, cross-checks any legacy stderr
+identity, and rejects success without an identity. Resume must return the
+requested identity, and fork must return a different identity. Streaming calls
+reject every explicit session mode because the current stream implementation
+uses the SDK and can only start a fresh thread; use the non-streaming CLI
+transport for exact session control.
+
 Both transports honor explicit `network_access_enabled=True` and
 `web_search_enabled=True`. The CLI route enables network access within the
 workspace-write sandbox and forwards web search through Codex's native
