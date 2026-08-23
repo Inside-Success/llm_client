@@ -3,8 +3,8 @@ type: lineage
 title: Personal and Inside Success Repository Lineage
 description: Ownership and synchronization boundaries between Brian's canonical upstream and the company downstream.
 created: 2026-08-16
-updated: 2026-08-16
-sources: [../../../../docs/plans/105_inside_success_fork_reconciliation.md, ../sources/revision-c2f3693.md, ../sources/inside-success-f4a08fe.md]
+updated: 2026-08-23
+sources: [../../../../docs/plans/105_inside_success_fork_reconciliation.md, ../sources/revision-4f7ecfa.md, ../sources/inside-success-f4a08fe.md, ../../raw/source-manifest-4f7ecfa-company-f4a08fe.json]
 confidence: high
 ---
 
@@ -30,12 +30,15 @@ The wiki now binds both sources independently:
 
 | Source | Revision | Tree | Capsule state |
 | --- | --- | --- | --- |
-| Personal upstream | `c2f3693` | `57cf3a8` | Exact current-tree verification; maintained accepted base remains `f194028` |
-| Company downstream | `f4a08fe` | `feca132` | Maintained Project Meta capsule and passing 16-anchor receipt |
+| Personal upstream | `4f7ecfa` | `e9dfd48` | Exact current source-surface verification; maintained accepted base capsule remains `f194028` |
+| Company downstream analyzed source | `f4a08fe` | `feca132` | Maintained Project Meta capsule and passing 16-anchor receipt |
+| Company downstream live branch | `926599c` | Not ingested | Fresh remote identity only; no capsule-backed source synthesis in this wiki |
 
-The company remote was freshly observed at `f4a08fe` during this ingest. That
-does not prove a deployed version. Deployment still requires live runtime
-evidence.
+The company remote was freshly observed at `926599c` during the 2026-08-23
+ingest. The analyzed company material remains pinned to accepted capsule source
+`f4a08fe`; claims below do not project that older analysis onto the newer
+branch. Neither observation proves a deployed version. Deployment still
+requires live runtime evidence.
 
 # Exact divergence at the pinned revisions
 
@@ -66,7 +69,7 @@ move downstream, or whether either repository should replace the other. Any
 such action still requires reviewed integration under the separate ownership
 rules.
 
-See [Revision c2f3693 source ingest](../sources/revision-c2f3693.md) for the
+See [Revision 4f7ecfa source ingest](../sources/revision-4f7ecfa.md) for the
 personal binding, [Inside Success revision f4a08fe](../sources/inside-success-f4a08fe.md)
 for the company binding, and [Architecture](../architecture.md) for the personal
 code relationships.
@@ -74,8 +77,8 @@ code relationships.
 # Citations
 
 1. [Plan 105 reconciliation authority at `c2f3693`](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/docs/plans/105_inside_success_fork_reconciliation.md)
-2. [Personal source revision on GitHub](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
-3. [Current dual-lineage source binding](../../raw/source-manifest-fc5ee7f-company-f4a08fe.json)
+2. [Personal comparison source revision on GitHub](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
+3. [Current dual-lineage source binding](../../raw/source-manifest-4f7ecfa-company-f4a08fe.json)
 4. [Company source tree](https://github.com/Inside-Success/llm_client/tree/f4a08fec950c8d973194e904ac3834e1e255166d)
 5. [Company-only policy overlay](https://github.com/Inside-Success/llm_client/blob/f4a08fec950c8d973194e904ac3834e1e255166d/llm_client/inside_success_policy.py)
 6. [Personal Codex deadline source](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/sdk/agents_codex.py)

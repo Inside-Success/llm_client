@@ -333,8 +333,8 @@
         "approvals": [],
         "failed_guards": []
       },
-      "status": "ready",
-      "record_version": 1
+      "status": "accepted",
+      "record_version": 2
     }
   ]
 }

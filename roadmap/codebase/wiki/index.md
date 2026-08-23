@@ -2,7 +2,7 @@
 
 Start here for architecture and code-navigation questions. This is a compiled,
 interlinked explanation of the complete Python repository at revision
-`657a98f135f6e0665cf34d81a8e8655c387dce69`. It is derived orientation: follow
+`4f7ecfa9527bb68dd5a9bda81abd384612c0d9cd`. It is derived orientation: follow
 its links, then reopen native source before changing code or making an exact
 claim.
 
@@ -28,7 +28,8 @@ claim.
 
 ## Source and maintenance
 
-- [Revision `657a98f` source ingest](sources/revision-657a98f.md) — current source, Python compatibility, provenance, and limits.
+- [Revision `4f7ecfa` source ingest](sources/revision-4f7ecfa.md) — current source, exact Codex CLI JSONL custody, provenance, and limits.
+- [Revision `657a98f` source ingest](sources/revision-657a98f.md) — prior Python compatibility binding.
 - [Revision `917318b` source ingest](sources/revision-917318b.md) — exact Codex-session seam and provider-free evidence.
 - [Revision `c2f3693` capsule ingest](sources/revision-c2f3693.md) — prior verified personal capsule evidence.
 - [Inside Success revision `f4a08fe` source ingest](sources/inside-success-f4a08fe.md) — separate company capsule, exact downstream differences, and provenance limits.
@@ -38,4 +39,4 @@ claim.
 The wiki indexes the full repository at package level and deepens the most
 important cross-package flows. Detailed symbol records remain in the older
 revision-bound capsules and are reopened only when a question needs that level
-of detail; exact current claims return to native source at `657a98f`.
+of detail; exact current claims return to native source at `4f7ecfa`.

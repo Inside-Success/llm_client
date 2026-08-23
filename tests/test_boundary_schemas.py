@@ -68,7 +68,7 @@ def test_schema_covers_all_dataclass_fields():
     )
 
 
-def test_codex_event_fields_are_additive_lists():
+def test_codex_events_schema_is_additive_list():
     schema = LLMCallResultSchema.model_json_schema()
     assert schema["properties"]["codex_events"]["type"] == "array"
     assert schema["properties"]["codex_jsonl"]["type"] == "array"
