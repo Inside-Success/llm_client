@@ -1,6 +1,6 @@
 # Plan #355: Codex Intrinsic Event Custody
 
-**Status:** Implemented (shared unit; downstream adoption pending)
+**Status:** In Progress
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -29,6 +29,22 @@ fail-closed action boundary still needs caller-visible evidence that the model
 did not execute command, file, web, or MCP actions. The shared client owns the
 transport/result seam; an application-local parser would create competing
 custody.
+
+### Downstream audit correction (2026-08-23)
+
+AC16's full-Codex harness audit found that completed-item projection is not
+lossless enough for an experiment authority. It cannot distinguish a stream
+that genuinely omitted an event from one where the shared parser ignored a
+malformed, unknown, or non-completed envelope. Reconstructing JSONL from
+`codex_events` in the consumer would create synthetic evidence.
+
+The shared seam will therefore also expose
+`codex_jsonl: list[str]`: every nonblank CLI stdout line, byte-for-byte after
+Python's text decoding and in original order. `codex_events` remains the
+normalized completed-item convenience projection. The new field is additive,
+defaults empty on non-CLI routes, and does not claim provider attestation,
+persistence, or semantic validity. AC16 will hash and persist this exact field,
+then fail closed on malformed or unsupported envelopes.
 
 ## Bounded Design
 
@@ -120,6 +136,12 @@ custody.
       and diff hygiene pass.
 - [ ] Agent Ecology 3's provider-free preflight observes its three intrinsic
       fixture types from this public field at the exact merged revision.
+- [ ] Direct Codex CLI calls expose every nonblank stdout JSONL line verbatim
+      and in order through additive `LLMCallResult.codex_jsonl`; process
+      serialization and the boundary schema preserve it without reconstructing
+      events.
+- [ ] AC16 pins the accepted revision and proves malformed-line detection from
+      the public exact-stream field rather than from a local subprocess parser.
 
 ## Reset Boundary
 
