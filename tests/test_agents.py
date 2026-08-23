@@ -2725,21 +2725,20 @@ class TestCodexFallback:
             {"id": "web-1", "type": "web_search", "status": "completed"},
         ]
 
+        raw_lines = [
+            json.dumps({"type": "thread.started", "thread_id": "0198-items"}),
+            *(json.dumps({"type": "item.completed", "item": item}) for item in items),
+            '{"type":"future.event","value":1}',
+            "malformed-json",
+        ]
+
         def _fake_run(command, *, input, text, capture_output, check, timeout, env):
             del input, text, capture_output, check, timeout, env
             output_path = command[command.index("-o") + 1]
             Path(output_path).write_text("structured response\n")
             return types.SimpleNamespace(
                 returncode=0,
-                stdout="\n".join([
-                    json.dumps(
-                        {"type": "thread.started", "thread_id": "0198-items"}
-                    ),
-                    *(
-                        json.dumps({"type": "item.completed", "item": item})
-                        for item in items
-                    ),
-                ]),
+                stdout="\n\n" + "\n".join(raw_lines) + "\n  \n",
                 stderr="",
             )
 
@@ -2755,7 +2754,14 @@ class TestCodexFallback:
         )
 
         assert result.codex_events == items
+        assert result.codex_jsonl == raw_lines
         assert result.tool_calls == []
+
+        transferred = agents_codex_mod._deserialize_llm_result(
+            agents_codex_mod._serialize_llm_result(result)
+        )
+        assert transferred.codex_events == items
+        assert transferred.codex_jsonl == raw_lines
 
     def test_public_structured_call_retains_codex_completed_items(
         self,
@@ -2769,6 +2775,10 @@ class TestCodexFallback:
             {"id": "file-1", "type": "file_change", "status": "completed"},
             {"id": "web-1", "type": "web_search", "status": "completed"},
         ]
+        raw_lines = [
+            json.dumps({"type": "thread.started", "thread_id": "0198-items"}),
+            "malformed-json",
+        ]
 
         def _fake_cli(*args, **kwargs):
             del args, kwargs
@@ -2779,6 +2789,7 @@ class TestCodexFallback:
                 model="codex/gpt-5.6-luna",
                 resolved_model="codex/gpt-5.6-luna",
                 codex_events=items,
+                codex_jsonl=raw_lines,
                 finish_reason="stop",
                 raw_response={"transport": "codex_cli"},
                 cost_source="subscription_included",
@@ -2800,6 +2811,7 @@ class TestCodexFallback:
 
         assert decision == Decision(action="wait")
         assert result.codex_events == items
+        assert result.codex_jsonl == raw_lines
         assert result.raw_response == {"transport": "codex_cli"}
 
     def test_call_codex_via_cli_attaches_mcp_and_returns_tool_evidence(

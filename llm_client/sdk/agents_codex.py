@@ -607,6 +607,8 @@ def _serialize_llm_result(result: LLMCallResult) -> dict[str, Any]:
         "execution_model": result.execution_model,
         "routing_trace": result.routing_trace,
         "tool_calls": result.tool_calls,
+        "codex_events": result.codex_events,
+        "codex_jsonl": result.codex_jsonl,
         "finish_reason": result.finish_reason,
         "warnings": result.warnings,
         "warning_records": result.warning_records,
@@ -631,6 +633,8 @@ def _deserialize_llm_result(payload: dict[str, Any]) -> LLMCallResult:
         execution_model=cast(str | None, payload.get("execution_model")),
         routing_trace=cast(dict[str, Any] | None, payload.get("routing_trace")),
         tool_calls=cast(list[dict[str, Any]], payload.get("tool_calls", [])),
+        codex_events=cast(list[dict[str, Any]], payload.get("codex_events", [])),
+        codex_jsonl=cast(list[str], payload.get("codex_jsonl", [])),
         finish_reason=str(payload.get("finish_reason", "")),
         raw_response=payload.get("raw_response_summary"),
         warnings=cast(list[str], payload.get("warnings", [])),
@@ -763,6 +767,7 @@ def _result_from_codex_cli(
     session: dict[str, Any] | None = None,
     tool_calls: list[dict[str, Any]] | None = None,
     codex_events: list[dict[str, Any]] | None = None,
+    codex_jsonl: list[str] | None = None,
     codex_home_sha256: str | None = None,
     codex_home_persistence: str = "unknown",
     warning: str | None = None,
@@ -782,6 +787,7 @@ def _result_from_codex_cli(
         model=model,
         tool_calls=tool_calls or [],
         codex_events=codex_events or [],
+        codex_jsonl=codex_jsonl or [],
         finish_reason="stop",
         raw_response={
             "transport": transport,
@@ -907,6 +913,7 @@ def _call_codex_via_cli(
             session = parse_codex_exec_events(completed.stdout, completed.stderr)
             _require_codex_session_receipt(session, prepared_kwargs)
             codex_events = _extract_codex_cli_completed_items(completed.stdout)
+            codex_jsonl = _extract_codex_cli_jsonl_lines(completed.stdout)
             return _result_from_codex_cli(
                 model,
                 final_response,
@@ -914,6 +921,7 @@ def _call_codex_via_cli(
                 session=session,
                 tool_calls=_codex_cli_tool_calls_from_completed_items(codex_events),
                 codex_events=codex_events,
+                codex_jsonl=codex_jsonl,
                 codex_home_sha256=_codex_home_sha256(env),
                 codex_home_persistence=(
                     "temporary"
@@ -1608,6 +1616,12 @@ def _extract_codex_cli_completed_items(stdout_jsonl: str) -> list[dict[str, Any]
         if isinstance(item, dict):
             completed_items.append(dict(item))
     return completed_items
+
+
+def _extract_codex_cli_jsonl_lines(stdout_jsonl: str) -> list[str]:
+    """Return every nonblank decoded Codex CLI stdout line without normalization."""
+
+    return [line for line in stdout_jsonl.splitlines() if line.strip()]
 
 
 def _extract_codex_cli_tool_calls(stdout_jsonl: str) -> list[dict[str, Any]]:

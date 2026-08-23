@@ -136,7 +136,7 @@ then fail closed on malformed or unsupported envelopes.
       and diff hygiene pass.
 - [ ] Agent Ecology 3's provider-free preflight observes its three intrinsic
       fixture types from this public field at the exact merged revision.
-- [ ] Direct Codex CLI calls expose every nonblank stdout JSONL line verbatim
+- [x] Direct Codex CLI calls expose every nonblank stdout JSONL line verbatim
       and in order through additive `LLMCallResult.codex_jsonl`; process
       serialization and the boundary schema preserve it without reconstructing
       events.
@@ -175,3 +175,13 @@ blocked until the shared unit is accepted on the canonical default branch.
 - The remaining acceptance item belongs to `WU-355-02`: after this shared unit
   merges, Agent Ecology 3 must bind the exact revision and rerun its
   provider-free preflight before any live Luna canary is considered.
+
+## Exact-Stream Correction Evidence (2026-08-23)
+
+- `LLMCallResult.codex_jsonl` and its Pydantic mirror default empty outside the
+  CLI route and preserve every nonblank decoded stdout line in original order.
+- Provider-free fixtures retain valid, future, and malformed envelopes exactly;
+  the structured public call and process-safe serializer preserve both the raw
+  stream and normalized completed items.
+- `tests/test_agents.py` plus `tests/test_boundary_schemas.py` passed 185 tests.
+  No provider call or monetary spend occurred.

@@ -1,5 +1,19 @@
 # Update Log
 
+## 2026-08-23
+
+- **Ingest** | Bound the current 166-file Python/config surface to source
+  revision `4f7ecfa`, tree `e9dfd48`, and digest
+  `sha256:c4a6aecf...f19a9475` after exact Codex CLI JSONL custody landed.
+- **Update** | Distinguished normalized completed-item evidence from the exact
+  decoded stdout stream and documented which one experiment authorities must
+  validate and hash.
+- **Lineage** | Freshly observed the Inside Success default branch at
+  `926599c` while retaining `f4a08fe` as the last capsule-backed analyzed
+  company source; no claims from the older capsule were projected forward.
+- **Lint** | Deterministic source freshness, link structure, index coverage,
+  and contradiction review passed for the revised pages.
+
 ## 2026-08-22
 
 - **Ingest** | Bound the full Python/config surface to source revision

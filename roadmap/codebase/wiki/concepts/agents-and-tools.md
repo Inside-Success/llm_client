@@ -3,7 +3,7 @@ type: concept
 title: Agents and Tools
 description: How agent SDK routing, MCP turns, Python tools, contracts, artifacts, and evidence compose with the core runtime.
 created: 2026-08-16
-updated: 2026-08-22
+updated: 2026-08-23
 sources: [../../../../llm_client/agent, ../../../../llm_client/tools, ../../../../llm_client/sdk]
 confidence: high
 ---
@@ -38,6 +38,16 @@ which role may resume or fork and at what recovery tier. Streaming rejects
 explicit session modes because its SDK path cannot yet meet the same receipt
 contract.
 
+# Exact Codex event custody
+
+The direct CLI result preserves both a normalized view and the exact observed
+stream. `codex_events` contains mapping-valued `item.completed` payloads;
+`codex_jsonl` contains every nonblank decoded stdout line in original order,
+including malformed or unknown envelopes. Consumers that need an exhaustive
+experiment receipt must use and validate `codex_jsonl`, not reconstruct a
+stream from the convenience projection. Both fields survive the public
+structured-call path and process-safe result serialization.
+
 # Navigation
 
 Begin in `agent/mcp_agent.py` for the public MCP loop, then follow the turn
@@ -51,4 +61,5 @@ systems live in `workflow/`; see the [package map](../packages/package-map.md).
 1. [Agent package at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/agent)
 2. [`callable_to_openai_tool`, lines 457–538](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/tools/tool_utils.py#L457-L538)
 3. [Typed tool-call observability](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/tool_calls.py#L1-L161)
-4. [Current exact-session adapter](https://github.com/BrianMills2718/llm_client/blob/917318bf5d9087cff5148409a52a068103496c6f/llm_client/sdk/agents_codex.py#L650-L930)
+4. [Current exact-session and event-custody adapter](https://github.com/BrianMills2718/llm_client/blob/4f7ecfa9527bb68dd5a9bda81abd384612c0d9cd/llm_client/sdk/agents_codex.py#L590-L924)
+5. [Exact-line extraction](https://github.com/BrianMills2718/llm_client/blob/4f7ecfa9527bb68dd5a9bda81abd384612c0d9cd/llm_client/sdk/agents_codex.py#L1604-L1624)
