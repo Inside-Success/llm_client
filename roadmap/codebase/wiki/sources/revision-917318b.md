@@ -8,7 +8,7 @@ sources: [../../raw/source-manifest-917318b-company-f4a08fe.json, ../../../../ll
 confidence: high
 ---
 
-# Current source binding
+# Exact session-capability source binding
 
 The wiki describes personal upstream `BrianMills2718/llm_client` at source
 commit `917318bf5d9087cff5148409a52a068103496c6f`, Git tree
@@ -44,6 +44,9 @@ This provider-free source ingest proves command construction, session-store
 custody, receipt validation, and fail-loud routing. It does not claim that a
 live model was invoked or that downstream AC16 has adopted the seam. Those are
 separate runtime and consumer evidence boundaries.
+
+Revision `657a98f` now owns the [current repository source binding](revision-657a98f.md)
+after a packaging-only Python 3.10 compatibility correction.
 
 # Citations
 

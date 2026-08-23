@@ -10,6 +10,9 @@
   home custody, identity receipts, and fail-loud streaming behavior.
 - **Maintenance** | Recounted the current 165 Python modules by package and
   moved the default freshness check to the new immutable manifest.
+- **Compatibility** | Advanced the current binding to `657a98f` after LiteLLM
+  1.98.0 broke Python 3.10 imports; constrained only Python below 3.11 and
+  retained the exact-session implementation at `917318b`.
 
 ## 2026-08-16
 

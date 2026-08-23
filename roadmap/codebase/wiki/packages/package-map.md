@@ -4,7 +4,7 @@ title: Whole-Repository Package Map
 description: Package-level coverage of all 165 Python modules at the current source revision.
 created: 2026-08-16
 updated: 2026-08-22
-sources: [../sources/revision-917318b.md, ../../../../llm_client]
+sources: [../sources/revision-657a98f.md, ../../../../llm_client]
 confidence: high
 ---
 
@@ -33,13 +33,13 @@ changes, start in `core/`; for an agent or MCP behavior, start in `agent/` and
 transport.
 
 This table covers the entire current source surface at package level. The
-[source-ingest page](../sources/revision-917318b.md) records exact counts and
+[source-ingest page](../sources/revision-657a98f.md) records exact counts and
 limits. Detailed symbol signatures and docstrings remain in older capsules;
 current exact claims reopen native source rather than projecting older symbol
-counts onto revision `917318b`.
+counts onto revision `657a98f`.
 
 # Citations
 
-1. [Exact source tree](https://github.com/BrianMills2718/llm_client/tree/917318bf5d9087cff5148409a52a068103496c6f/llm_client)
-2. [Current source coverage and provenance](../sources/revision-917318b.md)
+1. [Exact source tree](https://github.com/BrianMills2718/llm_client/tree/657a98f135f6e0665cf34d81a8e8655c387dce69/llm_client)
+2. [Current source coverage and provenance](../sources/revision-657a98f.md)
 3. [Runtime architecture](../architecture.md)

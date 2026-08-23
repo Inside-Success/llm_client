@@ -76,7 +76,7 @@ vertical or evidence that AC16 succeeds.
 - `llm_client/sdk/agents.py` (modify)
 - `llm_client/sdk/agents_codex.py` (modify)
 - `tests/test_agents.py` (modify)
-- `pyproject.toml` (modify: preserve advertised Python 3.10 installability)
+- `pyproject.toml` (modify: preserve advertised supported-Python installability)
 - `docs/guides/codex-integration.md` (modify)
 - `docs/plans/363_codex_session_continuation.md` (create)
 - `docs/plans/CLAUDE.md` (modify)

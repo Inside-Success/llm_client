@@ -525,7 +525,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--manifest",
         type=Path,
-        default=Path("roadmap/codebase/raw/source-manifest-917318b-company-f4a08fe.json"),
+        default=Path("roadmap/codebase/raw/source-manifest-657a98f-company-f4a08fe.json"),
     )
     parser.add_argument(
         "--external-repository",
