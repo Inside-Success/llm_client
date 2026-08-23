@@ -43,6 +43,8 @@ adversarial-review checkpoints, test commands, and completion criteria.
   proves wiki-first navigation back to native source.
 - **Completed wiki maintenance vertical:** Plan #359 enforces source freshness
   and ingests the separately owned Inside Success downstream capsule.
+- **Implemented provider-free:** Plan #363 adds explicit exact-session Codex CLI
+  resume/fork controls; AC16 downstream adoption remains open.
 - **Canonical main:** current `main` (verify its revision at integration time).
 - **Merged, awaiting downstream acceptance:** Plans #121, #122, #124, and
   #334. Plan #124's shared implementation is verified locally; its remaining
@@ -56,6 +58,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 363 | [Codex CLI Session Continuation](363_codex_session_continuation.md) | High | 🚧 Implemented (downstream adoption pending) | AC16 Plan #02 exact-session healing harness |
 | 359 | [Codebase Wiki Freshness and Dual-Lineage Ingest](359_codebase_wiki_freshness_and_dual_lineage.md) | Critical | ✅ Complete | Trustworthy ongoing personal/company wiki navigation |
 | 358 | [Revision-Grounded Karpathy Codebase Wiki](358_llm_client_karpathy_codebase_wiki.md) | Critical | ✅ Complete | Fresh-session wiki-first architecture navigation |
 | 361 | [Compatibility-Aware Workload Route Selection](361_workload_route_selection.md) | High | ❓  | explicit Codex/API/OpenRouter provider selection |

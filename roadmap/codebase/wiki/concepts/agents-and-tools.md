@@ -3,7 +3,7 @@ type: concept
 title: Agents and Tools
 description: How agent SDK routing, MCP turns, Python tools, contracts, artifacts, and evidence compose with the core runtime.
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-08-22
 sources: [../../../../llm_client/agent, ../../../../llm_client/tools, ../../../../llm_client/sdk]
 confidence: high
 ---
@@ -24,6 +24,20 @@ carry task/trace/budget identity and use the routing and observability
 substrate. Tool executions have their own typed result and durable logging so
 an agent trace can distinguish provider work from non-LLM actions.
 
+# Exact Codex session control
+
+Codex's non-streaming CLI adapter supports explicit `fresh`, `resume`, and
+`fork` modes. A session-aware caller supplies one dedicated, persistent Codex
+home for the lineage; the adapter keeps ordinary one-shot homes temporary,
+requires a returned session identity, verifies resume/fork identity semantics,
+and exposes an opaque home identity in `LLMCallResult.raw_response`.
+
+This is intentionally narrower than workflow recovery policy. The adapter owns
+transport, persistence custody, and receipts; a downstream controller decides
+which role may resume or fork and at what recovery tier. Streaming rejects
+explicit session modes because its SDK path cannot yet meet the same receipt
+contract.
+
 # Navigation
 
 Begin in `agent/mcp_agent.py` for the public MCP loop, then follow the turn
@@ -37,3 +51,4 @@ systems live in `workflow/`; see the [package map](../packages/package-map.md).
 1. [Agent package at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/agent)
 2. [`callable_to_openai_tool`, lines 457–538](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/tools/tool_utils.py#L457-L538)
 3. [Typed tool-call observability](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/tool_calls.py#L1-L161)
+4. [Current exact-session adapter](https://github.com/BrianMills2718/llm_client/blob/917318bf5d9087cff5148409a52a068103496c6f/llm_client/sdk/agents_codex.py#L650-L930)

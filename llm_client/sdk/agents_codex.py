@@ -11,6 +11,7 @@ re-exported from agents.py for backward compatibility.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json as _json
 import logging
 import multiprocessing as _mp
@@ -238,6 +239,7 @@ def _prepare_codex_mcp(kwargs: dict[str, Any]) -> tuple[dict[str, Any], str | No
     Returns:
         (updated_kwargs, tmp_dir_to_cleanup_or_None)
     """
+    _require_persistent_codex_home(kwargs)
     if "codex_home" in kwargs:
         if "mcp_servers" in kwargs:
             raise ValueError("Cannot specify both 'mcp_servers' and 'codex_home'")
@@ -258,6 +260,26 @@ def _cleanup_tmp(tmp_dir: str | None) -> None:
     """Remove a temporary codex home directory if it exists."""
     if tmp_dir:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _require_persistent_codex_home(kwargs: dict[str, Any]) -> None:
+    """Require caller-owned session storage for an explicit session contract."""
+
+    if "codex_session_mode" not in kwargs:
+        return
+    mode, _ = _codex_session_contract(kwargs)
+    raw_home = kwargs.get("codex_home")
+    if not isinstance(raw_home, (str, os.PathLike)) or not str(raw_home).strip():
+        raise ValueError(
+            f"Codex session mode {mode!r} requires a persistent caller-owned "
+            "codex_home"
+        )
+    home = Path(raw_home).expanduser().resolve()
+    if not (home / ".codex").is_dir():
+        raise ValueError(
+            "Persistent codex_home must contain an existing .codex directory"
+        )
+    kwargs["codex_home"] = str(home)
 
 
 def _as_bool(value: Any, *, default: bool = False) -> bool:
@@ -642,19 +664,34 @@ def _build_codex_cli_command(
     reasoning_effort = _agents_mod()._normalize_codex_reasoning_effort(
         kwargs.get("model_reasoning_effort")
     )
-    command = [
-        cli_path,
-        "exec",
-        "--json",
-        "--color",
-        "never",
-        "-C",
-        working_directory,
-        "-s",
-        sandbox_mode,
-        "-o",
-        output_path,
-    ]
+    session_mode, session_id = _codex_session_contract(kwargs)
+    if session_mode == "fresh":
+        command = [
+            cli_path,
+            "exec",
+            "--json",
+            "--color",
+            "never",
+            "-C",
+            working_directory,
+            "-s",
+            sandbox_mode,
+            "-o",
+            output_path,
+        ]
+    else:
+        # Resume/fork are nested exec subcommands and do not accept `-C`, `-s`,
+        # or `--add-dir` themselves. Codex accepts those as global options.
+        command = [
+            cli_path,
+            "-C",
+            working_directory,
+            "-s",
+            sandbox_mode,
+        ]
+        for add_dir in kwargs.get("additional_directories", []) or []:
+            command.extend(["--add-dir", str(add_dir)])
+        command.extend(["exec", session_mode, "--json", "-o", output_path])
     if yolo_mode:
         command.append("--dangerously-bypass-approvals-and-sandbox")
     else:
@@ -671,10 +708,13 @@ def _build_codex_cli_command(
         command.extend(["--model", underlying_model])
     if reasoning_effort:
         command.extend(["-c", f'model_reasoning_effort="{reasoning_effort}"'])
-    for add_dir in kwargs.get("additional_directories", []) or []:
-        command.extend(["--add-dir", str(add_dir)])
+    if session_mode == "fresh":
+        for add_dir in kwargs.get("additional_directories", []) or []:
+            command.extend(["--add-dir", str(add_dir)])
     if schema_path is not None and output_schema is not None:
         command.extend(["--output-schema", schema_path])
+    if session_id is not None:
+        command.append(session_id)
     command.append("-")
 
     env = dict(os.environ)
@@ -682,6 +722,37 @@ def _build_codex_cli_command(
     if codex_home:
         env["CODEX_HOME"] = str(Path(codex_home) / ".codex")
     return command, env, prompt
+
+
+def _codex_session_contract(kwargs: dict[str, Any]) -> tuple[str, str | None]:
+    """Validate an exact fresh/resume/fork contract for the Codex CLI."""
+
+    mode = kwargs.get("codex_session_mode", "fresh")
+    session_id = kwargs.get("codex_session_id")
+    if mode not in {"fresh", "resume", "fork"}:
+        raise ValueError("Codex session mode must be fresh, resume, or fork")
+    if mode == "fresh":
+        if session_id is not None:
+            raise ValueError("Codex session id must be omitted for a fresh session")
+        return mode, None
+    if not isinstance(session_id, str) or not session_id.strip():
+        raise ValueError(f"Codex session id is required for {mode}")
+    if session_id != session_id.strip() or session_id.startswith("-"):
+        raise ValueError("Codex session id must be trimmed and must not begin with '-'")
+    if any(ord(character) < 32 for character in session_id):
+        raise ValueError("Codex session id must not contain control characters")
+    return mode, session_id
+
+
+def _require_codex_session_transport(kwargs: dict[str, Any], transport: str) -> None:
+    """Prevent an SDK call from silently replacing exact CLI continuation."""
+
+    _codex_session_contract(kwargs)
+    if "codex_session_mode" in kwargs and transport != "cli":
+        raise ValueError(
+            "Explicit Codex session mode requires codex_transport='cli'; "
+            "the SDK transport does not expose the session receipt contract"
+        )
 
 
 def _result_from_codex_cli(
@@ -692,6 +763,8 @@ def _result_from_codex_cli(
     session: dict[str, Any] | None = None,
     tool_calls: list[dict[str, Any]] | None = None,
     codex_events: list[dict[str, Any]] | None = None,
+    codex_home_sha256: str | None = None,
+    codex_home_persistence: str = "unknown",
     warning: str | None = None,
 ) -> LLMCallResult:
     """Build an `LLMCallResult` from direct Codex CLI output."""
@@ -714,6 +787,8 @@ def _result_from_codex_cli(
             "transport": transport,
             "session_id": session.get("session_id"),
             "n_turns": session.get("n_turns", 0),
+            "codex_home_sha256": codex_home_sha256,
+            "codex_home_persistence": codex_home_persistence,
         },
         cost_source="subscription_included",
         billing_mode="subscription_included",
@@ -721,6 +796,32 @@ def _result_from_codex_cli(
     if warning:
         result.warnings.append(warning)
     return result
+
+
+def _codex_home_sha256(env: dict[str, str]) -> str:
+    """Return an opaque identity for the effective Codex session store."""
+
+    configured = env.get("CODEX_HOME") or str(Path.home() / ".codex")
+    canonical = str(Path(configured).expanduser().resolve())
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _require_codex_session_receipt(
+    session: dict[str, Any],
+    kwargs: dict[str, Any],
+) -> None:
+    """Reject successful CLI output that cannot prove its session identity."""
+
+    mode, parent_id = _codex_session_contract(kwargs)
+    observed_id = session.get("session_id")
+    if not isinstance(observed_id, str) or not observed_id.strip():
+        raise ValueError("Codex CLI success did not report a session identity")
+    if mode == "resume" and observed_id != parent_id:
+        raise ValueError(
+            "Codex resume returned a different session identity than requested"
+        )
+    if mode == "fork" and observed_id == parent_id:
+        raise ValueError("Codex fork returned the parent session identity")
 
 
 def _call_codex_via_cli(
@@ -804,6 +905,7 @@ def _call_codex_via_cli(
             if not final_response:
                 raise ValueError("Empty response from Codex CLI")
             session = parse_codex_exec_events(completed.stdout, completed.stderr)
+            _require_codex_session_receipt(session, prepared_kwargs)
             codex_events = _extract_codex_cli_completed_items(completed.stdout)
             return _result_from_codex_cli(
                 model,
@@ -812,6 +914,16 @@ def _call_codex_via_cli(
                 session=session,
                 tool_calls=_codex_cli_tool_calls_from_completed_items(codex_events),
                 codex_events=codex_events,
+                codex_home_sha256=_codex_home_sha256(env),
+                codex_home_persistence=(
+                    "temporary"
+                    if codex_home_tmp is not None
+                    else (
+                        "caller_managed"
+                        if prepared_kwargs.get("codex_home")
+                        else "ambient"
+                    )
+                ),
                 warning=fallback_warning,
             )
     finally:
@@ -930,6 +1042,7 @@ async def _acall_codex(
         "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
     }
     transport = _codex_transport(kwargs)
+    _require_codex_session_transport(kwargs, transport)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
         return await _acall_codex_via_cli(model, messages, timeout=timeout, **kwargs)
@@ -991,6 +1104,7 @@ def _call_codex(
         "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
     }
     transport = _codex_transport(kwargs)
+    _require_codex_session_transport(kwargs, transport)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
         return _call_codex_via_cli(model, messages, timeout=timeout, **kwargs)
@@ -1113,6 +1227,7 @@ async def _acall_codex_structured(
         "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
     }
     transport = _codex_transport(kwargs)
+    _require_codex_session_transport(kwargs, transport)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
         llm_result = await _acall_codex_via_cli(
@@ -1197,6 +1312,7 @@ def _call_codex_structured(
         "agent_hard_timeout": _agent_hard_timeout(kwargs, requested_timeout),
     }
     transport = _codex_transport(kwargs)
+    _require_codex_session_transport(kwargs, transport)
     hard_timeout = _agent_hard_timeout(kwargs, timeout)
     if transport == "cli":
         llm_result = _call_codex_via_cli(
@@ -1273,6 +1389,17 @@ def _call_codex_structured(
 # ---------------------------------------------------------------------------
 
 
+def _reject_codex_session_streaming(kwargs: dict[str, Any]) -> None:
+    """Fail loud because Codex streaming currently starts only fresh SDK threads."""
+
+    _codex_session_contract(kwargs)
+    if "codex_session_mode" in kwargs:
+        raise ValueError(
+            "Explicit Codex session mode is not supported for streaming; "
+            "use a non-streaming codex_transport='cli' call"
+        )
+
+
 class AsyncCodexStream:
     """Async streaming wrapper for Codex SDK. Yields text from AgentMessageItem events."""
 
@@ -1284,6 +1411,7 @@ class AsyncCodexStream:
         timeout: int = 300,
         **kwargs: Any,
     ) -> None:
+        _reject_codex_session_streaming(kwargs)
         self._model = model
         self._hooks = hooks
         self._text_parts: list[str] = []
@@ -1378,6 +1506,7 @@ class CodexStream:
         timeout: int = 300,
         **kwargs: Any,
     ) -> None:
+        _reject_codex_session_streaming(kwargs)
         self._model = model
         self._hooks = hooks
         self._result: LLMCallResult | None = None
@@ -1598,6 +1727,17 @@ def parse_codex_exec_events(stdout_jsonl: str, stderr: str) -> dict[str, Any]:
             continue
 
         event_type = event.get("type", "")
+
+        if event_type == "thread.started":
+            thread_id = event.get("thread_id") or event.get("session_id")
+            if isinstance(thread_id, str) and thread_id.strip():
+                observed = thread_id.strip()
+                existing = result.get("session_id")
+                if existing and existing != observed:
+                    raise ValueError(
+                        "Codex CLI reported conflicting session identities"
+                    )
+                result["session_id"] = observed
 
         # Count turns from JSONL too (prefer JSONL over stderr count)
         if event_type == "turn.started":

@@ -1,16 +1,17 @@
 ---
 type: source
-title: Revision c2f3693 Source Ingest
-description: Current source binding, exact capsule verification, and the relationship to the previously accepted base capsule.
+title: Revision c2f3693 Capsule Ingest
+description: Historical capsule verification and its relationship to the previously accepted base capsule.
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-08-22
 sources: [../../raw/source-manifest.json, ../../raw/source-manifest-fc5ee7f-company-f4a08fe.json, revision-f194028.md]
 confidence: high
 ---
 
-# Current source binding
+# Historical source binding
 
-The wiki describes personal upstream `BrianMills2718/llm_client` at commit
+At the time of this ingest, the wiki described personal upstream
+`BrianMills2718/llm_client` at commit
 `c2f3693a7a8f1f2e211368c189a64df69dcb381f`, Git tree
 `57cf3a89ed3e8b4c3d955c5bbdec4dd87ccb7c77`. This revision advanced while the
 wiki branch was being prepared. Its delta from the accepted capsule base
@@ -35,22 +36,26 @@ The earlier content-addressed
 Meta artifact and provenance base. It is not mislabeled as current.
 
 Plan 359's [dual-lineage manifest](../../raw/source-manifest-fc5ee7f-company-f4a08fe.json)
-supersedes the original manifest for current freshness checks. It confirms that
+superseded the original manifest for freshness checks at that time. It confirms that
 the selected personal Python/config surface still matches this exact source
 revision while adding current authority hashes and the separate company
 capsule. The original manifest remains immutable evidence of this ingest.
+
+Revision `917318b` now owns the [current source binding](revision-917318b.md).
+This page and both older manifests remain lineage evidence rather than
+current-source authority.
 
 # Limits
 
 Capsules contain definitions, signatures, docstrings, typing state, and source
 anchors—not calls, imports, runtime state, deployment state, or provider health.
-Workflow relationships in this wiki were checked directly in the current
-source. A future Project Meta refresh can publish the verified current capsule
+Workflow relationships in this wiki were checked directly in that historical
+source. A future Project Meta refresh can publish a newer verified capsule
 without changing this authority boundary.
 
 # Citations
 
-1. [Current source tree](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
-2. [Current trace query source](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/query.py)
+1. [Pinned source tree](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
+2. [Pinned trace query source](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/query.py)
 3. [`source-manifest.json`](../../raw/source-manifest.json)
-4. [Current dual-lineage manifest](../../raw/source-manifest-fc5ee7f-company-f4a08fe.json)
+4. [Historical dual-lineage manifest](../../raw/source-manifest-fc5ee7f-company-f4a08fe.json)

@@ -1,5 +1,19 @@
 # Update Log
 
+## 2026-08-22
+
+- **Ingest** | Bound the full Python/config surface to source revision
+  `917318b`, tree `cfdb8d2`, 166 tracked surface files, and digest
+  `sha256:72269551...3f0d83`; retained older capsule lineages without claiming
+  they describe the current revision.
+- **Update** | Documented exact Codex fresh/resume/fork transport, persistent
+  home custody, identity receipts, and fail-loud streaming behavior.
+- **Maintenance** | Recounted the current 165 Python modules by package and
+  moved the default freshness check to the new immutable manifest.
+- **Compatibility** | Advanced the current binding to `657a98f` after LiteLLM
+  1.98.0 broke Python 3.10 imports; constrained only Python below 3.11 and
+  retained the exact-session implementation at `917318b`.
+
 ## 2026-08-16
 
 - **Ingest** | Added the separately owned Inside Success downstream at
