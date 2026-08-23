@@ -76,6 +76,7 @@ vertical or evidence that AC16 succeeds.
 - `llm_client/sdk/agents.py` (modify)
 - `llm_client/sdk/agents_codex.py` (modify)
 - `tests/test_agents.py` (modify)
+- `pyproject.toml` (modify: preserve advertised Python 3.10 installability)
 - `docs/guides/codex-integration.md` (modify)
 - `docs/plans/363_codex_session_continuation.md` (create)
 - `docs/plans/CLAUDE.md` (modify)
@@ -126,6 +127,8 @@ vertical or evidence that AC16 succeeds.
 - [x] Existing working-directory, sandbox, model, effort, network, search, MCP,
       timeout, and returned-session behavior remains owned by `llm_client`.
 - [x] Focused provider-free tests pass without launching Codex.
+- [x] Core package import remains installable on advertised Python 3.10 and
+      current Python 3.12 environments.
 - [ ] AC16 pins the merged revision and proves exact-role resume routing through
       this shared seam; that downstream adoption is a separate unit.
 
