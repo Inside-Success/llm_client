@@ -62,6 +62,13 @@ class LLMCallResultSchema(BaseModel):
             "else empty list"
         ),
     )
+    codex_jsonl: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Exact nonblank lines exposed by direct Codex CLI stdout in stream order, "
+            "else empty list"
+        ),
+    )
     finish_reason: str = Field(
         default="",
         description='Why the model stopped: "stop", "length", "tool_calls", "content_filter", etc.',
