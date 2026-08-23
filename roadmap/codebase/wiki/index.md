@@ -2,7 +2,7 @@
 
 Start here for architecture and code-navigation questions. This is a compiled,
 interlinked explanation of the complete Python repository at revision
-`c2f3693a7a8f1f2e211368c189a64df69dcb381f`. It is derived orientation: follow
+`917318bf5d9087cff5148409a52a068103496c6f`. It is derived orientation: follow
 its links, then reopen native source before changing code or making an exact
 claim.
 
@@ -12,7 +12,7 @@ claim.
 | --- | --- |
 | What is this repository and what does it own? | [Overview](overview.md) |
 | How do the main layers connect? | [Architecture](architecture.md) |
-| Where does each of the 155 Python files belong? | [Package map](packages/package-map.md) |
+| Where does each of the 165 Python files belong? | [Package map](packages/package-map.md) |
 | What happens during a normal text call? | [Text-call lifecycle](workflows/text-call-lifecycle.md) |
 | What happens during a typed structured call? | [Structured-call lifecycle](workflows/structured-call-lifecycle.md) |
 | Why are there personal and company repositories? | [Personal and Inside Success lineage](lineage/personal-and-inside-success.md) |
@@ -28,12 +28,13 @@ claim.
 
 ## Source and maintenance
 
-- [Revision `c2f3693` source ingest](sources/revision-c2f3693.md) — current source, capsule verification, provenance, and limits.
+- [Revision `917318b` source ingest](sources/revision-917318b.md) — current source, exact Codex-session seam, provenance, and limits.
+- [Revision `c2f3693` capsule ingest](sources/revision-c2f3693.md) — prior verified personal capsule evidence.
 - [Inside Success revision `f4a08fe` source ingest](sources/inside-success-f4a08fe.md) — separate company capsule, exact downstream differences, and provenance limits.
 - [Revision `f194028` base capsule](sources/revision-f194028.md) — accepted Project Meta capsule retained as prior source evidence.
 - [Update log](log.md) — ingests, queries filed back, and lint results.
 
 The wiki indexes the full repository at package level and deepens the most
-important cross-package flows. It does not reproduce 1,079 symbol records as
-Markdown pages; those remain in the revision-bound capsule and are opened only
-when a question needs that level of detail.
+important cross-package flows. Detailed symbol records remain in the older
+revision-bound capsules and are reopened only when a question needs that level
+of detail; exact current claims return to native source at `917318b`.
