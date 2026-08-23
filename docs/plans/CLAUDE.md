@@ -38,6 +38,9 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 ## Current Execution
 
+- **Implemented, awaiting downstream acceptance:** Plan #364 binds Codex lifecycle failures to an opaque
+  executing-account digest so multi-account consumers cannot confuse one
+  profile's usage limit with global Luna capacity.
 - **Completed documentation vertical:** Plan #358 compiles the revision-bound
   `llm_client` capsule and exact source into a Karpathy-style codebase wiki and
   proves wiki-first navigation back to native source.
@@ -58,6 +61,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 364 | [Codex Account Identity Receipts](364_codex_account_identity_receipts.md) | Critical | 🚧 Implemented (WhyGame acceptance pending) | deterministic multi-account Codex consumers |
 | 363 | [Codex CLI Session Continuation](363_codex_session_continuation.md) | High | 🚧 Implemented (downstream adoption pending) | AC16 Plan #02 exact-session healing harness |
 | 359 | [Codebase Wiki Freshness and Dual-Lineage Ingest](359_codebase_wiki_freshness_and_dual_lineage.md) | Critical | ✅ Complete | Trustworthy ongoing personal/company wiki navigation |
 | 358 | [Revision-Grounded Karpathy Codebase Wiki](358_llm_client_karpathy_codebase_wiki.md) | Critical | ✅ Complete | Fresh-session wiki-first architecture navigation |

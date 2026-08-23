@@ -120,6 +120,17 @@ reject every explicit session mode because the current stream implementation
 uses the SDK and can only start a fresh thread; use the non-streaming CLI
 transport for exact session control.
 
+### Multi-account identity
+
+Consumers that must use one specific ChatGPT account should always pass a
+caller-owned `codex_home`; an omitted value deliberately inherits the mutable
+ambient `CODEX_HOME` or `~/.codex` login. Public non-streaming lifecycle events
+record `codex_auth_binding` (`explicit` or `ambient`) and, when ChatGPT account
+metadata is available, `codex_account_id_sha256`. The digest is stable for the
+account but does not retain the raw account ID, authentication tokens, email, or
+profile path. A provider usage-limit response is therefore attributable only to
+the recorded account digest, not to Codex or the requested model globally.
+
 Both transports honor explicit `network_access_enabled=True` and
 `web_search_enabled=True`. The CLI route enables network access within the
 workspace-write sandbox and forwards web search through Codex's native

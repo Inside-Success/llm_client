@@ -8,6 +8,7 @@ the wrapper-side liveness logic was restored.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -97,6 +98,17 @@ def _typed_lifecycle_phases(logical_call_id: str) -> list[str]:
         (logical_call_id,),
     ).fetchall()
     return [str(row[0]) for row in rows]
+
+
+def _typed_lifecycle_payloads(trace_id: str) -> list[dict[str, Any]]:
+    """Return stored typed lifecycle payloads for one exact trace."""
+
+    rows = io_log._get_db().execute(
+        """SELECT payload FROM call_lifecycle_events
+           WHERE trace_id = ? ORDER BY id""",
+        (trace_id,),
+    ).fetchall()
+    return [json.loads(str(row[0])) for row in rows]
 
 
 def _lifecycle_rows() -> list[tuple[str, dict[str, Any]]]:
@@ -294,6 +306,62 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
     assert completed["progress_observable"] is True
     assert completed["progress_source"] == "unit_test"
     assert completed["progress_event_count"] == 1
+
+
+def test_codex_explicit_account_digest_is_retained_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A failed Codex call keeps opaque account evidence without secrets or paths."""
+
+    account_id = "acct-multi-account-regression"
+    profile_home = tmp_path / "profile"
+    config_dir = profile_home / ".codex"
+    config_dir.mkdir(parents=True)
+    (config_dir / "auth.json").write_text(
+        json.dumps(
+            {
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "account_id": account_id,
+                    "access_token": "must-not-be-retained",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # mock-ok: forces the provider failure boundary after lifecycle start.
+    def _failed_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        raise RuntimeError("usage limit on selected account")
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _failed_impl,
+    )
+    trace_id = "trace.lifecycle.codex-account-failure"
+    with pytest.raises(RuntimeError, match="usage limit"):
+        client.call_llm_structured(
+            "codex/gpt-5.6-luna",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.codex-account",
+            trace_id=trace_id,
+            max_budget=0.1,
+            codex_home=str(profile_home),
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    payloads = _typed_lifecycle_payloads(trace_id)
+    assert [payload["phase"] for payload in payloads] == ["started", "failed"]
+    expected_digest = "sha256:" + hashlib.sha256(account_id.encode()).hexdigest()
+    for payload in payloads:
+        assert payload["codex_auth_binding"] == "explicit"
+        assert payload["codex_account_id_sha256"] == expected_digest
+        serialized = json.dumps(payload, sort_keys=True)
+        assert account_id not in serialized
+        assert "must-not-be-retained" not in serialized
+        assert str(profile_home) not in serialized
 
 
 def test_composed_sync_structured_call_emits_one_terminal_lifecycle(
