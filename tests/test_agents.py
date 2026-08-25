@@ -1496,11 +1496,13 @@ class TestCodexCall:
         assert normalized == 0
         assert "TIMEOUT_DISABLED[test_agents_timeout]: timeout=42s ignored" in caplog.text
 
-    def test_timeout_policy_ban_auto_transport_prefers_cli_with_hard_timeout(
+    def test_timeout_policy_ban_auto_transport_preserves_requested_cli_hard_timeout(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Auto transport should choose CLI immediately when provider timeouts are disabled."""
+        """Auto transport retains a bounded CLI deadline when provider timeouts are disabled."""
+
+        calls: dict[str, object] = {}
 
         def _unexpected_sdk(
             model: str,
@@ -1520,7 +1522,8 @@ class TestCodexCall:
             fallback_warning: str | None = None,
             **kwargs: object,
         ) -> LLMCallResult:
-            del messages, output_schema, kwargs
+            del messages, output_schema
+            calls["agent_hard_timeout"] = kwargs.get("agent_hard_timeout")
             return LLMCallResult(
                 content=f"cli via auto {timeout}",
                 usage={},
@@ -1542,7 +1545,6 @@ class TestCodexCall:
             [{"role": "user", "content": "Hi"}],
             codex_transport="auto",
             timeout=99,
-            agent_hard_timeout=21,
             reasoning_effort="medium",
             task="test",
             trace_id="test_agent_timeout_ban_cli_auto",
@@ -1551,7 +1553,56 @@ class TestCodexCall:
 
         assert result.content == "cli via auto 0"
         assert result.raw_response == {"transport": "codex_cli"}
+        assert calls["agent_hard_timeout"] == 99
         assert any("CODEX_TRANSPORT_AUTO[sdk->cli]" in warning for warning in result.warnings)
+
+    def test_agent_hard_timeout_env_overrides_requested_deadline(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A process-level Codex bound protects downstreams without code changes."""
+
+        calls: dict[str, object] = {}
+
+        def _fake_cli(
+            model: str,
+            messages: list[dict[str, object]],
+            *,
+            timeout: int = 300,
+            output_schema: dict[str, object] | None = None,
+            fallback_warning: str | None = None,
+            **kwargs: object,
+        ) -> LLMCallResult:
+            del messages, output_schema
+            calls["agent_hard_timeout"] = kwargs.get("agent_hard_timeout")
+            return LLMCallResult(
+                content=f"cli via auto {timeout}",
+                usage={},
+                cost=0.0,
+                model=model,
+                finish_reason="stop",
+                warnings=[fallback_warning] if fallback_warning else [],
+                raw_response={"transport": "codex_cli"},
+            )
+
+        monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+        monkeypatch.setenv("LLM_CLIENT_AGENT_HARD_TIMEOUT", "180")
+        monkeypatch.setattr(agents_mod, "_call_codex_via_cli", _fake_cli)
+        monkeypatch.setattr(agents_codex_mod, "_call_codex_via_cli", _fake_cli)
+        result = call_llm(
+            "codex",
+            [{"role": "user", "content": "Hi"}],
+            codex_transport="auto",
+            timeout=60,
+            reasoning_effort="medium",
+            task="test",
+            trace_id="test_agent_hard_timeout_env",
+            max_budget=0,
+        )
+
+        assert result.content == "cli via auto 0"
+        assert calls["agent_hard_timeout"] == 180
+        assert any("agent_hard_timeout=180s" in warning for warning in result.warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -2209,6 +2260,159 @@ class TestCodexFallback:
         assert 'model_reasoning_effort="high"' in command
         assert stdin_payload == "Reply with OK only."
 
+    def test_build_codex_cli_command_forwards_network_and_search(self, tmp_path) -> None:
+        """CLI fallback should retain explicitly requested agent capabilities."""
+
+        command, _env, _stdin_payload = _build_codex_cli_command(
+            "codex",
+            "Research one public source.",
+            output_schema=None,
+            kwargs={
+                "working_directory": str(tmp_path),
+                "approval_policy": "never",
+                "sandbox_mode": "workspace-write",
+                "model_reasoning_effort": "medium",
+                "network_access_enabled": True,
+                "web_search_enabled": True,
+            },
+            output_path=str(tmp_path / "last.txt"),
+            schema_path=None,
+        )
+
+        assert "sandbox_workspace_write.network_access=true" in command
+        assert "tools.web_search=true" in command
+        assert command[command.index("-s") + 1] == "workspace-write"
+
+    @pytest.mark.parametrize("session_mode", ["resume", "fork"])
+    def test_build_codex_cli_command_targets_exact_session(
+        self,
+        tmp_path: Path,
+        session_mode: str,
+    ) -> None:
+        """Continuation must name one exact Codex session on the CLI transport."""
+
+        command, _env, stdin_payload = _build_codex_cli_command(
+            "codex/gpt-5.6-luna",
+            "Repair only the failing component.",
+            output_schema=None,
+            kwargs={
+                "working_directory": str(tmp_path),
+                "approval_policy": "never",
+                "sandbox_mode": "workspace-write",
+                "model_reasoning_effort": "medium",
+                "codex_session_mode": session_mode,
+                "codex_session_id": "0198-session-id",
+            },
+            output_path=str(tmp_path / "last.txt"),
+            schema_path=None,
+        )
+
+        assert command[:5] == [
+            "codex",
+            "-C",
+            str(tmp_path),
+            "-s",
+            "workspace-write",
+        ]
+        exec_index = command.index("exec")
+        assert command[exec_index + 1] == session_mode
+        assert command[-2:] == ["0198-session-id", "-"]
+        assert stdin_payload == "Repair only the failing component."
+
+    @pytest.mark.parametrize(
+        ("session_mode", "session_id"),
+        [
+            ("fresh", "unexpected-parent"),
+            ("resume", None),
+            ("fork", ""),
+            ("invalid", "0198-session-id"),
+        ],
+    )
+    def test_build_codex_cli_command_rejects_invalid_session_contract(
+        self,
+        tmp_path: Path,
+        session_mode: str,
+        session_id: str | None,
+    ) -> None:
+        with pytest.raises(ValueError, match="Codex session"):
+            _build_codex_cli_command(
+                "codex",
+                "Continue.",
+                output_schema=None,
+                kwargs={
+                    "working_directory": str(tmp_path),
+                    "model_reasoning_effort": "medium",
+                    "codex_session_mode": session_mode,
+                    "codex_session_id": session_id,
+                },
+                output_path=str(tmp_path / "last.txt"),
+                schema_path=None,
+            )
+
+    def test_codex_session_continuation_rejects_non_cli_transport(self) -> None:
+        """All four SDK routes must not impersonate exact CLI continuation."""
+
+        class Decision(BaseModel):
+            action: Literal["wait"]
+
+        kwargs = {
+            "timeout": 1,
+            "codex_transport": "auto",
+            "codex_session_mode": "resume",
+            "codex_session_id": "0198-session-id",
+            "model_reasoning_effort": "medium",
+        }
+        args = (
+            "codex/gpt-5.6-luna",
+            [{"role": "user", "content": "Continue."}],
+        )
+
+        with pytest.raises(ValueError, match="codex_transport='cli'"):
+            agents_codex_mod._call_codex(*args, **kwargs)
+        with pytest.raises(ValueError, match="codex_transport='cli'"):
+            asyncio.run(agents_codex_mod._acall_codex(*args, **kwargs))
+        with pytest.raises(ValueError, match="codex_transport='cli'"):
+            agents_codex_mod._call_codex_structured(
+                *args,
+                response_model=Decision,
+                **kwargs,
+            )
+        with pytest.raises(ValueError, match="codex_transport='cli'"):
+            asyncio.run(
+                agents_codex_mod._acall_codex_structured(
+                    *args,
+                    response_model=Decision,
+                    **kwargs,
+                )
+            )
+        with pytest.raises(ValueError, match="codex_transport='cli'"):
+            agents_codex_mod._call_codex(
+                *args,
+                timeout=1,
+                codex_transport="sdk",
+                codex_session_mode="fresh",
+                model_reasoning_effort="medium",
+            )
+
+    def test_codex_session_continuation_rejects_streaming_routes(self) -> None:
+        """Streaming must not silently replace an exact session with a fresh one."""
+
+        kwargs = {
+            "reasoning_effort": "medium",
+            "codex_transport": "cli",
+            "codex_session_mode": "resume",
+            "codex_session_id": "0198-session-id",
+            "task": "test_codex_session_stream_refusal",
+            "trace_id": "test_codex_session_stream_refusal",
+            "max_budget": 0,
+        }
+        messages = [{"role": "user", "content": "Continue."}]
+
+        with pytest.raises(LLMError, match="not supported for streaming"):
+            stream_llm("codex/gpt-5.6-luna", messages, **kwargs)
+        with pytest.raises(LLMError, match="not supported for streaming"):
+            asyncio.run(astream_llm("codex/gpt-5.6-luna", messages, **kwargs))
+
     def test_build_codex_cli_command_yolo_mode_sets_skip_git_repo_check(self, tmp_path) -> None:
         """yolo_mode should enable Codex's trusted-repo bypass convenience flag."""
 
@@ -2283,7 +2487,12 @@ class TestCodexFallback:
             del input, text, capture_output, check, timeout, env
             output_path = command[command.index("-o") + 1]
             Path(output_path).write_text("cli transport ok\n")
-            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+            event = {"type": "thread.started", "thread_id": "0198-cli-session"}
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(event),
+                stderr="",
+            )
 
         monkeypatch.setattr(agents_codex_mod.subprocess, "run", _fake_run)
 
@@ -2299,11 +2508,211 @@ class TestCodexFallback:
         )
 
         assert result.content == "cli transport ok"
-        assert result.raw_response == {
-            "transport": "codex_cli",
-            "session_id": None,
-            "n_turns": 0,
+        assert result.raw_response["transport"] == "codex_cli"
+        assert result.raw_response["session_id"] == "0198-cli-session"
+        assert result.raw_response["n_turns"] == 0
+        assert len(result.raw_response["codex_home_sha256"]) == 64
+        assert result.raw_response["codex_home_persistence"] == "temporary"
+
+    def test_public_codex_cli_call_resumes_exact_session(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Public call kwargs must reach the owned CLI continuation boundary."""
+
+        observed_kwargs: dict[str, object] = {}
+        (tmp_path / ".codex").mkdir()
+
+        def _fake_cli(
+            model: str,
+            messages: list[dict[str, object]],
+            *,
+            timeout: int = 300,
+            output_schema: dict[str, object] | None = None,
+            fallback_warning: str | None = None,
+            **kwargs: object,
+        ) -> LLMCallResult:
+            del messages, timeout, output_schema, fallback_warning
+            observed_kwargs.update(kwargs)
+            return LLMCallResult(
+                content="repair complete",
+                usage={"input_tokens": 2, "output_tokens": 3},
+                cost=0.0,
+                model=model,
+                raw_response={
+                    "transport": "codex_cli",
+                    "session_id": "0198-session-id",
+                    "n_turns": 1,
+                },
+                billing_mode="subscription_included",
+                cost_source="subscription_included",
+            )
+
+        monkeypatch.setattr(agents_mod, "_call_codex_via_cli", _fake_cli)
+        monkeypatch.setattr(agents_codex_mod, "_call_codex_via_cli", _fake_cli)
+
+        result = call_llm(
+            "codex",
+            [{"role": "user", "content": "Repair only the failing component."}],
+            execution_mode="workspace_agent",
+            codex_transport="cli",
+            codex_session_mode="resume",
+            codex_session_id="0198-session-id",
+            codex_home=str(tmp_path),
+            working_directory=str(tmp_path),
+            reasoning_effort="medium",
+            task="test_codex_exact_resume",
+            trace_id="test_codex_exact_resume",
+            max_budget=0,
+        )
+
+        assert observed_kwargs["codex_session_mode"] == "resume"
+        assert observed_kwargs["codex_session_id"] == "0198-session-id"
+        assert result.content == "repair complete"
+        assert result.raw_response["session_id"] == "0198-session-id"
+
+    def test_codex_cli_fresh_resume_fork_share_persistent_home_and_prove_identity(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """A real adapter lifecycle must retain storage and verify each thread receipt."""
+
+        session_home = tmp_path / "session-home"
+        (session_home / ".codex").mkdir(parents=True)
+        observed_homes: list[str] = []
+
+        def _fake_run(command, *, input, text, capture_output, check, timeout, env):
+            del input, text, capture_output, check, timeout
+            observed_homes.append(env["CODEX_HOME"])
+            output_path = command[command.index("-o") + 1]
+            Path(output_path).write_text("completed\n")
+            if "fork" in command:
+                thread_id = "0198-forked-session"
+            else:
+                thread_id = "0198-parent-session"
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {"type": "thread.started", "thread_id": thread_id}
+                ),
+                stderr="",
+            )
+
+        monkeypatch.setattr(agents_codex_mod.subprocess, "run", _fake_run)
+        common = {
+            "working_directory": str(tmp_path),
+            "codex_home": str(session_home),
+            "codex_transport": "cli",
+            "model_reasoning_effort": "medium",
         }
+
+        fresh = agents_codex_mod._call_codex_via_cli(
+            "codex",
+            [{"role": "user", "content": "Start."}],
+            codex_session_mode="fresh",
+            **common,
+        )
+        resumed = agents_codex_mod._call_codex_via_cli(
+            "codex",
+            [{"role": "user", "content": "Continue."}],
+            codex_session_mode="resume",
+            codex_session_id="0198-parent-session",
+            **common,
+        )
+        forked = agents_codex_mod._call_codex_via_cli(
+            "codex",
+            [{"role": "user", "content": "Explore another repair."}],
+            codex_session_mode="fork",
+            codex_session_id="0198-parent-session",
+            **common,
+        )
+
+        assert fresh.raw_response["session_id"] == "0198-parent-session"
+        assert resumed.raw_response["session_id"] == "0198-parent-session"
+        assert forked.raw_response["session_id"] == "0198-forked-session"
+        assert len(set(observed_homes)) == 1
+        assert observed_homes[0] == str(session_home / ".codex")
+        assert len({
+            fresh.raw_response["codex_home_sha256"],
+            resumed.raw_response["codex_home_sha256"],
+            forked.raw_response["codex_home_sha256"],
+        }) == 1
+        assert fresh.raw_response["codex_home_persistence"] == "caller_managed"
+        assert session_home.exists()
+
+    def test_explicit_codex_session_mode_requires_persistent_home(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        with pytest.raises(ValueError, match="persistent caller-owned codex_home"):
+            agents_codex_mod._call_codex_via_cli(
+                "codex",
+                [{"role": "user", "content": "Start."}],
+                working_directory=str(tmp_path),
+                codex_session_mode="fresh",
+            )
+
+    @pytest.mark.parametrize(
+        ("mode", "parent_id", "observed_id", "message"),
+        [
+            ("fresh", None, None, "did not report a session identity"),
+            (
+                "resume",
+                "0198-parent",
+                "0198-other",
+                "different session identity",
+            ),
+            ("fork", "0198-parent", "0198-parent", "parent session identity"),
+        ],
+    )
+    def test_codex_cli_rejects_unproven_or_wrong_session_receipt(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        mode: str,
+        parent_id: str | None,
+        observed_id: str | None,
+        message: str,
+    ) -> None:
+        session_home = tmp_path / "session-home"
+        (session_home / ".codex").mkdir(parents=True)
+
+        def _fake_run(command, *, input, text, capture_output, check, timeout, env):
+            del input, text, capture_output, check, timeout, env
+            output_path = command[command.index("-o") + 1]
+            Path(output_path).write_text("completed\n")
+            stdout = ""
+            if observed_id is not None:
+                stdout = json.dumps(
+                    {"type": "thread.started", "thread_id": observed_id}
+                )
+            return types.SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+        monkeypatch.setattr(agents_codex_mod.subprocess, "run", _fake_run)
+        session_kwargs: dict[str, object] = {"codex_session_mode": mode}
+        if parent_id is not None:
+            session_kwargs["codex_session_id"] = parent_id
+
+        with pytest.raises(ValueError, match=message):
+            agents_codex_mod._call_codex_via_cli(
+                "codex",
+                [{"role": "user", "content": "Continue."}],
+                working_directory=str(tmp_path),
+                codex_home=str(session_home),
+                model_reasoning_effort="medium",
+                **session_kwargs,
+            )
+
+    def test_parse_codex_exec_events_rejects_conflicting_session_ids(self) -> None:
+        with pytest.raises(ValueError, match="conflicting session identities"):
+            agents_codex_mod.parse_codex_exec_events(
+                json.dumps(
+                    {"type": "thread.started", "thread_id": "0198-jsonl"}
+                ),
+                "session id: 0198-stderr",
+            )
 
     def test_call_codex_via_cli_exposes_completed_items_on_public_result(
         self,
@@ -2316,16 +2725,20 @@ class TestCodexFallback:
             {"id": "web-1", "type": "web_search", "status": "completed"},
         ]
 
+        raw_lines = [
+            json.dumps({"type": "thread.started", "thread_id": "0198-items"}),
+            *(json.dumps({"type": "item.completed", "item": item}) for item in items),
+            '{"type":"future.event","value":1}',
+            "malformed-json",
+        ]
+
         def _fake_run(command, *, input, text, capture_output, check, timeout, env):
             del input, text, capture_output, check, timeout, env
             output_path = command[command.index("-o") + 1]
             Path(output_path).write_text("structured response\n")
             return types.SimpleNamespace(
                 returncode=0,
-                stdout="\n".join(
-                    json.dumps({"type": "item.completed", "item": item})
-                    for item in items
-                ),
+                stdout="\n\n" + "\n".join(raw_lines) + "\n  \n",
                 stderr="",
             )
 
@@ -2341,7 +2754,14 @@ class TestCodexFallback:
         )
 
         assert result.codex_events == items
+        assert result.codex_jsonl == raw_lines
         assert result.tool_calls == []
+
+        transferred = agents_codex_mod._deserialize_llm_result(
+            agents_codex_mod._serialize_llm_result(result)
+        )
+        assert transferred.codex_events == items
+        assert transferred.codex_jsonl == raw_lines
 
     def test_public_structured_call_retains_codex_completed_items(
         self,
@@ -2355,6 +2775,10 @@ class TestCodexFallback:
             {"id": "file-1", "type": "file_change", "status": "completed"},
             {"id": "web-1", "type": "web_search", "status": "completed"},
         ]
+        raw_lines = [
+            json.dumps({"type": "thread.started", "thread_id": "0198-items"}),
+            "malformed-json",
+        ]
 
         def _fake_cli(*args, **kwargs):
             del args, kwargs
@@ -2365,6 +2789,7 @@ class TestCodexFallback:
                 model="codex/gpt-5.6-luna",
                 resolved_model="codex/gpt-5.6-luna",
                 codex_events=items,
+                codex_jsonl=raw_lines,
                 finish_reason="stop",
                 raw_response={"transport": "codex_cli"},
                 cost_source="subscription_included",
@@ -2386,6 +2811,7 @@ class TestCodexFallback:
 
         assert decision == Decision(action="wait")
         assert result.codex_events == items
+        assert result.codex_jsonl == raw_lines
         assert result.raw_response == {"transport": "codex_cli"}
 
     def test_call_codex_via_cli_attaches_mcp_and_returns_tool_evidence(
@@ -2421,7 +2847,12 @@ class TestCodexFallback:
             }
             return types.SimpleNamespace(
                 returncode=0,
-                stdout=json.dumps(event),
+                stdout="\n".join([
+                    json.dumps(
+                        {"type": "thread.started", "thread_id": "0198-mcp"}
+                    ),
+                    json.dumps(event),
+                ]),
                 stderr="",
             )
 
@@ -2658,3 +3089,206 @@ class TestCodexMcpServers:
         from llm_client.sdk.agents import _cleanup_tmp
 
         _cleanup_tmp("/tmp/this_does_not_exist_12345")  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Best-effort agent session diagnostics (reads the claude CLI's own session
+# transcript to summarize what happened during a failed agent-SDK call)
+# ---------------------------------------------------------------------------
+
+
+class TestAgentSessionDiagnosticsUnit:
+    """Direct unit tests of the transcript-reading summarizer, independent of
+    any real SDK call."""
+
+    def test_slug_replaces_path_separators_with_hyphens(self) -> None:
+        from llm_client.sdk.agents_claude import _agent_session_project_dir
+
+        result = _agent_session_project_dir("/home/brian/code/ac15")
+        assert result.name == "-home-brian-code-ac15"
+
+    def test_summarizes_multiple_attempts_from_a_real_transcript(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cwd = "/fake/project/dir"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-project-dir"
+        project_dir.mkdir(parents=True)
+        transcript = project_dir / "session-1.jsonl"
+        entries = [
+            {"type": "last-prompt", "leafUuid": "leaf-1"},
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "thinking", "thinking": "x" * 100}]},
+            },
+            {"type": "last-prompt", "leafUuid": "leaf-2"},
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "thinking", "thinking": "y" * 50},
+                        {"type": "tool_use", "name": "StructuredOutput", "input": {}},
+                    ]
+                },
+            },
+        ]
+        transcript.write_text(
+            "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+        )
+
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        result = _summarize_failed_agent_session(cwd, now, now)
+
+        assert result is not None
+        assert "attempts=2" in result
+        assert "attempt1(thinking_chars=100, answered=False)" in result
+        assert "attempt2(thinking_chars=50, answered=True)" in result
+
+    def test_returns_none_when_no_project_dir_exists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        assert _summarize_failed_agent_session("/nowhere", now, now) is None
+
+    def test_returns_none_when_no_file_matches_the_time_window(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cwd = "/fake/project"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-project"
+        project_dir.mkdir(parents=True)
+        (project_dir / "old-session.jsonl").write_text(
+            json.dumps({"type": "last-prompt", "leafUuid": "leaf-1"}) + "\n",
+            encoding="utf-8",
+        )
+        import os
+        from datetime import datetime, timedelta, timezone
+
+        # Push the file's mtime well outside the +/-5s matching window.
+        old_time = (datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()
+        os.utime(project_dir / "old-session.jsonl", (old_time, old_time))
+
+        now = datetime.now(timezone.utc)
+        assert _summarize_failed_agent_session(cwd, now, now) is None
+
+    def test_never_raises_on_malformed_transcript_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Diagnostic capture must degrade to None, never propagate its own
+        exception -- it must never be the reason a real call fails."""
+        from llm_client.sdk.agents_claude import _summarize_failed_agent_session
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        cwd = "/fake/project"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-project"
+        project_dir.mkdir(parents=True)
+        (project_dir / "bad-session.jsonl").write_text(
+            "not json at all\n{also not json\n", encoding="utf-8"
+        )
+
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        assert _summarize_failed_agent_session(cwd, now, now) is None
+
+
+class TestAgentSessionDiagnosticsOnFailure:
+    """End-to-end: a failing structured agent call must attach the summary as
+    an exception note, without changing the raised exception type."""
+
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    @pytest.mark.asyncio
+    async def test_structured_call_failure_gets_diagnostic_note(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        class _Answer(BaseModel):
+            x: int
+
+        async def _raising_query(prompt, options=None):
+            raise RuntimeError(
+                "Claude Code returned an error result: Failed to provide valid "
+                "structured output after 5 attempts"
+            )
+            yield  # pragma: no cover - unreachable; keeps this an async generator
+
+        monkeypatch.setattr(sys.modules["claude_agent_sdk"], "query", _raising_query)
+
+        cwd = "/fake/proj"
+        project_dir = tmp_path / ".claude" / "projects" / "-fake-proj"
+        project_dir.mkdir(parents=True)
+        transcript = project_dir / "session.jsonl"
+        transcript.write_text(
+            "\n".join(
+                json.dumps(e)
+                for e in [
+                    {"type": "last-prompt", "leafUuid": "leaf-1"},
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [{"type": "thinking", "thinking": "z" * 42}]
+                        },
+                    },
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(RuntimeError) as excinfo:
+            await acall_llm_structured(
+                "claude-code/sonnet",
+                [{"role": "user", "content": "hi"}],
+                response_model=_Answer,
+                task="test",
+                trace_id="test_diagnostics_on_failure",
+                max_budget=0,
+                cwd=cwd,
+            )
+
+        notes = getattr(excinfo.value, "__notes__", [])
+        assert any("agent_session_diagnostics" in n for n in notes), notes
+        assert any("thinking_chars=42" in n for n in notes), notes
+
+    @pytest.mark.usefixtures("_mock_agent_sdk")
+    @pytest.mark.asyncio
+    async def test_structured_call_failure_without_transcript_still_raises_cleanly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No matching transcript on disk -> no note attached, but the
+        original failure still propagates unchanged."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        class _Answer(BaseModel):
+            x: int
+
+        async def _raising_query(prompt, options=None):
+            raise RuntimeError("boom")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr(sys.modules["claude_agent_sdk"], "query", _raising_query)
+
+        with pytest.raises(RuntimeError, match="boom") as excinfo:
+            await acall_llm_structured(
+                "claude-code/sonnet",
+                [{"role": "user", "content": "hi"}],
+                response_model=_Answer,
+                task="test",
+                trace_id="test_diagnostics_missing_transcript",
+                max_budget=0,
+                cwd="/fake/nowhere",
+            )
+
+        assert not getattr(excinfo.value, "__notes__", [])

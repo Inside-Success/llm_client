@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import llm_client.io_log as _io_log
+from llm_client.core.errors import LLMBudgetReservationStoreError
 from llm_client.observability.call_receipts import (
     LLMCallReceiptV1,
     derive_started_at,
@@ -122,6 +123,12 @@ def _trace_family_match(candidate: Any, trace_id: str) -> bool:
     return candidate.endswith(f"/{trace_id}")
 
 
+def _rooted_trace_params(trace_id: str) -> tuple[str, str, str]:
+    """Return exact and indexed lexical bounds for one slash-delimited family."""
+
+    return trace_id, f"{trace_id}/", f"{trace_id}0"
+
+
 def lookup_result(trace_id: str) -> dict[str, Any] | None:
     """Look up a successful LLM call by trace_id."""
     db = _io_log._get_db()
@@ -208,10 +215,22 @@ def get_cost(
         raise ValueError(
             "At least one filter (trace_id, trace_prefix, task, project, since) is required."
         )
+    # get_cost() backs check_budget()'s enforcement gate (llm_client/execution/
+    # call_contracts.py). A silent 0.0 fallback here means "no spend recorded",
+    # which check_budget() reads as "budget not exceeded" — i.e. an unreachable
+    # or corrupted observability DB would silently disable every cost cap that
+    # depends on it (the 2026-08-18 llm_observability.db corruption window is
+    # exactly this case: "database disk image is malformed"). Fail loud instead
+    # of failing open: a cost check that can't verify spend must refuse to
+    # report a number, not report zero.
     try:
         db = _io_log._get_db()
-    except Exception:
-        return 0.0
+    except Exception as exc:
+        raise LLMBudgetReservationStoreError(
+            "cannot verify budget/spend: observability database is unavailable "
+            "(missing, locked, or corrupted); refusing to report cost as $0",
+            original=exc,
+        ) from exc
 
     total = 0.0
     for table in ("llm_calls", "embeddings"):
@@ -221,8 +240,10 @@ def get_cost(
             clauses.append("trace_id = ?")
             params.append(trace_id)
         if trace_prefix is not None:
-            clauses.append("(trace_id = ? OR trace_id LIKE ?)")
-            params.extend([trace_prefix, trace_prefix + "/%"])
+            clauses.append(
+                "(trace_id = ? OR (trace_id >= ? AND trace_id < ?))"
+            )
+            params.extend(_rooted_trace_params(trace_prefix))
         if task is not None:
             clauses.append("task = ?")
             params.append(task)
@@ -242,11 +263,18 @@ def get_cost(
         # ``check_same_thread=False`` permits sharing the connection but does
         # not make overlapping statements safe. Use the writer lock for every
         # statement on the shared connection.
-        with _io_log._db_write_lock:
-            row = db.execute(
-                f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
-                params,
-            ).fetchone()
+        try:
+            with _io_log._db_write_lock:
+                row = db.execute(
+                    f"SELECT {sum_expr} FROM {table} WHERE {where}",  # noqa: S608
+                    params,
+                ).fetchone()
+        except Exception as exc:
+            raise LLMBudgetReservationStoreError(
+                "cannot verify budget/spend: observability database query "
+                f"failed against table {table!r}; refusing to report cost as $0",
+                original=exc,
+            ) from exc
         total += row[0] if row else 0.0
     return total
 
@@ -263,7 +291,7 @@ def get_trace_tree(
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_iso = cutoff.isoformat()
-    like_pattern = trace_prefix + "/%"
+    trace_params = _rooted_trace_params(trace_prefix)
 
     rows = db.execute(
         """SELECT
@@ -278,11 +306,11 @@ def get_trace_tree(
             GROUP_CONCAT(DISTINCT model) as models_used
         FROM llm_calls
         WHERE trace_id IS NOT NULL
-          AND (trace_id = ? OR trace_id LIKE ?)
+          AND (trace_id = ? OR (trace_id >= ? AND trace_id < ?))
           AND timestamp >= ?
         GROUP BY trace_id
         ORDER BY MAX(timestamp) DESC""",
-        (trace_prefix, like_pattern, cutoff_iso),
+        (*trace_params, cutoff_iso),
     ).fetchall()
 
     prefix_len = len(trace_prefix)
@@ -313,48 +341,60 @@ def get_trace_tree(
     return result
 
 
-def summarize_trace(trace_id: str) -> dict[str, Any] | None:
+def summarize_trace(
+    trace_id: str,
+    *,
+    rooted: bool = False,
+) -> dict[str, Any] | None:
     """Return one compact cross-table summary for a trace.
 
     The goal is diagnosis, not replay fidelity. The summary answers the common
     questions that surfaced during grounded-research benchmark debugging:
     which LLM calls ran, which tool calls ran, what failed, and what completed
-    last without requiring bespoke SQL each time.
+    last without requiring bespoke SQL each time. Set ``rooted=True`` when
+    ``trace_id`` is the exact trace-family root. That path uses the trace index;
+    the compatibility default also finds a trace segment nested below an
+    unknown ancestor and may require a full scan.
     """
 
     db = _io_log._get_db()
     if db is None:
         return None
 
-    like_family = f"%/{trace_id}/%"
-    like_suffix = f"%/{trace_id}"
-    prefix = f"{trace_id}/%"
+    params: tuple[str, ...]
+    if rooted:
+        llm_where = "trace_id = ? OR (trace_id >= ? AND trace_id < ?)"
+        tool_where = llm_where
+        params = _rooted_trace_params(trace_id)
+    else:
+        like_family = f"%/{trace_id}/%"
+        like_suffix = f"%/{trace_id}"
+        prefix = f"{trace_id}/%"
+        llm_where = (
+            "trace_id = ? OR trace_id LIKE ? OR trace_id LIKE ? OR trace_id LIKE ?"
+        )
+        tool_where = llm_where
+        params = (trace_id, prefix, like_family, like_suffix)
 
     llm_rows = db.execute(
-        """
+        f"""
         SELECT trace_id, timestamp, model, caller, task, error, latency_s, finish_reason,
                COALESCE(marginal_cost, cost), total_tokens
         FROM llm_calls
-        WHERE trace_id = ?
-           OR trace_id LIKE ?
-           OR trace_id LIKE ?
-           OR trace_id LIKE ?
+        WHERE {llm_where}
         ORDER BY timestamp ASC, id ASC
         """,
-        (trace_id, prefix, like_family, like_suffix),
+        params,
     ).fetchall()
     tool_rows = db.execute(
-        """
+        f"""
         SELECT trace_id, timestamp, tool_name, operation, provider, status, task, target,
                duration_ms, error_type, error_message, cost, result_count
         FROM tool_calls
-        WHERE trace_id = ?
-           OR trace_id LIKE ?
-           OR trace_id LIKE ?
-           OR trace_id LIKE ?
+        WHERE {tool_where}
         ORDER BY timestamp ASC, id ASC
         """,
-        (trace_id, prefix, like_family, like_suffix),
+        params,
     ).fetchall()
 
     llm_rows = [row for row in llm_rows if _trace_family_match(row[0], trace_id)]
@@ -721,9 +761,13 @@ def get_background_mode_adoption(
 
     The log format is the task-graph `ExperimentRecord` JSONL, where
     `dimensions.reasoning_effort` and `dimensions.background_mode` are recorded.
+
+    experiments_path defaults to $LLM_CLIENT_DATA_ROOT/task_graph/experiments.jsonl
+    (LLM_CLIENT_DATA_ROOT defaults to ~/projects/data).
     """
     if experiments_path is None:
-        path = Path.home() / "projects" / "data" / "task_graph" / "experiments.jsonl"
+        data_root = Path(os.environ.get("LLM_CLIENT_DATA_ROOT", str(Path.home() / "projects" / "data")))
+        path = data_root / "task_graph" / "experiments.jsonl"
     else:
         path = Path(experiments_path)
 

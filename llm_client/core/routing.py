@@ -73,15 +73,22 @@ def resolve_call(request: CallRequest, config: ClientConfig) -> ResolvedCallPlan
         normalized = normalize_model_for_policy(raw, config.routing_policy)
         if normalized != raw:
             normalized_events.append({"from": raw, "to": normalized})
-            governance_event = describe_model_governance(raw, config.routing_policy)
-            if governance_event is not None:
-                provider_governance_events.append(
-                    {
-                        **governance_event,
-                        "from": raw,
-                        "to": normalized,
-                    }
-                )
+        # Governance rules (e.g. ExactAliasRule) can force a different
+        # route_class/provider/bill for a model even when the canonical
+        # string is identical to what the caller passed in (for example,
+        # a certified strict-schema route that pins a bare alias to direct
+        # OpenAI billing). Emit the governance event whenever a rule
+        # matched, not only when the model string itself changed, so a
+        # billing-relevant reroute is never silently invisible.
+        governance_event = describe_model_governance(raw, config.routing_policy)
+        if governance_event is not None:
+            provider_governance_events.append(
+                {
+                    **governance_event,
+                    "from": raw,
+                    "to": normalized,
+                }
+            )
         key = normalized.lower()
         if key in seen:
             continue

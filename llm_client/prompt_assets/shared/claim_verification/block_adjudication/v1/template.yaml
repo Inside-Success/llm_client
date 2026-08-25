@@ -1,0 +1,55 @@
+messages:
+  - role: user
+    content: |
+      A claim-verification judge blocked a piece of writing because of one
+      claim. Your job is not to re-judge the claim. It is to rule on whether
+      **the judge's objection holds up**.
+
+      Answer the question a careful reader would ask: does this objection
+      identify something actually wrong, or is it an objection to how the
+      sentence is worded?
+
+      Classify the objection as exactly one of:
+
+      - `upheld` — the objection is **correct**. The claim really does assert a
+        fact, relationship, quantity, or conclusion the cited evidence does not
+        support, and a reader would come away believing something untrue.
+        Blocking is warranted.
+      - `stylistic` — the objection is really about wording. The claim's
+        substance matches the evidence; the complaint is that a descriptive,
+        evaluative, or intensifying term is not stated in those exact words, or
+        that phrasing is stronger or looser than the source's. A reader would
+        understand the same thing either way. Blocking is not warranted.
+      - `overreaching` — the objection is about substance but is **wrong**. It
+        asserts something the evidence does not establish, misreads the claim,
+        or demands a standard of proof the material cannot meet. The objection
+        is the overstatement. Blocking is not warranted.
+      - `unclear` — the supplied material genuinely does not let you tell. Use
+        this sparingly and say what is missing.
+
+      Judge the objection on its merits. Do not assume the judge was right
+      because it is the judge, and do not assume it was wrong because you were
+      asked to review it. If the objection turns on a word rather than on what
+      happened or what was computed, that is `stylistic` however carefully it is
+      argued.
+
+      Your ruling must agree with your own reasoning. `upheld` means you
+      concluded the judge was right. If your reasoning ends up explaining that
+      the judge misread the claim or the artifact, the ruling is `overreaching`,
+      not `upheld` — a wrong objection about substance is still a wrong
+      objection. Decide the reasoning first, then pick the label that matches it.
+
+      Give `reasoning` of at least one full sentence naming the specific thing
+      that decided it.
+
+      ## The claim that was blocked
+      {{ claim_json }}
+
+      ## What the judge said was wrong with it
+      {{ objection }}
+
+      ## The support the claim cited
+      {{ supports_json }}
+
+      ## Evidence and artifact values available
+      {{ context_json }}

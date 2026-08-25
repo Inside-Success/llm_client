@@ -284,13 +284,15 @@ def load_model_floors(path: str | Path | None = None) -> dict[str, dict[str, Any
 
     Args:
         path: Path to model_floors.json. Defaults to
-            ~/projects/data/task_graph/model_floors.json.
+            $LLM_CLIENT_DATA_ROOT/task_graph/model_floors.json
+            (LLM_CLIENT_DATA_ROOT defaults to ~/projects/data).
 
     Returns:
         Dict mapping task_id → {floor, ceiling, last_tested, runs}.
     """
     if path is None:
-        path = Path.home() / "projects" / "data" / "task_graph" / "model_floors.json"
+        data_root = Path(os.environ.get("LLM_CLIENT_DATA_ROOT", str(Path.home() / "projects" / "data")))
+        path = data_root / "task_graph" / "model_floors.json"
     else:
         path = Path(path)
     if not path.exists():
@@ -310,10 +312,12 @@ def save_model_floors(
     Args:
         floors: Dict mapping task_id → {floor, ceiling, last_tested, runs}.
         path: Path to write. Defaults to
-            ~/projects/data/task_graph/model_floors.json.
+            $LLM_CLIENT_DATA_ROOT/task_graph/model_floors.json
+            (LLM_CLIENT_DATA_ROOT defaults to ~/projects/data).
     """
     if path is None:
-        path = Path.home() / "projects" / "data" / "task_graph" / "model_floors.json"
+        data_root = Path(os.environ.get("LLM_CLIENT_DATA_ROOT", str(Path.home() / "projects" / "data")))
+        path = data_root / "task_graph" / "model_floors.json"
     else:
         path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

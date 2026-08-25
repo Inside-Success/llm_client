@@ -1022,6 +1022,422 @@ class TestAcallWithMcp:
             assert result.raw_response.turns == 2  # 1 loop + 1 forced final
             assert len(result.raw_response.tool_calls) == 1
 
+    async def test_submit_answer_gets_budget_exempt_turn_after_last_retrieval(self) -> None:
+        """Consuming the last retrieval call must not preempt an explicit validated submit."""
+        from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
+
+        llm_results = [
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_search",
+                    "function": {"name": "search", "arguments": "{}"},
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_submit",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": '{"reasoning":"from chunk_1","answer":"grounded"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        async def mock_executor(tool_calls, max_len):
+            records = []
+            messages = []
+            for tool_call in tool_calls:
+                function = tool_call.get("function", {})
+                tool_name = function.get("name", "")
+                tool_call_id = tool_call.get("id", "")
+                if tool_name == "submit_answer":
+                    result = '{"status":"submitted","answer":"grounded"}'
+                    arguments = {"reasoning": "from chunk_1", "answer": "grounded"}
+                else:
+                    result = '{"chunks":[{"chunk_id":"chunk_1","text":"grounded"}]}'
+                    arguments = {}
+                records.append(
+                    MCPToolCallRecord(
+                        server="srv",
+                        tool=tool_name,
+                        arguments=arguments,
+                        result=result,
+                    )
+                )
+                messages.append(
+                    {"role": "tool", "tool_call_id": tool_call_id, "content": result}
+                )
+            return records, messages
+
+        agent_result = MCPAgentResult()
+        with patch("llm_client.agent.mcp_agent._inner_acall_llm", side_effect=llm_results):
+            content, finish = await _agent_loop(
+                "test-model",
+                [{"role": "user", "content": "q"}],
+                [
+                    {"type": "function", "function": {"name": "search"}},
+                    {"type": "function", "function": {"name": "submit_answer"}},
+                ],
+                agent_result,
+                mock_executor,
+                5,
+                1,
+                False,
+                50000,
+                max_message_chars=60,
+                timeout=60,
+                kwargs={"accept_forced_answer_on_max_tool_calls": False},
+            )
+
+        assert content == "grounded"
+        assert finish == "submitted"
+        assert [record.tool for record in agent_result.tool_calls] == ["search", "submit_answer"]
+        assert agent_result.metadata["submit_budget_grace_turns"] == 1
+        assert agent_result.metadata["submit_forced_accept_on_budget_exhaustion"] is False
+        assert any(
+            "evidence_exhausted or abstain terminal" in str(message.get("content") or "")
+            for message in agent_result.conversation_trace
+        )
+
+    async def test_validated_no_answer_submit_bypasses_stale_evidence_gate(self) -> None:
+        """Switching from a rejected answer to validated abstention is not an answer retry."""
+        from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
+
+        executor_call_names: list[str] = []
+
+        async def mock_executor(tool_calls, max_len):
+            tool_call = tool_calls[0]
+            tool_name = tool_call["function"]["name"]
+            executor_call_names.append(tool_name)
+            arguments = json.loads(tool_call["function"]["arguments"])
+            if len(executor_call_names) == 1:
+                result = json.dumps(
+                    {
+                        "status": "rejected",
+                        "validation_error": {
+                            "reason_code": "rejected_value_retry",
+                            "message": "candidate is unsupported",
+                        },
+                        "recovery_policy": {
+                            "new_evidence_required_before_retry": True,
+                        },
+                    }
+                )
+            else:
+                result = json.dumps(
+                    {
+                        "status": "submitted",
+                        "terminal_mode": "evidence_exhausted",
+                        "answer": "",
+                    }
+                )
+            return (
+                [
+                    MCPToolCallRecord(
+                        server="srv",
+                        tool=tool_name,
+                        arguments=arguments,
+                        result=result,
+                    )
+                ],
+                [
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call["id"],
+                        "content": result,
+                    }
+                ],
+            )
+
+        llm_results = [
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_answer",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": json.dumps(
+                            {"reasoning": "candidate", "answer": "guess", "terminal_mode": "answer"}
+                        ),
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_abstain",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": json.dumps(
+                            {
+                                "reasoning": "bounded evidence is exhausted",
+                                "answer": "",
+                                "terminal_mode": "evidence_exhausted",
+                            }
+                        ),
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        agent_result = MCPAgentResult()
+        with patch("llm_client.agent.mcp_agent._inner_acall_llm", side_effect=llm_results):
+            content, finish = await _agent_loop(
+                "test-model",
+                [{"role": "user", "content": "q"}],
+                [{"type": "function", "function": {"name": "submit_answer"}}],
+                agent_result,
+                mock_executor,
+                5,
+                None,
+                False,
+                50000,
+                max_message_chars=60,
+                suppress_control_loop_calls=True,
+                timeout=60,
+                kwargs={},
+            )
+
+        assert content == "submitted"
+        assert finish == "submitted"
+        assert executor_call_names == ["submit_answer", "submit_answer"]
+        assert agent_result.metadata["submit_validator_accepted"] is True
+        assert agent_result.metadata["submit_completion_mode"] == "grounded_submit"
+
+    async def test_validator_terminal_repair_gets_one_turn_after_grace_is_consumed(self) -> None:
+        """A late terminal repair contract must remain executable after generic grace."""
+        from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
+
+        llm_results = [
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_search",
+                    "function": {"name": "search", "arguments": "{}"},
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_todo",
+                    "function": {"name": "todo_write", "arguments": "{}"},
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_answer",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": json.dumps({
+                            "reasoning": "unsupported candidate",
+                            "answer": "guess",
+                            "terminal_mode": "answer",
+                        }),
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_exhausted",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": json.dumps({
+                            "reasoning": "bounded evidence gap",
+                            "answer": "",
+                            "terminal_mode": "evidence_exhausted",
+                        }),
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        async def mock_executor(tool_calls, max_len):
+            records = []
+            messages = []
+            for tool_call in tool_calls:
+                tool_name = tool_call["function"]["name"]
+                arguments = json.loads(tool_call["function"].get("arguments") or "{}")
+                if tool_name == "submit_answer" and arguments.get("terminal_mode") == "answer":
+                    result = json.dumps({
+                        "status": "rejected",
+                        "validation_error": {
+                            "reason_code": "evidence_exhausted_available",
+                            "message": "Use the validated no-answer terminal.",
+                        },
+                        "recovery_policy": {
+                            "new_evidence_required_before_retry": False,
+                            "validated_terminal_available": "evidence_exhausted",
+                            "repair_guidance": (
+                                "Call submit_answer with answer='', "
+                                "terminal_mode='evidence_exhausted'."
+                            ),
+                        },
+                    })
+                elif tool_name == "submit_answer":
+                    result = json.dumps({
+                        "status": "submitted",
+                        "terminal_mode": "evidence_exhausted",
+                        "answer": "",
+                    })
+                else:
+                    result = json.dumps({"status": "ok"})
+                records.append(MCPToolCallRecord(
+                    server="srv",
+                    tool=tool_name,
+                    arguments=arguments,
+                    result=result,
+                ))
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": result,
+                })
+            return records, messages
+
+        agent_result = MCPAgentResult()
+        with patch("llm_client.agent.mcp_agent._inner_acall_llm", side_effect=llm_results):
+            content, finish = await _agent_loop(
+                "test-model",
+                [{"role": "user", "content": "q"}],
+                [
+                    {"type": "function", "function": {"name": "search"}},
+                    {"type": "function", "function": {"name": "todo_write"}},
+                    {"type": "function", "function": {"name": "submit_answer"}},
+                ],
+                agent_result,
+                mock_executor,
+                8,
+                1,
+                False,
+                50000,
+                max_message_chars=60,
+                timeout=60,
+                kwargs={"accept_forced_answer_on_max_tool_calls": False},
+            )
+
+        assert content == "submitted"
+        assert finish == "submitted"
+        assert [record.tool for record in agent_result.tool_calls] == [
+            "search", "todo_write", "submit_answer", "submit_answer"
+        ]
+        assert agent_result.metadata["submit_budget_grace_turns"] == 2
+        assert agent_result.metadata["submit_terminal_repair_turns"] == 1
+        assert agent_result.metadata["validated_terminal_available"] == "evidence_exhausted"
+        assert any(
+            "one-shot, budget-exempt terminal repair turn" in str(message.get("content") or "")
+            for message in agent_result.conversation_trace
+        )
+
+    async def test_submit_required_budget_exhaustion_skips_plain_forced_final_when_disabled(self) -> None:
+        """A failed validated terminal must not trigger a provider-only guessed answer call."""
+        from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
+
+        executor_call_names: list[str] = []
+
+        async def mock_executor(tool_calls, max_len):
+            records = []
+            messages = []
+            for tool_call in tool_calls:
+                tool_name = tool_call["function"]["name"]
+                executor_call_names.append(tool_name)
+                arguments = json.loads(tool_call["function"].get("arguments") or "{}")
+                if tool_name == "search":
+                    result = '{"chunks":[{"chunk_id":"chunk_1"}]}'
+                else:
+                    result = json.dumps(
+                        {
+                            "status": "rejected",
+                            "pending_atoms": 1,
+                            "validation_error": {
+                                "reason_code": "pending_atoms",
+                                "message": "atom remains unresolved",
+                            },
+                            "todo_status_line": "[TODO: 0/1 done] [>] a1",
+                            "recovery_policy": {
+                                "new_evidence_required_before_retry": False,
+                                "repair_guidance": "Use a validated no-answer terminal.",
+                            },
+                        }
+                    )
+                records.append(
+                    MCPToolCallRecord(
+                        server="srv",
+                        tool=tool_name,
+                        arguments=arguments,
+                        result=result,
+                    )
+                )
+                messages.append(
+                    {"role": "tool", "tool_call_id": tool_call["id"], "content": result}
+                )
+            return records, messages
+
+        llm_results = [
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_search",
+                    "function": {"name": "search", "arguments": "{}"},
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_submit_1",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": '{"reasoning":"r","answer":"guess"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                tool_calls=[{
+                    "id": "tc_submit_2",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": '{"reasoning":"r","answer":"guess"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        agent_result = MCPAgentResult()
+        with patch(
+            "llm_client.agent.mcp_agent._inner_acall_llm",
+            side_effect=llm_results,
+        ) as mock_llm:
+            _content, _finish = await _agent_loop(
+                "test-model",
+                [{"role": "user", "content": "q"}],
+                [
+                    {"type": "function", "function": {"name": "search"}},
+                    {"type": "function", "function": {"name": "submit_answer"}},
+                ],
+                agent_result,
+                mock_executor,
+                8,
+                1,
+                False,
+                50000,
+                max_message_chars=60,
+                suppress_control_loop_calls=True,
+                timeout=60,
+                kwargs={"accept_forced_answer_on_max_tool_calls": False},
+            )
+
+        assert mock_llm.call_count == 3
+        assert executor_call_names == ["search", "submit_answer"]
+        assert agent_result.metadata["forced_final_attempts"] == 0
+        assert agent_result.metadata["required_submit_missing"] is True
+
     async def test_forced_final_llm_exception_preserves_tool_history(self) -> None:
         """Forced-final provider failure should keep prior tool trace instead of raising."""
         mock_session = AsyncMock()
@@ -3189,7 +3605,7 @@ class TestAgentDiagnostics:
         assert agent_result.metadata["context_tool_result_cleared_chars"] > 0
 
     async def test_submit_answer_enforced_when_tool_available(self) -> None:
-        """When submit_answer exists, plain-text response is nudged into explicit submission."""
+        """An accepted submit records its answer without dereferencing turn-local state."""
         from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
 
         llm_results = [

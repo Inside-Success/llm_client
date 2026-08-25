@@ -1,11 +1,13 @@
 # ADR 0007: Observability Contract Boundary
 
 Status: Accepted  
-Last verified: 2026-07-23
+Last verified: 2026-08-19
 Verification context: Provider-reported prompt and completion token details are
 preserved as bounded numeric metadata, with reasoning/cache counts queryable in
 SQLite. Hidden reasoning content and arbitrary provider payload fields remain
-outside the observability store.
+outside the observability store. `observability/prompt_drift.py` is a read-only
+query surface over existing `llm_calls` columns: it adds no sink, no persisted
+field, and no payload-shape change, so decision 5 is not engaged.
 Date: 2026-02-23
 
 ## Context

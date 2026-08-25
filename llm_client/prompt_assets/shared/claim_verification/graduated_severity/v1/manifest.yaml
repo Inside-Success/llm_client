@@ -1,0 +1,12 @@
+id: shared.claim_verification.graduated_severity
+version: 1
+kind: chat_prompt
+status: canonical
+description: >-
+  Graduated-severity atomic claim verification — judges each supplied claim
+  against supplied evidence and artifacts on a named severity scale, and records
+  one support entry per part of a claim rather than forcing a single support
+  regime onto a claim whose parts rest on different kinds of support.
+template_path: template.yaml
+input_schema: llm_client.claim_verification_input.v1
+output_schema: llm_client.claim_verification_report.v1

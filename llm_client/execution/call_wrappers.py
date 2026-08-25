@@ -19,12 +19,14 @@ from typing import Any, Awaitable, Callable, Literal, TypeVar
 
 from llm_client.execution.call_contracts import (
     acquire_budget_scope as _acquire_budget_scope,
+    check_prompt_size as _check_prompt_size,
     normalize_prompt_ref as _normalize_prompt_ref,
     release_budget_scope as _release_budget_scope,
     settle_budget_scope as _settle_budget_scope,
     require_tags as _require_tags,
     resolve_budget_scope as _resolve_budget_scope,
 )
+from llm_client.execution.codex_identity import resolve_codex_account_identity
 from llm_client.observability.budget_reservations import BudgetReservationLease
 from llm_client.observability.observed_runs import (
     _require_active_observed_run_child_trace,
@@ -60,6 +62,11 @@ class PreparedPublicCallEnvelope:
     # Optional for callers constructing a test/compatibility envelope directly;
     # production preparation always supplies the acquired lease.
     budget_scope_lease: str | BudgetReservationLease | None = None
+    # Measured from the same serialization used for ``prompt_sha256``.
+    # Defaults to 0 for directly-constructed test/compatibility envelopes.
+    estimated_prompt_tokens: int = 0
+    codex_auth_binding: str | None = None
+    codex_account_id_sha256: str | None = None
 
 
 def _prepare_public_call_envelope(
@@ -68,6 +75,7 @@ def _prepare_public_call_envelope(
     timeout: int,
     kwargs: dict[str, Any],
     messages: list[dict[str, Any]],
+    model: str | None = None,
     logical_timeout: float | None = None,
 ) -> PreparedPublicCallEnvelope:
     """Resolve call tags, lifecycle settings, and provider-safe runtime kwargs."""
@@ -94,11 +102,23 @@ def _prepare_public_call_envelope(
         budget_scope_mode=budget_scope_mode,
     )
     effective_provider_timeout = _provider_timeout_for_lifecycle(timeout)
+    # One serialization serves both the identity digest and the prompt-size
+    # contract, so measuring costs a len() rather than a second full dump.
+    serialized_prompt = json.dumps(
+        messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str
+    )
     prompt_sha256 = "sha256:" + hashlib.sha256(
-        json.dumps(messages, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+        serialized_prompt.encode("utf-8")
     ).hexdigest()
+    estimated_prompt_tokens = _check_prompt_size(
+        resolved_task,
+        serialized_prompt,
+        max_prompt_tokens=kwargs.get("max_prompt_tokens"),
+    )
 
     runtime_kwargs = dict(kwargs)
+    # Client control field: never forwarded to the provider.
+    runtime_kwargs.pop("max_prompt_tokens", None)
     runtime_kwargs.pop("budget_reservation", None)
     runtime_kwargs.pop("budget_scope_trace_id", None)
     runtime_kwargs.pop("budget_scope_mode", None)
@@ -110,10 +130,12 @@ def _prepare_public_call_envelope(
     runtime_kwargs["trace_id"] = resolved_trace_id
     runtime_kwargs["max_budget"] = resolved_max_budget
     runtime_kwargs["prompt_ref"] = normalized_prompt_ref
+    codex_identity = resolve_codex_account_identity(model or "", runtime_kwargs)
 
     return PreparedPublicCallEnvelope(
         normalized_prompt_ref=normalized_prompt_ref,
         prompt_sha256=prompt_sha256,
+        estimated_prompt_tokens=estimated_prompt_tokens,
         resolved_task=resolved_task,
         resolved_trace_id=resolved_trace_id,
         resolved_max_budget=resolved_max_budget,
@@ -124,6 +146,10 @@ def _prepare_public_call_envelope(
         stall_after_s=stall_after_s,
         budget_scope_lease=budget_scope_lease,
         runtime_kwargs=runtime_kwargs,
+        codex_auth_binding=(codex_identity.binding if codex_identity else None),
+        codex_account_id_sha256=(
+            codex_identity.account_id_sha256 if codex_identity else None
+        ),
     )
 
 
@@ -209,6 +235,8 @@ def _run_sync_public_call(
         progress_observable=started_snapshot.progress_observable,
         progress_source=started_snapshot.progress_source,
         progress_event_count=started_snapshot.progress_event_count,
+        codex_auth_binding=envelope.codex_auth_binding,
+        codex_account_id_sha256=envelope.codex_account_id_sha256,
     )
     runtime_kwargs = dict(envelope.runtime_kwargs)
     runtime_kwargs["_lifecycle_monitor"] = monitor
@@ -239,6 +267,8 @@ def _run_sync_public_call(
             progress_observable=snapshot.progress_observable,
             progress_source=snapshot.progress_source,
             progress_event_count=snapshot.progress_event_count,
+            codex_auth_binding=envelope.codex_auth_binding,
+            codex_account_id_sha256=envelope.codex_account_id_sha256,
         )
         _finalize_failed_budget_scope(envelope.budget_scope_lease, exc)
         raise
@@ -266,6 +296,8 @@ def _run_sync_public_call(
         progress_observable=completed_snapshot.progress_observable,
         progress_source=completed_snapshot.progress_source,
         progress_event_count=completed_snapshot.progress_event_count,
+        codex_auth_binding=envelope.codex_auth_binding,
+        codex_account_id_sha256=envelope.codex_account_id_sha256,
     )
     _settle_budget_scope(envelope.budget_scope_lease, settled_cost=_result_cost(result))
     return result
@@ -318,6 +350,8 @@ async def _run_async_public_call(
         progress_observable=started_snapshot.progress_observable,
         progress_source=started_snapshot.progress_source,
         progress_event_count=started_snapshot.progress_event_count,
+        codex_auth_binding=envelope.codex_auth_binding,
+        codex_account_id_sha256=envelope.codex_account_id_sha256,
     )
     runtime_kwargs = dict(envelope.runtime_kwargs)
     runtime_kwargs["_lifecycle_monitor"] = monitor
@@ -347,6 +381,8 @@ async def _run_async_public_call(
             progress_observable=snapshot.progress_observable,
             progress_source=snapshot.progress_source,
             progress_event_count=snapshot.progress_event_count,
+            codex_auth_binding=envelope.codex_auth_binding,
+            codex_account_id_sha256=envelope.codex_account_id_sha256,
         )
         _release_budget_scope(envelope.budget_scope_lease)
         raise
@@ -373,6 +409,8 @@ async def _run_async_public_call(
             progress_observable=snapshot.progress_observable,
             progress_source=snapshot.progress_source,
             progress_event_count=snapshot.progress_event_count,
+            codex_auth_binding=envelope.codex_auth_binding,
+            codex_account_id_sha256=envelope.codex_account_id_sha256,
         )
         _finalize_failed_budget_scope(envelope.budget_scope_lease, exc)
         raise
@@ -400,6 +438,8 @@ async def _run_async_public_call(
         progress_observable=completed_snapshot.progress_observable,
         progress_source=completed_snapshot.progress_source,
         progress_event_count=completed_snapshot.progress_event_count,
+        codex_auth_binding=envelope.codex_auth_binding,
+        codex_account_id_sha256=envelope.codex_account_id_sha256,
     )
     _settle_budget_scope(envelope.budget_scope_lease, settled_cost=_result_cost(result))
     return result

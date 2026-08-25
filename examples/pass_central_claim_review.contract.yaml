@@ -1,0 +1,46 @@
+# Worked example: the contract that would have caught the regression this
+# mechanism was built for.
+#
+# Drop a file like this beside a prompt template (here it would live at
+# process_tracing/pt/prompts/pass_central_claim_review.contract.yaml) and
+# render_prompt() measures every context variable against it.
+#
+# Verified against the real stored payload of a 615,835-prompt-token call:
+#
+#   analysis_artifacts_json   2,917,684 bytes   96.8% of the prompt
+#   evidence_json                87,830 bytes    2.9%
+#   claim_inventory_json          3,521 bytes    0.1%
+#   target_json                   1,536 bytes    0.1%
+#
+# With these budgets that render reports:
+#   'analysis_artifacts_json' is 2,917,684 bytes, over its 200,000 byte
+#   budget (14.6x)
+#
+# Note what the call site's own hand-written allowlist did *not* do: it listed
+# analysis_artifacts as permitted, so the artifact passed the name check and
+# the growth went unnoticed. The budget is what catches it.
+
+schema_version: "1.0"
+
+# Fail on any context variable the template was not declared to receive, so a
+# new variable cannot be added without also being budgeted.
+allow_undeclared: false
+
+variables:
+  # The deterministic final-prose target being audited. Small and bounded.
+  target_json:
+    max_bytes: 10000
+
+  # The atomic-claim inventory for this batch.
+  claim_inventory_json:
+    max_bytes: 100000
+
+  # Accepted evidence: the actual historical basis for the analysis. This is
+  # the content the review is *about*, and it should dominate the prompt.
+  evidence_json:
+    max_bytes: 400000
+
+  # Upstream computed artifacts the review may cite. Generous relative to the
+  # evidence it supports, and still ~15x below what was actually being sent.
+  analysis_artifacts_json:
+    max_bytes: 200000

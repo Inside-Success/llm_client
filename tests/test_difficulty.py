@@ -135,6 +135,16 @@ def test_save_creates_parent_dirs(tmp_path: Path):
     assert path.exists()
 
 
+def test_default_path_honors_llm_client_data_root_env_var(tmp_path: Path, monkeypatch):
+    """No explicit path -> default resolves under $LLM_CLIENT_DATA_ROOT, not a hardcoded ~/projects/data."""
+    monkeypatch.setenv("LLM_CLIENT_DATA_ROOT", str(tmp_path))
+    data = {"task": {"floor": 1, "ceiling": 2, "last_tested": "2026-02-20", "runs": 1}}
+    save_model_floors(data)
+    expected = tmp_path / "task_graph" / "model_floors.json"
+    assert expected.exists()
+    assert load_model_floors() == data
+
+
 # --- get_effective_tier ---
 
 

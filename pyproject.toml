@@ -8,7 +8,9 @@ version = "0.7.1"
 description = "Runtime substrate for multi-provider LLM calls, observability, budgets, and agent routing."
 requires-python = ">=3.10"
 dependencies = [
-    "litellm>=1.81.3",
+    # LiteLLM 1.98.0 imports typing.NotRequired, which is unavailable on 3.10.
+    "litellm>=1.81.3,<1.98.0; python_version < '3.11'",
+    "litellm>=1.81.3; python_version >= '3.11'",
     "pydantic>=2.0",
     "jinja2>=3.1",
     "pyyaml>=6.0",

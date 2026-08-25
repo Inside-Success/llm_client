@@ -139,7 +139,7 @@ def register_parser(subparsers: Any) -> None:
     )
     parser.add_argument(
         "--experiments-path",
-        help="Path to task-graph experiments JSONL (default: ~/projects/data/task_graph/experiments.jsonl)",
+        help="Path to task-graph experiments JSONL (default: $LLM_CLIENT_DATA_ROOT/task_graph/experiments.jsonl)",
     )
     parser.add_argument(
         "--since",

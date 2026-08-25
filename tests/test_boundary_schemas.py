@@ -71,8 +71,11 @@ def test_schema_covers_all_dataclass_fields():
 def test_codex_events_schema_is_additive_list():
     schema = LLMCallResultSchema.model_json_schema()
     assert schema["properties"]["codex_events"]["type"] == "array"
+    assert schema["properties"]["codex_jsonl"]["type"] == "array"
     assert LLMCallResultSchema(content="", usage={}, cost=0.0, model="test").codex_events == []
+    assert LLMCallResultSchema(content="", usage={}, cost=0.0, model="test").codex_jsonl == []
     assert LLMCallResult(content="", usage={}, cost=0.0, model="test").codex_events == []
+    assert LLMCallResult(content="", usage={}, cost=0.0, model="test").codex_jsonl == []
 
 
 def test_registry_has_output_schemas():

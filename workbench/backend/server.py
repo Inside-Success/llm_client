@@ -1,12 +1,15 @@
 """llm_client observability workbench backend.
 
-Serves read-only queries over ~/projects/data/llm_observability.db
-and ~/projects/data/llm_rate_limit_state.sqlite3.
+Serves read-only queries over LLM_CLIENT_DB_PATH (default:
+~/projects/data/llm_observability.db) and LLM_CLIENT_RATE_LIMIT_STATE_PATH
+(default: ~/projects/data/llm_rate_limit_state.sqlite3) -- the same env vars
+io_log.py and utils/rate_limit.py already honor.
 
 Start: cd workbench/backend && uvicorn server:app --host 0.0.0.0 --port 5203 --reload
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -15,8 +18,15 @@ from typing import Optional
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-OBS_DB = Path.home() / "projects/data/llm_observability.db"
-LIMIT_DB = Path.home() / "projects/data/llm_rate_limit_state.sqlite3"
+OBS_DB = Path(
+    os.environ.get("LLM_CLIENT_DB_PATH", str(Path.home() / "projects/data/llm_observability.db"))
+)
+LIMIT_DB = Path(
+    os.environ.get(
+        "LLM_CLIENT_RATE_LIMIT_STATE_PATH",
+        str(Path.home() / "projects/data/llm_rate_limit_state.sqlite3"),
+    )
+)
 
 app = FastAPI(title="llm_client Observability")
 app.add_middleware(

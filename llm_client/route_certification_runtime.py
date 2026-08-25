@@ -21,6 +21,7 @@ from llm_client.observability.selected_attempts import (
 from llm_client.openrouter_generation import (
     OpenRouterGenerationEvidence,
     OpenRouterGenerationEvidenceStore,
+    build_openrouter_inline_generation_evidence,
     fetch_openrouter_generation_evidence,
 )
 from llm_client.route_certification import (
@@ -170,14 +171,22 @@ def observe_openrouter_native_success(
     api_key: str | None = None,
     client: httpx.Client | None = None,
 ) -> RouteCertificationObservation:
-    """Fetch, verify, and persist one successful OpenRouter native-schema route."""
+    """Verify and persist one successful OpenRouter native-schema route.
+
+    Prefer exact provider/model metadata retained on the authenticated
+    completion itself.  Older/provider-minimal responses fall back to the
+    authenticated generation-history endpoint.
+    """
 
     if result.logical_call_id is None:
         raise ValueError("LLM result lacks logical_call_id")
     receipt = get_runtime_selected_attempt_receipt(result.logical_call_id)
-    evidence = fetch_openrouter_generation_evidence(
-        _generation_id(result), api_key=api_key, client=client
-    )
+    try:
+        evidence = build_openrouter_inline_generation_evidence(result.raw_response)
+    except ValueError:
+        evidence = fetch_openrouter_generation_evidence(
+            _generation_id(result), api_key=api_key, client=client
+        )
     evidence_path = generation_store.append(evidence)
     observation = compile_openrouter_native_success(
         result=result,
