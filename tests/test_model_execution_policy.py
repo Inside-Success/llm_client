@@ -15,9 +15,11 @@ from llm_client.core.model_execution_policy import (
     DEFAULT_EXECUTION_EMBEDDING_MODEL,
     DEFAULT_EXECUTION_MODEL,
     REASONING_CAPABILITIES,
+    SHARED_EXECUTION_MODELS,
     evaluate_model_execution_policy,
     evaluate_reasoning_policy,
 )
+from llm_client.inside_success_policy import INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
 
 
 def _mock_response() -> MagicMock:
@@ -267,23 +269,13 @@ def test_reasoning_capability_routes_are_all_allowlisted() -> None:
 
 def test_gpt55_family_is_absent_from_execution_policy() -> None:
     """Generic GPT-5.5 aliases stay absent outside the company overlay."""
-    from llm_client.inside_success_policy import (
-        INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS,
-    )
-
-    generic_models = ALLOWED_EXECUTION_MODELS - INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
-    assert not any("gpt-5.5" in model for model in generic_models)
+    assert not any("gpt-5.5" in model for model in SHARED_EXECUTION_MODELS)
     assert not any("gpt-5.5" in model for model in REASONING_CAPABILITIES)
 
 
 def test_gpt54_family_is_absent_from_execution_policy() -> None:
     """Generic GPT-5.4 aliases stay absent outside the company overlay."""
-    from llm_client.inside_success_policy import (
-        INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS,
-    )
-
-    generic_models = ALLOWED_EXECUTION_MODELS - INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
-    assert not any("gpt-5.4" in model for model in generic_models)
+    assert not any("gpt-5.4" in model for model in SHARED_EXECUTION_MODELS)
     assert not any("gpt-5.4" in model for model in REASONING_CAPABILITIES)
 
 
@@ -392,26 +384,53 @@ def test_removed_compatibility_mode_fails_before_dispatch(
     completion.assert_not_awaited()
 
 
-# --- A downstream overlay must never widen the upstream allowlist ---------
+# --- The reviewed downstream overlay is the ONLY way a banned family runs ---
 #
-# `ALLOWED_EXECUTION_MODELS` is built as a set union that ends with
-# `| INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS` (model_execution_policy.py).
-# A union is directional: an overlay that is a correct scoped exception in the
-# Inside Success downstream becomes a silent upstream relaxation the moment its
-# repository is merged back this way.
+# This is the Inside Success downstream. Upstream
+# (BrianMills2718/llm_client) asserts flatly that no Opus or GPT-5.4 route
+# reaches `ALLOWED_EXECUTION_MODELS`; here that assertion is false on purpose.
+# `llm_client/inside_success_policy.py` carries a reviewed, human-accepted
+# exception -- the benchmark-selected Grounded Research roster -- and
+# `model_execution_policy.py` unions it into the allowlist.
 #
-# That merge is invisible to every mechanical signal. Merging
-# Inside-Success/llm_client main into this main produces zero conflicts in
-# Python code and zero new test failures, and still takes the allowlist from 7
-# routes to 16 -- restoring both families ADR 0016 decision 5 and Plan #348 ban.
-# The existing policy tests do not catch it because the downstream updates them
-# in the same commits that widen the policy.
+# Copying the upstream guard down unchanged would fail, and deleting it would
+# leave nothing. So the downstream invariant is narrower and still has teeth:
 #
-# So the ban is asserted here against the *composed* allowlist rather than
-# against the literal upstream set. Whatever any overlay contributes, a banned
-# family must not survive into the set the dispatch gate consults.
+#   1. the shared upstream set stays clean -- a banned family may enter the
+#      composed allowlist only through the overlay, never through the set both
+#      repositories share. This is what catches the next personal->company
+#      sync, or a local edit, quietly adding Opus to the shared set. It asserts
+#      on SHARED_EXECUTION_MODELS by name, because deriving the shared set as
+#      ALLOWED_EXECUTION_MODELS minus the overlay would subtract away any route
+#      that leaked into both, which is the leak's actual shape;
+#   2. the overlay's banned roster is pinned here, so it cannot grow another
+#      banned route without someone editing this list next to the acceptance
+#      record in inside_success_policy.py;
+#   3. a banned route that is NOT on that reviewed roster is still refused at
+#      the gate, with a justification supplied.
+#
+# `test_gpt54_family_is_absent_from_execution_policy` above covers one family
+# against the generic set and REASONING_CAPABILITIES; point 1 here is the
+# family-general form over the same shared set, and adds Opus, which had none.
+#
+# Point 3 matters because the failure does not present as an open door. Once a
+# route is in the allowlist it stops failing with "not in the llm_client
+# execution allowlist" and starts failing with "requires model_justification"
+# -- which any caller clears by passing a string. Nothing reviews that string.
 
 BANNED_MODEL_FAMILIES = ("opus", "gpt-5.4", "gpt-5-4")
+
+# Exactly the banned-family routes the reviewed Inside Success overlay accepts.
+# Keep in sync with INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS and the
+# `model_override_acceptance` record beside it.
+REVIEWED_DOWNSTREAM_BANNED_ROUTES = (
+    "claude-code/claude-opus-4-8",
+    "codex/gpt-5.4-mini",
+    "codex/gpt-5.4-nano",
+    "openrouter/anthropic/claude-opus-4.8",
+    "openrouter/openai/gpt-5.4-mini",
+    "openrouter/openai/gpt-5.4-nano",
+)
 
 
 def _banned_routes(models: Iterable[str]) -> list[str]:
@@ -423,32 +442,49 @@ def _banned_routes(models: Iterable[str]) -> list[str]:
     )
 
 
-def test_no_banned_family_survives_into_the_composed_allowlist() -> None:
-    """No overlay may put a banned family into the set the gate consults."""
+def test_shared_upstream_allowlist_carries_no_banned_family() -> None:
+    """A banned family may reach the gate only through the reviewed overlay."""
 
-    leaked = _banned_routes(ALLOWED_EXECUTION_MODELS)
+    leaked = _banned_routes(SHARED_EXECUTION_MODELS)
 
     assert leaked == [], (
-        "banned model routes reached the execution allowlist: "
-        f"{leaked}. ADR 0016 decision 5 and Plan #348 ban the Opus and GPT-5.4 "
-        "families. The usual cause is a downstream policy overlay merged "
-        "upstream: it is unioned into ALLOWED_EXECUTION_MODELS, so a scoped "
-        "downstream exception silently becomes an upstream relaxation. Keep the "
-        "exception in the downstream repository."
+        "banned model routes reached the execution allowlist outside the "
+        f"reviewed Inside Success overlay: {leaked}. ADR 0016 decision 5 and "
+        "Plan #348 ban the Opus and GPT-5.4 families in the shared runtime. "
+        "The company exception lives in llm_client/inside_success_policy.py "
+        "next to its acceptance record; it does not belong in the set both "
+        "repositories share."
     )
 
 
-def test_banned_family_is_refused_even_with_a_justification() -> None:
-    """A justification is a caller-supplied string, not a review of the ban.
+def test_reviewed_overlay_roster_has_not_grown() -> None:
+    """The accepted exception is a fixed roster, not an open category."""
 
-    The regression this guards against does not present as an open door. Once a
-    banned route is in the allowlist it stops failing with "not in the
-    llm_client execution allowlist" and starts failing with "requires
-    model_justification" -- which any caller clears by passing one. So the ban
-    is asserted at the gate, with a justification supplied.
-    """
+    overlay = _banned_routes(INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS)
 
-    for model in ("claude-code/claude-opus-4-8", "codex/gpt-5.4-mini"):
+    assert overlay == sorted(REVIEWED_DOWNSTREAM_BANNED_ROUTES), (
+        "the Inside Success overlay's banned-family roster changed. Every "
+        "Opus/GPT-5.4 route it allows is a reviewed exception recorded in "
+        "llm_client/inside_success_policy.py under model_override_acceptance. "
+        "Adding one is a policy decision: update that record, then update "
+        "REVIEWED_DOWNSTREAM_BANNED_ROUTES here."
+    )
+
+
+def test_unreviewed_banned_route_is_refused_even_with_a_justification() -> None:
+    """A justification is a caller-supplied string, not a review of the ban."""
+
+    unreviewed = (
+        "openrouter/anthropic/claude-opus-4.1",
+        "openrouter/openai/gpt-5.4",
+        "gpt-5.4",
+    )
+    for model in unreviewed:
+        assert model not in ALLOWED_EXECUTION_MODELS, (
+            f"{model} is used here as a route the reviewed overlay does not "
+            "cover; it must stay outside the allowlist for this test to mean "
+            "anything."
+        )
         with pytest.raises(LLMConfigurationError, match="execution allowlist"):
             evaluate_model_execution_policy(
                 [model],
