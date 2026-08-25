@@ -4268,6 +4268,141 @@ class TestAgentDiagnostics:
             for record in agent_result.tool_calls
         )
 
+    async def test_pending_atom_todo_progress_allows_submit_without_duplicate_evidence(self) -> None:
+        """Validated TODO progress may consume cached evidence before a terminal retry."""
+        from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
+
+        executor_call_names: list[str] = []
+        submit_count = 0
+
+        async def mock_executor(tool_calls, max_len):
+            nonlocal submit_count
+            tool_call = tool_calls[0]
+            tool_name = tool_call["function"]["name"]
+            tool_call_id = tool_call["id"]
+            executor_call_names.append(tool_name)
+            if tool_name == "chunk_text_search":
+                result = '{"results":[{"chunk_id":"chunk_1"}]}'
+            elif tool_name == "todo_write":
+                result = json.dumps(
+                    {
+                        "status": "ok",
+                        "status_line": "[TODO: 2/2 done] [x] a1 | [x] a2",
+                    }
+                )
+            else:
+                submit_count += 1
+                if submit_count == 1:
+                    result = json.dumps(
+                        {
+                            "status": "rejected",
+                            "pending_atoms": 1,
+                            "pending_ids": ["a2"],
+                            "validation_error": {
+                                "reason_code": "pending_atoms",
+                                "message": "atom a2 still unresolved",
+                            },
+                            "todo_status_line": "[TODO: 1/2 done] [x] a1 | [>] a2",
+                            "recovery_policy": {
+                                "new_evidence_required_before_retry": True,
+                                "repair_guidance": "Complete atom a2 from cached typed evidence.",
+                            },
+                        }
+                    )
+                else:
+                    result = '{"status":"submitted","answer":"12"}'
+            return (
+                [
+                    MCPToolCallRecord(
+                        server="srv",
+                        tool=tool_name,
+                        arguments={},
+                        result=result,
+                    )
+                ],
+                [{"role": "tool", "tool_call_id": tool_call_id, "content": result}],
+            )
+
+        llm_results = [
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_search",
+                    "function": {
+                        "name": "chunk_text_search",
+                        "arguments": '{"query_text":"initial evidence","tool_reasoning":"ground atom"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_submit_1",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": '{"reasoning":"grounded","answer":"12","tool_reasoning":"submit"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_todo",
+                    "function": {
+                        "name": "todo_write",
+                        "arguments": '{"todos":[],"tool_reasoning":"commit cached typed fact"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+            _make_llm_result(
+                content="",
+                tool_calls=[{
+                    "id": "tc_submit_2",
+                    "function": {
+                        "name": "submit_answer",
+                        "arguments": '{"reasoning":"grounded","answer":"12","tool_reasoning":"retry after state progress"}',
+                    },
+                }],
+                finish_reason="tool_calls",
+            ),
+        ]
+
+        agent_result = MCPAgentResult()
+        with patch("llm_client.agent.mcp_agent._inner_acall_llm", side_effect=llm_results):
+            content, finish = await _agent_loop(
+                "test-model",
+                [{"role": "user", "content": "q"}],
+                [
+                    {"type": "function", "function": {"name": "submit_answer"}},
+                    {"type": "function", "function": {"name": "chunk_text_search"}},
+                    {"type": "function", "function": {"name": "todo_write"}},
+                ],
+                agent_result,
+                mock_executor,
+                6,
+                None,
+                False,
+                50000,
+                max_message_chars=60,
+                suppress_control_loop_calls=True,
+                timeout=60,
+                kwargs={},
+            )
+
+        assert content == "12"
+        assert finish == "submitted"
+        assert executor_call_names == [
+            "chunk_text_search",
+            "submit_answer",
+            "todo_write",
+            "submit_answer",
+        ]
+        assert agent_result.metadata.get("submit_evidence_digest_at_last_failure") is None
+        assert agent_result.metadata.get("submit_todo_status_at_last_failure") is None
+
     async def test_repeated_submit_suppressions_without_todo_progress_force_control_churn(self) -> None:
         """Repeated suppressed submit retries on the same TODO state should end the loop early."""
         from llm_client.agent.mcp_agent import MCPAgentResult, _agent_loop
