@@ -1,5 +1,6 @@
 """Contract tests for the shared allowed-model execution policy."""
 
+from collections.abc import Iterable
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -381,3 +382,67 @@ def test_removed_compatibility_mode_fails_before_dispatch(
         )
 
     completion.assert_not_awaited()
+
+
+# --- A downstream overlay must never widen the upstream allowlist ---------
+#
+# `ALLOWED_EXECUTION_MODELS` is built as a set union that ends with
+# `| INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS` (model_execution_policy.py).
+# A union is directional: an overlay that is a correct scoped exception in the
+# Inside Success downstream becomes a silent upstream relaxation the moment its
+# repository is merged back this way.
+#
+# That merge is invisible to every mechanical signal. Merging
+# Inside-Success/llm_client main into this main produces zero conflicts in
+# Python code and zero new test failures, and still takes the allowlist from 7
+# routes to 16 -- restoring both families ADR 0016 decision 5 and Plan #348 ban.
+# The existing policy tests do not catch it because the downstream updates them
+# in the same commits that widen the policy.
+#
+# So the ban is asserted here against the *composed* allowlist rather than
+# against the literal upstream set. Whatever any overlay contributes, a banned
+# family must not survive into the set the dispatch gate consults.
+
+BANNED_MODEL_FAMILIES = ("opus", "gpt-5.4", "gpt-5-4")
+
+
+def _banned_routes(models: Iterable[str]) -> list[str]:
+    lowered = ((model, model.lower()) for model in models)
+    return sorted(
+        model
+        for model, low in lowered
+        if any(family in low for family in BANNED_MODEL_FAMILIES)
+    )
+
+
+def test_no_banned_family_survives_into_the_composed_allowlist() -> None:
+    """No overlay may put a banned family into the set the gate consults."""
+
+    leaked = _banned_routes(ALLOWED_EXECUTION_MODELS)
+
+    assert leaked == [], (
+        "banned model routes reached the execution allowlist: "
+        f"{leaked}. ADR 0016 decision 5 and Plan #348 ban the Opus and GPT-5.4 "
+        "families. The usual cause is a downstream policy overlay merged "
+        "upstream: it is unioned into ALLOWED_EXECUTION_MODELS, so a scoped "
+        "downstream exception silently becomes an upstream relaxation. Keep the "
+        "exception in the downstream repository."
+    )
+
+
+def test_banned_family_is_refused_even_with_a_justification() -> None:
+    """A justification is a caller-supplied string, not a review of the ban.
+
+    The regression this guards against does not present as an open door. Once a
+    banned route is in the allowlist it stops failing with "not in the
+    llm_client execution allowlist" and starts failing with "requires
+    model_justification" -- which any caller clears by passing one. So the ban
+    is asserted at the gate, with a justification supplied.
+    """
+
+    for model in ("claude-code/claude-opus-4-8", "codex/gpt-5.4-mini"):
+        with pytest.raises(LLMConfigurationError, match="execution allowlist"):
+            evaluate_model_execution_policy(
+                [model],
+                justification="benchmark-selected for a downstream consumer",
+            )
