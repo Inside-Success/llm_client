@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 from llm_client.core.errors import LLMConfigurationError
 from llm_client.execution.call_contracts import OpenRouterRoutePolicyV1
-from llm_client.execution.retry import _error_status_code
+from llm_client.execution.retry import _error_status_code, _retry_error_summary
 from llm_client.utils.openrouter_accounts import (
     ACCOUNT_KEY_ENV,
     account_api_key,
@@ -733,16 +733,17 @@ def _maybe_retry_with_openrouter_key_rotation(
     if warning_sink is not None:
         warning_sink.append(
             f"RETRY {attempt + 1}/{max_retries + 1}: "
-            f"{current_model} ({type(error).__name__}: {error}) "
+            f"{current_model} ({_retry_error_summary(error)}) "
             f"[retry_delay_source={retry_delay_source}]"
         )
     logger.warning(
-        "%s attempt %d/%d failed (retrying immediately, source=%s): %s",
+        "%s attempt %d/%d failed for model=%s (retrying immediately, source=%s): %s",
         caller,
         attempt + 1,
         max_retries + 1,
+        current_model,
         retry_delay_source,
-        error,
+        _retry_error_summary(error),
     )
     return True
 

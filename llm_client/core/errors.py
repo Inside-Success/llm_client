@@ -76,6 +76,27 @@ class LLMEmptyResponseError(LLMError):
         self.diagnostics = diagnostics or {}
 
 
+class LLMProviderResponseError(LLMError):
+    """Provider signaled a failed generation that the transport masked as success.
+
+    Some providers report ``finish_reason='error'`` on a 200 response (e.g.
+    OpenRouter when the upstream provider dies mid-generation). litellm has no
+    mapping for that value and normalizes it to ``'stop'``, so the truncated
+    content would otherwise flow onward as a normal completion. Retryable —
+    the next attempt goes back through the provider.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_finish_reason: str | None = None,
+        original: Exception | None = None,
+    ) -> None:
+        super().__init__(message, original=original)
+        self.raw_finish_reason = raw_finish_reason
+
+
 class LLMModelNotFoundError(LLMError):
     """Model doesn't exist (404)."""
 

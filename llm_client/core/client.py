@@ -82,6 +82,14 @@ except ImportError:
 # schema mismatch is accepted by this switch.
 litellm.enable_json_schema_validation = False
 
+# Suppress litellm LoggingWorker cancellation/timeout tracebacks (benign
+# shutdown noise, unfixed upstream) - targeted filter, see the module docstring.
+from llm_client.utils.litellm_log_filters import (
+    install_litellm_logging_worker_noise_filter as _install_litellm_log_filter,
+)
+
+_install_litellm_log_filter()
+
 from llm_client.core.config import ClientConfig
 import llm_client.io_log as _io_log
 import llm_client.utils.rate_limit as _rate_limit
@@ -130,6 +138,7 @@ from llm_client.execution.call_contracts import (
 from llm_client.execution.timeout_policy import (
     default_timeout_for_caller as _default_timeout_for_caller,
     normalize_timeout as _normalize_timeout,
+    timeouts_disabled as _timeouts_disabled,
 )
 from llm_client.execution.execution_kernel import (
     run_async_with_fallback,
@@ -667,7 +676,14 @@ def call_llm_structured(
 
     resolved_timeout = timeout
     if resolved_timeout is None:
-        resolved_timeout = _default_timeout_for_caller(caller="call_llm_structured")
+        # Library default: only fill when the policy would honor it. Under
+        # policy=ban a filled default would just be discarded (with a spurious
+        # TIMEOUT_DISABLED warning) by normalize_timeout downstream.
+        resolved_timeout = (
+            0
+            if _timeouts_disabled()
+            else _default_timeout_for_caller(caller="call_llm_structured")
+        )
     if openrouter_route_policy is not None:
         kwargs["openrouter_route_policy"] = openrouter_route_policy
     if observability_content_policy is not None:
@@ -999,7 +1015,13 @@ async def acall_llm_structured(
 
     resolved_timeout = timeout
     if resolved_timeout is None:
-        resolved_timeout = _default_timeout_for_caller(caller="acall_llm_structured")
+        # Library default: only fill when the policy would honor it (see
+        # call_llm_structured).
+        resolved_timeout = (
+            0
+            if _timeouts_disabled()
+            else _default_timeout_for_caller(caller="acall_llm_structured")
+        )
     if openrouter_route_policy is not None:
         kwargs["openrouter_route_policy"] = openrouter_route_policy
     if observability_content_policy is not None:
