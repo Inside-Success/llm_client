@@ -1,0 +1,59 @@
+messages:
+  - role: user
+    content: |
+      Judge each supplied atomic claim against the supplied evidence and
+      artifacts. Return every claim exactly once, preserving its `claim_id` and
+      `claim_text` verbatim. Do not add, merge, split, omit, repair, or reword
+      claims, and do not repair the prose or add facts.
+
+      ## Severity
+
+      Assign exactly one severity tier per claim, from this rubric:
+
+      {% for tier in severity_tiers %}
+      - `{{ tier.name }}` — {{ tier.description }}
+      {% endfor %}
+
+      Choose the **least severe tier that honestly describes the divergence**.
+      These are every tier available to you. If a computed result is missing its
+      artifact attribution, that is recorded for you from the locators you
+      supply — do not try to express it through a tier.
+      Descriptive, evaluative, or intensifying wording that leaves the
+      substantive claim intact is `stylistic_gloss`, not an overstatement: a
+      claim is not more severe merely because an adjective is absent from the
+      source. Reserve the blocking tiers for claims that would leave a reader
+      believing something the evidence does not establish.
+
+      ## Support records
+
+      A claim's parts may rest on different kinds of support. Record one
+      `supports` entry per part, each naming the `basis` for that part and
+      quoting in `covers` the portion of the claim it backs. When a claim joins
+      a directly observed premise to a computed result, that is two entries, not
+      a choice between them. Available bases:
+
+      {% for basis in support_bases %}
+      - `{{ basis.name }}` — {{ basis.description }}
+      {% endfor %}
+
+      If a claim's parts cannot be covered by separate support entries because
+      the claim itself fuses them inseparably, mark it `composite_claim`.
+
+      `evidence_ids` is a closed set: use only exact `id` strings listed under
+      Supplied evidence. Never invent, normalize, abbreviate, paraphrase, or
+      infer an ID. Every artifact locator must give the artifact's exact name and
+      an exact RFC 6901 JSON Pointer to the supporting value. Do not explain
+      support using a different artifact than the declared locator.
+
+      Write an `overall_assessment` of at least one complete explanatory
+      sentence (20+ characters), not a status label. Do not state an accept or
+      block decision: the severity tiers determine it deterministically.
+
+      ## Claims to judge
+      {{ claims_json }}
+
+      ## Supplied evidence
+      {{ evidence_json }}
+
+      ## Supplied artifacts
+      {{ artifacts_json }}

@@ -221,6 +221,8 @@ def _emit_llm_call_lifecycle_event(
     progress_observable: bool | None = None,
     progress_source: str | None = None,
     progress_event_count: int | None = None,
+    codex_auth_binding: str | None = None,
+    codex_account_id_sha256: str | None = None,
     error: Exception | None = None,
 ) -> None:
     """Emit a Foundation-backed lifecycle event for one public LLM call."""
@@ -237,6 +239,8 @@ def _emit_llm_call_lifecycle_event(
         "timeout_policy": _timeout_policy_label(), "process_id": _PROCESS_ID if _PROCESS_ID > 0 else None,
         "host_name": _PROCESS_HOST_NAME, "process_start_token": _PROCESS_START_TOKEN,
         "error_type": _llm_lifecycle_error_type(error) if error is not None else None,
+        "codex_auth_binding": codex_auth_binding,
+        "codex_account_id_sha256": codex_account_id_sha256,
     }
     _io_log.record_call_lifecycle_event(lifecycle_event)
 

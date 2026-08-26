@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable, Literal, NoReturn, TypeVar
 
 from llm_client.core.errors import LLMLogicalDeadlineError
 from llm_client.core.model_availability import record_model_unavailability
+from llm_client.execution.retry import _retry_error_summary
 
 T = TypeVar("T")
 RetryDisposition = Literal["retry", "exhausted"]
@@ -85,6 +86,7 @@ def run_sync_with_retry(
     maybe_retry_hook: Callable[[Exception, int, int], bool] | None = None,
     deadline_at: float | None = None,
     clock: Callable[[], float] = time.monotonic,
+    task: str | None = None,
 ) -> T:
     """Execute sync attempts with shared retry behavior and optional total deadline."""
     for attempt in range(max_retries + 1):
@@ -132,17 +134,19 @@ def run_sync_with_retry(
                 on_retry(attempt, exc, effective_delay)
             warning_sink.append(
                 f"RETRY {attempt + 1}/{max_retries + 1}: "
-                f"{model} ({type(exc).__name__}: {_error_text(exc)}) "
+                f"{model} ({_retry_error_summary(exc)}) "
                 f"[retry_delay_source={retry_delay_source}]"
             )
             logger.warning(
-                "%s attempt %d/%d failed (retrying in %.1fs, source=%s): %s",
+                "%s attempt %d/%d failed for model=%s%s (retrying in %.1fs, source=%s): %s",
                 caller,
                 attempt + 1,
                 max_retries + 1,
+                model,
+                f" task={task}" if task else "",
                 effective_delay,
                 retry_delay_source,
-                _error_text(exc),
+                _retry_error_summary(exc),
             )
             if sleep_delay > 0:
                 time.sleep(sleep_delay)
@@ -166,6 +170,7 @@ async def run_async_with_retry(
     maybe_retry_hook: Callable[[Exception, int, int], bool] | None = None,
     deadline_at: float | None = None,
     clock: Callable[[], float] = time.monotonic,
+    task: str | None = None,
 ) -> T:
     """Execute async attempts with shared retry behavior and optional total deadline."""
     for attempt in range(max_retries + 1):
@@ -213,17 +218,19 @@ async def run_async_with_retry(
                 on_retry(attempt, exc, effective_delay)
             warning_sink.append(
                 f"RETRY {attempt + 1}/{max_retries + 1}: "
-                f"{model} ({type(exc).__name__}: {_error_text(exc)}) "
+                f"{model} ({_retry_error_summary(exc)}) "
                 f"[retry_delay_source={retry_delay_source}]"
             )
             logger.warning(
-                "%s attempt %d/%d failed (retrying in %.1fs, source=%s): %s",
+                "%s attempt %d/%d failed for model=%s%s (retrying in %.1fs, source=%s): %s",
                 caller,
                 attempt + 1,
                 max_retries + 1,
+                model,
+                f" task={task}" if task else "",
                 effective_delay,
                 retry_delay_source,
-                _error_text(exc),
+                _retry_error_summary(exc),
             )
             if sleep_delay > 0:
                 await asyncio.sleep(sleep_delay)

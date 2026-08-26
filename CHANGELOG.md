@@ -4,6 +4,45 @@ All notable changes to `llm-client` are documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Timeout-policy log spam under `LLM_CLIENT_TIMEOUT_POLICY=ban`: the
+  structured-call entrypoints no longer fill the library-default timeout
+  (180s) when the caller passed `timeout=None` and the policy would discard
+  it anyway, so `normalize_timeout` emits ZERO `TIMEOUT_DISABLED` records for
+  default-only calls (previously one WARNING per call — 136/262 lines of a
+  real CI run log). Explicit caller timeouts under the ban still warn, but
+  once per caller per process (repeats at DEBUG). `allow`-policy behavior is
+  unchanged.
+- Provider errors masked as success: some providers report
+  `finish_reason='error'` on a 200 response; litellm has no mapping for that
+  value and normalizes it to `'stop'`, letting truncated content flow into
+  schema validation. The structured runtimes (sync + async, native-schema +
+  instructor) now check the RAW finish reason litellm preserves in
+  `provider_specific_fields["native_finish_reason"]` BEFORE validation and
+  raise the new retryable `LLMProviderResponseError` (enters the existing
+  retry ladder; retry lines report `source=provider`).
+- Retry-log diagnostics: retry warnings now carry the model id and `task=`
+  (previously the only model mention came from the exception text — empty for
+  litellm's `JSONSchemaValidationError`, which litellm raises with
+  `model=""`), and error text is compacted via `_retry_error_summary`
+  (schema-validation errors log exception class + schema TITLE + a 120-char
+  raw-response snippet instead of the multi-KB full-schema `str()`; other
+  errors are whitespace-collapsed and capped at 240 chars). Applies to the
+  execution kernel and the OpenRouter key-rotation retry path.
+
+### Added
+
+- `LLMProviderResponseError` in `llm_client.core.errors` (retryable;
+  `raw_finish_reason` attribute).
+- `llm_client.utils.litellm_log_filters`: targeted filter on the `LiteLLM`
+  logger (installed at import, idempotent) that suppresses ONLY litellm
+  LoggingWorker `CancelledError`/`TimeoutError` tracebacks from
+  `logging_worker.py` — benign shutdown noise, verified unfixed on litellm
+  1.88.1 / 1.91.1 / current main. Other LoggingWorker errors and all other
+  LiteLLM records pass through (proven by test).
+- `tests/test_log_hygiene.py`: gates for the fixes above.
+
 ### Removed
 
 - Dead Gemini native REST path (~730 lines): `_call_gemini_native`,

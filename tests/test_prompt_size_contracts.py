@@ -1,0 +1,772 @@
+"""Tests for the prompt-size contract stack.
+
+Covers all three components:
+
+* ``check_prompt_size`` -- the call-boundary ceiling (Component B)
+* ``prompt_context_contract`` -- per-variable budgets at render time (Component C)
+* ``find_prompt_drift`` -- retrospective drift detection (Component A)
+
+The behaviour these tests pin down is the one the mechanism exists for: a
+payload that is *permitted by name* but has grown far past its budget must be
+caught and attributed. A name-only allowlist did not catch that, which is why
+every contract here is budget-bearing.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from llm_client.core.errors import LLMPromptBudgetExceededError
+from llm_client.execution.call_contracts import (
+    _TASK_PROMPT_BUDGETS,
+    check_prompt_size,
+    estimate_prompt_tokens,
+    get_task_prompt_budget,
+    register_task_prompt_budget,
+)
+from llm_client.prompt_context_contract import (
+    PromptContextContractError,
+    contract_breach_summary,
+    contract_path_for,
+    enforce_contract,
+    format_contract_breach_summary,
+    load_contract,
+    reset_contract_breach_tally,
+)
+
+
+@pytest.fixture(autouse=True)
+def _clear_registered_budgets():
+    """Task budgets are process-global; keep tests independent."""
+    saved = dict(_TASK_PROMPT_BUDGETS)
+    _TASK_PROMPT_BUDGETS.clear()
+    yield
+    _TASK_PROMPT_BUDGETS.clear()
+    _TASK_PROMPT_BUDGETS.update(saved)
+
+
+# --------------------------------------------------------------------------
+# Component B: call-boundary ceiling
+# --------------------------------------------------------------------------
+
+
+def test_registered_budget_is_readable() -> None:
+    register_task_prompt_budget("demo.task", 1000)
+    assert get_task_prompt_budget("demo.task") == 1000
+    assert get_task_prompt_budget("unregistered.task") is None
+
+
+def test_reregistering_same_value_is_idempotent() -> None:
+    register_task_prompt_budget("demo.task", 1000)
+    register_task_prompt_budget("demo.task", 1000)
+    assert get_task_prompt_budget("demo.task") == 1000
+
+
+def test_conflicting_registration_fails_loud() -> None:
+    """Two modules must not silently disagree about one task's ceiling."""
+    register_task_prompt_budget("demo.task", 1000)
+    with pytest.raises(ValueError, match="conflicting prompt budget"):
+        register_task_prompt_budget("demo.task", 2000)
+
+
+def test_under_budget_returns_measurement_without_raising() -> None:
+    register_task_prompt_budget("demo.task", 1000)
+    estimated = check_prompt_size("demo.task", "x" * 400)
+    assert estimated == 100
+
+
+def test_no_ceiling_still_measures() -> None:
+    """Measurement is unconditional; only enforcement is opt-in."""
+    assert check_prompt_size("unregistered.task", "x" * 4000) == 1000
+
+
+def test_over_budget_warns_by_default(caplog: pytest.LogCaptureFixture, monkeypatch) -> None:
+    """Warn-by-default keeps a cost problem from becoming an availability problem."""
+    monkeypatch.delenv("LLM_CLIENT_PROMPT_SIZE_STRICT", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    register_task_prompt_budget("demo.task", 100)
+    warnings: list[str] = []
+
+    with caplog.at_level("WARNING"):
+        estimated = check_prompt_size("demo.task", "x" * 40_000, warning_sink=warnings)
+
+    assert estimated == 10_000
+    assert warnings and "PROMPT_SIZE" in warnings[0]
+    assert "not truncated" in caplog.text
+
+
+def test_over_budget_raises_in_strict_mode(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_SIZE_STRICT", "1")
+    register_task_prompt_budget("demo.task", 100)
+
+    with pytest.raises(LLMPromptBudgetExceededError, match=r"100\.0x"):
+        check_prompt_size("demo.task", "x" * 40_000)
+
+
+def test_explicit_argument_overrides_registered_budget(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_SIZE_STRICT", "1")
+    register_task_prompt_budget("demo.task", 100)
+
+    # Explicit per-call ceiling wins over the registered default.
+    assert check_prompt_size("demo.task", "x" * 40_000, max_prompt_tokens=20_000) == 10_000
+
+
+def test_estimate_is_chars_over_four() -> None:
+    assert estimate_prompt_tokens("x" * 4000) == 1000
+
+
+@pytest.mark.parametrize("bad", [0, -1])
+def test_non_positive_budget_rejected(bad: int) -> None:
+    with pytest.raises(ValueError):
+        register_task_prompt_budget("demo.task", bad)
+
+
+def test_boolean_budget_rejected() -> None:
+    """bool is an int subclass; a True ceiling is a bug, not a budget."""
+    with pytest.raises(TypeError):
+        register_task_prompt_budget("demo.task", True)  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------
+# Component C: per-variable render-time contract
+# --------------------------------------------------------------------------
+
+
+def _write_contract(tmp_path: Path, body: str) -> Path:
+    template = tmp_path / "demo.yaml"
+    template.write_text("messages:\n  - role: user\n    content: hi\n", encoding="utf-8")
+    contract_path_for(template).write_text(body, encoding="utf-8")
+    return template
+
+
+def test_contract_path_is_a_sibling_of_the_template(tmp_path: Path) -> None:
+    assert contract_path_for(tmp_path / "foo.yaml").name == "foo.contract.yaml"
+
+
+def test_absent_contract_is_not_an_error(tmp_path: Path) -> None:
+    template = tmp_path / "demo.yaml"
+    template.write_text("messages: []\n", encoding="utf-8")
+    assert load_contract(template) is None
+    assert enforce_contract(template, {"anything": "x" * 10_000}, strict=True) == []
+
+
+def test_oversized_variable_is_named(tmp_path: Path) -> None:
+    """Attribution is the deliverable: the breach must name the variable."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 100\n',
+    )
+
+    with pytest.raises(PromptContextContractError, match="artifacts_json"):
+        enforce_contract(template, {"artifacts_json": "x" * 1000}, strict=True)
+
+
+def test_permitted_but_oversized_variable_is_still_caught(tmp_path: Path) -> None:
+    """The regression this mechanism exists for.
+
+    The offending artifact in the reference case was *on* the call site's
+    allowlist. Being declared is not enough; the budget is what catches it.
+    """
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 200000\n',
+    )
+
+    breaches = enforce_contract(template, {"artifacts_json": "x" * 2_917_684}, strict=False)
+    assert len(breaches) == 1
+    assert "artifacts_json" in breaches[0]
+    assert "14.6x" in breaches[0]
+
+
+def test_all_breaches_reported_worst_first(tmp_path: Path) -> None:
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "variables:\n"
+        "  small_json:\n    max_bytes: 100\n"
+        "  big_json:\n    max_bytes: 100\n",
+    )
+
+    breaches = enforce_contract(
+        template, {"small_json": "x" * 200, "big_json": "x" * 5000}, strict=False
+    )
+    assert len(breaches) == 2
+    assert "big_json" in breaches[0], "worst breach must sort first"
+    assert "small_json" in breaches[1]
+
+
+def test_undeclared_variable_rejected_by_default(tmp_path: Path) -> None:
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  known_json:\n    max_bytes: 100\n',
+    )
+
+    with pytest.raises(PromptContextContractError, match="not declared"):
+        enforce_contract(template, {"known_json": "x", "surprise": "y"}, strict=True)
+
+
+def test_undeclared_variable_allowed_when_opted_in(tmp_path: Path) -> None:
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "allow_undeclared: true\n"
+        "variables:\n  known_json:\n    max_bytes: 100\n",
+    )
+
+    assert enforce_contract(template, {"known_json": "x", "surprise": "y"}, strict=True) == []
+
+
+def test_compliant_context_passes(tmp_path: Path) -> None:
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 1000\n',
+    )
+    assert enforce_contract(template, {"artifacts_json": "x" * 500}, strict=True) == []
+
+
+def test_malformed_contract_fails_loud_rather_than_degrading(tmp_path: Path) -> None:
+    """An unparseable contract must not silently mean 'no constraints'."""
+    template = _write_contract(tmp_path, "schema_version: \"1.0\"\nvariables: [not, a, mapping]\n")
+
+    with pytest.raises(PromptContextContractError, match="must be a mapping"):
+        load_contract(template)
+
+
+def test_unsupported_schema_version_rejected(tmp_path: Path) -> None:
+    template = _write_contract(tmp_path, 'schema_version: "9.9"\nvariables: {}\n')
+
+    with pytest.raises(PromptContextContractError, match="unsupported schema_version"):
+        load_contract(template)
+
+
+def test_variable_without_positive_max_bytes_rejected(tmp_path: Path) -> None:
+    template = _write_contract(
+        tmp_path, 'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 0\n'
+    )
+
+    with pytest.raises(PromptContextContractError, match="positive integer max_bytes"):
+        load_contract(template)
+
+
+def test_multibyte_values_measured_in_bytes(tmp_path: Path) -> None:
+    """Budgets are byte budgets; a 2-byte character counts as two."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  text:\n    max_bytes: 150\n',
+    )
+
+    breaches = enforce_contract(template, {"text": "é" * 100}, strict=False)
+    assert breaches and "200 bytes" in breaches[0]
+
+
+def test_render_prompt_enforces_the_contract(tmp_path: Path, monkeypatch) -> None:
+    """The contract is wired into the real render path, not just callable."""
+    from llm_client.prompts import render_prompt
+
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_CONTEXT_STRICT", "1")
+    template = tmp_path / "demo.yaml"
+    template.write_text(
+        "messages:\n  - role: user\n    content: |\n      {{ artifacts_json }}\n",
+        encoding="utf-8",
+    )
+    contract_path_for(template).write_text(
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 100\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PromptContextContractError, match="artifacts_json"):
+        render_prompt(template, artifacts_json="x" * 5000)
+
+
+def test_render_prompt_warns_but_proceeds_by_default(tmp_path: Path, monkeypatch) -> None:
+    from llm_client.prompts import render_prompt
+
+    monkeypatch.delenv("LLM_CLIENT_PROMPT_CONTEXT_STRICT", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    template = tmp_path / "demo.yaml"
+    template.write_text(
+        "messages:\n  - role: user\n    content: |\n      {{ artifacts_json }}\n",
+        encoding="utf-8",
+    )
+    contract_path_for(template).write_text(
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 100\n',
+        encoding="utf-8",
+    )
+
+    messages = render_prompt(template, artifacts_json="x" * 5000)
+    assert len(messages[0]["content"]) == 5000
+
+
+# --------------------------------------------------------------------------
+# Component A: retrospective drift detection
+# --------------------------------------------------------------------------
+
+
+def _seed_calls(conn, rows) -> None:
+    conn.executemany(
+        "INSERT INTO llm_calls (timestamp, project, model, task, prompt_tokens, error) "
+        "VALUES (?, ?, 'test-model', ?, ?, NULL)",
+        rows,
+    )
+    conn.commit()
+
+
+@pytest.fixture
+def drift_db(tmp_path, monkeypatch):
+    """An isolated observability DB so drift tests never read real spend data."""
+    import sqlite3
+
+    from llm_client.observability import prompt_drift
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE llm_calls (timestamp TEXT, project TEXT, model TEXT, "
+        "task TEXT, prompt_tokens INTEGER, error TEXT)"
+    )
+    monkeypatch.setattr(prompt_drift._io_log, "_get_db", lambda: conn)
+    return conn
+
+
+def _at(day: int) -> str:
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime(2026, 6, 1, tzinfo=timezone.utc) + timedelta(days=day)).isoformat()
+
+
+def test_growth_against_own_baseline_is_detected(drift_db) -> None:
+    from datetime import datetime, timezone
+
+    from llm_client.observability.prompt_drift import find_prompt_drift
+
+    # 30 baseline calls at ~1,000 tokens, then 30 recent calls at ~10,000.
+    _seed_calls(drift_db, [(_at(20), "proj", "t.grew", 1000) for _ in range(30)])
+    _seed_calls(drift_db, [(_at(40), "proj", "t.grew", 10_000) for _ in range(30)])
+
+    findings = find_prompt_drift(
+        baseline_days=30,
+        recent_days=7,
+        min_calls=20,
+        now=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+
+    assert [f.task for f in findings] == ["t.grew"]
+    assert findings[0].growth_ratio == pytest.approx(10.0)
+    assert "prompt_growth" in findings[0].reasons
+
+
+def test_stable_task_is_not_flagged(drift_db) -> None:
+    from datetime import datetime, timezone
+
+    from llm_client.observability.prompt_drift import find_prompt_drift
+
+    _seed_calls(drift_db, [(_at(20), "proj", "t.stable", 1000) for _ in range(30)])
+    _seed_calls(drift_db, [(_at(40), "proj", "t.stable", 1100) for _ in range(30)])
+
+    assert (
+        find_prompt_drift(
+            baseline_days=30,
+            recent_days=7,
+            min_calls=20,
+            now=datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+        == []
+    )
+
+
+def test_bimodal_task_is_caught_by_dispersion(drift_db) -> None:
+    """The shape a median-only comparison hides.
+
+    Observed on real data: one task, one day, most calls ~24K prompt tokens and
+    a subset over 1.2M. The median barely moves, so only dispersion catches it.
+    """
+    from datetime import datetime, timezone
+
+    from llm_client.observability.prompt_drift import find_prompt_drift
+
+    _seed_calls(drift_db, [(_at(40), "proj", "t.bimodal", 24_000) for _ in range(90)])
+    _seed_calls(drift_db, [(_at(40), "proj", "t.bimodal", 1_200_000) for _ in range(10)])
+
+    findings = find_prompt_drift(
+        baseline_days=30,
+        recent_days=7,
+        min_calls=20,
+        now=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+
+    assert [f.task for f in findings] == ["t.bimodal"]
+    assert "prompt_dispersion" in findings[0].reasons
+    assert findings[0].recent_max_prompt_tokens == 1_200_000
+    assert findings[0].baseline_median_prompt_tokens is None
+
+
+def test_small_samples_are_not_judged(drift_db) -> None:
+    from datetime import datetime, timezone
+
+    from llm_client.observability.prompt_drift import find_prompt_drift
+
+    _seed_calls(drift_db, [(_at(20), "proj", "t.tiny", 1000) for _ in range(3)])
+    _seed_calls(drift_db, [(_at(40), "proj", "t.tiny", 100_000) for _ in range(3)])
+
+    assert (
+        find_prompt_drift(
+            baseline_days=30,
+            recent_days=7,
+            min_calls=20,
+            now=datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+        == []
+    )
+
+
+def test_unavailable_database_refuses_to_report_no_drift(monkeypatch) -> None:
+    """An unreadable DB must not look like a clean bill of health."""
+    from llm_client.core.errors import LLMObservabilityUnavailableError
+    from llm_client.observability import prompt_drift
+
+    def _boom():
+        raise sqlite3.DatabaseError("database disk image is malformed")
+
+    import sqlite3
+
+    monkeypatch.setattr(prompt_drift._io_log, "_get_db", _boom)
+
+    with pytest.raises(LLMObservabilityUnavailableError):
+        prompt_drift.find_prompt_drift()
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"baseline_days": 0},
+        {"recent_days": 0},
+        {"min_calls": 0},
+        {"growth_ratio": 1.0},
+        {"dispersion_ratio": 0.5},
+    ],
+)
+def test_invalid_thresholds_rejected(kwargs) -> None:
+    from llm_client.observability.prompt_drift import find_prompt_drift
+
+    with pytest.raises(ValueError):
+        find_prompt_drift(**kwargs)
+
+
+# --------------------------------------------------------------------------
+# Envelope wiring
+# --------------------------------------------------------------------------
+
+
+def test_max_prompt_tokens_is_a_client_control_field() -> None:
+    """It must be consumed here and never forwarded to the provider."""
+    from llm_client.execution.call_wrappers import _prepare_public_call_envelope
+
+    envelope = _prepare_public_call_envelope(
+        caller="call_llm",
+        timeout=60,
+        kwargs={
+            "task": "probe.task",
+            "trace_id": "probe/control-field",
+            "max_budget": 0.0,
+            "max_prompt_tokens": 50_000,
+            "temperature": 0.1,
+        },
+        messages=[{"role": "user", "content": "hello"}],
+    )
+
+    assert "max_prompt_tokens" not in envelope.runtime_kwargs
+    assert envelope.runtime_kwargs["temperature"] == 0.1
+    assert envelope.estimated_prompt_tokens > 0
+
+
+def test_envelope_measures_prompt_and_enforces_registered_ceiling(monkeypatch) -> None:
+    """The ceiling is applied on the real call path, not only when called directly."""
+    from llm_client.execution.call_wrappers import _prepare_public_call_envelope
+
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_SIZE_STRICT", "1")
+    register_task_prompt_budget("probe.enforced", 10)
+
+    with pytest.raises(LLMPromptBudgetExceededError):
+        _prepare_public_call_envelope(
+            caller="call_llm",
+            timeout=60,
+            kwargs={
+                "task": "probe.enforced",
+                "trace_id": "probe/enforced",
+                "max_budget": 0.0,
+            },
+            messages=[{"role": "user", "content": "x" * 10_000}],
+        )
+
+
+# --------------------------------------------------------------------------
+# Strict mode must never be inferred
+# --------------------------------------------------------------------------
+
+
+def test_ci_does_not_make_a_prompt_ceiling_fatal(monkeypatch) -> None:
+    """A ceiling must not silently become fatal just because CI is set.
+
+    Prompt size is a property of the input, so the same correct code passes on
+    a short document and breaches on a long one. Turning that into a hard
+    failure in CI produces an opaque build break in the environment with the
+    least context to debug it, and an outer retry loop will re-run the doomed
+    call until somebody discovers the limit was self-imposed.
+    """
+    from llm_client.execution.call_contracts import prompt_size_strict_mode
+
+    monkeypatch.delenv("LLM_CLIENT_PROMPT_SIZE_STRICT", raising=False)
+    monkeypatch.setenv("CI", "1")
+    assert prompt_size_strict_mode() is False
+
+    register_task_prompt_budget("demo.ci", 100)
+    # Warns, returns the measurement, does not raise.
+    assert check_prompt_size("demo.ci", "x" * 40_000) == 10_000
+
+
+def test_ci_does_not_make_a_context_contract_fatal(tmp_path: Path, monkeypatch) -> None:
+    from llm_client.prompt_context_contract import prompt_context_strict_mode
+
+    monkeypatch.delenv("LLM_CLIENT_PROMPT_CONTEXT_STRICT", raising=False)
+    monkeypatch.setenv("CI", "1")
+    assert prompt_context_strict_mode() is False
+
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 100\n',
+    )
+    breaches = enforce_contract(
+        template, {"artifacts_json": "x" * 5000}, strict=prompt_context_strict_mode()
+    )
+    assert breaches, "the breach should still be reported"
+
+
+def test_strict_mode_requires_its_own_explicit_variable(monkeypatch) -> None:
+    from llm_client.execution.call_contracts import prompt_size_strict_mode
+    from llm_client.prompt_context_contract import prompt_context_strict_mode
+
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_SIZE_STRICT", "1")
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_CONTEXT_STRICT", "1")
+    assert prompt_size_strict_mode() is True
+    assert prompt_context_strict_mode() is True
+
+
+def test_breach_message_says_the_limit_is_self_imposed(monkeypatch) -> None:
+    """The costly part of a self-imposed limit is discovering that it is one."""
+    monkeypatch.setenv("LLM_CLIENT_PROMPT_SIZE_STRICT", "1")
+    register_task_prompt_budget("demo.diagnose", 100)
+
+    with pytest.raises(LLMPromptBudgetExceededError) as excinfo:
+        check_prompt_size("demo.diagnose", "x" * 40_000)
+
+    message = str(excinfo.value)
+    assert "not a provider" in message
+    assert "register_task_prompt_budget" in message
+    assert "prompt-drift" in message
+
+
+def test_context_breach_message_warns_against_budgeting_source_material(
+    tmp_path: Path,
+) -> None:
+    """Budget what should not grow with the input; never the input itself."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  evidence_json:\n    max_bytes: 100\n',
+    )
+
+    with pytest.raises(PromptContextContractError) as excinfo:
+        enforce_contract(template, {"evidence_json": "x" * 5000}, strict=True)
+
+    message = str(excinfo.value)
+    assert "not provider limits" in message
+    assert "should NOT grow with the input" in message
+
+
+# --------------------------------------------------------------------------
+# Deliberately unbounded variables
+# --------------------------------------------------------------------------
+
+
+def test_unbounded_variable_never_breaches(tmp_path: Path) -> None:
+    """Source material is declared, and deliberately not budgeted.
+
+    A ceiling on input-proportional content fails on a long document and passes
+    on a short one, which is the job working rather than a defect. Declaring it
+    unbounded keeps it inside the contract so the choice is reviewable.
+    """
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "variables:\n"
+        "  evidence_json:\n    unbounded: true\n"
+        "  artifacts_json:\n    max_bytes: 200000\n",
+    )
+
+    assert enforce_contract(
+        template,
+        {"evidence_json": "x" * 50_000_000, "artifacts_json": "y" * 1000},
+        strict=True,
+    ) == []
+
+
+def test_unbounded_does_not_excuse_its_neighbours(tmp_path: Path) -> None:
+    """The exemption is per variable, not a way to disable the contract."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "variables:\n"
+        "  evidence_json:\n    unbounded: true\n"
+        "  artifacts_json:\n    max_bytes: 100\n",
+    )
+
+    with pytest.raises(PromptContextContractError, match="artifacts_json"):
+        enforce_contract(
+            template,
+            {"evidence_json": "x" * 1_000_000, "artifacts_json": "y" * 5000},
+            strict=True,
+        )
+
+
+def test_unbounded_still_requires_declaration(tmp_path: Path) -> None:
+    """An unbounded variable is declared; an unknown one is still rejected."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  evidence_json:\n    unbounded: true\n',
+    )
+
+    with pytest.raises(PromptContextContractError, match="not declared"):
+        enforce_contract(
+            template, {"evidence_json": "x", "surprise_json": "y"}, strict=True
+        )
+
+
+def test_declaring_both_a_budget_and_unbounded_is_rejected(tmp_path: Path) -> None:
+    """Ambiguity here would silently drop a real budget."""
+    template = _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\n'
+        "variables:\n  evidence_json:\n    unbounded: true\n    max_bytes: 100\n",
+    )
+
+    with pytest.raises(PromptContextContractError, match="both max_bytes and unbounded"):
+        load_contract(template)
+
+
+def test_a_variable_still_needs_one_of_the_two(tmp_path: Path) -> None:
+    """Forgetting a budget must not silently become unbounded."""
+    template = _write_contract(
+        tmp_path, 'schema_version: "1.0"\nvariables:\n  evidence_json: {}\n'
+    )
+
+    with pytest.raises(PromptContextContractError, match="unbounded: true"):
+        load_contract(template)
+
+
+# --------------------------------------------------------------------------
+# Run-scoped breach tally: the report a human actually sees
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def _clean_tally():
+    """The tally is process-global by design; keep tests independent."""
+    reset_contract_breach_tally()
+    yield
+    reset_contract_breach_tally()
+
+
+def _tight_contract(tmp_path: Path) -> Path:
+    return _write_contract(
+        tmp_path,
+        'schema_version: "1.0"\nvariables:\n  artifacts_json:\n    max_bytes: 100\n',
+    )
+
+
+def test_clean_run_reports_nothing(tmp_path: Path, _clean_tally) -> None:
+    """A summary that always prints something is a summary people stop reading."""
+    template = _tight_contract(tmp_path)
+    enforce_contract(template, {"artifacts_json": "x" * 10}, strict=False)
+
+    assert contract_breach_summary() == []
+    assert format_contract_breach_summary() is None
+
+
+def test_tally_counts_breaching_renders_against_total(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """The finding this exists for: 45 of 74 renders over budget, unnoticed.
+
+    The ratio is the point. A count of breaches alone cannot distinguish one
+    pathological input from a payload that has drifted for the whole run.
+    """
+    template = _tight_contract(tmp_path)
+    for _ in range(3):
+        enforce_contract(template, {"artifacts_json": "x" * 10}, strict=False)
+    for _ in range(2):
+        enforce_contract(template, {"artifacts_json": "x" * 500}, strict=False)
+
+    (summary,) = contract_breach_summary()
+    assert summary.template_name == "demo.yaml"
+    assert summary.renders == 5
+    assert summary.breaching_renders == 2
+
+
+def test_tally_keeps_the_worst_size_seen_not_the_last(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """A run is judged by its worst payload; the last one is an accident of order."""
+    template = _tight_contract(tmp_path)
+    enforce_contract(template, {"artifacts_json": "x" * 900}, strict=False)
+    enforce_contract(template, {"artifacts_json": "x" * 200}, strict=False)
+
+    (summary,) = contract_breach_summary()
+    (worst,) = summary.worst
+    assert worst.variable == "artifacts_json"
+    assert worst.observed_bytes == 900
+    assert worst.budget_bytes == 100
+
+    report = format_contract_breach_summary()
+    assert report is not None
+    assert "2 of 2 renders over budget" in report
+    assert "900" in report
+
+
+def test_strict_mode_still_counts_before_it_raises(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """The breach happened whether or not the caller chose to make it fatal."""
+    template = _tight_contract(tmp_path)
+
+    with pytest.raises(PromptContextContractError):
+        enforce_contract(template, {"artifacts_json": "x" * 500}, strict=True)
+
+    (summary,) = contract_breach_summary()
+    assert summary.breaching_renders == 1
+
+
+def test_undeclared_variable_is_counted_too(tmp_path: Path, _clean_tally) -> None:
+    """An undeclared variable is how the payload grew unnoticed in the first place."""
+    template = _tight_contract(tmp_path)
+    enforce_contract(
+        template,
+        {"artifacts_json": "x" * 10, "smuggled_json": "y" * 50},
+        strict=False,
+    )
+
+    (summary,) = contract_breach_summary()
+    (worst,) = summary.worst
+    assert worst.variable == "smuggled_json"
+    assert worst.undeclared
+
+
+def test_template_without_a_contract_is_not_counted_as_a_render(
+    tmp_path: Path, _clean_tally
+) -> None:
+    """Only governed templates have a budget to be measured against."""
+    template = tmp_path / "ungoverned.yaml"
+    template.write_text("messages: []\n", encoding="utf-8")
+    enforce_contract(template, {"anything": "x" * 10_000}, strict=False)
+
+    assert contract_breach_summary() == []

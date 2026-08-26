@@ -1,0 +1,61 @@
+name: claim_verification_severity
+version: "1.0"
+description: >-
+  Graduated severity for atomic claim verification. Replaces a binary
+  entailed/overstated split, which forces a harmless adjective and a fabricated
+  causal claim into the same bucket. Tier scores drive a worst-tier-wins gate
+  (see llm_client.claim_verification.SeverityPolicy), not a weighted mean.
+dimensions:
+  - name: claim_severity
+    description: >-
+      Severity of the divergence between one atomic claim and the evidence cited
+      for it. Judge exactly one tier per claim. Choose the least severe tier that
+      honestly describes the divergence.
+    weight: 1.0
+    scale: categorical
+    categories:
+      - name: grounded
+        description: >-
+          Directly stated by, or straightforwardly entailed by, the cited
+          evidence or artifact values.
+        score: 1.0
+      - name: stylistic_gloss
+        description: >-
+          Descriptive, evaluative, or intensifying language that is not verbatim
+          in the source but is consistent with it and does not change what a
+          reader would understand happened. "Substantial", "decisive", and
+          "hostile" for a source reading "poorly received" belong here. Do not
+          escalate a claim to a higher tier only because an adjective is absent
+          from the source.
+        score: 0.9
+      - name: unattributed_computed_claim
+        description: >-
+          DERIVED, NOT JUDGED — do not return this tier. A real and correct
+          computed result (a posterior, rank, threshold, matrix cell, or gate
+          outcome) asserted without attribution to the artifact that produced
+          it. Code assigns this when a computed support carries no locator, or
+          one that does not resolve, because that is a fact rather than a
+          judgment: a judge asked to rule on it is simultaneously required to
+          supply the very attribution it is ruling on, so the tier can never
+          honestly apply to its own output. Repair by attaching the artifact
+          locator, not by rewriting the prose.
+        score: 0.6
+      - name: composite_claim
+        description: >-
+          Each element is individually supported but the claim asserts their
+          conjunction, or the claim fuses parts that require different support
+          regimes (for example a historical premise joined to a computed
+          conclusion). The defect is in the decomposition, not the prose. Repair
+          by re-splitting the claim or by recording one support entry per part.
+        score: 0.5
+      - name: substantive_overstatement
+        description: >-
+          Asserts a fact, relationship, causal link, or comparative conclusion
+          that the cited evidence does not support. A reader would come away
+          believing something the evidence does not establish.
+        score: 0.2
+      - name: fabricated
+        description: >-
+          Contradicts the evidence, or has no basis in it at all, including
+          invented identifiers, actors, quantities, or events.
+        score: 0.0

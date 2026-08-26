@@ -55,6 +55,33 @@ def test_resolve_api_base_prefers_explicit_and_injects_openrouter_default() -> N
     )
 
 
+def test_resolve_call_plan_logs_provider_governance_reroute_loudly(caplog) -> None:
+    """A rule that pins a bare alias to a different provider/bill than the
+    caller's literal string implied must never be silently invisible, even
+    when the canonical model string is unchanged from what was requested."""
+    import logging
+
+    cfg = ClientConfig(routing_policy="openrouter")
+
+    with caplog.at_level(logging.WARNING, logger="llm_client.core.client_dispatch"):
+        plan = _resolve_call_plan(
+            model="gpt-5.6-terra",
+            fallback_models=None,
+            api_base=None,
+            config=cfg,
+        )
+
+    assert plan.primary_model == "gpt-5.6-terra"
+    warning_records = [
+        record for record in caplog.records if "ROUTE_PROVIDER_GOVERNANCE" in record.message
+    ]
+    assert len(warning_records) == 1
+    assert warning_records[0].levelno == logging.WARNING
+    message = warning_records[0].message
+    assert "gpt-5.6-terra" in message
+    assert "direct_provider" in message
+
+
 def test_resolve_call_plan_skips_temporarily_unavailable_models() -> None:
     cfg = ClientConfig(routing_policy="direct")
 
@@ -130,6 +157,19 @@ def test_resolve_call_gpt56_preserves_certified_direct_route_under_openrouter_po
     assert plan.models == ["gpt-5.6"]
     assert plan.routing_trace["routing_policy"] == "openrouter_on"
     assert "normalized_from" not in plan.routing_trace
+    assert plan.routing_trace["provider_governance_events"] == [
+        {
+            "event": "model_canonicalized",
+            "reason": (
+                "GPT-5.6 Sol's certified strict-schema route is OpenAI Responses API, "
+                "not the default OpenRouter proxy."
+            ),
+            "route_class": "direct_provider",
+            "canonical_model": "gpt-5.6",
+            "from": "gpt-5.6",
+            "to": "gpt-5.6",
+        }
+    ]
 
 
 def test_resolve_call_gpt56_terra_preserves_certified_direct_route_under_openrouter_policy() -> None:
@@ -140,6 +180,24 @@ def test_resolve_call_gpt56_terra_preserves_certified_direct_route_under_openrou
 
     assert plan.primary_model == "gpt-5.6-terra"
     assert plan.models == ["gpt-5.6-terra"]
+    # The exact-alias rule pins this bare alias to direct OpenAI billing even
+    # though the canonical string is identical to what the caller passed in.
+    # That must still surface as a governance event so the reroute is never
+    # silently invisible (see llm_client/core/client_dispatch.py's
+    # ROUTE_PROVIDER_GOVERNANCE warning log).
+    assert plan.routing_trace["provider_governance_events"] == [
+        {
+            "event": "model_canonicalized",
+            "reason": (
+                "GPT-5.6 Terra's certified strict-schema route is OpenAI Responses API, "
+                "not the default OpenRouter proxy."
+            ),
+            "route_class": "direct_provider",
+            "canonical_model": "gpt-5.6-terra",
+            "from": "gpt-5.6-terra",
+            "to": "gpt-5.6-terra",
+        }
+    ]
 
 
 def test_resolve_call_gpt54_preserves_banned_identity_under_direct_policy() -> None:

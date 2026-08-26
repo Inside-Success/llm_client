@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "comment": "Which OpenRouter billing account a repository's LLM spend belongs to. Resolved automatically at call time so account selection never depends on a human remembering to switch. Undeclared repositories fall back to default_account: billing client work to the personal account is a nuisance, billing personal work to a client is not.",
+  "default_account": "personal",
+  "remote_owner_accounts": {
+    "inside-success": "inside_success"
+  },
+  "repository_accounts": {
+    "brianmills2718/onto-canon6": "inside_success",
+    "brianmills2718/digimon_application_20260215": "inside_success"
+  }
+}

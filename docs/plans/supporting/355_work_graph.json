@@ -219,6 +219,122 @@
       },
       "status": "ready",
       "record_version": 1
+    },
+    {
+      "schema_version": "1.0",
+      "record_type": "work_unit",
+      "id": "WU-355-03",
+      "initiative_id": "ac16-full-codex-comparison",
+      "goal_id": "public-codex-intrinsic-event-custody",
+      "design_revision": "ac16-p02-u4-audit-20260823",
+      "spec_revision": "wu-355-03-v1",
+      "title": "Expose the exact ordered Codex CLI JSONL stream",
+      "class": "implementation",
+      "objective": "Extend the public result with every nonblank Codex CLI stdout line verbatim so experiment consumers can validate and hash the real stream instead of reconstructing evidence from completed items.",
+      "profile": "small",
+      "execution_class": "independently_executable",
+      "claimability": "ready_for_execution",
+      "authorization_mode": "registry_claim",
+      "scope": {
+        "included": [
+          "Additive LLMCallResult and boundary-schema codex_jsonl field",
+          "Exact nonblank CLI stdout line custody in stream order",
+          "Process serialization preservation",
+          "Focused deterministic tests and generated API documentation"
+        ],
+        "excluded": [
+          "Semantic acceptance of unknown or malformed event envelopes",
+          "Persistence or replay migration",
+          "Generic cross-provider event taxonomy",
+          "Live provider calls",
+          "Package publication"
+        ]
+      },
+      "inputs": [
+        {
+          "kind": "WorkUnitOutput",
+          "id": "WU-355-01",
+          "revision": "63f471347f2f1e18b37cf82d50b5546336b6a5e1"
+        },
+        {
+          "kind": "ConsumerAudit",
+          "id": "ac16-p02-u4-independent-audit",
+          "revision": "2026-08-23"
+        }
+      ],
+      "outputs": [
+        "Public codex_jsonl result contract",
+        "Exact CLI stdout line custody",
+        "Focused contract evidence",
+        "Merged shared-client revision for AC16 pinning"
+      ],
+      "dependencies": [
+        {
+          "unit_id": "WU-355-01",
+          "type": "hard",
+          "gate": {
+            "type": "unit_status",
+            "required_status": "accepted"
+          },
+          "rationale": "The exact-stream field extends the accepted completed-item contract without replacing it."
+        }
+      ],
+      "conflict_surfaces": [
+        {
+          "kind": "repository_path",
+          "target": "llm_client/core/data_types.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-public-result"
+        },
+        {
+          "kind": "repository_path",
+          "target": "llm_client/schemas.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-boundary-schema"
+        },
+        {
+          "kind": "repository_path",
+          "target": "llm_client/sdk/agents_codex.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-codex-cli"
+        },
+        {
+          "kind": "repository_path",
+          "target": "llm_client/sdk/agents_codex_process.py",
+          "repository": "llm_client",
+          "access": "exclusive",
+          "coordination_key": "llm-client-plan-355-process-result"
+        },
+        {
+          "kind": "contract",
+          "target": "LLMCallResult.codex_jsonl",
+          "access": "exclusive",
+          "coordination_key": "llm-client-codex-jsonl-v1"
+        }
+      ],
+      "acceptance": [
+        {
+          "id": "AC-355-03-lossless-stream",
+          "criterion": "A direct Codex CLI result exposes every nonblank stdout line verbatim and in stream order, including malformed or unknown envelopes.",
+          "evidence_required": [
+            "Fixture with valid, unknown, and malformed nonblank lines",
+            "Exact public-result equality assertion",
+            "Process serialization round trip"
+          ],
+          "negative_control": "The field is never reconstructed from codex_events and remains empty for non-CLI routes."
+        }
+      ],
+      "readiness": {
+        "status": "ready",
+        "required_approval_types": [],
+        "approvals": [],
+        "failed_guards": []
+      },
+      "status": "accepted",
+      "record_version": 2
     }
   ]
 }

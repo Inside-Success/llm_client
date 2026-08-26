@@ -30,6 +30,9 @@ def cmd_cost(args: argparse.Namespace) -> None:
     if args.project:
         where_parts.append("project = ?")
         params.append(args.project)
+    if args.task:
+        where_parts.append("task = ?")
+        params.append(args.task)
     if args.trace_id:
         where_parts.append("trace_id = ?")
         params.append(args.trace_id)
@@ -185,6 +188,7 @@ def register_parser(subparsers: Any) -> None:
         help="Comma-separated columns to group by (project, model, caller, task, trace_id, cost_source, billing_mode)",
     )
     parser.add_argument("--project", help="Filter to a specific project")
+    parser.add_argument("--task", help="Filter to a specific task")
     parser.add_argument("--trace-id", help="Filter to a specific trace_id")
     parser.add_argument("--days", type=int, help="Only show last N days")
     parser.add_argument("--format", choices=["table", "json"], default="table", help="Output format")

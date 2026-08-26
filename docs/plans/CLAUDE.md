@@ -38,8 +38,17 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 ## Current Execution
 
-- **Canonical main:** `5a3369e` (verified 2026-07-25; 1,948 passed, 3 skipped,
-  12 deselected).
+- **Implemented, awaiting downstream acceptance:** Plan #364 binds Codex lifecycle failures to an opaque
+  executing-account digest so multi-account consumers cannot confuse one
+  profile's usage limit with global Luna capacity.
+- **Completed documentation vertical:** Plan #358 compiles the revision-bound
+  `llm_client` capsule and exact source into a Karpathy-style codebase wiki and
+  proves wiki-first navigation back to native source.
+- **Completed wiki maintenance vertical:** Plan #359 enforces source freshness
+  and ingests the separately owned Inside Success downstream capsule.
+- **Implemented provider-free:** Plan #363 adds explicit exact-session Codex CLI
+  resume/fork controls; AC16 downstream adoption remains open.
+- **Canonical main:** current `main` (verify its revision at integration time).
 - **Merged, awaiting downstream acceptance:** Plans #121, #122, #124, and
   #334. Plan #124's shared implementation is verified locally; its remaining
   acceptance is one governed Process Tracing replay.
@@ -52,9 +61,15 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 364 | [Codex Account Identity Receipts](364_codex_account_identity_receipts.md) | Critical | 🚧 Implemented (WhyGame acceptance pending) | deterministic multi-account Codex consumers |
+| 363 | [Codex CLI Session Continuation](363_codex_session_continuation.md) | High | 🚧 Implemented (downstream adoption pending) | AC16 Plan #02 exact-session healing harness |
+| 359 | [Codebase Wiki Freshness and Dual-Lineage Ingest](359_codebase_wiki_freshness_and_dual_lineage.md) | Critical | ✅ Complete | Trustworthy ongoing personal/company wiki navigation |
+| 358 | [Revision-Grounded Karpathy Codebase Wiki](358_llm_client_karpathy_codebase_wiki.md) | Critical | ✅ Complete | Fresh-session wiki-first architecture navigation |
+| 361 | [Compatibility-Aware Workload Route Selection](361_workload_route_selection.md) | High | ❓  | explicit Codex/API/OpenRouter provider selection |
+| 360 | [Codex Subscription Default](360_codex_subscription_default.md) | High | ❓  | compatibility-aware route selection |
 | 357 | [Nested Tool-Loop Model Justification](357_nested_tool_model_justification.md) | Critical | ✅ Complete | Open Web Retrieval agent-driven MVP M1 canary |
 | 356 | [Instructor Structured-Attempt Ledger](356_instructor_attempt_ledger.md) | Critical | ✅ Complete | `research_v3` Plan #25 evidence-complete Luna comparison |
-| 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | ❓ Implemented (downstream adoption pending) | Agent Ecology 3 Plan #10 Luna Medium recovery gate |
+| 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | 🚧 In Progress (exact raw JSONL correction) | AC16 Plan 02 and Agent Ecology 3 Plan #10 |
 | 354 | [Single Structured-Call Terminal Lifecycle](354_single_structured_terminal.md) | Critical | ✅ Complete | `research_v3` Plan #25 trace validity |
 | 353 | [Terminal Structured-Attempt Cost Settlement](353_terminal_structured_attempt_cost_settlement.md) | Critical | ✅ Complete | Complete reserved-concurrent budget accounting for structured workloads |
 | 352 | [Monotonic Concurrent Budget-Cap Resume](352_monotonic_concurrent_budget_cap_resume.md) | Critical | ✅ Complete | Process Tracing Plan 038 full revolution-corpus adjudication |
@@ -152,6 +167,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 337 | [Current Model Selection Evidence and GPT-5.5 Retirement](337_current-model-selection-evidence-and-gpt-5-5-retirement.md) | Critical | ✅ Complete | - |
 | 338 | [Observed Application-Run Lifecycle](338_observed_application_run_lifecycle.md) | Critical | ❓  | Process Tracing outer-run receipt |
 | 350 | [Tool Response Custody](350_tool_response_custody.md) | High | ✅ Complete | Agent Ecology 3 provider qualification and prescription ablation |
+| 362 | [Codex CLI Network Parity](362_codex_cli_network_parity.md) | High | ✅ Complete | research_v3 Plan #38 subscription-agent OSINT vertical |
 
 
 ## Status Key

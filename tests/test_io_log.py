@@ -655,6 +655,30 @@ class TestLogCall:
             "pipeline/root123/verify/D-1/search/D-1",
         ]
 
+    def test_rooted_trace_summary_uses_exact_family_boundary(self, tmp_path):
+        io_log.log_call(
+            model="gpt-5-mini",
+            result=_mock_result(cost=0.05),
+            latency_s=0.8,
+            caller="call_llm_structured",
+            task="summary.rooted",
+            trace_id="root123/Alpha",
+        )
+        io_log.log_call(
+            model="gpt-5-mini",
+            result=_mock_result(cost=0.07),
+            latency_s=0.8,
+            caller="call_llm_structured",
+            task="summary.embedded",
+            trace_id="pipeline/root123/Beta",
+        )
+
+        summary = summarize_trace("root123", rooted=True)
+
+        assert summary is not None
+        assert summary["llm_calls"] == 1
+        assert summary["matched_trace_ids"] == ["root123/Alpha"]
+
 
 # ---------------------------------------------------------------------------
 # log_embedding
@@ -1271,9 +1295,65 @@ class TestGetCostTracePrefix:
         cost = io_log.get_cost(trace_prefix="exact")
         assert abs(cost - 2.0) < 0.001
 
+    def test_prefix_treats_sql_wildcards_as_literal_trace_characters(self, tmp_path):
+        self._insert_call(tmp_path, "dispatch_a/child", 1.0)
+        self._insert_call(tmp_path, "dispatchXa/child", 9.0)
+        self._insert_call(tmp_path, "dispatch%a/child", 2.0)
+        self._insert_call(tmp_path, "dispatch*a/child", 3.0)
+
+        assert io_log.get_cost(trace_prefix="dispatch_a") == pytest.approx(1.0)
+        assert io_log.get_cost(trace_prefix="dispatch%a") == pytest.approx(2.0)
+        assert io_log.get_cost(trace_prefix="dispatch*a") == pytest.approx(3.0)
+
     def test_prefix_and_trace_id_exclusive(self):
         with pytest.raises(ValueError, match="mutually exclusive"):
             io_log.get_cost(trace_id="a", trace_prefix="b")
+
+
+class TestGetCostFailsClosedOnDbError:
+    """Regression test for the 2026-08-18 llm_observability.db corruption
+    incident: a caller reading "database disk image is malformed" (or any
+    other DB-open failure) must not have get_cost() silently return 0.0.
+    check_budget() treats a 0.0 spend as "budget not exceeded", so a silent
+    fallback here would have disabled every cost cap that depends on it for
+    the entire corruption window without anyone noticing."""
+
+    def test_get_cost_raises_when_db_connection_unavailable(self, monkeypatch):
+        from llm_client.core.errors import LLMBudgetReservationStoreError
+
+        def _boom():
+            raise sqlite3.DatabaseError("database disk image is malformed")
+
+        monkeypatch.setattr(io_log, "_get_db", _boom)
+
+        with pytest.raises(LLMBudgetReservationStoreError, match="cannot verify budget"):
+            io_log.get_cost(trace_id="anything")
+
+    def test_get_cost_raises_when_query_fails_after_connect(self, monkeypatch, tmp_path):
+        from llm_client.core.errors import LLMBudgetReservationStoreError
+
+        class _ExplodingConnection:
+            def execute(self, *args, **kwargs):
+                raise sqlite3.DatabaseError("database disk image is malformed")
+
+        monkeypatch.setattr(io_log, "_get_db", lambda: _ExplodingConnection())
+
+        with pytest.raises(LLMBudgetReservationStoreError, match="cannot verify budget"):
+            io_log.get_cost(trace_id="anything")
+
+    def test_check_budget_fails_closed_when_spend_cannot_be_verified(self, monkeypatch):
+        """The actual enforcement gate (check_budget) must propagate the
+        failure rather than treating an unverifiable spend as $0 spent."""
+        from llm_client.core.errors import LLMBudgetReservationStoreError
+        from llm_client.execution.call_contracts import check_budget
+
+        def _boom():
+            raise sqlite3.DatabaseError("database disk image is malformed")
+
+        monkeypatch.setattr(io_log, "_get_db", _boom)
+
+        with pytest.raises(LLMBudgetReservationStoreError):
+            check_budget("some-trace", max_budget=5.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1702,6 +1782,13 @@ class TestBackgroundModeAdoption:
         assert summary["exists"] is False
         assert summary["total_records"] == 0
         assert summary["records_considered"] == 0
+
+    def test_default_path_honors_llm_client_data_root_env_var(self, tmp_path, monkeypatch):
+        """No explicit experiments_path -> default resolves under $LLM_CLIENT_DATA_ROOT."""
+        monkeypatch.setenv("LLM_CLIENT_DATA_ROOT", str(tmp_path))
+        summary = io_log.get_background_mode_adoption()
+        assert summary["experiments_path"] == str(tmp_path / "task_graph" / "experiments.jsonl")
+        assert summary["exists"] is False
 
 
 class TestConfigure:

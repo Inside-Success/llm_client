@@ -16,6 +16,8 @@ import logging
 import queue
 import threading
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, cast
 
 from pydantic import BaseModel
@@ -361,10 +363,19 @@ async def _acall_agent(
                                      agent_tool_calls, _tool_id_to_idx,
                                      ToolResultBlock)
 
-    if timeout > 0:
-        await asyncio.wait_for(_run(), timeout=float(timeout))
-    else:
-        await _run()
+    wall_start = datetime.now(timezone.utc)
+    try:
+        if timeout > 0:
+            await asyncio.wait_for(_run(), timeout=float(timeout))
+        else:
+            await _run()
+    except Exception as exc:
+        diagnostics = _summarize_failed_agent_session(
+            getattr(options, "cwd", None), wall_start, datetime.now(timezone.utc)
+        )
+        if diagnostics:
+            exc.add_note(diagnostics)
+        raise
 
     # content = last assistant message only; full_text = everything
     last_text = all_messages_text[-1] if all_messages_text else []
@@ -389,6 +400,125 @@ def _call_agent(
 
     coro = _acall_agent(model, messages, timeout=timeout, **kwargs)
     return cast(LLMCallResult, _run_sync(coro))
+
+
+# ---------------------------------------------------------------------------
+# Best-effort session diagnostics on failure
+# ---------------------------------------------------------------------------
+#
+# The Claude Agent SDK's own internal retry loop for structured output (its
+# "Failed to provide valid structured output after N attempts" error) happens
+# entirely inside the closed-source `claude` CLI binary: this module makes
+# exactly one call to the SDK and sees only the final success or exception,
+# with no visibility into what happened during those attempts. Separately,
+# the `claude` CLI writes its own session transcript to
+# ~/.claude/projects/<slug-of-cwd>/<session-id>.jsonl as a side effect of
+# running. That is not a documented or stable interface -- it is an internal
+# implementation detail of the CLI's own session storage that may change or
+# disappear in a future CLI version -- so reading it here is strictly
+# best-effort diagnostic sugar attached to a failure that already occurred.
+# It must never affect call behavior, timing, or success/failure outcome.
+
+
+def _agent_session_project_dir(cwd: str) -> Path:
+    """Return the `claude` CLI's session-transcript directory for one cwd.
+
+    Mirrors the CLI's own slugging: every path separator becomes a hyphen.
+    Undocumented convention, observed empirically; may change in a future
+    CLI version.
+    """
+    return Path.home() / ".claude" / "projects" / cwd.replace("/", "-")
+
+
+def _summarize_failed_agent_session(
+    cwd: str | None,
+    wall_start: datetime,
+    wall_end: datetime,
+) -> str | None:
+    """Best-effort summary of what the `claude` CLI's session transcript shows
+    happened during a failed call: how many distinct attempts it made (by
+    request-tree leaf), how much it "thought" per attempt, and whether it
+    ever got as far as producing an answer (a tool call or text block).
+
+    Returns None whenever the transcript cannot be confidently located or
+    parsed -- including when the directory or file layout does not match
+    what this function expects -- rather than raising. This must never be
+    the reason a real call fails.
+    """
+    try:
+        effective_cwd = cwd or str(Path.cwd())
+        project_dir = _agent_session_project_dir(effective_cwd)
+        if not project_dir.is_dir():
+            return None
+
+        # Small slack around the call window: the CLI's own file mtime is a
+        # few seconds offset from our wall-clock markers.
+        window_start = wall_start.timestamp() - 5
+        window_end = wall_end.timestamp() + 5
+        candidates = []
+        for path in project_dir.glob("*.jsonl"):
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if window_start <= mtime <= window_end:
+                candidates.append(path)
+        if not candidates:
+            return None
+        transcript_path = max(candidates, key=lambda p: p.stat().st_mtime)
+
+        attempts: list[dict[str, Any]] = []
+        current_leaf: str | None = None
+        current: dict[str, Any] | None = None
+        with transcript_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = _json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                entry_type = entry.get("type")
+                if entry_type == "last-prompt":
+                    leaf = entry.get("leafUuid")
+                    if leaf != current_leaf:
+                        if current is not None:
+                            attempts.append(current)
+                        current_leaf = leaf
+                        current = {
+                            "thinking_chars": 0,
+                            "had_tool_use": False,
+                            "had_text": False,
+                        }
+                elif entry_type == "assistant" and current is not None:
+                    content = (entry.get("message") or {}).get("content") or []
+                    for block in content:
+                        block_type = block.get("type")
+                        if block_type == "thinking":
+                            current["thinking_chars"] += len(block.get("thinking") or "")
+                        elif block_type == "tool_use":
+                            current["had_tool_use"] = True
+                        elif block_type == "text":
+                            current["had_text"] = True
+        if current is not None:
+            attempts.append(current)
+        if not attempts:
+            return None
+
+        rendered = ", ".join(
+            f"attempt{i + 1}(thinking_chars={a['thinking_chars']}, "
+            f"answered={a['had_tool_use'] or a['had_text']})"
+            for i, a in enumerate(attempts)
+        )
+        return (
+            "agent_session_diagnostics(best_effort, source=claude_cli_transcript, "
+            f"file={transcript_path.name}, attempts={len(attempts)}): {rendered}"
+        )
+    except Exception:
+        # Diagnostic capture must never break the real call.
+        logger.debug("Best-effort agent session diagnostics failed", exc_info=True)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -427,10 +557,19 @@ async def _acall_agent_structured(
             elif isinstance(message, ResultMessage):
                 result_msg = message
 
-    if timeout > 0:
-        await asyncio.wait_for(_run(), timeout=float(timeout))
-    else:
-        await _run()
+    wall_start = datetime.now(timezone.utc)
+    try:
+        if timeout > 0:
+            await asyncio.wait_for(_run(), timeout=float(timeout))
+        else:
+            await _run()
+    except Exception as exc:
+        diagnostics = _summarize_failed_agent_session(
+            getattr(options, "cwd", None), wall_start, datetime.now(timezone.utc)
+        )
+        if diagnostics:
+            exc.add_note(diagnostics)
+        raise
 
     # Parse structured output: prefer SDK's structured_output, else parse text
     parsed_data: Any = None
@@ -439,7 +578,13 @@ async def _acall_agent_structured(
     else:
         raw_text = "\n".join(text_parts) if text_parts else ""
         if not raw_text.strip():
-            raise ValueError("Empty response from agent — no structured output")
+            diagnostics = _summarize_failed_agent_session(
+                getattr(options, "cwd", None), wall_start, datetime.now(timezone.utc)
+            )
+            error = ValueError("Empty response from agent — no structured output")
+            if diagnostics:
+                error.add_note(diagnostics)
+            raise error
         parsed_data = _json.loads(raw_text)
 
     validated = response_model.model_validate(parsed_data)

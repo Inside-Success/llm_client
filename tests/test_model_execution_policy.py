@@ -1,5 +1,6 @@
 """Contract tests for the shared allowed-model execution policy."""
 
+from collections.abc import Iterable
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,11 +12,14 @@ from llm_client.core.data_types import _cache_key
 from llm_client.core.errors import LLMConfigurationError
 from llm_client.core.model_execution_policy import (
     ALLOWED_EXECUTION_MODELS,
+    DEFAULT_EXECUTION_EMBEDDING_MODEL,
     DEFAULT_EXECUTION_MODEL,
     REASONING_CAPABILITIES,
+    SHARED_EXECUTION_MODELS,
     evaluate_model_execution_policy,
     evaluate_reasoning_policy,
 )
+from llm_client.inside_success_policy import INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
 
 
 def _mock_response() -> MagicMock:
@@ -35,13 +39,49 @@ def test_default_route_needs_no_justification_but_requires_reasoning_policy() ->
     decision = evaluate_model_execution_policy(
         [DEFAULT_EXECUTION_MODEL],
         mode="enforce_allowlist",
-        reasoning_effort="NONE",
+        reasoning_effort="medium",
     )
 
     assert decision.enforced is True
     assert decision.uses_only_default is True
     assert decision.justification is None
-    assert decision.reasoning_policy.effort == "none"
+    assert decision.reasoning_policy.effort == "medium"
+
+
+def test_legacy_default_is_not_the_workload_routing_policy() -> None:
+    assert DEFAULT_EXECUTION_MODEL == "openrouter/openai/gpt-5.6-luna"
+
+
+def test_embedding_default_needs_no_justification() -> None:
+    # embed() has no model_justification parameter -- callers cannot supply
+    # one, so the embedding default must be exempt the same way the chat
+    # default is.
+    decision = evaluate_model_execution_policy(
+        [DEFAULT_EXECUTION_EMBEDDING_MODEL],
+        mode="enforce_allowlist",
+    )
+
+    assert decision.enforced is True
+    assert decision.uses_only_default is True
+    assert decision.justification is None
+    assert DEFAULT_EXECUTION_EMBEDDING_MODEL == "openrouter/openai/text-embedding-3-small"
+    assert DEFAULT_EXECUTION_EMBEDDING_MODEL in ALLOWED_EXECUTION_MODELS
+    assert DEFAULT_EXECUTION_EMBEDDING_MODEL not in REASONING_CAPABILITIES
+
+
+def test_embedding_route_resolution_fails_loud_for_disallowed_model() -> None:
+    # Regression: _resolve_embedding_route previously caught every exception
+    # from _resolve_call_plan, including a real execution-allowlist
+    # rejection, and silently fell back to dispatching the raw unrouted
+    # model string. A policy rejection must propagate like it does for
+    # chat-completion routes, not disappear into a direct-provider fallback.
+    from llm_client.execution.embedding_runtime import _resolve_embedding_route
+
+    with pytest.raises(LLMConfigurationError, match="execution allowlist"):
+        _resolve_embedding_route(
+            model="text-embedding-not-a-real-allowlisted-model",
+            api_base=None,
+        )
 
 
 def test_allowed_alternate_requires_and_records_justification() -> None:
@@ -79,7 +119,6 @@ def test_openrouter_sol_requires_explicit_justification_and_reasoning() -> None:
 @pytest.mark.parametrize(
     "model",
     [
-        "codex/gpt-5.6-luna",
         "codex/gpt-5.6-sol",
         "codex/gpt-5.6-terra",
     ],
@@ -125,6 +164,16 @@ def test_allowed_alternate_without_justification_fails() -> None:
             mode="enforce_allowlist",
             reasoning_effort="low",
         )
+
+
+def test_legacy_openrouter_default_remains_compatible_for_unmigrated_callers() -> None:
+    decision = evaluate_model_execution_policy(
+        ["openrouter/openai/gpt-5.6-luna"],
+        mode="enforce_allowlist",
+        reasoning_effort="medium",
+    )
+
+    assert decision.uses_only_default is True
 
 
 @pytest.mark.parametrize(
@@ -220,23 +269,13 @@ def test_reasoning_capability_routes_are_all_allowlisted() -> None:
 
 def test_gpt55_family_is_absent_from_execution_policy() -> None:
     """Generic GPT-5.5 aliases stay absent outside the company overlay."""
-    from llm_client.inside_success_policy import (
-        INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS,
-    )
-
-    generic_models = ALLOWED_EXECUTION_MODELS - INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
-    assert not any("gpt-5.5" in model for model in generic_models)
+    assert not any("gpt-5.5" in model for model in SHARED_EXECUTION_MODELS)
     assert not any("gpt-5.5" in model for model in REASONING_CAPABILITIES)
 
 
 def test_gpt54_family_is_absent_from_execution_policy() -> None:
     """Generic GPT-5.4 aliases stay absent outside the company overlay."""
-    from llm_client.inside_success_policy import (
-        INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS,
-    )
-
-    generic_models = ALLOWED_EXECUTION_MODELS - INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS
-    assert not any("gpt-5.4" in model for model in generic_models)
+    assert not any("gpt-5.4" in model for model in SHARED_EXECUTION_MODELS)
     assert not any("gpt-5.4" in model for model in REASONING_CAPABILITIES)
 
 
@@ -343,3 +382,111 @@ def test_removed_compatibility_mode_fails_before_dispatch(
         )
 
     completion.assert_not_awaited()
+
+
+# --- The reviewed downstream overlay is the ONLY way a banned family runs ---
+#
+# This is the Inside Success downstream. Upstream
+# (BrianMills2718/llm_client) asserts flatly that no Opus or GPT-5.4 route
+# reaches `ALLOWED_EXECUTION_MODELS`; here that assertion is false on purpose.
+# `llm_client/inside_success_policy.py` carries a reviewed, human-accepted
+# exception -- the benchmark-selected Grounded Research roster -- and
+# `model_execution_policy.py` unions it into the allowlist.
+#
+# Copying the upstream guard down unchanged would fail, and deleting it would
+# leave nothing. So the downstream invariant is narrower and still has teeth:
+#
+#   1. the shared upstream set stays clean -- a banned family may enter the
+#      composed allowlist only through the overlay, never through the set both
+#      repositories share. This is what catches the next personal->company
+#      sync, or a local edit, quietly adding Opus to the shared set. It asserts
+#      on SHARED_EXECUTION_MODELS by name, because deriving the shared set as
+#      ALLOWED_EXECUTION_MODELS minus the overlay would subtract away any route
+#      that leaked into both, which is the leak's actual shape;
+#   2. the overlay's banned roster is pinned here, so it cannot grow another
+#      banned route without someone editing this list next to the acceptance
+#      record in inside_success_policy.py;
+#   3. a banned route that is NOT on that reviewed roster is still refused at
+#      the gate, with a justification supplied.
+#
+# `test_gpt54_family_is_absent_from_execution_policy` above covers one family
+# against the generic set and REASONING_CAPABILITIES; point 1 here is the
+# family-general form over the same shared set, and adds Opus, which had none.
+#
+# Point 3 matters because the failure does not present as an open door. Once a
+# route is in the allowlist it stops failing with "not in the llm_client
+# execution allowlist" and starts failing with "requires model_justification"
+# -- which any caller clears by passing a string. Nothing reviews that string.
+
+BANNED_MODEL_FAMILIES = ("opus", "gpt-5.4", "gpt-5-4")
+
+# Exactly the banned-family routes the reviewed Inside Success overlay accepts.
+# Keep in sync with INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS and the
+# `model_override_acceptance` record beside it.
+REVIEWED_DOWNSTREAM_BANNED_ROUTES = (
+    "claude-code/claude-opus-4-8",
+    "codex/gpt-5.4-mini",
+    "codex/gpt-5.4-nano",
+    "openrouter/anthropic/claude-opus-4.8",
+    "openrouter/openai/gpt-5.4-mini",
+    "openrouter/openai/gpt-5.4-nano",
+)
+
+
+def _banned_routes(models: Iterable[str]) -> list[str]:
+    lowered = ((model, model.lower()) for model in models)
+    return sorted(
+        model
+        for model, low in lowered
+        if any(family in low for family in BANNED_MODEL_FAMILIES)
+    )
+
+
+def test_shared_upstream_allowlist_carries_no_banned_family() -> None:
+    """A banned family may reach the gate only through the reviewed overlay."""
+
+    leaked = _banned_routes(SHARED_EXECUTION_MODELS)
+
+    assert leaked == [], (
+        "banned model routes reached the execution allowlist outside the "
+        f"reviewed Inside Success overlay: {leaked}. ADR 0016 decision 5 and "
+        "Plan #348 ban the Opus and GPT-5.4 families in the shared runtime. "
+        "The company exception lives in llm_client/inside_success_policy.py "
+        "next to its acceptance record; it does not belong in the set both "
+        "repositories share."
+    )
+
+
+def test_reviewed_overlay_roster_has_not_grown() -> None:
+    """The accepted exception is a fixed roster, not an open category."""
+
+    overlay = _banned_routes(INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS)
+
+    assert overlay == sorted(REVIEWED_DOWNSTREAM_BANNED_ROUTES), (
+        "the Inside Success overlay's banned-family roster changed. Every "
+        "Opus/GPT-5.4 route it allows is a reviewed exception recorded in "
+        "llm_client/inside_success_policy.py under model_override_acceptance. "
+        "Adding one is a policy decision: update that record, then update "
+        "REVIEWED_DOWNSTREAM_BANNED_ROUTES here."
+    )
+
+
+def test_unreviewed_banned_route_is_refused_even_with_a_justification() -> None:
+    """A justification is a caller-supplied string, not a review of the ban."""
+
+    unreviewed = (
+        "openrouter/anthropic/claude-opus-4.1",
+        "openrouter/openai/gpt-5.4",
+        "gpt-5.4",
+    )
+    for model in unreviewed:
+        assert model not in ALLOWED_EXECUTION_MODELS, (
+            f"{model} is used here as a route the reviewed overlay does not "
+            "cover; it must stay outside the allowlist for this test to mean "
+            "anything."
+        )
+        with pytest.raises(LLMConfigurationError, match="execution allowlist"):
+            evaluate_model_execution_policy(
+                [model],
+                justification="benchmark-selected for a downstream consumer",
+            )

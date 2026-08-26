@@ -15,6 +15,7 @@ Utility scripts for development and CI. All scripts support `--help` for options
 | `scripts/meta/generate_quiz.py` | Generate comprehension quiz prompts |
 | `scripts/meta/check_required_reading.py` | Enforce required docs read before editing coupled source files |
 | `scripts/meta/validate_relationships.py` | Validate relationships/read-gate config integrity |
+| `scripts/meta/check_codebase_wiki_freshness.py` | Verify the immutable codebase-wiki source surface, authority hashes, external capsules, and optional remote pins |
 | `scripts/meta/worktree-coordination/check_claims.py` | Claim, inspect, and release sanctioned worktree ownership |
 | `scripts/meta/worktree-coordination/create_worktree.py` | Create sanctioned worktrees under the repo's default worktree root |
 | `scripts/meta/worktree-coordination/safe_worktree_remove.py` | Remove sanctioned worktrees safely |
@@ -43,6 +44,10 @@ pytest -q tests/test_required_reading_gate.py
 
 # Validate relationships config before CI
 python scripts/meta/validate_relationships.py --strict
+
+# Codebase wiki freshness (offline gate, then full external/network check)
+make codebase-wiki-check
+make codebase-wiki-check-full
 
 # Sanctioned worktree coordination
 make worktree BRANCH=plan-22-example TASK="Describe the task" PLAN=22

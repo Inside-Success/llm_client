@@ -8,6 +8,7 @@ the wrapper-side liveness logic was restored.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -97,6 +98,17 @@ def _typed_lifecycle_phases(logical_call_id: str) -> list[str]:
         (logical_call_id,),
     ).fetchall()
     return [str(row[0]) for row in rows]
+
+
+def _typed_lifecycle_payloads(trace_id: str) -> list[dict[str, Any]]:
+    """Return stored typed lifecycle payloads for one exact trace."""
+
+    rows = io_log._get_db().execute(
+        """SELECT payload FROM call_lifecycle_events
+           WHERE trace_id = ? ORDER BY id""",
+        (trace_id,),
+    ).fetchall()
+    return [json.loads(str(row[0])) for row in rows]
 
 
 def _lifecycle_rows() -> list[tuple[str, dict[str, Any]]]:
@@ -294,6 +306,62 @@ def test_call_llm_structured_emits_started_and_completed_lifecycle(monkeypatch: 
     assert completed["progress_observable"] is True
     assert completed["progress_source"] == "unit_test"
     assert completed["progress_event_count"] == 1
+
+
+def test_codex_explicit_account_digest_is_retained_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A failed Codex call keeps opaque account evidence without secrets or paths."""
+
+    account_id = "acct-multi-account-regression"
+    profile_home = tmp_path / "profile"
+    config_dir = profile_home / ".codex"
+    config_dir.mkdir(parents=True)
+    (config_dir / "auth.json").write_text(
+        json.dumps(
+            {
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "account_id": account_id,
+                    "access_token": "must-not-be-retained",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # mock-ok: forces the provider failure boundary after lifecycle start.
+    def _failed_impl(*args: Any, **kwargs: Any) -> tuple[BaseModel, LLMCallResult]:
+        raise RuntimeError("usage limit on selected account")
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _failed_impl,
+    )
+    trace_id = "trace.lifecycle.codex-account-failure"
+    with pytest.raises(RuntimeError, match="usage limit"):
+        client.call_llm_structured(
+            "codex/gpt-5.6-luna",
+            [{"role": "user", "content": "hello"}],
+            _ResponseModel,
+            task="test.lifecycle.codex-account",
+            trace_id=trace_id,
+            max_budget=0.1,
+            codex_home=str(profile_home),
+            lifecycle_heartbeat_interval_s=0,
+        )
+
+    payloads = _typed_lifecycle_payloads(trace_id)
+    assert [payload["phase"] for payload in payloads] == ["started", "failed"]
+    expected_digest = "sha256:" + hashlib.sha256(account_id.encode()).hexdigest()
+    for payload in payloads:
+        assert payload["codex_auth_binding"] == "explicit"
+        assert payload["codex_account_id_sha256"] == expected_digest
+        serialized = json.dumps(payload, sort_keys=True)
+        assert account_id not in serialized
+        assert "must-not-be-retained" not in serialized
+        assert str(profile_home) not in serialized
 
 
 def test_composed_sync_structured_call_emits_one_terminal_lifecycle(
@@ -662,7 +730,17 @@ def test_public_call_rejects_terminal_active_observed_run(
 def test_call_llm_structured_uses_shared_default_timeout_when_omitted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Structured wrappers should apply the shared finite default timeout."""
+    """Structured wrappers should apply the shared finite default timeout.
+
+    Pinned to ``policy=allow``. The policy is read from the process
+    environment, and ``llm_client/__init__.py`` loads the operator's keys file
+    into ``os.environ`` at import, so an unpinned assertion here silently
+    depends on whether that file happens to set
+    ``LLM_CLIENT_TIMEOUT_POLICY``. The ``ban`` half of the contract is the
+    test below.
+    """
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
 
     seen: dict[str, Any] = {}
 
@@ -703,6 +781,60 @@ def test_call_llm_structured_uses_shared_default_timeout_when_omitted(
     )
 
     assert seen["timeout"] == 60
+
+
+def test_call_llm_structured_omits_default_timeout_under_policy_ban(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Under policy=ban the wrapper must not fill the library default.
+
+    ``normalize_timeout`` discards every timeout under the ban, so filling the
+    60s default downstream only produced a spurious ``TIMEOUT_DISABLED``
+    warning on every default-only call. Effective behavior is identical either
+    way (no timeout is applied); this pins the quiet path.
+    """
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+
+    seen: dict[str, Any] = {}
+
+    # mock-ok: verifies wrapper timeout resolution without provider calls.
+    def _fake_impl(
+        model: str,
+        messages: list[dict[str, Any]],
+        response_model: type[BaseModel],
+        **kwargs: Any,
+    ) -> tuple[BaseModel, LLMCallResult]:
+        seen["timeout"] = kwargs["timeout"]
+        parsed = response_model(label="ok")
+        result = LLMCallResult(
+            content=parsed.model_dump_json(),
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            cost=0.0,
+            model=model,
+            resolved_model=model,
+            finish_reason="stop",
+            raw_response={"ok": True},
+            warnings=[],
+            cost_source="computed",
+        )
+        return parsed, result
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+
+    client.call_llm_structured(
+        "gemini/gemini-2.5-flash",
+        [{"role": "user", "content": "hello"}],
+        _ResponseModel,
+        task="test.lifecycle",
+        trace_id="trace.lifecycle.default_timeout_ban",
+        max_budget=0.1,
+    )
+
+    assert seen["timeout"] == 0
 
 
 def test_call_llm_structured_preserves_explicit_timeout_override(
