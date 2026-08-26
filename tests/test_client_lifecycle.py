@@ -730,7 +730,17 @@ def test_public_call_rejects_terminal_active_observed_run(
 def test_call_llm_structured_uses_shared_default_timeout_when_omitted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Structured wrappers should apply the shared finite default timeout."""
+    """Structured wrappers should apply the shared finite default timeout.
+
+    Pinned to ``policy=allow``. The policy is read from the process
+    environment, and ``llm_client/__init__.py`` loads the operator's keys file
+    into ``os.environ`` at import, so an unpinned assertion here silently
+    depends on whether that file happens to set
+    ``LLM_CLIENT_TIMEOUT_POLICY``. The ``ban`` half of the contract is the
+    test below.
+    """
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "allow")
 
     seen: dict[str, Any] = {}
 
@@ -771,6 +781,60 @@ def test_call_llm_structured_uses_shared_default_timeout_when_omitted(
     )
 
     assert seen["timeout"] == 60
+
+
+def test_call_llm_structured_omits_default_timeout_under_policy_ban(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Under policy=ban the wrapper must not fill the library default.
+
+    ``normalize_timeout`` discards every timeout under the ban, so filling the
+    60s default downstream only produced a spurious ``TIMEOUT_DISABLED``
+    warning on every default-only call. Effective behavior is identical either
+    way (no timeout is applied); this pins the quiet path.
+    """
+
+    monkeypatch.setenv("LLM_CLIENT_TIMEOUT_POLICY", "ban")
+
+    seen: dict[str, Any] = {}
+
+    # mock-ok: verifies wrapper timeout resolution without provider calls.
+    def _fake_impl(
+        model: str,
+        messages: list[dict[str, Any]],
+        response_model: type[BaseModel],
+        **kwargs: Any,
+    ) -> tuple[BaseModel, LLMCallResult]:
+        seen["timeout"] = kwargs["timeout"]
+        parsed = response_model(label="ok")
+        result = LLMCallResult(
+            content=parsed.model_dump_json(),
+            usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            cost=0.0,
+            model=model,
+            resolved_model=model,
+            finish_reason="stop",
+            raw_response={"ok": True},
+            warnings=[],
+            cost_source="computed",
+        )
+        return parsed, result
+
+    monkeypatch.setattr(
+        "llm_client.execution.structured_runtime._call_llm_structured_impl",
+        _fake_impl,
+    )
+
+    client.call_llm_structured(
+        "gemini/gemini-2.5-flash",
+        [{"role": "user", "content": "hello"}],
+        _ResponseModel,
+        task="test.lifecycle",
+        trace_id="trace.lifecycle.default_timeout_ban",
+        max_budget=0.1,
+    )
+
+    assert seen["timeout"] == 0
 
 
 def test_call_llm_structured_preserves_explicit_timeout_override(
