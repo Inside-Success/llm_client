@@ -11,7 +11,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -250,3 +250,83 @@ def persist_usage_snapshot(
 
     io_log._run_db_write(_write)
     return inserted
+
+
+def parse_ccusage_daily_json(
+    payload: Mapping[str, object],
+    *,
+    machine_id: str,
+    account_fingerprint: str,
+    billing_mode: BillingMode,
+    source_version: str,
+    observed_at: datetime | None = None,
+) -> tuple[UsageSnapshotV1, ...]:
+    """Normalize ccusage daily JSON without reimplementing its accounting."""
+
+    rows = payload.get("daily")
+    if not isinstance(rows, list):
+        raise ComputeObservabilityError("ccusage payload is missing the daily array")
+
+    snapshots: list[UsageSnapshotV1] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise ComputeObservabilityError("ccusage daily row is not an object")
+        period = row.get("period", row.get("date"))
+        if not isinstance(period, str) or not period:
+            raise ComputeObservabilityError("ccusage daily row is missing period/date")
+        row_time = observed_at or _period_timestamp(period)
+        breakdowns = row.get("modelBreakdowns")
+        model_rows = breakdowns if isinstance(breakdowns, list) and breakdowns else [row]
+        for model_row in model_rows:
+            if not isinstance(model_row, Mapping):
+                raise ComputeObservabilityError("ccusage model breakdown is not an object")
+            model = model_row.get("modelName")
+            if model is not None and not isinstance(model, str):
+                raise ComputeObservabilityError("ccusage modelName must be a string")
+            raw_record = {"period": period, "row": dict(row), "model": dict(model_row)}
+            raw_json = json.dumps(raw_record, sort_keys=True, separators=(",", ":"))
+            raw_sha256 = hashlib.sha256(raw_json.encode("utf-8")).hexdigest()
+            snapshots.append(
+                UsageSnapshotV1(
+                    snapshot_id=f"ccusage:{machine_id}:{account_fingerprint}:{period}:{model or 'aggregate'}",
+                    source_name="ccusage",
+                    source_version=source_version,
+                    observed_at=row_time,
+                    machine_id=machine_id,
+                    provider=str(row.get("agent", "unknown")),
+                    model=model,
+                    account_fingerprint=account_fingerprint,
+                    billing_mode=billing_mode,
+                    input_tokens=_integer_field(model_row, "inputTokens"),
+                    cached_input_tokens=_integer_field(model_row, "cacheReadTokens"),
+                    output_tokens=_integer_field(model_row, "outputTokens"),
+                    api_equivalent_cost_usd=_number_field(model_row, "cost"),
+                    raw_record_sha256=raw_sha256,
+                )
+            )
+    return tuple(snapshots)
+
+
+def _period_timestamp(period: str) -> datetime:
+    try:
+        return datetime.fromisoformat(period.replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise ComputeObservabilityError(f"unsupported ccusage period: {period}") from exc
+
+
+def _integer_field(row: Mapping[str, object], name: str) -> int | None:
+    value = row.get(name)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ComputeObservabilityError(f"ccusage field {name} must be a non-negative integer")
+    return value
+
+
+def _number_field(row: Mapping[str, object], name: str) -> float | None:
+    value = row.get(name)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise ComputeObservabilityError(f"ccusage field {name} must be a non-negative number")
+    return float(value)

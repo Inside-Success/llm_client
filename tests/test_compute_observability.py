@@ -14,6 +14,7 @@ from llm_client.observability.compute_observability import (
     QuotaWindow,
     TaskAttemptReceiptV1,
     UsageSnapshotV1,
+    parse_ccusage_daily_json,
     persist_usage_snapshot,
 )
 
@@ -138,3 +139,35 @@ def test_usage_snapshot_persistence_rejects_credential_fields() -> None:
 
     with pytest.raises(ComputeObservabilityError, match="credential-bearing"):
         persist_usage_snapshot(snapshot, sanitized_raw_record=raw)
+
+
+def test_ccusage_daily_json_normalizes_model_breakdowns_without_repricing() -> None:
+    snapshots = parse_ccusage_daily_json(
+        {
+            "daily": [
+                {
+                    "agent": "codex",
+                    "period": "2026-09-10",
+                    "modelBreakdowns": [
+                        {
+                            "modelName": "gpt-5.6-luna",
+                            "inputTokens": 10,
+                            "cacheReadTokens": 4,
+                            "outputTokens": 3,
+                            "cost": 0.25,
+                        }
+                    ],
+                }
+            ]
+        },
+        machine_id="machine-a",
+        account_fingerprint="unknown",
+        billing_mode="subscription",
+        source_version="20.0.20",
+    )
+
+    assert len(snapshots) == 1
+    assert snapshots[0].model == "gpt-5.6-luna"
+    assert snapshots[0].cached_input_tokens == 4
+    assert snapshots[0].api_equivalent_cost_usd == 0.25
+    assert snapshots[0].actual_marginal_cost_usd is None

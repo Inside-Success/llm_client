@@ -114,6 +114,7 @@ from llm_client.observability.structured_attempts import (
 from llm_client.observability.compute_observability import (
     ComputeObservabilityError,
     OutcomeReceiptV1,
+    parse_ccusage_daily_json,
     persist_usage_snapshot,
     QuotaWindow,
     TaskAttemptReceiptV1,
@@ -124,6 +125,7 @@ from llm_client.observability.compute_observability import (
 __all__ = [
     "AgentToolUsageEvent",
     "OutcomeReceiptV1",
+    "parse_ccusage_daily_json",
     "ComputeObservabilityError",
     "QuotaWindow",
     "TaskAttemptReceiptV1",
