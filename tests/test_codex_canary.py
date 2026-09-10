@@ -1,9 +1,11 @@
 """Focused contract tests for the bounded dedicated-Codex canary."""
 
+import sqlite3
 from types import SimpleNamespace
 
 import pytest
 
+from llm_client import io_log
 from llm_client.codex_canary import (
     CodexCanaryConfig,
     CodexCanaryJob,
@@ -75,6 +77,56 @@ async def test_queue_writes_terminal_receipt_and_telemetry(monkeypatch, tmp_path
     assert receipt.fallback_used is False
     assert queue.telemetry().succeeded == 1
     assert len((tmp_path / "receipts.jsonl").read_text().splitlines()) == 1
+
+
+@pytest.mark.asyncio
+async def test_queue_emits_provider_neutral_attempt_and_outcome_receipts(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr("llm_client.codex_canary.ObservedRun", _FakeRun)
+    old_enabled, old_db_path = io_log._enabled, io_log._db_path
+    io_log.configure(enabled=True, db_path=tmp_path / "observability.db")
+    try:
+
+        async def fake_call(model, messages, **kwargs):
+            return SimpleNamespace(cost=0.0)
+
+        monkeypatch.setattr("llm_client.codex_canary.acall_llm", fake_call)
+        queue = CodexCanaryQueue.for_trusted_async_work(_config(tmp_path))
+        receipt = await queue.submit(
+            CodexCanaryJob(
+                task="canary.echo",
+                task_id="task-123",
+                task_type="verification",
+                estimated_value=2.0,
+                trace_id="receipt-test",
+                messages=[{"role": "user", "content": "Reply with ok"}],
+            )
+        )
+        await queue.close()
+
+        with sqlite3.connect(tmp_path / "observability.db") as db:
+            attempt = db.execute(
+                "SELECT task_id, attempt_id, provider, billing_mode, worker_id "
+                "FROM task_attempt_receipts"
+            ).fetchone()
+            outcome = db.execute(
+                "SELECT task_id, attempt_id, coordinator_decision, weighted_shipped_value "
+                "FROM outcome_receipts"
+            ).fetchone()
+
+        assert receipt.status == "succeeded"
+        assert attempt == (
+            "task-123",
+            receipt.job_id,
+            "codex_subscription",
+            "subscription",
+            "codex-canary-worker-0",
+        )
+        assert outcome == ("task-123", receipt.job_id, "accepted", None)
+    finally:
+        io_log.close()
+        io_log._enabled, io_log._db_path = old_enabled, old_db_path
 
 
 @pytest.mark.asyncio

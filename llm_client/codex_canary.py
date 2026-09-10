@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import platform
 import time
 from collections import Counter
 from dataclasses import dataclass
@@ -15,13 +17,20 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from llm_client import io_log
 from llm_client.core.client import acall_llm
 from llm_client.core.model_selection import (
     ResolvedWorkloadRoute,
     WorkloadRouteContext,
     resolve_workload_route,
 )
-from llm_client.observability import ObservedRun
+from llm_client.observability import (
+    ObservedRun,
+    OutcomeReceiptV1,
+    TaskAttemptReceiptV1,
+    persist_outcome,
+    persist_task_attempt,
+)
 
 
 class CodexCanaryConfig(BaseModel):
@@ -46,11 +55,17 @@ class CodexCanaryConfig(BaseModel):
 
     def validate_fallback(self) -> None:
         if (self.fallback_model is None) != (self.fallback_provider is None):
-            raise ValueError("fallback_model and fallback_provider must be configured together")
+            raise ValueError(
+                "fallback_model and fallback_provider must be configured together"
+            )
         if self.fallback_model is not None and self.fallback_spend_ceiling_usd <= 0:
-            raise ValueError("fallback_spend_ceiling_usd must be positive when fallback is configured")
+            raise ValueError(
+                "fallback_spend_ceiling_usd must be positive when fallback is configured"
+            )
         if self.fallback_model is None and self.fallback_spend_ceiling_usd != 0:
-            raise ValueError("fallback spend ceiling without an explicit fallback is invalid")
+            raise ValueError(
+                "fallback spend ceiling without an explicit fallback is invalid"
+            )
 
 
 class CodexCanaryJob(BaseModel):
@@ -59,6 +74,12 @@ class CodexCanaryJob(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     task: str = Field(min_length=1)
     trace_id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9._:-]+$")
+    task_id: str | None = Field(default=None, min_length=1)
+    parent_task_id: str | None = Field(default=None, min_length=1)
+    task_type: str | None = Field(default=None, min_length=1)
+    difficulty: float | None = Field(default=None, ge=0)
+    estimated_value: float | None = Field(default=None, ge=0)
+    parallel_branch_count: int = Field(default=1, ge=1)
     messages: list[dict[str, Any]] = Field(min_length=1)
     max_budget: float = Field(default=0.01, gt=0)
     reasoning_effort: Literal["medium"] = "medium"
@@ -109,13 +130,22 @@ class _QueuedJob:
 class CodexCanaryQueue:
     """One-account, one-worker bounded queue for trusted async work."""
 
-    def __init__(self, config: CodexCanaryConfig, *, route: ResolvedWorkloadRoute) -> None:
+    def __init__(
+        self, config: CodexCanaryConfig, *, route: ResolvedWorkloadRoute
+    ) -> None:
         config.validate_fallback()
-        if route.provider != "codex_subscription" or route.model != "codex/gpt-5.6-luna":
-            raise ValueError("CodexCanaryQueue requires the explicit codex_subscription Luna route")
+        if (
+            route.provider != "codex_subscription"
+            or route.model != "codex/gpt-5.6-luna"
+        ):
+            raise ValueError(
+                "CodexCanaryQueue requires the explicit codex_subscription Luna route"
+            )
         self.config = config
         self.route = route
-        self._queue: asyncio.Queue[_QueuedJob | None] = asyncio.Queue(maxsize=config.queue_size)
+        self._queue: asyncio.Queue[_QueuedJob | None] = asyncio.Queue(
+            maxsize=config.queue_size
+        )
         self._worker: asyncio.Task[None] | None = None
         self._closed = False
         self._accepted = 0
@@ -142,7 +172,9 @@ class CodexCanaryQueue:
         if self._closed:
             raise RuntimeError("canary queue is closed")
         if self._worker is None:
-            self._worker = asyncio.create_task(self._run(), name=f"codex-canary-{self.config.account_id}")
+            self._worker = asyncio.create_task(
+                self._run(), name=f"codex-canary-{self.config.account_id}"
+            )
 
     async def submit(self, job: CodexCanaryJob) -> CodexCanaryReceipt:
         await self.start()
@@ -151,7 +183,9 @@ class CodexCanaryQueue:
         if self.config.max_jobs is not None and self._accepted >= self.config.max_jobs:
             return await self._reject(job, "job quota exhausted")
         self._accepted += 1
-        future: asyncio.Future[CodexCanaryReceipt] = asyncio.get_running_loop().create_future()
+        future: asyncio.Future[CodexCanaryReceipt] = (
+            asyncio.get_running_loop().create_future()
+        )
         await self._queue.put(_QueuedJob(uuid4().hex, job, future))
         return await future
 
@@ -240,7 +274,10 @@ class CodexCanaryQueue:
                             reasoning_effort=item.job.reasoning_effort,
                             task=item.job.task,
                             trace_id=run.child_trace_id("explicit_paid_fallback"),
-                            max_budget=min(item.job.max_budget, self.config.fallback_spend_ceiling_usd),
+                            max_budget=min(
+                                item.job.max_budget,
+                                self.config.fallback_spend_ceiling_usd,
+                            ),
                             model_justification=(
                                 f"Explicit canary fallback after Codex failure; provider="
                                 f"{self.config.fallback_provider}; spend ceiling="
@@ -250,10 +287,18 @@ class CodexCanaryQueue:
                         timeout=self.config.hard_timeout_s,
                     )
                     if result is None:
-                        raise RuntimeError("explicit fallback returned no result") from primary_error
+                        raise RuntimeError(
+                            "explicit fallback returned no result"
+                        ) from primary_error
                 cost_usd = _result_cost(result)
-                if fallback_used and cost_usd is not None and cost_usd > self.config.fallback_spend_ceiling_usd:
-                    raise RuntimeError("observed fallback cost exceeded the configured spend ceiling")
+                if (
+                    fallback_used
+                    and cost_usd is not None
+                    and cost_usd > self.config.fallback_spend_ceiling_usd
+                ):
+                    raise RuntimeError(
+                        "observed fallback cost exceeded the configured spend ceiling"
+                    )
         except asyncio.CancelledError as exc:
             error = exc
             status: Literal["succeeded", "failed", "cancelled"] = "cancelled"
@@ -286,6 +331,12 @@ class CodexCanaryQueue:
             error_message=str(error)[:500] if error else None,
         )
         _append_receipt(self.config.receipt_path, receipt)
+        _emit_compute_receipts(
+            job_id=item.job_id,
+            job=item.job,
+            receipt=receipt,
+            worker_id="codex-canary-worker-0",
+        )
         return receipt
 
     async def _reject(self, job: CodexCanaryJob, reason: str) -> CodexCanaryReceipt:
@@ -307,6 +358,12 @@ class CodexCanaryQueue:
         )
         self._telemetry["rejected"] += 1
         _append_receipt(self.config.receipt_path, receipt)
+        _emit_compute_receipts(
+            job_id=receipt.job_id,
+            job=job,
+            receipt=receipt,
+            worker_id="codex-canary-coordinator",
+        )
         return receipt
 
 
@@ -323,4 +380,63 @@ def _append_receipt(path: Path, receipt: CodexCanaryReceipt) -> None:
         os.fsync(handle.fileno())
 
 
-__all__ = ["CanaryTelemetry", "CodexCanaryConfig", "CodexCanaryJob", "CodexCanaryQueue", "CodexCanaryReceipt"]
+def _emit_compute_receipts(
+    *,
+    job_id: str,
+    job: CodexCanaryJob,
+    receipt: CodexCanaryReceipt,
+    worker_id: str,
+) -> None:
+    """Join one coordinator job to the shared provider-neutral ledger.
+
+    This records orchestration identity and outcome only. Provider usage and
+    cost remain owned by the normal LLM call ledger and imported usage
+    snapshots; this path never reprices or duplicates them.
+    """
+
+    if not io_log._logging_enabled():
+        return
+
+    task_id = job.task_id or job.trace_id
+    persist_task_attempt(
+        TaskAttemptReceiptV1(
+            task_id=task_id,
+            parent_task_id=job.parent_task_id,
+            attempt_id=job_id,
+            trace_id=job.trace_id,
+            provider="codex_subscription",
+            model=receipt.model,
+            account_fingerprint=hashlib.sha256(
+                receipt.account_id.encode("utf-8")
+            ).hexdigest(),
+            machine_id=platform.node() or "unknown-machine",
+            worker_id=worker_id,
+            billing_mode="subscription",
+            started_at=receipt.started_at,
+            ended_at=receipt.completed_at,
+            parallel_branch_count=job.parallel_branch_count,
+            task_type=job.task_type or job.task,
+            difficulty=job.difficulty,
+            estimated_value=job.estimated_value,
+        )
+    )
+    persist_outcome(
+        OutcomeReceiptV1(
+            task_id=task_id,
+            attempt_id=job_id,
+            coordinator_decision=(
+                "accepted" if receipt.status == "succeeded" else "rejected"
+            ),
+            recorded_at=receipt.completed_at,
+            evidence_refs=(f"codex-canary:{job_id}",),
+        )
+    )
+
+
+__all__ = [
+    "CanaryTelemetry",
+    "CodexCanaryConfig",
+    "CodexCanaryJob",
+    "CodexCanaryQueue",
+    "CodexCanaryReceipt",
+]
