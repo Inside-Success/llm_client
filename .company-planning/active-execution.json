@@ -1,12 +1,12 @@
 {
   "active_slice": {
-    "description": "Persist idempotent sanitized source records and normalized usage snapshots in the existing observability store.",
-    "next_action": "Inspect the existing SQLite writer seam and add source-record/snapshot persistence with duplicate and malformed-record behavior.",
+    "description": "Consume pinned ccusage and CodexBar machine-readable reports into normalized usage snapshots.",
+    "next_action": "Pin the exact CodexBar repository/revision, inspect live JSON output, and add adapter fixtures before wiring CLI ingestion.",
     "requires_external_action": false,
     "requires_spend": false,
-    "slice_id": "usage-source-persistence",
+    "slice_id": "provider-source-adapters",
     "status": "ready",
-    "target_revision": "contract-fixtures@local"
+    "target_revision": "contract-persistence@0e0636bc"
   },
   "authority": {
     "external_action_authorized": false,
@@ -24,12 +24,12 @@
   "completion": {
     "evidence_revision": null,
     "receipt_ref": null,
-    "remaining_ready_work": 3,
+    "remaining_ready_work": 2,
     "requested": false,
     "verifier_outcome": null
   },
   "cursor_id": "cost-observability-subscriptions-v1",
-  "cursor_revision": 2,
+  "cursor_revision": 3,
   "failure_state": {
     "boundary": null,
     "last_failure_ref": null,
@@ -40,9 +40,16 @@
   "observations": [
     {
       "boundary": "compute-observability-contracts",
-      "evidence_ref": "tests/test_compute_observability.py::4 passed",
+      "evidence_ref": "tests/test_compute_observability.py::6 passed",
       "kind": "authentic_result",
       "observation_id": "obs-contract-fixtures",
+      "outcome": "pass"
+    },
+    {
+      "boundary": "existing-io-log-schema",
+      "evidence_ref": "tests/test_io_log.py tests/test_io_log_compat.py::93 passed",
+      "kind": "authentic_result",
+      "observation_id": "obs-io-log-compatibility",
       "outcome": "pass"
     }
   ],
