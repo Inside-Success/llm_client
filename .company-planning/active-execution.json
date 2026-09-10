@@ -1,12 +1,12 @@
 {
   "active_slice": {
-    "description": "Normalize CodexBar quota/reset/account JSON while preserving source-specific fields and multi-account identity.",
-    "next_action": "Use the pinned steipete/CodexBar v0.56.8 contract to add quota/account fixtures and a parser; do not install or modify credentials.",
+    "description": "Expose a supported ingestion command and demonstrate one real task-attempt-to-usage join.",
+    "next_action": "Add the CLI ingestion entrypoint for ccusage/CodexBar JSON and exercise it with the live ccusage output plus a real task receipt.",
     "requires_external_action": false,
     "requires_spend": false,
-    "slice_id": "codexbar-quota-adapter",
+    "slice_id": "cli-ingestion-and-real-join",
     "status": "ready",
-    "target_revision": "ccusage-adapter@ec39ccc2"
+    "target_revision": "task-outcome-persistence@9afd8e74"
   },
   "authority": {
     "external_action_authorized": false,
@@ -24,12 +24,12 @@
   "completion": {
     "evidence_revision": null,
     "receipt_ref": null,
-    "remaining_ready_work": 2,
+    "remaining_ready_work": 1,
     "requested": false,
     "verifier_outcome": null
   },
   "cursor_id": "cost-observability-subscriptions-v1",
-  "cursor_revision": 4,
+  "cursor_revision": 5,
   "failure_state": {
     "boundary": null,
     "last_failure_ref": null,
@@ -40,7 +40,7 @@
   "observations": [
     {
       "boundary": "compute-observability-contracts",
-      "evidence_ref": "tests/test_compute_observability.py::7 passed",
+      "evidence_ref": "tests/test_compute_observability.py::9 passed",
       "kind": "authentic_result",
       "observation_id": "obs-contract-fixtures",
       "outcome": "pass"
@@ -53,10 +53,17 @@
       "outcome": "pass"
     },
     {
-      "boundary": "ccusage-source",
-      "evidence_ref": "ccusage@20.0.20 daily --json --last 1 --mode auto --breakdown returned local daily/model JSON",
+      "boundary": "provider-sources",
+      "evidence_ref": "ccusage@20.0.20 live daily JSON and CodexBar v0.56.8 local Codex JSON probes succeeded",
       "kind": "authentic_result",
-      "observation_id": "obs-ccusage-live-probe",
+      "observation_id": "obs-source-probes",
+      "outcome": "pass"
+    },
+    {
+      "boundary": "task-outcome-attribution",
+      "evidence_ref": "tests/test_compute_observability.py tests/test_io_log.py tests/test_io_log_compat.py::102 passed",
+      "kind": "authentic_result",
+      "observation_id": "obs-task-join-contract",
       "outcome": "pass"
     }
   ],
