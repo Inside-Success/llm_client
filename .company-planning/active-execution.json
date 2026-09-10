@@ -1,12 +1,12 @@
 {
   "active_slice": {
-    "description": "Expose a supported ingestion command and demonstrate one real task-attempt-to-usage join.",
-    "next_action": "Add the CLI ingestion entrypoint for ccusage/CodexBar JSON and exercise it with the live ccusage output plus a real task receipt.",
+    "description": "Expose read-only joins and efficiency metrics for quota, actual spend, API-equivalent cost, shipped value, latency, and human intervention.",
+    "next_action": "Add a read-only report query/CLI over usage snapshots, task attempts, attribution links, and outcome receipts with explicit missing-data coverage.",
     "requires_external_action": false,
     "requires_spend": false,
-    "slice_id": "cli-ingestion-and-real-join",
+    "slice_id": "compute-observability-report",
     "status": "ready",
-    "target_revision": "task-outcome-persistence@9afd8e74"
+    "target_revision": "cli-ingestion@ce3ec36f"
   },
   "authority": {
     "external_action_authorized": false,
@@ -29,7 +29,7 @@
     "verifier_outcome": null
   },
   "cursor_id": "cost-observability-subscriptions-v1",
-  "cursor_revision": 5,
+  "cursor_revision": 6,
   "failure_state": {
     "boundary": null,
     "last_failure_ref": null,
@@ -39,31 +39,24 @@
   "lifecycle_state": "active",
   "observations": [
     {
-      "boundary": "compute-observability-contracts",
-      "evidence_ref": "tests/test_compute_observability.py::9 passed",
+      "boundary": "provider-ingestion-cli",
+      "evidence_ref": "live ccusage@20.0.20 -> python -m llm_client compute-usage import -> 3 SQLite snapshots",
       "kind": "authentic_result",
-      "observation_id": "obs-contract-fixtures",
-      "outcome": "pass"
-    },
-    {
-      "boundary": "existing-io-log-schema",
-      "evidence_ref": "tests/test_io_log.py tests/test_io_log_compat.py::93 passed",
-      "kind": "authentic_result",
-      "observation_id": "obs-io-log-compatibility",
-      "outcome": "pass"
-    },
-    {
-      "boundary": "provider-sources",
-      "evidence_ref": "ccusage@20.0.20 live daily JSON and CodexBar v0.56.8 local Codex JSON probes succeeded",
-      "kind": "authentic_result",
-      "observation_id": "obs-source-probes",
+      "observation_id": "obs-live-cli-import",
       "outcome": "pass"
     },
     {
       "boundary": "task-outcome-attribution",
-      "evidence_ref": "tests/test_compute_observability.py tests/test_io_log.py tests/test_io_log_compat.py::102 passed",
+      "evidence_ref": "live task live-task-1 joined to gpt-5.6-luna usage with API-equivalent cost and null actual marginal cost",
       "kind": "authentic_result",
-      "observation_id": "obs-task-join-contract",
+      "observation_id": "obs-live-task-join",
+      "outcome": "pass"
+    },
+    {
+      "boundary": "llm-client-compatibility",
+      "evidence_ref": "102 focused/compatibility tests passed; current adapter contract test 9 passed",
+      "kind": "authentic_result",
+      "observation_id": "obs-regression-suite",
       "outcome": "pass"
     }
   ],
