@@ -252,6 +252,130 @@ def persist_usage_snapshot(
     return inserted
 
 
+def persist_task_attempt(receipt: TaskAttemptReceiptV1) -> bool:
+    """Persist an orchestrator attempt receipt idempotently."""
+
+    inserted = False
+
+    def _write(db: object) -> None:
+        nonlocal inserted
+        existing = db.execute(
+            "SELECT attempt_id FROM task_attempt_receipts WHERE attempt_id = ?",
+            (receipt.attempt_id,),
+        ).fetchone()
+        if existing is not None:
+            return
+        db.execute(
+            """INSERT INTO task_attempt_receipts
+               (attempt_id, task_id, parent_task_id, trace_id, logical_call_id,
+                attempt_ordinal, provider, model, account_fingerprint, machine_id,
+                worker_id, billing_mode, started_at, ended_at, parallel_branch_count,
+                task_type, difficulty, estimated_value, usage_snapshot_ids_json, imported_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                receipt.attempt_id,
+                receipt.task_id,
+                receipt.parent_task_id,
+                receipt.trace_id,
+                receipt.logical_call_id,
+                receipt.attempt_ordinal,
+                receipt.provider,
+                receipt.model,
+                receipt.account_fingerprint,
+                receipt.machine_id,
+                receipt.worker_id,
+                receipt.billing_mode,
+                receipt.started_at.isoformat(),
+                receipt.ended_at.isoformat() if receipt.ended_at else None,
+                receipt.parallel_branch_count,
+                receipt.task_type,
+                receipt.difficulty,
+                receipt.estimated_value,
+                json.dumps(receipt.usage_snapshot_ids),
+                datetime.now(receipt.started_at.tzinfo).isoformat(),
+            ),
+        )
+        inserted = True
+
+    io_log._run_db_write(_write)
+    return inserted
+
+
+def persist_outcome(receipt: OutcomeReceiptV1) -> bool:
+    """Persist one orchestrator outcome receipt idempotently."""
+
+    inserted = False
+
+    def _write(db: object) -> None:
+        nonlocal inserted
+        existing = db.execute(
+            "SELECT attempt_id FROM outcome_receipts WHERE task_id = ? AND attempt_id = ?",
+            (receipt.task_id, receipt.attempt_id),
+        ).fetchone()
+        if existing is not None:
+            return
+        db.execute(
+            """INSERT INTO outcome_receipts
+               (task_id, attempt_id, tests_status, ci_status, static_analysis_status,
+                coordinator_decision, merged, reverted, regressed, weighted_shipped_value,
+                critical_path_seconds, human_intervention_count, human_intervention_minutes,
+                recorded_at, evidence_refs_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                receipt.task_id,
+                receipt.attempt_id,
+                receipt.tests_status,
+                receipt.ci_status,
+                receipt.static_analysis_status,
+                receipt.coordinator_decision,
+                None if receipt.merged is None else int(receipt.merged),
+                None if receipt.reverted is None else int(receipt.reverted),
+                None if receipt.regressed is None else int(receipt.regressed),
+                receipt.weighted_shipped_value,
+                receipt.critical_path_seconds,
+                receipt.human_intervention_count,
+                receipt.human_intervention_minutes,
+                receipt.recorded_at.isoformat(),
+                json.dumps(receipt.evidence_refs),
+            ),
+        )
+        inserted = True
+
+    io_log._run_db_write(_write)
+    return inserted
+
+
+def persist_task_compute_link(link: TaskComputeLinkV1) -> bool:
+    """Persist an explicit or confidence-labeled attribution edge."""
+
+    inserted = False
+
+    def _write(db: object) -> None:
+        nonlocal inserted
+        existing = db.execute(
+            "SELECT attempt_id FROM task_compute_links WHERE attempt_id = ? AND snapshot_id = ?",
+            (link.attempt_id, link.snapshot_id),
+        ).fetchone()
+        if existing is not None:
+            return
+        db.execute(
+            """INSERT INTO task_compute_links
+               (task_id, attempt_id, snapshot_id, attribution_reason, attribution_confidence)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                link.task_id,
+                link.attempt_id,
+                link.snapshot_id,
+                link.attribution_reason,
+                link.attribution_confidence,
+            ),
+        )
+        inserted = True
+
+    io_log._run_db_write(_write)
+    return inserted
+
+
 def parse_ccusage_daily_json(
     payload: Mapping[str, object],
     *,

@@ -13,9 +13,13 @@ from llm_client.observability.compute_observability import (
     OutcomeReceiptV1,
     QuotaWindow,
     TaskAttemptReceiptV1,
+    TaskComputeLinkV1,
     UsageSnapshotV1,
     parse_ccusage_daily_json,
     parse_codexbar_usage_json,
+    persist_outcome,
+    persist_task_attempt,
+    persist_task_compute_link,
     persist_usage_snapshot,
 )
 
@@ -204,3 +208,44 @@ def test_codexbar_usage_normalizes_quota_windows_without_storing_identity() -> N
     assert snapshots[0].quota_windows[0].reset_at is not None
     assert snapshots[0].account_fingerprint == "d" * 64
     assert snapshots[0].actual_marginal_cost_usd is None
+
+
+def test_task_attempt_outcome_and_compute_link_are_joinable_and_idempotent() -> None:
+    started = _now()
+    attempt = TaskAttemptReceiptV1(
+        task_id="task-1",
+        attempt_id="attempt-1",
+        trace_id="trace-1",
+        provider="codex",
+        model="gpt-5.6-luna",
+        account_fingerprint="e" * 64,
+        machine_id="machine-a",
+        billing_mode="subscription",
+        started_at=started,
+        ended_at=started,
+        usage_snapshot_ids=("snapshot-1",),
+    )
+    outcome = OutcomeReceiptV1(
+        task_id="task-1",
+        attempt_id="attempt-1",
+        tests_status="pass",
+        ci_status="pass",
+        coordinator_decision="accepted",
+        merged=True,
+        weighted_shipped_value=2.0,
+        recorded_at=started,
+    )
+    link = TaskComputeLinkV1(
+        task_id="task-1",
+        attempt_id="attempt-1",
+        snapshot_id="snapshot-1",
+        attribution_reason="explicit",
+        attribution_confidence="high",
+    )
+
+    assert persist_task_attempt(attempt) is True
+    assert persist_task_attempt(attempt) is False
+    assert persist_outcome(outcome) is True
+    assert persist_outcome(outcome) is False
+    assert persist_task_compute_link(link) is True
+    assert persist_task_compute_link(link) is False

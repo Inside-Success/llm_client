@@ -1186,6 +1186,60 @@ CREATE TABLE IF NOT EXISTS usage_snapshots (
     imported_at TEXT NOT NULL,
     FOREIGN KEY(raw_record_sha256) REFERENCES usage_source_records(raw_record_sha256)
 );
+
+CREATE TABLE IF NOT EXISTS task_attempt_receipts (
+    attempt_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    parent_task_id TEXT,
+    trace_id TEXT,
+    logical_call_id TEXT,
+    attempt_ordinal INTEGER,
+    provider TEXT NOT NULL,
+    model TEXT,
+    account_fingerprint TEXT NOT NULL,
+    machine_id TEXT NOT NULL,
+    worker_id TEXT,
+    billing_mode TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    parallel_branch_count INTEGER NOT NULL,
+    task_type TEXT,
+    difficulty REAL,
+    estimated_value REAL,
+    usage_snapshot_ids_json TEXT NOT NULL,
+    imported_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS outcome_receipts (
+    task_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,
+    tests_status TEXT NOT NULL,
+    ci_status TEXT NOT NULL,
+    static_analysis_status TEXT NOT NULL,
+    coordinator_decision TEXT NOT NULL,
+    merged INTEGER,
+    reverted INTEGER,
+    regressed INTEGER,
+    weighted_shipped_value REAL,
+    critical_path_seconds REAL,
+    human_intervention_count INTEGER NOT NULL,
+    human_intervention_minutes REAL NOT NULL,
+    recorded_at TEXT NOT NULL,
+    evidence_refs_json TEXT NOT NULL,
+    PRIMARY KEY (task_id, attempt_id),
+    FOREIGN KEY(attempt_id) REFERENCES task_attempt_receipts(attempt_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_compute_links (
+    task_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,
+    snapshot_id TEXT NOT NULL,
+    attribution_reason TEXT NOT NULL,
+    attribution_confidence TEXT NOT NULL,
+    PRIMARY KEY (attempt_id, snapshot_id),
+    FOREIGN KEY(attempt_id) REFERENCES task_attempt_receipts(attempt_id),
+    FOREIGN KEY(snapshot_id) REFERENCES usage_snapshots(snapshot_id)
+);
 """
 
 _INDEXES_SQL = """
@@ -1199,6 +1253,8 @@ CREATE INDEX IF NOT EXISTS idx_calls_task ON llm_calls(task);
 CREATE INDEX IF NOT EXISTS idx_usage_snapshots_observed ON usage_snapshots(observed_at);
 CREATE INDEX IF NOT EXISTS idx_usage_snapshots_account ON usage_snapshots(account_fingerprint);
 CREATE INDEX IF NOT EXISTS idx_usage_snapshots_provider ON usage_snapshots(provider, model);
+CREATE INDEX IF NOT EXISTS idx_task_attempts_task ON task_attempt_receipts(task_id);
+CREATE INDEX IF NOT EXISTS idx_outcome_receipts_task ON outcome_receipts(task_id);
 CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
 CREATE INDEX IF NOT EXISTS idx_calls_trace_id ON llm_calls(trace_id);
 CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref);
