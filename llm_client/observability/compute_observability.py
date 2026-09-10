@@ -146,7 +146,7 @@ class TaskComputeLinkV1(BaseModel):
 
 
 _FORBIDDEN_RAW_KEYS = re.compile(
-    r"(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)",
+    r"(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|account[_-]?email|email)",
     re.IGNORECASE,
 )
 
@@ -307,11 +307,86 @@ def parse_ccusage_daily_json(
     return tuple(snapshots)
 
 
+def parse_codexbar_usage_json(
+    payload: object,
+    *,
+    machine_id: str,
+    account_fingerprint: str,
+    source_version: str,
+    observed_at: datetime | None = None,
+) -> tuple[UsageSnapshotV1, ...]:
+    """Normalize CodexBar quota JSON without retaining account identity text."""
+
+    entries = payload if isinstance(payload, list) else [payload]
+    snapshots: list[UsageSnapshotV1] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            raise ComputeObservabilityError("CodexBar usage entry is not an object")
+        provider = entry.get("provider")
+        usage = entry.get("usage")
+        if not isinstance(provider, str) or not isinstance(usage, Mapping):
+            raise ComputeObservabilityError("CodexBar usage entry lacks provider/usage")
+        timestamp = usage.get("updatedAt")
+        snapshot_time = observed_at or _parse_timestamp(timestamp)
+        windows: list[QuotaWindow] = []
+        for window_name in ("primary", "secondary", "tertiary"):
+            window = usage.get(window_name)
+            if window is None:
+                continue
+            if not isinstance(window, Mapping):
+                raise ComputeObservabilityError(f"CodexBar {window_name} window is not an object")
+            used_percent = window.get("usedPercent")
+            if not isinstance(used_percent, (int, float)) or isinstance(used_percent, bool):
+                raise ComputeObservabilityError(
+                    f"CodexBar {window_name} window lacks usedPercent"
+                )
+            reset_at = window.get("resetsAt")
+            windows.append(
+                QuotaWindow(
+                    name=window_name,
+                    used_percent=float(used_percent),
+                    reset_at=_parse_timestamp(reset_at) if reset_at else None,
+                    limit=float(window["windowMinutes"])
+                    if isinstance(window.get("windowMinutes"), (int, float))
+                    else None,
+                )
+            )
+        if not windows:
+            raise ComputeObservabilityError("CodexBar usage entry has no quota windows")
+        raw_record = {"provider": provider, "usage": dict(usage)}
+        raw_json = json.dumps(raw_record, sort_keys=True, separators=(",", ":"))
+        raw_sha256 = hashlib.sha256(raw_json.encode("utf-8")).hexdigest()
+        snapshots.append(
+            UsageSnapshotV1(
+                snapshot_id=f"codexbar:{machine_id}:{account_fingerprint}:{provider}:{snapshot_time.isoformat()}",
+                source_name="codexbar",
+                source_version=source_version,
+                observed_at=snapshot_time,
+                machine_id=machine_id,
+                provider=provider,
+                account_fingerprint=account_fingerprint,
+                billing_mode="subscription",
+                quota_windows=tuple(windows),
+                raw_record_sha256=raw_sha256,
+            )
+        )
+    return tuple(snapshots)
+
+
 def _period_timestamp(period: str) -> datetime:
     try:
         return datetime.fromisoformat(period.replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
     except ValueError as exc:
         raise ComputeObservabilityError(f"unsupported ccusage period: {period}") from exc
+
+
+def _parse_timestamp(value: object) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ComputeObservabilityError("provider timestamp is missing")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ComputeObservabilityError(f"unsupported provider timestamp: {value}") from exc
 
 
 def _integer_field(row: Mapping[str, object], name: str) -> int | None:

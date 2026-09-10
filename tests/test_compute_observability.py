@@ -15,6 +15,7 @@ from llm_client.observability.compute_observability import (
     TaskAttemptReceiptV1,
     UsageSnapshotV1,
     parse_ccusage_daily_json,
+    parse_codexbar_usage_json,
     persist_usage_snapshot,
 )
 
@@ -140,6 +141,9 @@ def test_usage_snapshot_persistence_rejects_credential_fields() -> None:
     with pytest.raises(ComputeObservabilityError, match="credential-bearing"):
         persist_usage_snapshot(snapshot, sanitized_raw_record=raw)
 
+    with pytest.raises(ComputeObservabilityError, match="credential-bearing"):
+        persist_usage_snapshot(snapshot, sanitized_raw_record={"accountEmail": "redact@example.com"})
+
 
 def test_ccusage_daily_json_normalizes_model_breakdowns_without_repricing() -> None:
     snapshots = parse_ccusage_daily_json(
@@ -170,4 +174,33 @@ def test_ccusage_daily_json_normalizes_model_breakdowns_without_repricing() -> N
     assert snapshots[0].model == "gpt-5.6-luna"
     assert snapshots[0].cached_input_tokens == 4
     assert snapshots[0].api_equivalent_cost_usd == 0.25
+    assert snapshots[0].actual_marginal_cost_usd is None
+
+
+def test_codexbar_usage_normalizes_quota_windows_without_storing_identity() -> None:
+    snapshots = parse_codexbar_usage_json(
+        [
+            {
+                "provider": "codex",
+                "source": "codex-cli",
+                "usage": {
+                    "updatedAt": "2026-09-10T07:36:55Z",
+                    "secondary": {
+                        "usedPercent": 21,
+                        "windowMinutes": 10080,
+                        "resetsAt": "2026-09-17T04:35:04Z",
+                    },
+                    "identity": {"providerID": "codex", "loginMethod": "pro"},
+                },
+            }
+        ],
+        machine_id="machine-a",
+        account_fingerprint="d" * 64,
+        source_version="0.56.8",
+    )
+
+    assert len(snapshots) == 1
+    assert snapshots[0].quota_windows[0].used_percent == 21
+    assert snapshots[0].quota_windows[0].reset_at is not None
+    assert snapshots[0].account_fingerprint == "d" * 64
     assert snapshots[0].actual_marginal_cost_usd is None
