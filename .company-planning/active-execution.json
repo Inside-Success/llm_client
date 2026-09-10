@@ -25,11 +25,11 @@
     "evidence_revision": "ee68ff82+working-tree-emission-tests",
     "receipt_ref": "tests/test_codex_canary.py::test_queue_emits_provider_neutral_attempt_and_outcome_receipts",
     "remaining_ready_work": 0,
-    "requested": false,
+    "requested": true,
     "verifier_outcome": "pass"
   },
   "cursor_id": "cost-observability-subscriptions-v1",
-  "cursor_revision": 8,
+  "cursor_revision": 9,
   "failure_state": {
     "boundary": null,
     "last_failure_ref": null,
