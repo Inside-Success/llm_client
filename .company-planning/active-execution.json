@@ -1,12 +1,12 @@
 {
   "active_slice": {
-    "description": "Add provider-neutral usage snapshot and task-attempt join contracts with positive and negative fixtures.",
-    "next_action": "Implement typed contracts and focused offline tests, then run the canonical test entrypoint.",
+    "description": "Persist idempotent sanitized source records and normalized usage snapshots in the existing observability store.",
+    "next_action": "Inspect the existing SQLite writer seam and add source-record/snapshot persistence with duplicate and malformed-record behavior.",
     "requires_external_action": false,
     "requires_spend": false,
-    "slice_id": "usage-contract-fixtures",
-    "status": "executing",
-    "target_revision": "origin/main@7efa2c39"
+    "slice_id": "usage-source-persistence",
+    "status": "ready",
+    "target_revision": "contract-fixtures@local"
   },
   "authority": {
     "external_action_authorized": false,
@@ -24,12 +24,12 @@
   "completion": {
     "evidence_revision": null,
     "receipt_ref": null,
-    "remaining_ready_work": 4,
+    "remaining_ready_work": 3,
     "requested": false,
     "verifier_outcome": null
   },
   "cursor_id": "cost-observability-subscriptions-v1",
-  "cursor_revision": 1,
+  "cursor_revision": 2,
   "failure_state": {
     "boundary": null,
     "last_failure_ref": null,
@@ -37,7 +37,15 @@
   },
   "goal_ref": "goal:provider-agnostic-compute-observability",
   "lifecycle_state": "active",
-  "observations": [],
+  "observations": [
+    {
+      "boundary": "compute-observability-contracts",
+      "evidence_ref": "tests/test_compute_observability.py::4 passed",
+      "kind": "authentic_result",
+      "observation_id": "obs-contract-fixtures",
+      "outcome": "pass"
+    }
+  ],
   "plan_revision": "bounded-design@2026-09-10-approved",
   "ready_alternatives": [],
   "record_type": "plan_execution_cursor",
