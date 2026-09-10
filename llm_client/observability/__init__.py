@@ -49,6 +49,7 @@ from llm_client.observability.compute_observability import (
     persist_task_compute_link,
     persist_usage_snapshot,
 )
+from llm_client.observability.compute_report import build_compute_report
 from llm_client.observability.events import (
     ActiveFeatureProfile,
     activate_feature_profile,
@@ -162,6 +163,7 @@ __all__ = [
     "acquire_budget_reservation",
     "activate_experiment_run",
     "activate_feature_profile",
+    "build_compute_report",
     "build_usage_report",
     "cleanup_structured_raw_artifacts",
     "compare_call_snapshots",

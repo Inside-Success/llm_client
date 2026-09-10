@@ -15,6 +15,7 @@ from llm_client.observability.compute_observability import (
     ingest_ccusage_daily_json,
     ingest_codexbar_usage_json,
 )
+from llm_client.observability.compute_report import build_compute_report
 
 
 def _read_json(path: str) -> object:
@@ -58,6 +59,25 @@ def cmd_compute_usage_import(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_compute_usage_report(args: argparse.Namespace) -> None:
+    """Print read-only provider efficiency rows."""
+
+    rows = build_compute_report(Path(args.db).expanduser())
+    if args.format == "json":
+        print(json.dumps(rows, indent=2))
+        return
+    for row in rows:
+        print(
+            f"{row['provider']}/{row['model'] or 'unknown'} "
+            f"account={row['account_fingerprint']} "
+            f"quota={row['quota_used_percent']}% "
+            f"actual={row['actual_marginal_cost_usd']} "
+            f"api_equiv=${row['api_equivalent_cost_usd']:.4f} "
+            f"verified={row['verified_accepted_tasks']} "
+            f"value/${row['shipped_value_per_actual_dollar']}"
+        )
+
+
 def register_parser(subparsers: Any) -> None:
     """Register ``compute-usage import``."""
 
@@ -86,6 +106,17 @@ def register_parser(subparsers: Any) -> None:
         help="SQLite path (default: LLM_CLIENT_DB_PATH or shared observability DB)",
     )
     import_parser.set_defaults(handler=cmd_compute_usage_import)
+    report_parser = commands.add_parser(
+        "report",
+        help="Report provider efficiency and attribution coverage",
+    )
+    report_parser.add_argument("--format", choices=["table", "json"], default="table")
+    report_parser.add_argument(
+        "--db",
+        default=str(get_db_path()),
+        help="SQLite path (default: LLM_CLIENT_DB_PATH or shared observability DB)",
+    )
+    report_parser.set_defaults(handler=cmd_compute_usage_report)
 
 
-__all__ = ["cmd_compute_usage_import", "register_parser"]
+__all__ = ["cmd_compute_usage_import", "cmd_compute_usage_report", "register_parser"]
