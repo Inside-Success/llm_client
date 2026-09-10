@@ -69,6 +69,22 @@ provider call and outer `ObservedRun`; the JSONL receipt records queue
 admission, route, fallback, quota, latency, cancellation, and terminal error
 evidence. Account rotation to evade limits is not supported.
 
+When the shared observability store is enabled, each terminal queue path also
+emits one provider-neutral `TaskAttemptReceiptV1` and one
+`OutcomeReceiptV1`. The attempt joins the queue job to the caller's
+`task_id` (or its trace ID when no task ID is supplied), records the selected
+subscription route and worker, and carries task attribution fields such as
+`task_type`, `difficulty`, and `estimated_value`. The outcome records whether
+the coordinator accepted or rejected the attempt and points back to the
+queue receipt. Provider usage, subscription-versus-actual billing, and cost
+remain owned by the normal call ledger and imported usage snapshots; these
+coordinator receipts do not reprice or duplicate provider accounting.
+
+The account identifier is stored only as a stable SHA-256 fingerprint in the
+shared receipt. Queue-level JSONL receipts may retain the account identifier
+for the dedicated private lane, so restrict that file to its intended trusted
+workspace.
+
 ## Transport fallback
 
 Three transport modes:
