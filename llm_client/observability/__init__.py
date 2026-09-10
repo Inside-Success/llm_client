@@ -111,9 +111,25 @@ from llm_client.observability.structured_attempts import (
     get_structured_attempt_histories,
     record_structured_attempt_event,
 )
+from llm_client.observability.compute_observability import (
+    ComputeObservabilityError,
+    OutcomeReceiptV1,
+    persist_usage_snapshot,
+    QuotaWindow,
+    TaskAttemptReceiptV1,
+    TaskComputeLinkV1,
+    UsageSnapshotV1,
+)
 
 __all__ = [
     "AgentToolUsageEvent",
+    "OutcomeReceiptV1",
+    "ComputeObservabilityError",
+    "QuotaWindow",
+    "TaskAttemptReceiptV1",
+    "TaskComputeLinkV1",
+    "UsageSnapshotV1",
+    "persist_usage_snapshot",
     "BudgetReservationLease",
     "BudgetScopeMode",
     "BudgetScopeSnapshot",

@@ -1153,6 +1153,39 @@ CREATE TABLE IF NOT EXISTS budget_reservations (
     settled_cost_microusd INTEGER,
     FOREIGN KEY(scope_trace_id) REFERENCES budget_scopes(scope_trace_id)
 );
+
+CREATE TABLE IF NOT EXISTS usage_source_records (
+    raw_record_sha256 TEXT PRIMARY KEY,
+    source_name TEXT NOT NULL,
+    source_version TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    raw_json TEXT NOT NULL,
+    imported_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS usage_snapshots (
+    snapshot_id TEXT PRIMARY KEY,
+    raw_record_sha256 TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    source_version TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    machine_id TEXT NOT NULL,
+    worker_id TEXT,
+    provider TEXT NOT NULL,
+    model TEXT,
+    account_fingerprint TEXT NOT NULL,
+    billing_mode TEXT NOT NULL,
+    quota_windows_json TEXT NOT NULL,
+    input_tokens INTEGER,
+    cached_input_tokens INTEGER,
+    output_tokens INTEGER,
+    reasoning_tokens INTEGER,
+    api_equivalent_cost_usd REAL,
+    actual_marginal_cost_usd REAL,
+    actual_cost_source TEXT,
+    imported_at TEXT NOT NULL,
+    FOREIGN KEY(raw_record_sha256) REFERENCES usage_source_records(raw_record_sha256)
+);
 """
 
 _INDEXES_SQL = """
@@ -1163,6 +1196,9 @@ CREATE INDEX IF NOT EXISTS idx_calls_accounted_timestamp ON llm_calls(timestamp)
     WHERE cost_source IS NOT NULL OR billing_mode IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_calls_model ON llm_calls(model);
 CREATE INDEX IF NOT EXISTS idx_calls_task ON llm_calls(task);
+CREATE INDEX IF NOT EXISTS idx_usage_snapshots_observed ON usage_snapshots(observed_at);
+CREATE INDEX IF NOT EXISTS idx_usage_snapshots_account ON usage_snapshots(account_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_usage_snapshots_provider ON usage_snapshots(provider, model);
 CREATE INDEX IF NOT EXISTS idx_calls_project ON llm_calls(project);
 CREATE INDEX IF NOT EXISTS idx_calls_trace_id ON llm_calls(trace_id);
 CREATE INDEX IF NOT EXISTS idx_calls_prompt_ref ON llm_calls(prompt_ref);
