@@ -1,11 +1,11 @@
 {
   "active_slice": {
     "description": "Wire real coordinator/worker execution paths to emit task-attempt and outcome receipts into the shared substrate.",
-    "next_action": "Identify the canonical coordinator execution seam and add one real task-context emission path without duplicating provider accounting.",
+    "next_action": null,
     "requires_external_action": false,
     "requires_spend": false,
     "slice_id": "coordinator-emission-integration",
-    "status": "ready",
+    "status": "accepted",
     "target_revision": "compute-report@6b1277ad"
   },
   "authority": {
@@ -22,14 +22,14 @@
     "runtime_integrity_valid": true
   },
   "completion": {
-    "evidence_revision": null,
-    "receipt_ref": null,
-    "remaining_ready_work": 1,
+    "evidence_revision": "ee68ff82+working-tree-emission-tests",
+    "receipt_ref": "tests/test_codex_canary.py::test_queue_emits_provider_neutral_attempt_and_outcome_receipts",
+    "remaining_ready_work": 0,
     "requested": false,
-    "verifier_outcome": null
+    "verifier_outcome": "pass"
   },
   "cursor_id": "cost-observability-subscriptions-v1",
-  "cursor_revision": 7,
+  "cursor_revision": 8,
   "failure_state": {
     "boundary": null,
     "last_failure_ref": null,
@@ -50,6 +50,13 @@
       "evidence_ref": "103 focused/compatibility tests passed",
       "kind": "authentic_result",
       "observation_id": "obs-regression-suite",
+      "outcome": "pass"
+    },
+    {
+      "boundary": "coordinator-worker-emission",
+      "evidence_ref": "pytest -q tests/test_codex_canary.py tests/test_compute_observability.py: 15 passed; real queue submission persisted one TaskAttemptReceiptV1 and one OutcomeReceiptV1 in isolated SQLite",
+      "kind": "authentic_result",
+      "observation_id": "obs-coordinator-worker-emission",
       "outcome": "pass"
     }
   ],
