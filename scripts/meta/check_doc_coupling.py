@@ -239,7 +239,13 @@ def check_couplings(
         sources = coupling.get("sources", [])
         docs = coupling.get("docs", [])
         description = coupling.get("description", "")
-        is_soft = coupling.get("soft", False)
+        coupling_type = coupling.get("type", "locked")
+        explicit_soft = coupling.get("soft")
+        is_soft = (
+            bool(explicit_soft)
+            if explicit_soft is not None
+            else coupling_type == "validated"
+        )
         verify_sync = coupling.get("verify_sync")
 
         # Find which source patterns matched
@@ -266,6 +272,7 @@ def check_couplings(
                 "changed_sources": matched_sources,
                 "expected_docs": docs,
                 "soft": is_soft,
+                "type": coupling_type,
             }
             if is_soft:
                 soft_warnings.append(violation)

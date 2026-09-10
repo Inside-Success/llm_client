@@ -64,6 +64,18 @@ def _explicit_test_routing_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_model_unavailability()
 
 
+@pytest.fixture
+def _isolate_instructor_client_cache() -> None:
+    """Prevent patched Instructor factories from inheriting prior test clients."""
+    from llm_client.execution import structured_runtime
+
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
+    yield
+    structured_runtime._INSTRUCTOR_CLIENT_CACHE.clear()
+    structured_runtime._INSTRUCTOR_READY_CLIENT_IDS.clear()
+
+
 class TestRequiredTags:
     def test_calls_experiment_enforcement_hook(self) -> None:
         with (
@@ -593,7 +605,12 @@ class TestAcallLLMStructured:
     @pytest.mark.asyncio
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("instructor.from_litellm")
-    async def test_api_base_passed_through(self, mock_from_litellm: MagicMock, mock_cost: MagicMock) -> None:
+    async def test_api_base_passed_through(
+        self,
+        mock_from_litellm: MagicMock,
+        mock_cost: MagicMock,
+        _isolate_instructor_client_cache: None,
+    ) -> None:
         class Item(BaseModel):
             name: str
 
@@ -854,7 +871,13 @@ class TestSmartRetry:
     @patch("llm_client.core.client.time.sleep")
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("instructor.from_litellm")
-    def test_structured_retries_on_transient_error(self, mock_from_litellm: MagicMock, mock_cost: MagicMock, mock_sleep: MagicMock) -> None:
+    def test_structured_retries_on_transient_error(
+        self,
+        mock_from_litellm: MagicMock,
+        mock_cost: MagicMock,
+        mock_sleep: MagicMock,
+        _isolate_instructor_client_cache: None,
+    ) -> None:
         """Structured: transient errors should retry."""
         class Item(BaseModel):
             name: str
@@ -1443,6 +1466,7 @@ class TestThinkingModelDetection:
         self,
         mock_from_litellm: MagicMock,
         mock_cost: MagicMock,
+        _isolate_instructor_client_cache: None,
     ) -> None:
         class Item(BaseModel):
             name: str
@@ -2748,7 +2772,12 @@ class TestCache:
 
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("instructor.from_litellm")
-    def test_cache_structured(self, mock_from_litellm: MagicMock, mock_cost: MagicMock) -> None:
+    def test_cache_structured(
+        self,
+        mock_from_litellm: MagicMock,
+        mock_cost: MagicMock,
+        _isolate_instructor_client_cache: None,
+    ) -> None:
         """Structured call caching should return parsed model and LLMCallResult."""
         class Item(BaseModel):
             name: str
@@ -4299,7 +4328,13 @@ class TestGPT5StructuredOutput:
     @patch("llm_client.core.client.litellm.supports_response_schema", return_value=False)
     @patch("llm_client.core.client.litellm.completion_cost", return_value=0.001)
     @patch("instructor.from_litellm")
-    def test_structured_unsupported_model_uses_instructor(self, mock_from_litellm: MagicMock, mock_cost: MagicMock, mock_supports: MagicMock) -> None:
+    def test_structured_unsupported_model_uses_instructor(
+        self,
+        mock_from_litellm: MagicMock,
+        mock_cost: MagicMock,
+        mock_supports: MagicMock,
+        _isolate_instructor_client_cache: None,
+    ) -> None:
         """Models without response_schema support fall back to instructor."""
         class Item(BaseModel):
             name: str

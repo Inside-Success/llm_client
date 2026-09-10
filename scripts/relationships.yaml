@@ -97,6 +97,7 @@ couplings:
   - workbench/backend/**
   docs:
   - ui/registry.yaml
+  type: validated
   description: A UI-serving file is about to be created or changed. Read ui/registry.yaml
     first -- this repo has one real surface (llm-client-observability-workbench);
     a change is very unlikely to need a second one.
