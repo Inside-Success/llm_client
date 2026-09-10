@@ -410,6 +410,15 @@ def parse_ccusage_daily_json(
             raw_record = {"period": period, "row": dict(row), "model": dict(model_row)}
             raw_json = json.dumps(raw_record, sort_keys=True, separators=(",", ":"))
             raw_sha256 = hashlib.sha256(raw_json.encode("utf-8")).hexdigest()
+            metadata = row.get("metadata")
+            metadata_agents = metadata.get("agents") if isinstance(metadata, Mapping) else None
+            provider = (
+                metadata_agents[0]
+                if isinstance(metadata_agents, list)
+                and len(metadata_agents) == 1
+                and isinstance(metadata_agents[0], str)
+                else row.get("agent", "unknown")
+            )
             snapshots.append(
                 UsageSnapshotV1(
                     snapshot_id=f"ccusage:{machine_id}:{account_fingerprint}:{period}:{model or 'aggregate'}",
@@ -417,7 +426,7 @@ def parse_ccusage_daily_json(
                     source_version=source_version,
                     observed_at=row_time,
                     machine_id=machine_id,
-                    provider=str(row.get("agent", "unknown")),
+                    provider=str(provider),
                     model=model,
                     account_fingerprint=account_fingerprint,
                     billing_mode=billing_mode,
@@ -429,6 +438,39 @@ def parse_ccusage_daily_json(
                 )
             )
     return tuple(snapshots)
+
+
+def ingest_ccusage_daily_json(
+    payload: Mapping[str, object],
+    *,
+    machine_id: str,
+    account_fingerprint: str,
+    billing_mode: BillingMode,
+    source_version: str,
+) -> tuple[UsageSnapshotV1, ...]:
+    """Parse and persist ccusage daily JSON through the canonical sink."""
+
+    snapshots = parse_ccusage_daily_json(
+        payload,
+        machine_id=machine_id,
+        account_fingerprint=account_fingerprint,
+        billing_mode=billing_mode,
+        source_version=source_version,
+    )
+    rows = payload.get("daily")
+    assert isinstance(rows, list)
+    for snapshot in snapshots:
+        period = snapshot.snapshot_id.split(":")[-2]
+        row = next(row for row in rows if isinstance(row, Mapping) and row.get("period", row.get("date")) == period)
+        model = snapshot.model
+        model_rows = row.get("modelBreakdowns") if isinstance(row, Mapping) else None
+        model_row = next(
+            (item for item in model_rows if isinstance(item, Mapping) and item.get("modelName") == model),
+            row,
+        ) if isinstance(model_rows, list) and model_rows else row
+        raw_record = {"period": period, "row": dict(row), "model": dict(model_row)}
+        persist_usage_snapshot(snapshot, sanitized_raw_record=raw_record)
+    return snapshots
 
 
 def parse_codexbar_usage_json(
@@ -495,6 +537,36 @@ def parse_codexbar_usage_json(
             )
         )
     return tuple(snapshots)
+
+
+def ingest_codexbar_usage_json(
+    payload: object,
+    *,
+    machine_id: str,
+    account_fingerprint: str,
+    source_version: str,
+) -> tuple[UsageSnapshotV1, ...]:
+    """Parse and persist CodexBar usage JSON through the canonical sink."""
+
+    snapshots = parse_codexbar_usage_json(
+        payload,
+        machine_id=machine_id,
+        account_fingerprint=account_fingerprint,
+        source_version=source_version,
+    )
+    entries = payload if isinstance(payload, list) else [payload]
+    for snapshot, entry in zip(snapshots, entries, strict=True):
+        if not isinstance(entry, Mapping):
+            raise ComputeObservabilityError("CodexBar usage entry is not an object")
+        usage = entry.get("usage")
+        provider = entry.get("provider")
+        if not isinstance(usage, Mapping) or not isinstance(provider, str):
+            raise ComputeObservabilityError("CodexBar usage entry lacks provider/usage")
+        persist_usage_snapshot(
+            snapshot,
+            sanitized_raw_record={"provider": provider, "usage": dict(usage)},
+        )
+    return snapshots
 
 
 def _period_timestamp(period: str) -> datetime:

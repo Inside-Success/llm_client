@@ -22,6 +22,9 @@ import sys
 
 from llm_client.cli.adoption import register_parser as register_adoption_parser
 from llm_client.cli.backfill import register_parser as register_backfill_parser
+from llm_client.cli.compute_usage import (
+    register_parser as register_compute_usage_parser,
+)
 from llm_client.cli.cost import register_parser as register_cost_parser
 from llm_client.cli.dashboard import register_parser as register_dashboard_parser
 from llm_client.cli.deliberate import register_parser as register_deliberate_parser
@@ -33,13 +36,17 @@ from llm_client.cli.json_schema_call import (
 from llm_client.cli.models import register_parser as register_models_parser
 from llm_client.cli.prompt_drift import register_parser as register_prompt_drift_parser
 from llm_client.cli.prompt_show import register_parser as register_prompt_show_parser
-from llm_client.cli.provider_limits import register_parser as register_provider_limits_parser
+from llm_client.cli.provider_limits import (
+    register_parser as register_provider_limits_parser,
+)
 from llm_client.cli.replay import register_parser as register_replay_parser
+from llm_client.cli.review_artifact import (
+    register_parser as register_review_artifact_parser,
+)
+from llm_client.cli.review_cycle import register_parser as register_review_cycle_parser
 from llm_client.cli.route_certification import (
     register_parser as register_route_certification_parser,
 )
-from llm_client.cli.review_artifact import register_parser as register_review_artifact_parser
-from llm_client.cli.review_cycle import register_parser as register_review_cycle_parser
 from llm_client.cli.scores import register_parser as register_scores_parser
 from llm_client.cli.tool_lint import register_parser as register_tool_lint_parser
 from llm_client.cli.tool_usage import register_parser as register_tool_usage_parser
@@ -55,6 +62,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     register_cost_parser(subparsers)
+    register_compute_usage_parser(subparsers)
     register_dashboard_parser(subparsers)
     register_deliberate_parser(subparsers)
     register_duet_parser(subparsers)

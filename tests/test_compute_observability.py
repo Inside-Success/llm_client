@@ -154,7 +154,8 @@ def test_ccusage_daily_json_normalizes_model_breakdowns_without_repricing() -> N
         {
             "daily": [
                 {
-                    "agent": "codex",
+                    "agent": "all",
+                    "metadata": {"agents": ["codex"]},
                     "period": "2026-09-10",
                     "modelBreakdowns": [
                         {
@@ -176,6 +177,7 @@ def test_ccusage_daily_json_normalizes_model_breakdowns_without_repricing() -> N
 
     assert len(snapshots) == 1
     assert snapshots[0].model == "gpt-5.6-luna"
+    assert snapshots[0].provider == "codex"
     assert snapshots[0].cached_input_tokens == 4
     assert snapshots[0].api_equivalent_cost_usd == 0.25
     assert snapshots[0].actual_marginal_cost_usd is None
