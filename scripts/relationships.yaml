@@ -75,6 +75,7 @@ couplings:
 - sources:
   - llm_client/io_log.py
   - llm_client/observability/*.py
+  - llm_client/langfuse_callbacks.py
   - llm_client/cli/replay.py
   docs:
   - docs/adr/0003-warning-taxonomy.md
