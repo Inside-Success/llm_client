@@ -1,0 +1,50 @@
+{
+  "active_slice": {
+    "description": "Make the shared Langfuse callback metadata-only by default and preserve explicit full-content opt-in",
+    "next_action": "Implement and test the external-observability content policy in llm_client.",
+    "requires_external_action": false,
+    "requires_spend": false,
+    "slice_id": "langfuse-metadata-only",
+    "status": "executing",
+    "target_revision": "7efa2c399b27fe43db9b10c865fd1c51340f5a56"
+  },
+  "authority": {
+    "external_action_authorized": false,
+    "human_decision": null,
+    "human_decision_required": false,
+    "implementation_authorized": true,
+    "spend_cap_usd": 0,
+    "spend_used_usd": 0
+  },
+  "circuit_breakers": {
+    "context_integrity_valid": true,
+    "max_same_boundary_failures": 3,
+    "runtime_integrity_valid": true
+  },
+  "completion": {
+    "evidence_revision": null,
+    "receipt_ref": null,
+    "remaining_ready_work": 1,
+    "requested": false,
+    "verifier_outcome": null
+  },
+  "cursor_id": "second-brain-langfuse-privacy-20260911",
+  "cursor_revision": 1,
+  "failure_state": {
+    "boundary": null,
+    "last_failure_ref": null,
+    "same_boundary_failures": 0
+  },
+  "goal_ref": "user:second-brain-observability",
+  "lifecycle_state": "active",
+  "observations": [],
+  "plan_revision": "conversation:2026-09-11-langfuse-privacy@1",
+  "ready_alternatives": [],
+  "record_type": "plan_execution_cursor",
+  "schema_version": "1.0",
+  "target": {
+    "branch": "feat/langfuse-metadata-only-20260911",
+    "repository": "Inside-Success/llm_client",
+    "worktree": "/home/brian/code/inside-success/repos/llm_client/worktrees/feat/langfuse-metadata-only-20260911"
+  }
+}
