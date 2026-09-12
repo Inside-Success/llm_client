@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-25T23:38:19Z -->
+<!-- Generated: 2026-09-12T00:46:51Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -2173,15 +2173,20 @@ Activates Langfuse as a complementary observability backend alongside the defaul
 JSONL+SQLite logging. Langfuse is never required -- it activates only when both
 conditions are met:
 
-    1. ``LITELLM_CALLBACKS`` env var includes ``langfuse``
+    1. ``LITELLM_CALLBACKS`` includes ``langfuse_otel`` or legacy ``langfuse``
     2. The ``langfuse`` package is importable
+
+External callbacks are metadata-only by default. Set
+``LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT=full`` only when the caller has
+explicitly authorized prompt and response export.
 
 LiteLLM reads Langfuse credentials from standard env vars automatically:
     ``LANGFUSE_PUBLIC_KEY``, ``LANGFUSE_SECRET_KEY``, ``LANGFUSE_HOST``
 
 Usage (shell)::
 
-    export LITELLM_CALLBACKS=langfuse
+    export LITELLM_CALLBACKS=langfuse_otel
+    export LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT=metadata_only
     export LANGFUSE_PUBLIC_KEY=pk-lf-...
     export LANGFUSE_SECRET_KEY=sk-lf-...
     export LANGFUSE_HOST=https://cloud.langfuse.com   # or self-hosted
@@ -2214,8 +2219,9 @@ Install the optional dependency::
     <pre class="doc">Register Langfuse in LiteLLM&#x27;s callback lists if env-configured.
 
 Reads ``LITELLM_CALLBACKS`` for a comma-separated list of callback names.
-If ``langfuse`` is present, verifies the package is importable, then appends
-``&quot;langfuse&quot;`` to ``litellm.success_callback`` and ``litellm.failure_callback``.
+If a supported Langfuse callback name is present, verifies the package is
+importable, applies the external-content policy, then registers that name
+with LiteLLM&#x27;s success and failure callback lists.
 
 Returns LangfuseCallbackConfig describing activation state.
 Idempotent -- safe to call multiple times.</pre>
@@ -2242,7 +2248,7 @@ This is a no-op when both task and trace_id are None.</pre>
 <h4>Classes</h4>
 
 <details class="symbol class-symbol" id="module-llm_client-langfuse_callbacks-LangfuseCallbackConfig">
-  <summary><code>LangfuseCallbackConfig</code> <span class="sig">(*, enabled: bool, host: str | None) -&gt; None</span></summary>
+  <summary><code>LangfuseCallbackConfig</code> <span class="sig">(*, enabled: bool, host: str | None, callback: str | None, content_policy: Optional[Literal[&#x27;metadata_only&#x27;, &#x27;full&#x27;]]) -&gt; None</span></summary>
   <div class="symbol-body">
     <p class="summary">Configuration state describing whether Langfuse callbacks are active.</p>
     <p class="meta">Source: <code>llm_client.langfuse_callbacks</code> class</p>

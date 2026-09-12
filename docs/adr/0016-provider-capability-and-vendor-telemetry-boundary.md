@@ -4,6 +4,26 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-09-11 Amendment: External Callback Content Is Metadata-Only by Default
+
+LiteLLM callbacks are an external data boundary, not merely another view over
+the local observability store. Enabling Langfuse previously sent request
+messages and generated content under LiteLLM's default callback behavior even
+when `llm_client`'s local `ObservabilityContentPolicy` was metadata-only.
+
+`llm_client` now defaults requested `langfuse_otel` and legacy `langfuse`
+callbacks to `LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT=metadata_only`, which
+sets LiteLLM's supported `turn_off_message_logging` switch before registering
+the callback. Model, usage, cost, timing, task, and trace metadata remain
+available. Prompt and response export requires the explicit value `full`;
+unknown values fail before callback registration.
+
+This is a global LiteLLM callback switch, so metadata-only is intentionally the
+strongest active policy for the process. A full-content request does not turn
+the switch back off if another component has already enabled it. Local
+JSONL/SQLite evidence remains authoritative and retains its own independently
+configured content policy.
+
 ## 2026-08-21 Amendment: A Schema Rejection Is Not a Route Denial at Runtime
 
 The amendment below states the rule for how capability findings are *recorded*:
