@@ -1,12 +1,12 @@
 {
   "active_slice": {
     "description": "Make the shared Langfuse callback metadata-only by default and preserve explicit full-content opt-in",
-    "next_action": "Implement and test the external-observability content policy in llm_client.",
+    "next_action": null,
     "requires_external_action": false,
     "requires_spend": false,
     "slice_id": "langfuse-metadata-only",
-    "status": "executing",
-    "target_revision": "7efa2c399b27fe43db9b10c865fd1c51340f5a56"
+    "status": "accepted",
+    "target_revision": "4918d12"
   },
   "authority": {
     "external_action_authorized": false,
@@ -22,22 +22,37 @@
     "runtime_integrity_valid": true
   },
   "completion": {
-    "evidence_revision": null,
-    "receipt_ref": null,
-    "remaining_ready_work": 1,
-    "requested": false,
-    "verifier_outcome": null
+    "evidence_revision": "4918d12",
+    "receipt_ref": "tests/test_langfuse_callbacks.py",
+    "remaining_ready_work": 0,
+    "requested": true,
+    "verifier_outcome": "pass"
   },
   "cursor_id": "second-brain-langfuse-privacy-20260911",
-  "cursor_revision": 1,
+  "cursor_revision": 2,
   "failure_state": {
     "boundary": null,
     "last_failure_ref": null,
     "same_boundary_failures": 0
   },
   "goal_ref": "user:second-brain-observability",
-  "lifecycle_state": "active",
-  "observations": [],
+  "lifecycle_state": "complete",
+  "observations": [
+    {
+      "boundary": "langfuse-callback-content-policy",
+      "evidence_ref": "commit:4918d12; tests/test_langfuse_callbacks.py:18-passed",
+      "kind": "authentic_result",
+      "observation_id": "obs-langfuse-metadata-default",
+      "outcome": "pass"
+    },
+    {
+      "boundary": "repository-quick-suite",
+      "evidence_ref": "pytest:2310-passed,48-skipped,12-unrelated-failures; missing optional data_contracts/langgraph collection dependencies",
+      "kind": "supporting_work",
+      "observation_id": "obs-llm-client-broad-regression",
+      "outcome": "inconclusive"
+    }
+  ],
   "plan_revision": "conversation:2026-09-11-langfuse-privacy@1",
   "ready_alternatives": [],
   "record_type": "plan_execution_cursor",
