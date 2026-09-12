@@ -2,11 +2,11 @@
 
 Status: Accepted
 Date: 2026-03-22
-Last verified: 2026-07-16
-Verification context: Experiment-run start now rejects duplicate run_id
-evidence before derivative JSONL append. Call snapshots, fingerprints, replay
-authority, selected-attempt receipts, raw-artifact links, and historical replay
-remain unchanged. Focused replay and observability controls pass.
+Last verified: 2026-09-11
+Verification context: Metadata-only external telemetry does not change call
+snapshots, fingerprints, replay authority, selected-attempt receipts,
+raw-artifact links, or historical replay. Explicit full-content export remains
+outside the replay contract.
 
 ## Context
 

@@ -1,11 +1,11 @@
 # ADR 0012: Shared Data Plane Boundary
 
 Status: Accepted  
-Last verified: 2026-07-16
-Verification context: Experiment-run start now makes SQLite's existing unique
-run_id row authoritative before appending JSONL metadata; no raw payload,
-dataset, artifact, or lineage field changed. Focused observability controls
-pass.
+Last verified: 2026-09-11
+Verification context: Optional Langfuse telemetry exports bounded metadata by
+default and does not add raw prompts or responses to the shared data plane.
+Explicit `full` mode is a separate external-content authorization; no dataset,
+artifact, lineage, or local sink field changes.
 Date: 2026-03-17
 
 ## Context

@@ -7,8 +7,8 @@ kwargs for callback propagation.
 
 from __future__ import annotations
 
-import importlib
 import os
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import litellm
@@ -22,16 +22,25 @@ from llm_client.langfuse_callbacks import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_langfuse_state() -> None:  # type: ignore[misc]
+def _reset_langfuse_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Reset module state and litellm callbacks between tests."""
     import llm_client.langfuse_callbacks as mod
 
+    monkeypatch.delenv("LITELLM_CALLBACKS", raising=False)
+    monkeypatch.delenv("LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT", raising=False)
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    monkeypatch.delenv("LANGFUSE_OTEL_HOST", raising=False)
+    original_message_logging = litellm.turn_off_message_logging
     mod._initialized = False
-    # Remove langfuse from callbacks if present
-    if "langfuse" in litellm.success_callback:
-        litellm.success_callback.remove("langfuse")
-    if "langfuse" in litellm.failure_callback:
-        litellm.failure_callback.remove("langfuse")
+    mod._configured_callback = None
+    mod._configured_content_policy = None
+    for callback in ("langfuse_otel", "langfuse"):
+        while callback in litellm.success_callback:
+            litellm.success_callback.remove(callback)
+        while callback in litellm.failure_callback:
+            litellm.failure_callback.remove(callback)
+    yield
+    litellm.turn_off_message_logging = original_message_logging
 
 
 class TestConfigureLangfuseCallbacks:
@@ -43,6 +52,7 @@ class TestConfigureLangfuseCallbacks:
             os.environ.pop("LITELLM_CALLBACKS", None)
             result = configure_langfuse_callbacks()
         assert result.enabled is False
+        assert result.content_policy is None
         assert "langfuse" not in litellm.success_callback
         assert "langfuse" not in litellm.failure_callback
 
@@ -66,17 +76,26 @@ class TestConfigureLangfuseCallbacks:
         assert "langfuse" not in litellm.success_callback
 
     def test_env_var_with_langfuse_installed_activates(self) -> None:
-        """When langfuse is requested and importable, register callbacks."""
+        """Langfuse defaults to metadata-only external telemetry."""
         # mock-ok: simulating langfuse availability without installing it
         import types
 
         fake_langfuse = types.ModuleType("langfuse")
         with (
-            patch.dict(os.environ, {"LITELLM_CALLBACKS": "langfuse"}),
+            patch.dict(
+                os.environ,
+                {
+                    "LITELLM_CALLBACKS": "langfuse",
+                    "LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT": "metadata_only",
+                },
+            ),
             patch.dict("sys.modules", {"langfuse": fake_langfuse}),
         ):
             result = configure_langfuse_callbacks()
         assert result.enabled is True
+        assert result.callback == "langfuse"
+        assert result.content_policy == "metadata_only"
+        assert litellm.turn_off_message_logging is True
         assert "langfuse" in litellm.success_callback
         assert "langfuse" in litellm.failure_callback
 
@@ -100,12 +119,96 @@ class TestConfigureLangfuseCallbacks:
 
         fake_langfuse = types.ModuleType("langfuse")
         with (
-            patch.dict(os.environ, {"LITELLM_CALLBACKS": "prometheus, langfuse, datadog"}),
+            patch.dict(
+                os.environ, {"LITELLM_CALLBACKS": "prometheus, langfuse, datadog"}
+            ),
             patch.dict("sys.modules", {"langfuse": fake_langfuse}),
         ):
             result = configure_langfuse_callbacks()
         assert result.enabled is True
         assert "langfuse" in litellm.success_callback
+
+    def test_otel_callback_uses_otel_host_and_metadata_only_default(self) -> None:
+        """The current OTEL callback name uses its endpoint and redacts content."""
+        import types
+
+        fake_langfuse = types.ModuleType("langfuse")
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "LITELLM_CALLBACKS": "langfuse_otel",
+                    "LANGFUSE_OTEL_HOST": "https://otel.example.test",
+                    "LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT": "metadata_only",
+                },
+            ),
+            patch.dict("sys.modules", {"langfuse": fake_langfuse}),
+        ):
+            result = configure_langfuse_callbacks()
+        assert result.enabled is True
+        assert result.callback == "langfuse_otel"
+        assert result.host == "https://otel.example.test"
+        assert result.content_policy == "metadata_only"
+        assert litellm.turn_off_message_logging is True
+        assert "langfuse_otel" in litellm.success_callback
+
+    def test_full_content_requires_explicit_policy(self) -> None:
+        """Full-content export is possible only through an explicit setting."""
+        import types
+
+        fake_langfuse = types.ModuleType("langfuse")
+        litellm.turn_off_message_logging = False
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "LITELLM_CALLBACKS": "langfuse_otel",
+                    "LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT": "full",
+                },
+            ),
+            patch.dict("sys.modules", {"langfuse": fake_langfuse}),
+        ):
+            result = configure_langfuse_callbacks()
+        assert result.content_policy == "full"
+        assert litellm.turn_off_message_logging is False
+
+    def test_full_content_does_not_weaken_an_existing_process_policy(self) -> None:
+        """A callback cannot re-enable content another component disabled."""
+        import types
+
+        fake_langfuse = types.ModuleType("langfuse")
+        litellm.turn_off_message_logging = True
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "LITELLM_CALLBACKS": "langfuse_otel",
+                    "LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT": "full",
+                },
+            ),
+            patch.dict("sys.modules", {"langfuse": fake_langfuse}),
+        ):
+            result = configure_langfuse_callbacks()
+        assert result.content_policy == "full"
+        assert litellm.turn_off_message_logging is True
+
+    def test_invalid_content_policy_fails_before_callback_registration(self) -> None:
+        """Unknown content policies fail loudly instead of leaking by fallback."""
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "LITELLM_CALLBACKS": "langfuse_otel",
+                    "LLM_CLIENT_EXTERNAL_OBSERVABILITY_CONTENT": "everything",
+                },
+            ),
+            pytest.raises(ValueError, match="must be 'metadata_only' or 'full'"),
+        ):
+            configure_langfuse_callbacks()
+        assert "langfuse_otel" not in litellm.success_callback
+        import llm_client.langfuse_callbacks as mod
+
+        assert mod._initialized is False
 
 
 class TestIsActive:
@@ -118,6 +221,11 @@ class TestIsActive:
     def test_active_after_configuration(self) -> None:
         """After successful configuration, reports active."""
         litellm.success_callback.append("langfuse")
+        assert _is_active() is True
+
+    def test_active_with_otel_callback(self) -> None:
+        """The current OTEL callback is recognized as active."""
+        litellm.success_callback.append("langfuse_otel")
         assert _is_active() is True
 
 
