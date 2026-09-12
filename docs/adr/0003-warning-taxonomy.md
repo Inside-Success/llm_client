@@ -2,10 +2,10 @@
 
 Status: Accepted
 Date: 2026-02-22
-Last verified: 2026-07-16
-Verification context: Experiment-run start now rejects a duplicate run_id before
-emitting a second JSONL start record; SQLite integrity failure remains an error,
-not an advisory. Focused observability controls pass.
+Last verified: 2026-09-11
+Verification context: External-observability content policy rejects unknown
+values before callback registration; configuration errors remain errors rather
+than warnings. No new warning code or advisory path is introduced.
 
 Plan 94's OpenRouter generation enrichment emits a bounded warning for each
 eventual-consistency 404 retry; exhaustion remains an error and never becomes a

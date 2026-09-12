@@ -1,11 +1,10 @@
 # ADR 0013: Stream Lifecycle Heartbeat and Stagnation Observability
 
 Status: Accepted  
-Last verified: 2026-07-16
-Verification context: Non-streaming experiment-run start now rejects duplicate
-run_id evidence before JSONL append; stream start, progress, completion,
-failure, heartbeat, and stagnation semantics remain unchanged. Related client
-controls pass.
+Last verified: 2026-09-11
+Verification context: The optional external callback policy changes only
+content export. Stream start, progress, completion, failure, heartbeat, and
+stagnation lifecycle semantics remain unchanged.
 Date: 2026-03-22
 
 ## Context
