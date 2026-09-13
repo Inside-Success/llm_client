@@ -3,12 +3,17 @@
 from types import SimpleNamespace
 
 import pytest
+from pydantic import BaseModel
 
 from llm_client.codex_canary import (
     CodexCanaryConfig,
     CodexCanaryJob,
     CodexCanaryQueue,
 )
+
+
+class _StructuredReply(BaseModel):
+    message: str
 
 
 class _FakeRun:
@@ -75,6 +80,55 @@ async def test_queue_writes_terminal_receipt_and_telemetry(monkeypatch, tmp_path
     assert receipt.fallback_used is False
     assert queue.telemetry().succeeded == 1
     assert len((tmp_path / "receipts.jsonl").read_text().splitlines()) == 1
+
+
+@pytest.mark.asyncio
+async def test_structured_submit_returns_value_without_persisting_content(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr("llm_client.codex_canary.ObservedRun", _FakeRun)
+
+    async def fake_structured_call(model, messages, response_model, **kwargs):
+        assert model == "codex/gpt-5.6-luna"
+        assert response_model is _StructuredReply
+        assert kwargs["trace_id"].endswith("/codex_subscription")
+        return _StructuredReply(message="ok"), SimpleNamespace(cost=0.0)
+
+    monkeypatch.setattr(
+        "llm_client.codex_canary.acall_llm_structured",
+        fake_structured_call,
+    )
+    queue = CodexCanaryQueue.for_trusted_async_work(_config(tmp_path))
+
+    outcome = await queue.submit_structured(_job(), _StructuredReply)
+    await queue.close()
+
+    assert outcome.receipt.status == "succeeded"
+    assert outcome.value == _StructuredReply(message="ok")
+    persisted = (tmp_path / "receipts.jsonl").read_text()
+    assert '"message"' not in persisted
+    assert '"ok"' not in persisted
+
+
+@pytest.mark.asyncio
+async def test_structured_submit_returns_no_value_on_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr("llm_client.codex_canary.ObservedRun", _FakeRun)
+
+    async def fake_structured_call(model, messages, response_model, **kwargs):
+        raise RuntimeError("structured call failed")
+
+    monkeypatch.setattr(
+        "llm_client.codex_canary.acall_llm_structured",
+        fake_structured_call,
+    )
+    queue = CodexCanaryQueue.for_trusted_async_work(_config(tmp_path))
+
+    outcome = await queue.submit_structured(_job("canary-structured-failure"), _StructuredReply)
+    await queue.close()
+
+    assert outcome.receipt.status == "failed"
+    assert outcome.receipt.error_type == "RuntimeError"
+    assert outcome.value is None
 
 
 @pytest.mark.asyncio

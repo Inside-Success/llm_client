@@ -69,6 +69,17 @@ provider call and outer `ObservedRun`; the JSONL receipt records queue
 admission, route, fallback, quota, latency, cancellation, and terminal error
 evidence. Account rotation to evade limits is not supported.
 
+For schema-bound consumers, `submit_structured(job, ResponseModel)` uses the
+same queue, account, route, timeout, quota, fallback, and receipt controls while
+returning a `CodexCanaryStructuredOutcome[ResponseModel]`. Its `value` is the
+Pydantic-validated model on success and `None` on failure or quota rejection;
+its `receipt` is always the ordinary terminal queue receipt. The validated
+value is intentionally ephemeral and is never added to the queue JSONL
+receipt. The caller owns any content retention under its own data contract.
+
+`submit(job)` remains backward compatible and returns only
+`CodexCanaryReceipt`.
+
 ## Transport fallback
 
 Three transport modes:

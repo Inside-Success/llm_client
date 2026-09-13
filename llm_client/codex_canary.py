@@ -10,18 +10,20 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Generic, Literal, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from llm_client.core.client import acall_llm
+from llm_client.core.client import acall_llm, acall_llm_structured
 from llm_client.core.model_selection import (
     ResolvedWorkloadRoute,
     WorkloadRouteContext,
     resolve_workload_route,
 )
 from llm_client.observability import ObservedRun
+
+StructuredResultT = TypeVar("StructuredResultT", bound=BaseModel)
 
 
 class CodexCanaryConfig(BaseModel):
@@ -99,11 +101,26 @@ class CanaryTelemetry:
     observed_cost_usd: float
 
 
+@dataclass(frozen=True)
+class CodexCanaryStructuredOutcome(Generic[StructuredResultT]):
+    """Ephemeral typed result paired with its durable content-free receipt."""
+
+    receipt: CodexCanaryReceipt
+    value: StructuredResultT | None
+
+
+@dataclass(frozen=True)
+class _CanaryExecution:
+    receipt: CodexCanaryReceipt
+    value: BaseModel | None = None
+
+
 @dataclass
 class _QueuedJob:
     job_id: str
     job: CodexCanaryJob
-    future: asyncio.Future[CodexCanaryReceipt]
+    future: asyncio.Future[_CanaryExecution]
+    response_model: type[BaseModel] | None = None
 
 
 class CodexCanaryQueue:
@@ -145,14 +162,41 @@ class CodexCanaryQueue:
             self._worker = asyncio.create_task(self._run(), name=f"codex-canary-{self.config.account_id}")
 
     async def submit(self, job: CodexCanaryJob) -> CodexCanaryReceipt:
+        execution = await self._submit(job)
+        return execution.receipt
+
+    async def submit_structured(
+        self,
+        job: CodexCanaryJob,
+        response_model: type[StructuredResultT],
+    ) -> CodexCanaryStructuredOutcome[StructuredResultT]:
+        """Return a validated result without adding its content to queue receipts."""
+
+        execution = await self._submit(job, response_model=response_model)
+        value = execution.value
+        if value is not None and not isinstance(value, response_model):
+            raise TypeError("canary structured result does not match response_model")
+        return CodexCanaryStructuredOutcome(
+            receipt=execution.receipt,
+            value=value,
+        )
+
+    async def _submit(
+        self,
+        job: CodexCanaryJob,
+        *,
+        response_model: type[BaseModel] | None = None,
+    ) -> _CanaryExecution:
         await self.start()
         if self._closed:
             raise RuntimeError("canary queue is closed")
         if self.config.max_jobs is not None and self._accepted >= self.config.max_jobs:
             return await self._reject(job, "job quota exhausted")
         self._accepted += 1
-        future: asyncio.Future[CodexCanaryReceipt] = asyncio.get_running_loop().create_future()
-        await self._queue.put(_QueuedJob(uuid4().hex, job, future))
+        future: asyncio.Future[_CanaryExecution] = asyncio.get_running_loop().create_future()
+        await self._queue.put(
+            _QueuedJob(uuid4().hex, job, future, response_model=response_model)
+        )
         return await future
 
     async def close(self) -> None:
@@ -181,23 +225,24 @@ class CodexCanaryQueue:
                 self._queue.task_done()
                 return
             try:
-                receipt = await self._execute(item)
+                execution = await self._execute(item)
                 if not item.future.done():
-                    item.future.set_result(receipt)
+                    item.future.set_result(execution)
             except Exception as exc:  # noqa: BLE001 - terminal receipt boundary
                 if not item.future.done():
                     item.future.set_exception(exc)
             finally:
                 self._queue.task_done()
 
-    async def _execute(self, item: _QueuedJob) -> CodexCanaryReceipt:
+    async def _execute(self, item: _QueuedJob) -> _CanaryExecution:
         started = datetime.now(timezone.utc)
         began = time.monotonic()
         fallback_used = False
         fallback_tag: str | None = None
         cost_usd: float | None = None
         error: BaseException | None = None
-        result: Any = None
+        call_result: Any = None
+        value: BaseModel | None = None
         try:
             async with ObservedRun(
                 project="llm_client",
@@ -211,47 +256,81 @@ class CodexCanaryQueue:
             ) as run:
                 run.set_phase("codex_subscription_call")
                 try:
-                    result = await asyncio.wait_for(
-                        acall_llm(
-                            self.route.model,
-                            item.job.messages,
-                            timeout=int(self.config.hard_timeout_s),
-                            num_retries=self.config.max_retries,
-                            reasoning_effort=item.job.reasoning_effort,
-                            task=item.job.task,
-                            trace_id=run.child_trace_id("codex_subscription"),
-                            max_budget=item.job.max_budget,
-                            model_justification=self.route.model_justification,
-                        ),
-                        timeout=self.config.hard_timeout_s,
-                    )
+                    if item.response_model is None:
+                        call_result = await asyncio.wait_for(
+                            acall_llm(
+                                self.route.model,
+                                item.job.messages,
+                                timeout=int(self.config.hard_timeout_s),
+                                num_retries=self.config.max_retries,
+                                reasoning_effort=item.job.reasoning_effort,
+                                task=item.job.task,
+                                trace_id=run.child_trace_id("codex_subscription"),
+                                max_budget=item.job.max_budget,
+                                model_justification=self.route.model_justification,
+                            ),
+                            timeout=self.config.hard_timeout_s,
+                        )
+                    else:
+                        value, call_result = await asyncio.wait_for(
+                            acall_llm_structured(
+                                self.route.model,
+                                item.job.messages,
+                                item.response_model,
+                                timeout=int(self.config.hard_timeout_s),
+                                num_retries=self.config.max_retries,
+                                reasoning_effort=item.job.reasoning_effort,
+                                task=item.job.task,
+                                trace_id=run.child_trace_id("codex_subscription"),
+                                max_budget=item.job.max_budget,
+                                model_justification=self.route.model_justification,
+                            ),
+                            timeout=self.config.hard_timeout_s,
+                        )
                 except Exception as primary_error:
                     if self.config.fallback_model is None:
                         raise
                     fallback_used = True
                     fallback_tag = f"explicit_fallback:{self.config.fallback_provider}"
                     run.set_phase("explicit_paid_fallback")
-                    result = await asyncio.wait_for(
-                        acall_llm(
-                            self.config.fallback_model,
-                            item.job.messages,
-                            timeout=int(self.config.hard_timeout_s),
-                            num_retries=0,
-                            reasoning_effort=item.job.reasoning_effort,
-                            task=item.job.task,
-                            trace_id=run.child_trace_id("explicit_paid_fallback"),
-                            max_budget=min(item.job.max_budget, self.config.fallback_spend_ceiling_usd),
-                            model_justification=(
-                                f"Explicit canary fallback after Codex failure; provider="
-                                f"{self.config.fallback_provider}; spend ceiling="
-                                f"{self.config.fallback_spend_ceiling_usd:.2f} USD"
-                            ),
+                    fallback_kwargs = {
+                        "timeout": int(self.config.hard_timeout_s),
+                        "num_retries": 0,
+                        "reasoning_effort": item.job.reasoning_effort,
+                        "task": item.job.task,
+                        "trace_id": run.child_trace_id("explicit_paid_fallback"),
+                        "max_budget": min(
+                            item.job.max_budget,
+                            self.config.fallback_spend_ceiling_usd,
                         ),
-                        timeout=self.config.hard_timeout_s,
-                    )
-                    if result is None:
+                        "model_justification": (
+                            "Explicit canary fallback after Codex failure; "
+                            f"provider={self.config.fallback_provider}; spend ceiling="
+                            f"{self.config.fallback_spend_ceiling_usd:.2f} USD"
+                        ),
+                    }
+                    if item.response_model is None:
+                        call_result = await asyncio.wait_for(
+                            acall_llm(
+                                self.config.fallback_model,
+                                item.job.messages,
+                                **fallback_kwargs,
+                            ),
+                            timeout=self.config.hard_timeout_s,
+                        )
+                    else:
+                        value, call_result = await asyncio.wait_for(
+                            acall_llm_structured(
+                                self.config.fallback_model,
+                                item.job.messages,
+                                item.response_model,
+                                **fallback_kwargs,
+                            ),
+                            timeout=self.config.hard_timeout_s,
+                        )
+                    if call_result is None:
                         raise RuntimeError("explicit fallback returned no result") from primary_error
-                cost_usd = _result_cost(result)
+                cost_usd = _result_cost(call_result)
                 if fallback_used and cost_usd is not None and cost_usd > self.config.fallback_spend_ceiling_usd:
                     raise RuntimeError("observed fallback cost exceeded the configured spend ceiling")
         except asyncio.CancelledError as exc:
@@ -286,9 +365,12 @@ class CodexCanaryQueue:
             error_message=str(error)[:500] if error else None,
         )
         _append_receipt(self.config.receipt_path, receipt)
-        return receipt
+        return _CanaryExecution(
+            receipt=receipt,
+            value=value if status == "succeeded" else None,
+        )
 
-    async def _reject(self, job: CodexCanaryJob, reason: str) -> CodexCanaryReceipt:
+    async def _reject(self, job: CodexCanaryJob, reason: str) -> _CanaryExecution:
         now = datetime.now(timezone.utc)
         receipt = CodexCanaryReceipt(
             job_id=uuid4().hex,
@@ -307,7 +389,7 @@ class CodexCanaryQueue:
         )
         self._telemetry["rejected"] += 1
         _append_receipt(self.config.receipt_path, receipt)
-        return receipt
+        return _CanaryExecution(receipt=receipt)
 
 
 def _result_cost(result: Any) -> float | None:
@@ -323,4 +405,11 @@ def _append_receipt(path: Path, receipt: CodexCanaryReceipt) -> None:
         os.fsync(handle.fileno())
 
 
-__all__ = ["CanaryTelemetry", "CodexCanaryConfig", "CodexCanaryJob", "CodexCanaryQueue", "CodexCanaryReceipt"]
+__all__ = [
+    "CanaryTelemetry",
+    "CodexCanaryConfig",
+    "CodexCanaryJob",
+    "CodexCanaryQueue",
+    "CodexCanaryReceipt",
+    "CodexCanaryStructuredOutcome",
+]

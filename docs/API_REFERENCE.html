@@ -1,4 +1,4 @@
-<!-- Generated: 2026-09-12T00:46:51Z -->
+<!-- Generated: 2026-09-13T15:03:08Z -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -1201,6 +1201,15 @@ class&#x27;s ancestry rather than requiring every generated name to be listed.</
   </div>
 </details>
 
+<details class="symbol" id="module-llm_client-codex_canary-submit_structured">
+  <summary><code>submit_structured</code> <span class="sig">(self, job: llm_client.codex_canary.CodexCanaryJob, response_model: type[~StructuredResultT]) -&gt; llm_client.codex_canary.CodexCanaryStructuredOutcome[~StructuredResultT]</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Return a validated result without adding its content to queue receipts.</p>
+    <p class="meta">Source: <code>llm_client.codex_canary</code> method</p>
+    <pre class="doc">Return a validated result without adding its content to queue receipts.</pre>
+  </div>
+</details>
+
 <details class="symbol" id="module-llm_client-codex_canary-telemetry">
   <summary><code>telemetry</code> <span class="sig">(self) -&gt; llm_client.codex_canary.CanaryTelemetry</span></summary>
   <div class="symbol-body">
@@ -1220,6 +1229,16 @@ class&#x27;s ancestry rather than requiring every generated name to be listed.</
     <p class="summary">Durable queue-level receipt for one submitted canary job.</p>
     <p class="meta">Source: <code>llm_client.codex_canary</code> class</p>
     <pre class="doc">Durable queue-level receipt for one submitted canary job.</pre>
+
+  </div>
+</details>
+
+<details class="symbol class-symbol" id="module-llm_client-codex_canary-CodexCanaryStructuredOutcome">
+  <summary><code>CodexCanaryStructuredOutcome</code> <span class="sig">(receipt: llm_client.codex_canary.CodexCanaryReceipt, value: Optional[~StructuredResultT]) -&gt; None</span></summary>
+  <div class="symbol-body">
+    <p class="summary">Ephemeral typed result paired with its durable content-free receipt.</p>
+    <p class="meta">Source: <code>llm_client.codex_canary</code> class</p>
+    <pre class="doc">Ephemeral typed result paired with its durable content-free receipt.</pre>
 
   </div>
 </details>
@@ -14740,7 +14759,7 @@ historical single-key behaviour untouched.</pre>
   <tbody>
     <tr><td><code>ACCOUNT_KEY_ENV</code></td><td><code>{&#x27;inside_success&#x27;: &#x27;OPENROUTER_API_KEY_INSIDE_SUCCESS&#x27;, &#x27;personal&#x27;: &#x27;OPENROUTER_API_KEY_PERSONAL&#x27;}</code></td><td>dict</td></tr>
 <tr><td><code>ACCOUNT_OVERRIDE_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ACCOUNT&#x27;</code></td><td>str</td></tr>
-<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/projects/inside-success/repos/llm_client/worktrees/sync/personal-main-20260825/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
+<tr><td><code>DEFAULT_ROUTING_PATH</code></td><td><code>PosixPath(&#x27;/home/brian/code/inside-success/repos/llm_client/worktrees/feat/obs-wu05-typed-canary-result/llm_client/data/openrouter_account_routing.json&#x27;)</code></td><td>PosixPath</td></tr>
 <tr><td><code>INSIDE_SUCCESS_ACCOUNT</code></td><td><code>&#x27;inside_success&#x27;</code></td><td>str</td></tr>
 <tr><td><code>PERSONAL_ACCOUNT</code></td><td><code>&#x27;personal&#x27;</code></td><td>str</td></tr>
 <tr><td><code>ROUTING_PATH_ENV</code></td><td><code>&#x27;LLM_CLIENT_OPENROUTER_ROUTING_FILE&#x27;</code></td><td>str</td></tr>
