@@ -676,10 +676,25 @@ def _is_ancestor(repo_root: Path, ancestor_ref: str, descendant_ref: str) -> boo
     return result.returncode == 0
 
 
-def _patch_without_blob_identity(patch: bytes) -> bytes:
-    """Remove only full-index blob IDs while preserving the complete patch body."""
+_HUNK_HEADER_OFFSETS_RE = re.compile(rb"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
 
-    return b"".join(line for line in patch.splitlines(keepends=True) if not line.startswith(b"index "))
+
+def _patch_without_blob_identity(patch: bytes) -> bytes:
+    """Remove full-index blob IDs and hunk-header line offsets while preserving
+    the complete patch body. Backported from canonical enforced-planning PR
+    #515 (2026-09-14): without normalizing hunk headers, an unrelated earlier
+    commit shifting line numbers in the same file makes an otherwise-identical
+    squash-merge patch compare unequal, false-negatives the merge proof, and
+    refuses to close an already-merged lane."""
+
+    normalized: list[bytes] = []
+    for line in patch.splitlines(keepends=True):
+        if line.startswith(b"index "):
+            continue
+        if line.startswith(b"@@ "):
+            line = _HUNK_HEADER_OFFSETS_RE.sub(b"@@ -N,N +N,N @@", line, count=1)
+        normalized.append(line)
+    return b"".join(normalized)
 
 
 def _squash_merge_matches_branch(
