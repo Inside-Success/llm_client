@@ -9,6 +9,37 @@
 3. **Execution mode** — whether the call needs a workspace-agent SDK lane with
    side effects, tools, and repository context.
 
+## OpenRouter Luna Flex
+
+Use the typed route policy for synchronous Luna Flex calls:
+
+```python
+from llm_client import OpenRouterRoutePolicyV1, call_llm
+
+result = call_llm(
+    "openrouter/openai/gpt-5.6-luna",
+    messages,
+    reasoning_effort="medium",
+    openrouter_route_policy=OpenRouterRoutePolicyV1(service_tier="flex"),
+    model_justification="Luna quality with the current discounted Flex route",
+    task="coding_agent",
+    trace_id=trace_id,
+    max_budget=0.25,
+)
+
+assert result.service_tier in {"flex", None}
+```
+
+Flex is synchronous and supports ordinary completion, structured, tool, and
+streaming request paths. It can have higher latency and lower availability than
+standard capacity. It is not the asynchronous OpenRouter Batch API.
+
+The typed policy sends `service_tier="flex"`, declares the parameter through
+LiteLLM's OpenAI-compatible seam, and requires supporting endpoints. Do not
+combine it with a raw `service_tier` kwarg. The provider-reported served tier
+is retained on `result.service_tier`, in `routing_trace`, and in call
+observability. A missing value remains `None`; it is never guessed.
+
 New and migrated production callers use:
 
 ```python

@@ -4,6 +4,20 @@ Status: Accepted
 Date: 2026-07-22
 Applies to: Plan #110
 
+## 2026-08-28 Amendment: OpenRouter Flex Service Tier
+
+Plan 365 adds `service_tier="flex"` to `OpenRouterRoutePolicyV1` as a
+synchronous cost-routing constraint. The typed surface intentionally excludes
+paid priority tiers. It compiles through LiteLLM's normalized parameter seam
+and requires OpenRouter endpoint support, so the control cannot be silently
+dropped. A raw `service_tier` conflicts with the typed setting and fails
+before dispatch.
+
+The provider-reported served tier is bounded and retained as local evidence.
+Absence remains unknown rather than being inferred. OpenRouter remains the
+runtime authority on current Flex capacity; capacity failure does not authorize
+automatic standard-tier fallback inside the typed policy.
+
 ## 2026-08-21 Amendment: A Schema Rejection Is Not a Route Denial at Runtime
 
 The amendment below states the rule for how capability findings are *recorded*:

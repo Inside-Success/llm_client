@@ -12,6 +12,7 @@ from llm_client.observability.replay import build_call_snapshot, snapshot_finger
 from llm_client.utils.openrouter import (
     _enable_openrouter_inline_metadata,
     _openrouter_response_cache_status,
+    _openrouter_service_tier,
     compile_openrouter_route_policy,
 )
 
@@ -38,6 +39,8 @@ def test_compiles_typed_policy_without_unrelated_defaults() -> None:
 
 
 def test_policy_rejects_empty_or_conflicting_constraints() -> None:
+    with pytest.raises(ValueError, match="Input should be 'flex'"):
+        OpenRouterRoutePolicyV1(service_tier="priority")
     with pytest.raises(ValueError, match="must not be empty"):
         OpenRouterRoutePolicyV1(allowed_providers=())
     with pytest.raises(ValueError, match="conflicts"):
@@ -92,6 +95,35 @@ def test_policy_applies_to_openrouter_payload() -> None:
         "zdr": True,
     }
     assert "openrouter_route_policy" not in payload
+
+
+def test_flex_policy_applies_fail_loud_normalized_control() -> None:
+    payload = {
+        "model": "openrouter/openai/gpt-5.6-luna",
+        "openrouter_route_policy": OpenRouterRoutePolicyV1(service_tier="flex"),
+    }
+
+    _enable_openrouter_inline_metadata(payload["model"], payload)
+
+    assert payload["service_tier"] == "flex"
+    assert payload["allowed_openai_params"] == ["service_tier"]
+    assert payload["provider"] == {"require_parameters": True}
+
+
+def test_flex_policy_rejects_raw_service_tier_conflict() -> None:
+    payload = {
+        "model": "openrouter/openai/gpt-5.6-luna",
+        "service_tier": "flex",
+        "openrouter_route_policy": OpenRouterRoutePolicyV1(service_tier="flex"),
+    }
+
+    with pytest.raises(LLMConfigurationError) as raised:
+        _enable_openrouter_inline_metadata(payload["model"], payload)
+
+    assert (
+        raised.value.error_code
+        == "openrouter_route_policy_conflicts_with_service_tier"
+    )
 
 
 def test_policy_applies_explicit_response_cache_headers() -> None:
@@ -245,6 +277,7 @@ def test_policy_is_replay_serializable() -> None:
         "zero_data_retention": True,
         "allow_provider_fallbacks": True,
         "sort": None,
+        "service_tier": None,
         "require_parameters": True,
         "response_cache_mode": "disabled",
         "response_cache_ttl_seconds": None,
@@ -333,6 +366,56 @@ def test_reads_openrouter_response_cache_status(
     )()
 
     assert _openrouter_response_cache_status(raw_response) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_response", "expected"),
+    [
+        ({"service_tier": "flex"}, "flex"),
+        (
+            type(
+                "RawResponse",
+                (),
+                {"model_extra": {"service_tier": "FLEX"}},
+            )(),
+            "flex",
+        ),
+        (
+            type(
+                "RawResponse",
+                (),
+                {"_hidden_params": {"service_tier": "default"}},
+            )(),
+            "default",
+        ),
+        ({"service_tier": "invalid tier value"}, None),
+    ],
+)
+def test_reads_bounded_openrouter_service_tier(
+    raw_response: object, expected: str | None
+) -> None:
+    assert _openrouter_service_tier(raw_response) == expected
+
+
+def test_provider_service_tier_updates_result_and_routing_trace() -> None:
+    result = LLMCallResult(
+        content="ok",
+        usage={"total_tokens": 1},
+        cost=0.0,
+        model="openrouter/openai/gpt-5.6-luna",
+        raw_response={"service_tier": "flex"},
+    )
+
+    finalized = _finalize_result(
+        result,
+        requested_model="openrouter/openai/gpt-5.6-luna",
+        resolved_model="openrouter/openai/gpt-5.6-luna",
+        routing_trace={"attempted_models": ["openrouter/openai/gpt-5.6-luna"]},
+    )
+
+    assert finalized.service_tier == "flex"
+    assert finalized.routing_trace is not None
+    assert finalized.routing_trace["openrouter_service_tier"] == "flex"
 
 
 def test_provider_response_cache_hit_updates_result_accounting() -> None:

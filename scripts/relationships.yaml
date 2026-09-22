@@ -62,6 +62,19 @@ couplings:
   type: validated
   description: Generic provider controls, OpenRouter telemetry projection, and complete model-ban invariants.
 - sources:
+  - llm_client/execution/call_contracts.py
+  - llm_client/utils/openrouter.py
+  - llm_client/core/data_types.py
+  - llm_client/core/client_dispatch.py
+  - llm_client/schemas.py
+  - llm_client/io_log.py
+  docs:
+  - docs/adr/0007-observability-contract-boundary.md
+  - docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md
+  - docs/plans/365_openrouter-flex-service-tier.md
+  type: validated
+  description: Typed OpenRouter Flex routing and provider-reported service-tier evidence.
+- sources:
   - llm_client/agent/mcp_agent.py
   - llm_client/foundation.py
   - llm_client/sdk/agents.py

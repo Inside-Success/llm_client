@@ -40,6 +40,7 @@ class LLMCallResult:
                      else empty
         finish_reason: Why the model stopped: "stop", "length", "tool_calls",
                        "content_filter", etc. Empty string if unavailable.
+        service_tier: Provider-reported service tier, when returned.
         raw_response: The full litellm response object for edge cases
                       (e.g., accessing provider-specific data like Claude
                       thinking blocks). Excluded from repr to keep logs clean.
@@ -90,6 +91,8 @@ class LLMCallResult:
     """Completed items exposed by direct Codex CLI JSONL, in stream order."""
     codex_jsonl: list[str] = field(default_factory=list, repr=False)
     """Exact nonblank lines exposed by direct Codex CLI stdout, in stream order."""
+    service_tier: str | None = None
+    """Provider-reported service tier, or None when it is not returned."""
 
     def __post_init__(self) -> None:
         if self.marginal_cost is None:

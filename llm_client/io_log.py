@@ -465,6 +465,7 @@ def log_call(
         marginal_cost = None
         cache_hit = 0
         finish_reason = None
+        service_tier = None
         warnings: list[str] | None = None
         n_tool_calls: int | None = None
         response_tool_calls: list[Any] | None = None
@@ -489,6 +490,9 @@ def log_call(
             cache_attr = getattr(result, "cache_hit", False)
             cache_hit = 1 if cache_attr is True else 0
             finish_reason = getattr(result, "finish_reason", None)
+            service_tier_raw = getattr(result, "service_tier", None)
+            if isinstance(service_tier_raw, str):
+                service_tier = service_tier_raw
             warnings_raw = getattr(result, "warnings", None)
             if isinstance(warnings_raw, list):
                 warnings = [str(w) for w in warnings_raw if str(w)]
@@ -526,6 +530,7 @@ def log_call(
             "marginal_cost": marginal_cost,
             "cache_hit": cache_hit,
             "finish_reason": finish_reason,
+            "service_tier": service_tier,
             "latency_s": round(latency_s, 3) if latency_s is not None else None,
             "error": stored_error,
             "warnings": stored_warnings,
@@ -562,6 +567,7 @@ def log_call(
             marginal_cost=marginal_cost,
             cache_hit=cache_hit,
             finish_reason=finish_reason,
+            service_tier=service_tier,
             latency_s=round(latency_s, 3) if latency_s is not None else None,
             error=stored_error,
             caller=caller,
@@ -840,6 +846,7 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     marginal_cost REAL,
     cache_hit INTEGER DEFAULT 0,
     finish_reason TEXT,
+    service_tier TEXT,
     latency_s REAL,
     error TEXT,
     caller TEXT,
@@ -1402,6 +1409,8 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN response_tool_calls TEXT")
     if "n_tool_calls" not in llm_cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN n_tool_calls INTEGER")
+    if "service_tier" not in llm_cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN service_tier TEXT")
 
     lifecycle_cols = {
         row[1] for row in conn.execute("PRAGMA table_info(call_lifecycle_events)")
@@ -1899,6 +1908,7 @@ def _write_call_to_db(
     marginal_cost: float | None,
     cache_hit: int,
     finish_reason: str | None,
+    service_tier: str | None,
     latency_s: float | None,
     error: str | None,
     caller: str,
@@ -1950,12 +1960,12 @@ def _write_call_to_db(
                     usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     billing_account, openrouter_key_fingerprint,
-                    finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
+                    finish_reason, service_tier, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint, call_snapshot,
                     error_type, execution_path, retry_count,
                     schema_hash, response_format_type, validation_errors,
                     causal_parent_id, logical_call_id, content_persistence)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     timestamp, project, model,
                     json.dumps(messages, default=str) if messages else None,
@@ -1969,7 +1979,7 @@ def _write_call_to_db(
                     usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
                     billing_account, openrouter_key_fingerprint,
-                    finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
+                    finish_reason, service_tier, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint,
                     json.dumps(call_snapshot, default=str) if call_snapshot is not None else None,
                     error_type, execution_path, retry_count,
@@ -2206,9 +2216,9 @@ def import_jsonl(jsonl_path: str | Path, table: str = "llm_calls") -> int:
                     reasoning_tokens, cached_tokens, cache_creation_tokens,
                     usage_details,
                     cost, cost_source, billing_mode, marginal_cost, cache_hit,
-                    finish_reason, latency_s, error, caller, task, trace_id, prompt_ref,
+                    finish_reason, service_tier, latency_s, error, caller, task, trace_id, prompt_ref,
                     call_fingerprint, call_snapshot, content_persistence)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     r.get("timestamp"), project, r.get("model"),
                     json.dumps(r.get("messages"), default=str) if r.get("messages") else None,
@@ -2229,6 +2239,7 @@ def import_jsonl(jsonl_path: str | Path, table: str = "llm_calls") -> int:
                     r.get("marginal_cost"),
                     r.get("cache_hit", 0),
                     r.get("finish_reason"),
+                    r.get("service_tier"),
                     r.get("latency_s"), r.get("error"),
                     r.get("caller"), r.get("task"), r.get("trace_id"), r.get("prompt_ref"),
                     r.get("call_fingerprint"),

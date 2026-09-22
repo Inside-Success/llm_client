@@ -10,6 +10,15 @@ query surface over existing `llm_calls` columns: it adds no sink, no persisted
 field, and no payload-shape change, so decision 5 is not engaged.
 Date: 2026-02-23
 
+## 2026-08-28 Amendment: Provider-Reported Service Tier
+
+Plan 365 adds the provider-reported service tier as bounded call metadata.
+The value is additive on the public result, routing trace, JSONL call record,
+and SQLite call row. Missing evidence remains null and is never inferred from
+the requested policy, model slug, price, or selected provider. The field does
+not retain prompts, responses, headers, credentials, or arbitrary provider
+payload data.
+
 ## Context
 
 Observability logic was historically mixed into core call paths, and `io_log.py`

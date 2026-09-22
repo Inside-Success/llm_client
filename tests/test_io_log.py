@@ -236,6 +236,24 @@ class TestLogCall:
         assert row[4] == 15
         db.close()
 
+    def test_preserves_provider_reported_service_tier(self, tmp_path):
+        result = _mock_result()
+        result.service_tier = "flex"
+
+        io_log.log_call(
+            model="openrouter/openai/gpt-5.6-luna",
+            result=result,
+            latency_s=1.0,
+            task="flex-audit",
+        )
+
+        record = json.loads(_today_jsonl(tmp_path, "calls").read_text().strip())
+        assert record["service_tier"] == "flex"
+        row = io_log._get_db().execute(
+            "SELECT service_tier FROM llm_calls"
+        ).fetchone()
+        assert row == ("flex",)
+
     def test_full_content_retains_response_tool_calls(self, tmp_path):
         tool_calls = [
             {
@@ -1150,6 +1168,27 @@ class TestImportJsonl:
         assert json.loads(row[0]) == tool_calls
         assert row[1] == "full"
 
+    def test_import_calls_preserves_service_tier(self, tmp_path):
+        data_dir = tmp_path / "myproj" / "myproj_llm_client_data"
+        data_dir.mkdir(parents=True)
+        jsonl_file = data_dir / "calls.jsonl"
+        jsonl_file.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-08-28T00:00:00+00:00",
+                    "model": "openrouter/openai/gpt-5.6-luna",
+                    "service_tier": "flex",
+                }
+            )
+            + "\n"
+        )
+
+        assert io_log.import_jsonl(jsonl_file, table="llm_calls") == 1
+        row = io_log._get_db().execute(
+            "SELECT service_tier FROM llm_calls"
+        ).fetchone()
+        assert row == ("flex",)
+
     def test_import_embeddings(self, tmp_path):
         data_dir = tmp_path / "proj" / "proj_llm_client_data"
         data_dir.mkdir(parents=True)
@@ -1183,6 +1222,27 @@ class TestImportJsonl:
 # ---------------------------------------------------------------------------
 # configure
 # ---------------------------------------------------------------------------
+
+
+def test_migrate_adds_service_tier_to_legacy_calls_table(tmp_path):
+    legacy_path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(legacy_path)
+    connection.execute(
+        "CREATE TABLE llm_calls ("
+        "id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL, model TEXT NOT NULL)"
+    )
+    connection.executescript(io_log._TABLES_SQL)
+    io_log._migrate_db(connection)
+    connection.commit()
+    columns = {
+        row[1]
+        for row in connection.execute(
+            "PRAGMA table_info(llm_calls)"
+        ).fetchall()
+    }
+    connection.close()
+
+    assert "service_tier" in columns
 
 
 class TestLogScoreGitCommit:

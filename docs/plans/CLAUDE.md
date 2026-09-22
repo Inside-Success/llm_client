@@ -61,6 +61,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 
 | # | Name | Priority | Status | Blocks |
 |---|------|----------|--------|--------|
+| 365 | [OpenRouter Flex Service Tier](365_openrouter-flex-service-tier.md) | High | 🚧 In Progress | lower-cost synchronous Luna coding-agent execution |
 | 364 | [Codex Account Identity Receipts](364_codex_account_identity_receipts.md) | Critical | 🚧 Implemented (WhyGame acceptance pending) | deterministic multi-account Codex consumers |
 | 363 | [Codex CLI Session Continuation](363_codex_session_continuation.md) | High | 🚧 Implemented (downstream adoption pending) | AC16 Plan #02 exact-session healing harness |
 | 359 | [Codebase Wiki Freshness and Dual-Lineage Ingest](359_codebase_wiki_freshness_and_dual_lineage.md) | Critical | ✅ Complete | Trustworthy ongoing personal/company wiki navigation |

@@ -73,6 +73,10 @@ class LLMCallResultSchema(BaseModel):
         default="",
         description='Why the model stopped: "stop", "length", "tool_calls", "content_filter", etc.',
     )
+    service_tier: str | None = Field(
+        default=None,
+        description="Provider-reported service tier when returned",
+    )
     warnings: list[str] = Field(
         default_factory=list,
         description="Diagnostic warnings accumulated during retry/fallback/routing",

@@ -481,6 +481,45 @@ def test_caller_openrouter_route_policy_overrides_the_bedrock_default() -> None:
     }
 
 
+def test_openrouter_luna_flex_policy_reaches_completion_transport() -> None:
+    call_kwargs = _prepare_call_kwargs(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        num_retries=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={
+            "openrouter_route_policy": OpenRouterRoutePolicyV1(
+                service_tier="flex"
+            )
+        },
+    )
+
+    assert call_kwargs["service_tier"] == "flex"
+    assert call_kwargs["allowed_openai_params"] == ["service_tier"]
+    assert call_kwargs["provider"]["require_parameters"] is True
+
+
+def test_openrouter_luna_flex_policy_reaches_responses_transport() -> None:
+    call_kwargs = _prepare_responses_kwargs(
+        "openrouter/openai/gpt-5.6-luna",
+        [{"role": "user", "content": "hello"}],
+        timeout=0,
+        reasoning_effort=None,
+        api_base=None,
+        kwargs={
+            "openrouter_route_policy": OpenRouterRoutePolicyV1(
+                service_tier="flex"
+            )
+        },
+    )
+
+    assert call_kwargs["service_tier"] == "flex"
+    assert call_kwargs["allowed_openai_params"] == ["service_tier"]
+    assert call_kwargs["provider"]["require_parameters"] is True
+
+
 def test_raw_provider_kwarg_is_not_overridden_by_the_bedrock_default() -> None:
     """A caller-owned raw provider dict is left exactly as the caller set it
     (aside from the pre-existing require_parameters merge) -- the default

@@ -42,6 +42,7 @@ from llm_client.core.model_execution_policy import evaluate_model_execution_poli
 from llm_client.utils.openrouter import (
     _openrouter_response_cache_status,
     _openrouter_routing_enabled,
+    _openrouter_service_tier,
 )
 from llm_client.result_finalization import finalize_result as _finalize_result_base
 from llm_client.result_metadata import (
@@ -256,11 +257,19 @@ def _finalize_result(
     if model_warning is not None:
         extra_warning_records.append(model_warning)
     provider_cache_status = _openrouter_response_cache_status(result.raw_response)
+    provider_service_tier = _openrouter_service_tier(result.raw_response)
+    if provider_service_tier is not None:
+        result.service_tier = provider_service_tier
     effective_cache_hit = cache_hit or provider_cache_status == "hit"
     if routing_trace is not None and provider_cache_status is not None:
         routing_trace = {
             **routing_trace,
             "openrouter_response_cache_status": provider_cache_status,
+        }
+    if routing_trace is not None and provider_service_tier is not None:
+        routing_trace = {
+            **routing_trace,
+            "openrouter_service_tier": provider_service_tier,
         }
     return _finalize_result_base(
         result,

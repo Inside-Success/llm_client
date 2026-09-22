@@ -91,7 +91,10 @@ OPENROUTER_METADATA_HEADER = "X-OpenRouter-Metadata"
 OPENROUTER_RESPONSE_CACHE_HEADER = "X-OpenRouter-Cache"
 OPENROUTER_RESPONSE_CACHE_TTL_HEADER = "X-OpenRouter-Cache-TTL"
 OPENROUTER_RESPONSE_CACHE_CLEAR_HEADER = "X-OpenRouter-Cache-Clear"
-_OPENROUTER_NORMALIZED_PASSTHROUGH_PARAMS = frozenset({"reasoning_effort"})
+_OPENROUTER_NORMALIZED_PASSTHROUGH_PARAMS = frozenset(
+    {"reasoning_effort", "service_tier"}
+)
+_OPENROUTER_SERVICE_TIER_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 # ---------------------------------------------------------------------------
 # Module-level state for key rotation
@@ -395,12 +398,20 @@ def _apply_openrouter_route_policy(
     )
     if policy is None:
         return
+    if policy.service_tier is not None and "service_tier" in call_kwargs:
+        raise LLMConfigurationError(
+            "openrouter_route_policy.service_tier cannot be combined with raw "
+            "service_tier kwargs",
+            error_code="openrouter_route_policy_conflicts_with_service_tier",
+        )
     if raw_provider is not None:
         raise LLMConfigurationError(
             "openrouter_route_policy cannot be combined with raw provider kwargs",
             error_code="openrouter_route_policy_conflicts_with_provider_kwargs",
         )
     call_kwargs["provider"] = compile_openrouter_route_policy(policy)
+    if policy.service_tier is not None:
+        call_kwargs["service_tier"] = policy.service_tier
 
 
 def _validate_openrouter_route_policy_model(
@@ -467,6 +478,30 @@ def _openrouter_response_cache_status(raw_response: Any) -> str | None:
                 continue
             status = str(value).strip().casefold()
             return status if status in {"hit", "miss"} else None
+    return None
+
+
+def _openrouter_service_tier(raw_response: Any) -> str | None:
+    """Return bounded provider-reported service-tier evidence when present."""
+
+    candidates: list[Any] = []
+    if isinstance(raw_response, Mapping):
+        candidates.append(raw_response.get("service_tier"))
+    else:
+        candidates.append(getattr(raw_response, "service_tier", None))
+        model_extra = getattr(raw_response, "model_extra", None)
+        if isinstance(model_extra, Mapping):
+            candidates.append(model_extra.get("service_tier"))
+    hidden = getattr(raw_response, "_hidden_params", None)
+    if isinstance(hidden, Mapping):
+        candidates.append(hidden.get("service_tier"))
+
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        normalized = candidate.strip().casefold()
+        if _OPENROUTER_SERVICE_TIER_RE.fullmatch(normalized):
+            return normalized
     return None
 
 

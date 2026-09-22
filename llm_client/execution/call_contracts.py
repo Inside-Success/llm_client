@@ -106,7 +106,8 @@ class ObservabilityContentPolicy(BaseModel):
 class OpenRouterRoutePolicyV1(BaseModel):
     """Typed intent compiled into OpenRouter routing and cache controls.
 
-    Route fields describe caller-authorized provider constraints. Response-cache
+    Route fields describe caller-authorized provider constraints. The service tier
+    selects OpenRouter's synchronous discounted Flex capacity. Response-cache
     fields explicitly authorize OpenRouter to retain and reuse an exact response;
     they are disabled by default and are incompatible with zero-data-retention.
     This contract does not claim a local inventory of live providers or endpoints.
@@ -120,6 +121,7 @@ class OpenRouterRoutePolicyV1(BaseModel):
     zero_data_retention: bool | None = None
     allow_provider_fallbacks: bool = True
     sort: Literal["price", "throughput", "latency"] | None = None
+    service_tier: Literal["flex"] | None = None
     require_parameters: Literal[True] = True
     response_cache_mode: Literal["disabled", "enabled", "refresh"] = "disabled"
     response_cache_ttl_seconds: int | None = Field(default=None, gt=0, le=86_400)
