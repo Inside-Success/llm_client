@@ -23,7 +23,7 @@ fi
 # Allow coordination files everywhere
 BASENAME=$(basename "$FILE_PATH")
 if [[ "$FILE_PATH" == *"/.claude/"* ]] || \
-   [[ "$BASENAME" == "CLAUDE.md" ]] || \
+   [[ "$BASENAME" == "AGENTS.md" ]] || \
    [[ "$FILE_PATH" == *"/.git/"* ]] || \
    [[ "$FILE_PATH" == */meta/patterns/*.md ]] || \
    [[ "$FILE_PATH" == */meta-process/*.md ]] || \

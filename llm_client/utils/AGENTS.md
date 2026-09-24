@@ -2,4 +2,4 @@
 
 Standalone utilities: cost extraction, git, OpenRouter, rate limiting.
 
-Read [`../CLAUDE.md`](../CLAUDE.md) for package-level context.
+Read [`../AGENTS.md`](../AGENTS.md) for package-level context.

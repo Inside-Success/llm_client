@@ -5,7 +5,7 @@
 #   2. Worktrees without an active claim (must claim before editing)
 #
 # Exceptions (allowed in main):
-#   - Coordination files (.claude/*, CLAUDE.md, .git/*, .claude_session)
+#   - Coordination files (.claude/*, AGENTS.md, .git/*, .claude_session)
 #   - Meta-process docs (meta/patterns/*.md) - process patterns, not implementation
 #   - Plan files (docs/plans/NN_*.md) - if NEW or UNCLAIMED
 #   - Files in claimed worktrees (worktrees/XXX/*) - if XXX has a claim
@@ -54,7 +54,7 @@ fi
 # Allow coordination files everywhere
 BASENAME=$(basename "$FILE_PATH")
 if [[ "$FILE_PATH" == *"/.claude/"* ]] || \
-   [[ "$BASENAME" == "CLAUDE.md" ]] || \
+   [[ "$BASENAME" == "AGENTS.md" ]] || \
    [[ "$FILE_PATH" == *"/.git/"* ]] || \
    [[ "$FILE_PATH" == */meta/patterns/*.md ]] || \
    [[ "$BASENAME" == ".claude_session" ]]; then

@@ -65,8 +65,8 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 363 | [Codex CLI Session Continuation](363_codex_session_continuation.md) | High | 🚧 Implemented (downstream adoption pending) | AC16 Plan #02 exact-session healing harness |
 | 359 | [Codebase Wiki Freshness and Dual-Lineage Ingest](359_codebase_wiki_freshness_and_dual_lineage.md) | Critical | ✅ Complete | Trustworthy ongoing personal/company wiki navigation |
 | 358 | [Revision-Grounded Karpathy Codebase Wiki](358_llm_client_karpathy_codebase_wiki.md) | Critical | ✅ Complete | Fresh-session wiki-first architecture navigation |
-| 361 | [Compatibility-Aware Workload Route Selection](361_workload_route_selection.md) | High | ❓  | explicit Codex/API/OpenRouter provider selection |
-| 360 | [Codex Subscription Default](360_codex_subscription_default.md) | High | ❓  | compatibility-aware route selection |
+| 361 | [Compatibility-Aware Workload Route Selection](361_workload_route_selection.md) | High | 🚧 Implemented (focused verification) | explicit Codex/API/OpenRouter provider selection |
+| 360 | [Codex Subscription Default](360_codex_subscription_default.md) | High | 🚧 Implemented (focused verification) | compatibility-aware route selection |
 | 357 | [Nested Tool-Loop Model Justification](357_nested_tool_model_justification.md) | Critical | ✅ Complete | Open Web Retrieval agent-driven MVP M1 canary |
 | 356 | [Instructor Structured-Attempt Ledger](356_instructor_attempt_ledger.md) | Critical | ✅ Complete | `research_v3` Plan #25 evidence-complete Luna comparison |
 | 355 | [Codex Intrinsic Event Custody](355_codex_intrinsic_event_custody.md) | High | 🚧 In Progress (exact raw JSONL correction) | AC16 Plan 02 and Agent Ecology 3 Plan #10 |
@@ -85,7 +85,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 343 | [Codex Certification Integrity](343_codex_certification_integrity.md) | Critical | ✅ Complete | Trustworthy downstream route advertisement |
 | 336 | [Typed OpenRouter Route Policy and Consumer Migration](336_typed_openrouter_route_policy.md) | Critical | 🚧 In Progress | Inside Success DP-03 real messy-Slack preprocessing vertical |
 | 124 | [Logical Structured-Call Deadline](124_logical_structured_call_deadline.md) | Critical | ❓  | Bounded retry-chain latency and Plan 021 terminal repair |
-| 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | ❓  | Evidence-based failure localization and provider-attribution claims |
+| 121 | [Privacy-Bounded Attempt Diagnostic Envelope](121_attempt_diagnostic_envelope.md) | Critical | 🚧 Implemented on main; downstream Process Tracing verification pending | Evidence-based failure localization and provider-attribution claims |
 | 120 | [Durable Cross-Project Call Lifecycle](120_durable_call_lifecycle.md) | Critical | ✅ Complete | Truthful localization of missing-terminal calls |
 | 119 | [Runtime Cost Governance](119_runtime_cost_governance.md) | Critical | ✅ Complete | Trustworthy real-time cost control and cross-provider spend analysis |
 | 118 | [OpenRouter Discriminated-Union Projection](118_openrouter_schema_compaction.md) | High | ✅ Complete | DoDAF Plan 75 Army publication extraction |
@@ -93,7 +93,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 116 | [Ecosystem Allowlist Cutover](116_ecosystem-allowlist-cutover.md) | Critical | ✅ Complete | Unconditional allowed-model enforcement |
 | 115 | [Allowed-Model Execution Policy](115_allowed-model-execution-policy.md) | Critical | ✅ Complete | Safe cross-project model-policy enforcement |
 | 114 | [JSON-Schema-Native Bridge](114_json-schema-native-bridge.md) | High | ✅ Complete | learning-environment migration away from direct provider transport |
-| 113 | [Responses Structured Custody Reconciliation](113_responses_structured_custody_reconciliation.md) | Critical | ❓  | onto-canon6 Plan 0145 reviewed preprocessing replay |
+| 113 | [Responses Structured Custody Reconciliation](113_responses_structured_custody_reconciliation.md) | Critical | 🚧 Implemented (focused verified; repository completion gate unavailable) | onto-canon6 Plan 0145 reviewed preprocessing replay |
 | 112 | [Provider Usage-Detail Observability](112_provider_usage_detail_observability.md) | High | ✅ Complete | Exact hidden-reasoning attribution in downstream cost experiments |
 | 111 | [All-Attempt Structured Cost Coverage](111_all_attempt_cost_coverage.md) | Critical | ✅ Complete | Honest recovered structured calls in strict-budget consumers |
 | 108 | [Agent-schema Responses compatibility](108_agent_schema_responses_compatibility.md) | High | ✅ Complete | Cybernetic simulator exact-schema route certification |
@@ -149,7 +149,7 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 42 | [Codex CLI MCP Parity](42_codex_cli_mcp_parity.md) | High | ✅ Complete | Inside Success Twitter prospecting agent |
 | 43 | [Version Adversarial Review Prompts as Assets](43_review_prompt_assets.md) | Medium | ✅ Complete | - |
 | 44 | [Reconcile Completed Cross-Project Plan Status](44_plan_status_reconciliation.md) | Medium | ✅ Complete | - |
-| 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | ❓  | DIGIMON governed replay |
+| 91 | [Pending-Atom Submit Churn Requires TODO Progress](91_pending_atom_submit_churn_requires_todo_progress.md) | High | 🚧 Implemented; downstream verification pending | DIGIMON governed replay |
 | 93 | [Agent tool-usage ledger](93_agent-tool-usage-ledger.md) | High | ✅ Complete | project-meta Plan #213 reporting and comparative selection evaluation |
 | 92 | [Worktree Lifecycle Governance and Cleanup](92_worktree-lifecycle-governance-and-cleanup.md) | Critical | ✅ Complete | Merge-or-disposition enforcement live; historical checkout cleanup reconciled |
 | 94 | [Model Tier Taxonomy and Fable Ban](94_model-tier-taxonomy-and-fable-ban.md) | High | 🚧 In Progress (tier selectors implemented; declared-vs-certified route follow-up open) | Cross-project model-selection cleanup |
@@ -161,8 +161,8 @@ adversarial-review checkpoints, test commands, and completion criteria.
 | 109 | [Structured-Call Hard Deadline](109_structured_call_hard_deadline.md) | High | ✅ Complete | Reliable long-running structured simulations |
 | 110 | [Provider Capabilities and Opus Ban](110_provider-capabilities-opus-ban.md) | High | ✅ Complete | Cybernetic simulator DeepSeek V4 Flash max-reasoning sample |
 | 333 | [root budget scope across child traces](333_root-budget-scope-across-child-traces.md) | High | ✅ Complete | Plan #335 concurrent root-budget reservations |
-| 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | ❓  | Plan #121 merged diagnostics contract |
-| 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | ❓  | Plan #122 client deadline classification |
+| 122 | [Client Attempt Deadline Classification](122_client-attempt-deadline-classification.md) | High | 🚧 Implemented on main; downstream Process Tracing verification pending | Plan #121 merged diagnostics contract |
+| 334 | [Empty Structured Response Observability](334_empty-structured-response-observability.md) | Critical | 🚧 Implemented on main; governed downstream live trace pending | Plan #122 client deadline classification |
 | 335 | [Concurrent Root-Budget Reservations](335_concurrent-root-budget-reservations.md) | Critical | ✅ Complete | DIGIMON Plan #182 |
 | 337 | [Current Model Selection Evidence and GPT-5.5 Retirement](337_current-model-selection-evidence-and-gpt-5-5-retirement.md) | Critical | ✅ Complete | - |
 | 338 | [Observed Application-Run Lifecycle](338_observed_application_run_lifecycle.md) | Critical | ❓  | Process Tracing outer-run receipt |

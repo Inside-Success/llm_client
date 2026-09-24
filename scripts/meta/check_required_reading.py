@@ -151,7 +151,7 @@ def _required_docs_for_target(target: str, relationships: dict) -> tuple[list[st
 
     # Safe baseline if config exists but doesn't provide defaults.
     if not docs:
-        docs.add("CLAUDE.md")
+        docs.add("AGENTS.md")
 
     matched_any = False
     for coupling in relationships.get("couplings", []):

@@ -16,7 +16,7 @@ Usage:
 
 Status is tracked in two places:
 1. Individual plan files (docs/plans/NN_*.md) - SOURCE OF TRUTH
-2. Index table in docs/plans/CLAUDE.md
+2. Index table in docs/plans/AGENTS.md
 
 This script ensures they stay in sync and validates that status matches content.
 """
@@ -28,7 +28,7 @@ from pathlib import Path
 
 
 PLANS_DIR = Path("docs/plans")
-INDEX_FILE = PLANS_DIR / "CLAUDE.md"
+INDEX_FILE = PLANS_DIR / "AGENTS.md"
 
 # Status emoji mapping
 STATUS_MAP = {
@@ -69,6 +69,8 @@ def parse_plan_status(plan_path: Path) -> dict | None:
         if emoji in status_text or name.lower() in status_text.lower():
             status_emoji = emoji
             break
+    if status_emoji is None and status_text.casefold().startswith("implemented"):
+        status_emoji = "🚧"
 
     # Extract title from first heading
     title_match = re.search(r"^#\s*(?:Gap\s*\d+[:\s]*)?(.+?)(?:\n|$)", content, re.MULTILINE)
@@ -373,7 +375,9 @@ def sync_index_to_plans() -> int:
 
         # Rebuild the status cell with new emoji and appropriate text
         new_status_text = STATUS_MAP.get(new_status, "")
-        if custom_suffix:
+        if plan["status_raw"].casefold().startswith("implemented") and not custom_suffix:
+            cells[3] = f"{new_status} {plan['status_raw']}"
+        elif custom_suffix:
             cells[3] = f"{new_status} {custom_suffix}"
         else:
             cells[3] = f"{new_status} {new_status_text}"

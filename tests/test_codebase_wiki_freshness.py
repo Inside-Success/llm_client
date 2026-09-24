@@ -38,7 +38,7 @@ def _repository(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (repository / "pyproject.toml").write_text("[project]\nname='fixture'\n", encoding="utf-8")
-    (repository / "CLAUDE.md").write_text("# Authority\n", encoding="utf-8")
+    (repository / "AGENTS.md").write_text("# Authority\n", encoding="utf-8")
     _git(repository, "init", "-b", "main")
     _git(repository, "config", "user.email", "fixture@example.com")
     _git(repository, "config", "user.name", "Fixture")
@@ -72,8 +72,8 @@ def _manifest(repository: Path, manifest_path: Path) -> WikiSourceManifestV1:
         code_surface=surface,
         authority_sources=[
             AuthoritySourceV1(
-                path="CLAUDE.md",
-                sha256=hashlib.sha256((repository / "CLAUDE.md").read_bytes()).hexdigest(),
+                path="AGENTS.md",
+                sha256=hashlib.sha256((repository / "AGENTS.md").read_bytes()).hexdigest(),
             )
         ],
         capsules=[],
@@ -119,12 +119,12 @@ def test_authority_drift_fails_without_code_change(tmp_path: Path) -> None:
     repository = _repository(tmp_path)
     manifest_path = tmp_path / "manifest.json"
     manifest = _manifest(repository, manifest_path)
-    (repository / "CLAUDE.md").write_text("# Changed authority\n", encoding="utf-8")
+    (repository / "AGENTS.md").write_text("# Changed authority\n", encoding="utf-8")
 
     receipt = evaluate_manifest(repository, manifest_path, manifest)
 
     assert receipt.ok is False
-    assert any(error.startswith("authority:CLAUDE.md:") for error in receipt.errors)
+    assert any(error.startswith("authority:AGENTS.md:") for error in receipt.errors)
 
 
 def test_external_capsule_reopens_exact_git_blob(tmp_path: Path) -> None:

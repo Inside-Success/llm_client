@@ -24,7 +24,7 @@
 
 - `llm_client/client.py:45-89` - existing implementation
 - `docs/architecture/current/example.md` - current design
-- `CLAUDE.md` - project conventions
+- `AGENTS.md` - project conventions
 
 ---
 

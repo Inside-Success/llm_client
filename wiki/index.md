@@ -14,11 +14,11 @@ Inside Success organization downstream of Brian's personal llm_client repository
 
 ## Read next
 
-- [Operating rules](../CLAUDE.md)
+- [Operating rules](../AGENTS.md)
 - [Operating rules (Codex mirror)](../AGENTS.md)
 - [Project overview](../README.md)
 - [Roadmap](../roadmap/README.md)
-- [Active plan queue](../docs/plans/CLAUDE.md)
+- [Active plan queue](../docs/plans/AGENTS.md)
 - [Architecture decisions](../docs/adr/README.md)
 
 ## Coverage and unknowns

@@ -1,24 +1,12 @@
 # LLM Client
 
-<!-- GENERATED FILE: DO NOT EDIT DIRECTLY -->
-<!-- generated_by: scripts/meta/render_agents_md.py -->
-<!-- canonical_claude: CLAUDE.md -->
-<!-- canonical_relationships: scripts/relationships.yaml -->
-<!-- canonical_relationships_sha256: da60fc3ad171 -->
-<!-- sync_check: python scripts/meta/check_agents_sync.py --check -->
-
-This file is a generated Codex-oriented projection of repo governance.
-Edit the canonical sources instead of editing this file directly.
-
-Canonical governance sources:
-- `CLAUDE.md` — human-readable project rules, workflow, and references
-- `scripts/relationships.yaml` — machine-readable ADR, coupling, and required-reading graph
+`AGENTS.md` is the authored repository instruction authority for Claude Code and Codex.
+Machine-readable ADR, coupling, and required-reading edges are authored in
+`scripts/relationships.yaml`.
 
 ## Purpose
 
-`CLAUDE.md` is the authored repository instruction authority. `AGENTS.md` is
-its generated Codex-facing projection. Machine-readable ADR, coupling, and
-required-reading edges are authored in `scripts/relationships.yaml`.
+LLM Client uses `AGENTS.md` as canonical repo governance and workflow policy.
 
 ## Commands
 
@@ -57,16 +45,10 @@ python scripts/meta/validate_relationships.py --strict  # Validate coupling conf
 ```
 
 This file keeps the highest-signal repository rules in always-on agent context.
-Use the linked project authorities and the nearest subtree `CLAUDE.md` for
+Use the linked project authorities and the nearest subtree `AGENTS.md` for
 details scoped below the repository root.
 
-## Operating Rules
-
-This projection keeps the highest-signal rules in always-on Codex context.
-For full project structure, detailed terminology, and any rule omitted here,
-read `CLAUDE.md` directly.
-
-### Principles
+## Principles
 
 1. **Runtime substrate, not thin wrapper** -- `llm_client` is a control plane providing routing, observability, retry/fallback, and structured output enforcement. It is not a convenience layer over LiteLLM.
 2. **Required kwargs on every call** -- `task=`, `trace_id=`, `max_budget=`. No exceptions.
@@ -87,12 +69,12 @@ read `CLAUDE.md` directly.
     Project Meta and network access are available to authenticate external
     capsules and the company-downstream revision as well.
 
-### Workflow
+## Workflow
 
 ### Process Awareness
 - All significant work follows meta-process plans in `docs/plans/`.
 - Use `[Trivial]` only for <20 lines with no production code changes.
-- Plan index: `docs/plans/CLAUDE.md`. Template: `docs/plans/TEMPLATE.md`.
+- Plan index: `docs/plans/AGENTS.md`. Template: `docs/plans/TEMPLATE.md`.
 
 ### Read-Gating
 - Source files coupled to ADRs in `scripts/relationships.yaml` require reading the linked docs before editing.
@@ -105,17 +87,17 @@ read `CLAUDE.md` directly.
 
 ## Machine-Readable Governance
 
-`scripts/relationships.yaml` is the source of truth for machine-readable governance in this repo: ADR coupling, required-reading edges, and doc-code linkage. This generated file does not inline that graph; it records the canonical path and sync marker, then points operators and validators back to the source graph. Prefer deterministic validators over prompt-only memory when those scripts are available.
+`scripts/relationships.yaml` is the source of truth for machine-readable governance in this repo: ADR coupling, required-reading edges, and doc-code linkage. This instruction file does not duplicate that graph. Prefer deterministic validators over prompt-only memory when those scripts are available.
 
 ## References
 
 | Doc | Purpose |
 |-----|---------|
 | `docs/plans/01_master-roadmap.md` | Master roadmap (Programs A-E) |
-| `docs/plans/CLAUDE.md` | Plan index |
+| `docs/plans/AGENTS.md` | Plan index |
 | `docs/API_REFERENCE.md` | Generated API reference |
 | `roadmap/codebase/wiki/index.md` | Interlinked codebase orientation and source-backed reading paths |
 | `docs/adr/README.md` | Architecture decision records index |
 | `scripts/relationships.yaml` | Source-doc coupling and read-gate config |
-| `scripts/CLAUDE.md` | Scripts directory reference |
+| `scripts/AGENTS.md` | Scripts directory reference |
 | `.openclaw/success-criteria.yaml` | OpenClaw success criteria contract |

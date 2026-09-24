@@ -14,7 +14,7 @@ coupling_types:
     actor: agent
 required_reading:
   defaults:
-  - CLAUDE.md
+  - AGENTS.md
 couplings:
 - sources:
   - llm_client/provider_limits.py

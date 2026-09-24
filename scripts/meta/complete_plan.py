@@ -431,11 +431,11 @@ def update_plan_index(
     plans_dir: Path,
     dry_run: bool = False,
 ) -> bool:
-    """Update plan status in CLAUDE.md index.
+    """Update plan status in AGENTS.md index.
 
     Returns True if updated successfully.
     """
-    index_file = plans_dir / "CLAUDE.md"
+    index_file = plans_dir / "AGENTS.md"
     if not index_file.exists():
         return False
 
@@ -455,7 +455,7 @@ def update_plan_index(
         return False
 
     if dry_run:
-        print(f"[DRY RUN] Would update plans/CLAUDE.md index")
+        print(f"[DRY RUN] Would update plans/AGENTS.md index")
         return True
 
     index_file.write_text(new_content)

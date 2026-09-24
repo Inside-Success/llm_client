@@ -49,7 +49,7 @@ Other known backlog:
 ## Files that must not be edited directly
 
 - `docs/API_REFERENCE.md` and `docs/API_REFERENCE.html` are generated. Change public code/docstrings or the generator, then run `python scripts/meta/generate_api_reference.py --write`.
-- `AGENTS.md` is the generated Codex projection of canonical `CLAUDE.md` and relationship metadata.
+- `AGENTS.md` is the authored instruction source for Claude Code and Codex. Keep relationship metadata in `scripts/relationships.yaml`.
 
 ## Quick sanity checks
 

@@ -58,6 +58,6 @@ make worktree-remove BRANCH=plan-22-example
 ## Configuration
 
 Edit config files in repo root to customize behavior:
-- `docs/plans/CLAUDE.md` - plan index
+- `docs/plans/AGENTS.md` - plan index
 - `docs/ops/CAPABILITY_DECOMPOSITION.md` - repo-local capability ownership source of record
 - `scripts/relationships.yaml` - source/doc couplings and required-reading defaults
