@@ -56,7 +56,7 @@ debug "WORKTREE_PATH=$WORKTREE_PATH"
 
 # Allow coordination files without plan declaration
 if [[ "$WORKTREE_PATH" == ".claude/"* ]] || \
-   [[ "$WORKTREE_PATH" == *"CLAUDE.md" ]] || \
+   [[ "$WORKTREE_PATH" == *"AGENTS.md" ]] || \
    [[ "$WORKTREE_PATH" == ".git/"* ]] || \
    [[ "$WORKTREE_PATH" == "docs/plans/"* ]]; then
     debug "Coordination file, allowing"

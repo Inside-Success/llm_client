@@ -2,4 +2,4 @@
 
 Types, config, errors, models, and dispatch hub. Everything else depends on this layer.
 
-Read [`../CLAUDE.md`](../CLAUDE.md) for package-level context.
+Read [`../AGENTS.md`](../AGENTS.md) for package-level context.

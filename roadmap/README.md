@@ -7,7 +7,7 @@ Use the two routes below for different questions:
 | Need | Start here |
 | --- | --- |
 | Understand how the codebase fits together | [Codebase wiki](codebase/wiki/index.md) |
-| Find delivery status, plans, or pending work | [Plan index](../docs/plans/CLAUDE.md) |
+| Find delivery status, plans, or pending work | [Plan index](../docs/plans/AGENTS.md) |
 
 The [codebase wiki](codebase/wiki/index.md) is derived orientation grounded in
 an exact source revision. It explains architecture, workflows, packages, and

@@ -17,7 +17,7 @@ and avoids confusing generated discovery data with source truth.
 - `raw/` contains immutable source manifests and revision pins. Do not edit a
   manifest in place; add a new revision manifest and supersede the old ingest.
 - `wiki/` contains derived, interlinked Markdown maintained by agents.
-- `CLAUDE.md` is this operating schema. User corrections belong here so future
+- `AGENTS.md` is this operating schema. User corrections belong here so future
   sessions do not repeat the same misunderstanding.
 
 The repository code itself remains the authoritative raw source. The manifest

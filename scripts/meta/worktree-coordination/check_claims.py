@@ -93,7 +93,6 @@ def get_main_repo_root() -> Path:
 # Use main repo root for claims to share across worktrees
 _MAIN_ROOT = get_main_repo_root()
 YAML_PATH = _MAIN_ROOT / ".claude/active-work.yaml"
-CLAUDE_MD_PATH = _MAIN_ROOT / "CLAUDE.md"
 PLANS_DIR = _MAIN_ROOT / "docs/plans"
 
 

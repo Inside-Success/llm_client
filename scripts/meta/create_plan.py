@@ -30,7 +30,7 @@ def resolve_plan_root(repo_root: str) -> Path:
 def resolve_plan_paths(repo_root: Path) -> tuple[Path, Path, Path]:
     """Return the plan directory, template path, and index path for a repo."""
     plans_dir = repo_root / "docs" / "plans"
-    return plans_dir, plans_dir / "TEMPLATE.md", plans_dir / "CLAUDE.md"
+    return plans_dir, plans_dir / "TEMPLATE.md", plans_dir / "AGENTS.md"
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,7 +88,7 @@ def _new_index_row(plan_number: int, title: str, priority: str, status: str, blo
 def update_index(index_text: str, row: str, plan_number: int) -> str:
     """Insert one new row into the plan index before the status-key section."""
     if f"| {plan_number} |" in index_text:
-        raise ValueError(f"Plan #{plan_number} already exists in docs/plans/CLAUDE.md")
+        raise ValueError(f"Plan #{plan_number} already exists in docs/plans/AGENTS.md")
 
     lines = index_text.splitlines()
     insert_at = None
@@ -97,7 +97,7 @@ def update_index(index_text: str, row: str, plan_number: int) -> str:
             insert_at = idx
             break
     if insert_at is None:
-        raise ValueError("docs/plans/CLAUDE.md is missing the '## Status Key' section")
+        raise ValueError("docs/plans/AGENTS.md is missing the '## Status Key' section")
 
     rows = []
     for idx, line in enumerate(lines):

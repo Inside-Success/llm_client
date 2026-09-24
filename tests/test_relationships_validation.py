@@ -32,7 +32,7 @@ def test_validator_rejects_missing_doc(tmp_path: Path) -> None:
             [
                 "required_reading:",
                 "  defaults:",
-                "    - CLAUDE.md",
+                "    - AGENTS.md",
                 "couplings:",
                 "  - sources:",
                 "      - llm_client/client.py",

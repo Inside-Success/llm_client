@@ -65,7 +65,7 @@ if [[ -n "$GENERATOR" ]]; then
     if [[ -n "$STAGED_PLANS" ]]; then
         echo "Regenerating plan index..."
         "$PYTHON_BIN" "$GENERATOR"
-        git add docs/plans/CLAUDE.md
+        git add docs/plans/AGENTS.md
     fi
 fi
 

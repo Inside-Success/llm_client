@@ -4,7 +4,7 @@ title: llm_client Overview
 description: The repository's role, main capabilities, boundaries, and shortest useful reading paths.
 created: 2026-08-16
 updated: 2026-08-16
-sources: [../../../CLAUDE.md, ../../../docs/ops/CAPABILITY_DECOMPOSITION.md, sources/revision-c2f3693.md]
+sources: [../../../AGENTS.md, ../../../docs/ops/CAPABILITY_DECOMPOSITION.md, sources/revision-c2f3693.md]
 confidence: high
 ---
 

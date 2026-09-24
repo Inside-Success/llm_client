@@ -87,9 +87,9 @@ obvious missing implementation.
 
 ## Read First
 
-1. `CLAUDE.md`
+1. `AGENTS.md`
 2. `docs/plans/01_master-roadmap.md`
-3. `docs/plans/CLAUDE.md`
+3. `docs/plans/AGENTS.md`
 4. `docs/plans/91_pending_atom_submit_churn_requires_todo_progress.md`
 5. `llm_client/tools/decorator.py`
 6. `tests/test_tool_decorator.py`

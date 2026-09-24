@@ -5,7 +5,7 @@ the package surface, not the repo-wide governance layer.
 
 Read these first when working under `llm_client/`:
 
-1. [`../CLAUDE.md`](../CLAUDE.md)
+1. [`../AGENTS.md`](../AGENTS.md)
 2. [`../docs/API_REFERENCE.md`](../docs/API_REFERENCE.md)
 3. [`../docs/API_REFERENCE.html`](../docs/API_REFERENCE.html)
 4. [`../scripts/meta/generate_api_reference.py`](../scripts/meta/generate_api_reference.py)
