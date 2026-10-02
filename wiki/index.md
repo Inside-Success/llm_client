@@ -1,3 +1,15 @@
+---
+id: inside-success-llm-client-wiki-index
+type: index
+title: "Inside Success LLM Client wiki routing stub"
+status: generated
+authority: derived
+owner: project-meta/scripts/generate_wiki_routing_stub.py
+as_of: 2026-10-02
+visibility: unknown
+source_of_truth: false
+---
+
 # Inside Success LLM Client
 
 Routing stub generated under Plan #268 (project-meta) from this repository's own declared metadata. It states what is known and what is not; it does not invent purpose or status.
@@ -15,7 +27,6 @@ Inside Success organization downstream of Brian's personal llm_client repository
 ## Read next
 
 - [Operating rules](../AGENTS.md)
-- [Operating rules (Codex mirror)](../AGENTS.md)
 - [Project overview](../README.md)
 - [Roadmap](../roadmap/README.md)
 - [Active plan queue](../docs/plans/AGENTS.md)
