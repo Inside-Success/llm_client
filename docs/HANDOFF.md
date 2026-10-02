@@ -3,6 +3,12 @@
 Updated: 2026-07-25
 Canonical revision checked: `5a3369e`
 
+> **Point-in-time record (banner added 2026-10-02).** Everything below is as of
+> the revision above. The current status of every plan named here is owned by
+> `docs/plans/AGENTS.md`; where this page and the plan index differ, the plan
+> index wins. Do not treat the "Current Posture" or "Remaining Work" sections
+> as present-tense status without re-checking them.
+
 ## Current Posture
 
 - Personal `main` is clean and synchronized with `origin/main`.

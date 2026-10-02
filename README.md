@@ -167,15 +167,18 @@ Prefer task-based selection over hardcoded model IDs:
 ```python
 from llm_client import get_model, list_models
 
-model = get_model("extraction")       # Best model for extraction tasks
-models = list_models("extraction")    # All candidates, ranked
+model = get_model("default_intelligent")       # Shared default for ordinary project work
+models = list_models("default_intelligent")    # All candidates, ranked
 ```
 
-Task profiles: `extraction`, `budget_extraction`, `graph_building`,
-`fast_extraction`, `bulk_cheap`, `synthesis`, `deep_review`,
-`code_generation`, `judging`, `agent_reasoning`. Use `make models` or
-`list_models(task)` to see candidates per task.
-`graph_building` (lowest cost).
+Current task profiles: `default_intelligent`, `fast_intelligent`, `fast_mid`,
+`fast_cheap_mid`, `ultra_cheap_low_intel`, `ultra_fast_low_intel`,
+`very_intelligent`, `max_intelligence`. Older names (`extraction`,
+`budget_extraction`, `graph_building`, `fast_extraction`, `bulk_cheap`,
+`synthesis`, `deep_review`, `code_generation`, `judging`, `agent_reasoning`)
+remain as compatibility selectors that point at the profiles above. Run
+`python -m llm_client models tasks` (or `list_models(task)`) for the live list
+and candidates per task.
 
 ## Observability
 
@@ -298,3 +301,5 @@ from llm_client import call_llm
 The concern front doors route without relocating existing authorities:
 [`docs/`](docs/), [`roadmap/`](roadmap/), [`src/`](src/), [`tests/`](tests/),
 [`ui/`](ui/), [`generated/`](generated/), and [`misc/`](misc/).
+
+[Wiki routing stub](wiki/index.md)
