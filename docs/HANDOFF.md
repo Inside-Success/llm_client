@@ -114,3 +114,5 @@ retry fixes are already landed. The two unfinished truths are:
 1. Plan `#91` still needs to land if DIGIMON’s submit-churn family stays live.
 2. The new tool-routing metadata exists, but its real consumer contract is not
    yet fully operationalized.
+
+Wiki route: [wiki/index.md](../wiki/index.md) is the repository front door.

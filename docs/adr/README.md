@@ -28,3 +28,5 @@ Related architecture docs:
 - `project-meta/docs/ops/ADR-2026-04-04-workflow-portability-revised-execution-strategies.md` — supersedes Plan #24 scope
 
 Status: active.
+
+Wiki route: [wiki/index.md](../../wiki/index.md) is the repository front door.
