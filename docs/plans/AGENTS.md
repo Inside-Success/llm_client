@@ -207,3 +207,5 @@ python scripts/meta/complete_plan.py --plan N
 ```
 
 This verifies tests pass and records completion evidence.
+
+Wiki route: [wiki/index.md](../../wiki/index.md) is the repository front door.
