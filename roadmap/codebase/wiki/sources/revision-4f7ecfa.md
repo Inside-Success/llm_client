@@ -1,16 +1,16 @@
 ---
 type: source
 title: Revision 4f7ecfa Source Ingest
-description: Current source binding with exact Codex CLI JSONL custody at the public result boundary.
+description: Superseded source binding (former personal upstream) with exact Codex CLI JSONL custody at the public result boundary.
 created: 2026-08-23
 updated: 2026-08-23
 sources: [../../raw/source-manifest-4f7ecfa-company-f4a08fe.json, ../../../../llm_client/core/data_types.py, ../../../../llm_client/sdk/agents_codex.py]
 confidence: high
 ---
 
-# Current source binding
+# Former source binding (superseded)
 
-The current personal upstream source is commit
+Superseded 2026-10-03 by [revision `5228ceb`](revision-5228ceb.md). The former personal upstream source was commit
 `4f7ecfa9527bb68dd5a9bda81abd384612c0d9cd`, Git tree
 `e9dfd48904b4efc3c8bc8ab330b2455a611c689f`. Its deterministic code surface is
 165 Python files plus `pyproject.toml`, bound by digest

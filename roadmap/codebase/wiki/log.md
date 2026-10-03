@@ -1,5 +1,17 @@
 # Update Log
 
+## 2026-10-03 (re-ingest)
+
+- **Ingest** | Re-ingested from canonical `Inside-Success/llm_client` revision
+  `5228ceb`, tree `1a0edc0`; new manifest
+  `raw/source-manifest-5228ceb-inside-success.json` binds 169 surface files,
+  digest `sha256:a29cd7f0...a662da`, and the current `AGENTS.md`-based
+  authority set (the `CLAUDE.md` files were retired in #29). The freshness
+  check default points to it. The earlier manifests are retained as history.
+- **Update** | Refreshed package-map file counts (168 Python modules) and the
+  lineage page; added [revision 5228ceb](sources/revision-5228ceb.md).
+  Concept and workflow pages were not re-derived and still cite `4f7ecfa`.
+
 ## 2026-10-03
 
 - **Lineage** | Recorded that `Inside-Success/llm_client` is independent and
