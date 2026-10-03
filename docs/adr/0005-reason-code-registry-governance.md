@@ -25,6 +25,13 @@ meaning, or fragment into one-off strings that break trend analysis.
    - `unfinished_todos`: submit blocked because required TODO items are not complete.
    - `answer_not_grounded`: submit blocked because answer lacks required evidence grounding.
 
+Current-code note (verified 2026-10-03): this repository only consumes
+`reason_code` from submit-validator payloads (`llm_client/agent/mcp_turn_outcomes.py`);
+it does not emit these codes, and `unfinished_todos` does not appear in this
+repository's code. The runtime also keys behavior on `pending_atoms` (Plan #91),
+which is not in the registry above and so is currently unregistered telemetry
+under item 4; promoting it is a separate ADR update.
+
 ## Consequences
 
 Positive:

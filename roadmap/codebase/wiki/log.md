@@ -1,5 +1,14 @@
 # Update Log
 
+## 2026-10-03 (authority re-pin)
+
+- **Maintenance** | The documentation review edited hashed authority inputs
+  (`AGENTS.md`, the capability and ecosystem documents). Added immutable
+  manifest `raw/source-manifest-98c9333-inside-success.json` (same code
+  surface and digest as `5228ceb`, source commit `98c9333`, new authority
+  hashes) and pointed the freshness check at it. The `5228ceb` manifest is
+  retained as history.
+
 ## 2026-10-03 (re-ingest)
 
 - **Ingest** | Re-ingested from canonical `Inside-Success/llm_client` revision

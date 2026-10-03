@@ -9,6 +9,7 @@ tool-chain legality and expose only currently legal tools.
 result = await acall_llm(
     "openrouter/deepseek/deepseek-chat",
     messages,
+    model_justification="Reviewed MCP-loop route.",  # required for any non-default allowlisted model
     task="mcp_contracts",
     trace_id="mcp_contracts",
     max_budget=5.00,

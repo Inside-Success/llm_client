@@ -14,7 +14,9 @@ progress.
 
 ## Decision
 
-1. `gpt-5.2-pro` is treated as a Responses-API model in `llm_client/client.py`.
+1. `gpt-5.2-pro` is treated as a Responses-API model (currently `_RESPONSES_API_MODELS` in
+   `llm_client/core/model_detection.py`; the former `llm_client/client.py` no
+   longer exists).
 2. For long-thinking effort levels (`high`, `xhigh`), Responses requests enable
    `background=true`.
 3. When initial Responses status is non-terminal, the client polls by
@@ -74,3 +76,12 @@ scope and unchanged.
 Plan 354 removes a duplicate private-runtime terminal lifecycle write without
 changing Responses routing, background polling, or timeout behavior. Focused
 structured runtime and lifecycle suites pass in fresh processes.
+
+Current-code note (verified against `llm_client/execution/background_runtime.py`
+on 2026-10-03; the decision above is unchanged): background retrieval now
+accepts both OpenAI and OpenRouter endpoints (`_validate_background_retrieval_api_base`
+returns `"openai"` or `"openrouter"`) and rejects any other `api_base`
+with `LLMC_ERR_BACKGROUND_ENDPOINT_UNSUPPORTED`. Decision items 6 and 8 therefore
+read as follows today: OpenRouter is no longer rejected, and the missing-key
+errors are `LLMC_ERR_BACKGROUND_OPENAI_KEY_REQUIRED` and
+`LLMC_ERR_BACKGROUND_OPENROUTER_KEY_REQUIRED`. Defaults of 900s/15s still hold.

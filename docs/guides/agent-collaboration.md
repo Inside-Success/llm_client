@@ -1,12 +1,11 @@
 # Agent Collaboration Workflows
 
-This branch packages the local work for replacing manual paste-between-agent
-loops with `llm_client` workflows that call agent models directly and write
-structured artifacts to disk.
+These workflows replace manual paste-between-agent
+loops: they call agent models directly and write structured artifacts to disk.
 
 ## Install
 
-From this checkout:
+From a checkout of this repository:
 
 ```bash
 pip install -e ".[workflow,structured,agents,codex]"
@@ -108,16 +107,18 @@ python -m llm_client deliberate-task \
 Outputs include per-round positions, verifier ledgers when enabled, synthesis,
 and signoff artifacts.
 
-## Evidence In This Branch
+## Tracked Evidence
 
-Tracked examples under `runs/` show prior dogfood runs:
+Tracked examples under `runs/` show prior dogfood runs (index: `runs/README.md`):
 
 - `runs/background-review-demo/`
-- `runs/plan-33-self-deliberation*/`
+- `runs/plan-33-self-deliberation/` and `runs/plan-33-self-deliberation-v2/`
 - `runs/plan-35-barrier-pilot/`
+- `runs/model-experiments/`
 
-New local run output is ignored by default. Commit curated evidence with
-`git add -f runs/<name>/...` when it should travel with the branch.
+New local run output is ignored by default (`.gitignore` ignores `runs/**`
+except `runs/README.md`). Add curated evidence deliberately with
+`git add -f runs/<name>/...`.
 
 ## Design References
 

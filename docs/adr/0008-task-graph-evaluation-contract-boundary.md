@@ -4,6 +4,11 @@ Status: Superseded
 Superseded: 2026-03-24 — task_graph.py extracted to project-meta, experiment_eval.py to prompt_eval (Plan #17)  
 Date: 2026-02-23
 
+Current-code note (verified 2026-10-03): `llm_client/task_graph.py` and
+`docs/TASK_GRAPH_DESIGN.md` no longer exist in this repository, and
+`llm_client/experiment_eval.py` is a compatibility shim that re-exports
+`prompt_eval.experiment_eval`. The text below is the historical decision.
+
 ## Context
 
 `llm_client/task_graph.py` and `llm_client/experiment_eval.py` govern how DAG

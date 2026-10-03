@@ -4,7 +4,7 @@ title: Inside Success Revision 5228ceb Source Ingest
 description: Current source binding to the canonical Inside-Success/llm_client main, with the code changes since the former personal revision 4f7ecfa.
 created: 2026-10-03
 updated: 2026-10-03
-sources: [../../raw/source-manifest-5228ceb-inside-success.json, ../../../../llm_client/inside_success_policy.py, ../../../../llm_client/execution/codex_identity.py, ../../../../llm_client/utils/litellm_log_filters.py]
+sources: [../../raw/source-manifest-5228ceb-inside-success.json, ../../raw/source-manifest-98c9333-inside-success.json, ../../../../llm_client/inside_success_policy.py, ../../../../llm_client/execution/codex_identity.py, ../../../../llm_client/utils/litellm_log_filters.py]
 confidence: high
 ---
 
@@ -22,6 +22,11 @@ documents, Plan 105, and this wiki's schema.
 This replaces the earlier binding to the former personal upstream at
 [`4f7ecfa`](revision-4f7ecfa.md). That upstream is ancestry only; see
 [lineage](../lineage/personal-and-inside-success.md).
+
+Authority hashes were later re-pinned in
+[`source-manifest-98c9333-inside-success.json`](../../raw/source-manifest-98c9333-inside-success.json)
+(same code surface, source commit `98c9333`); that is the manifest the freshness
+check now reads.
 
 # Source changes since `4f7ecfa` (package surface)
 

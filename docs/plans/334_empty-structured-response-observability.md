@@ -31,7 +31,7 @@ without claiming provider fault.
   diagnostic boundary and sync/async native response handling.
 - `llm_client/observability/attempt_diagnostics.py` and `llm_client/io_log.py`
   - strict envelope and additive SQLite persistence.
-- `docs/plans/121_attempt_diagnostic_envelope.md` and `CLAUDE.md` - privacy,
+- `docs/plans/121_attempt_diagnostic_envelope.md` and `AGENTS.md` - privacy,
   observability, and verification constraints.
 - `docs/adr/0001-model-identity-v0.md`
 - `docs/adr/0002-routing-config-precedence.md`

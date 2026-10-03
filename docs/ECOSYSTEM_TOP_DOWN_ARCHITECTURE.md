@@ -8,7 +8,7 @@ enforcement_status: authoritative
 capabilities belong to which layer, and where the boundaries lie. This is the
 primary boundary contract for `llm_client` consumers.
 
-**Updated**: 2026-04-02
+**Updated**: 2026-04-02 (stale-path corrections 2026-10-03; layer/consumer claims about other repos are external and not re-verified)
 
 ---
 
@@ -78,11 +78,13 @@ dataset management, evaluator dispatch, rubric scoring, statistical comparison
 
 ---
 
-## Workflow Layer (planned — not yet built)
+## Workflow Layer (planned — durable layer status unverified)
 
-**Target boundary** (see `docs/plans/04_workflow-layer-boundary.md`):
-
-Lines 170-190 of this document define the coexistence rules:
+**Target boundary** (see `docs/plans/04_workflow-layer-boundary.md`, status
+Complete). `llm_client/workflow/` (review/deliberation workflows) and
+`llm_client/workflow_langgraph.py` (a LangGraph approval-workflow proving
+slice, documented in its docstring as not a general framework) now exist in this
+repo; a general durable workflow layer is not shown to exist. Coexistence rules:
 
 The workflow layer will own **durable multi-step orchestration** — e.g.,
 LangGraph-backed pipelines where steps persist state, can be retried, and
@@ -90,7 +92,7 @@ have explicit entry/exit contracts. It is NOT the same as `task_graph.py`
 (synchronous YAML DAG runner for single-process execution).
 
 **Coexistence rules**:
-- `task_graph.py` (in project-meta) is synchronous, single-process. Use it
+- `task_graph.py` (in project-meta, external) is synchronous, single-process. Use it
   for simple linear plans where each step completes before the next begins.
 - A future workflow layer handles async, durable, re-entrant workflows.
 - The two systems are not competing. `task_graph.py` may become a lane
@@ -163,8 +165,8 @@ These are signals that a boundary is being crossed incorrectly:
 1. **Direct provider SDK import** outside `llm_client` → move to llm_client
 2. **Evaluation rubric logic** in `llm_client` → move to prompt_eval
 3. **Web fetch/search code** duplicated in a project → move to open_web_retrieval
-4. **Observability DB queries** in multiple projects → use `db.py` from ecosystem-ops
-5. **Prompt f-strings** in project code → move to YAML templates in `llm_client/prompts/`
+4. **Observability DB queries** in multiple projects → use `db.py` from ecosystem-ops (external)
+5. **Prompt f-strings** in project code → move to YAML/Jinja2 templates in the project's own `prompts/`, loaded via `render_prompt()` (`llm_client/prompts.py`)
 
 ---
 

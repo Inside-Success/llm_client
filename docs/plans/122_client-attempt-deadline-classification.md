@@ -54,7 +54,7 @@ missing provider evidence before changing a model, retry policy, or timeout.
   is a reusable client-side timeout fact, distinct from background polling,
   replay, provider telemetry, and vendor attribution.
 - `docs/plans/121_attempt_diagnostic_envelope.md` - prior diagnostic contract.
-- `CLAUDE.md` - repository conventions and required verification.
+- `AGENTS.md` - repository conventions and required verification.
 
 ---
 
@@ -65,7 +65,7 @@ missing provider evidence before changing a model, retry policy, or timeout.
 - `llm_client/observability/attempt_diagnostics.py` (modify)
 - `llm_client/execution/structured_runtime.py` (modify)
 - `tests/test_attempt_diagnostics.py` (modify)
-- `docs/plans/CLAUDE.md` and this plan (modify)
+- `docs/plans/AGENTS.md` and this plan (modify)
 
 ---
 

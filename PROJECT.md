@@ -1,6 +1,7 @@
 # LLM Client Project Dossier
 
-Wiki home: http://localhost:8088/index.php/Project_Wiki
+Wiki home (external, machine-local MediaWiki; not in this repo, unverified): http://localhost:8088/index.php/Project_Wiki
+Repository wiki entry: [wiki/index.md](wiki/index.md).
 
 ## Portfolio Role
 

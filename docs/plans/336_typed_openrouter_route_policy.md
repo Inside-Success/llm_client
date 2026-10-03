@@ -1,6 +1,6 @@
 # Plan #336: Typed OpenRouter Route Policy and Consumer Migration
 
-**Status:** 🚧 In Progress
+**Status:** 🚧 In Progress (WU-336-01 shared-client typed policy landed at `b6906ba` and `OpenRouterRoutePolicyV1` is exported; WU-336-02 Inside Success consumer migration and the acceptance boxes below remain unticked)
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None for the shared-client slice; the Inside Success integration
@@ -195,7 +195,7 @@ processing is authorized.
 
 ### Repository authority and implementation
 
-- `CLAUDE.md` — runtime-substrate identity, plan workflow, structured-output,
+- `AGENTS.md` — runtime-substrate identity, plan workflow, structured-output,
   trace, and fail-loud rules.
 - `docs/plans/01_master-roadmap.md` — canonical program authority.
 - `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` — borrow

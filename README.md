@@ -25,12 +25,13 @@ make worktree-list
 make worktree-remove BRANCH=plan-22-example
 ```
 
-Those entrypoints should be preferred over ad hoc local worktree commands when
-doing bounded implementation work in this repo.
+Prefer these entrypoints over ad hoc local worktree commands for bounded
+implementation work. `make help` lists the full session/claim target set; the
+command reference is `scripts/AGENTS.md`.
 
 ## Agent collaboration workflows
 
-This branch includes the Claude/Codex collaboration work that replaces manual
+The Claude/Codex collaboration commands replace manual
 paste-between-terminal loops with structured `llm_client` calls and on-disk
 artifacts:
 
@@ -49,8 +50,9 @@ for install notes, command examples, and the tracked dogfood evidence map.
 ## Install
 
 ```bash
-pip install -e ~/projects/llm_client
-pip install -e "~/projects/llm_client[structured]"  # + instructor for Pydantic extraction
+git clone https://github.com/Inside-Success/llm_client && cd llm_client
+pip install -e .          # instructor (Pydantic extraction) is a core dependency
+pip install -e ".[dev]"  # + pytest, mypy, ruff, vulture, langgraph (make install does this)
 ```
 
 ## Quick start
@@ -205,7 +207,8 @@ runs = get_runs(project="myproject")
 ### Traces
 
 ```bash
-python -m llm_client traces --project myproject --days 3
+python -m llm_client traces --limit 20            # recent traces with cost rollup
+python -m llm_client traces --trace-id demo/basic  # one trace across llm_calls and tool_calls
 ```
 
 ## Configuration
@@ -225,8 +228,9 @@ export ANTHROPIC_API_KEY=sk-ant-...    # Direct Anthropic
 | `LLM_CLIENT_OPENROUTER_ROUTING` | `on` | Route through OpenRouter by default |
 | `LLM_CLIENT_DATA_ROOT` | `~/projects/data` | Observability data directory |
 | `LLM_CLIENT_PROJECT` | `basename(cwd)` | Project name for logging |
-| `LLM_CLIENT_REQUIRE_TAGS` | off | Strict enforcement of task/trace_id/max_budget |
+| `LLM_CLIENT_REQUIRE_TAGS` | off | Strict enforcement of task/trace_id/max_budget (also on when `CI` is truthy or the task starts with `benchmark`/`bench`/`eval`/`ci`) |
 | `LLM_CLIENT_TIMEOUT_POLICY` | `allow` | `ban` to disable all per-call timeouts |
+| `LLM_CLIENT_DB_PATH` | `$LLM_CLIENT_DATA_ROOT/llm_observability.db` | SQLite observability DB path |
 | `LLM_CLIENT_LOG_ENABLED` | `1` | Disable logging with `0` |
 | `LLM_CLIENT_RATE_LIMIT_SHARED_ENABLED` | `1` | Enable cross-process shared provider leases |
 | `LLM_CLIENT_RATE_LIMIT_SHARED_LIMITS` | provider defaults | Override cross-process provider caps as JSON |
@@ -263,28 +267,24 @@ python -m llm_client tools --group-by tool_name --days 7
 ### Rubric scoring
 
 ```python
-from llm_client import load_rubric, score_categorical
+from llm_client import load_categorical_rubric
 
-rubric = load_rubric("extraction_quality")
-score = score_categorical(rubric, {"completeness": "good", "accuracy": "excellent"})
+rubric = load_categorical_rubric("extraction_quality")
+score = rubric.score_categorical({"completeness": "complete", "accuracy": "mostly_accurate"})
 ```
 
 ### Log maintenance
 
 ```bash
 python scripts/log_maintenance.py stats             # Show log sizes and date ranges
-python scripts/log_maintenance.py rotate --days 7    # Compress logs older than 7 days
-python scripts/log_maintenance.py cleanup --days 90  # Delete logs older than 90 days
+python scripts/log_maintenance.py rotate --max-size 100   # Rotate logs larger than 100 MB
+python scripts/log_maintenance.py cleanup --days 90       # Archive logs older than 90 days (--delete-days N also deletes old archives)
+# add --dry-run (-n) to preview
 ```
 
 ## Using from another project
 
-```bash
-pip install -e ~/projects/llm_client
-
-# Then in code:
-from llm_client import call_llm
-```
+Install as above (`pip install -e <path-to-clone>`), then `from llm_client import call_llm`.
 
 ## Detailed guides
 

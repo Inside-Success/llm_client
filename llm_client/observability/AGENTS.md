@@ -15,6 +15,13 @@ surfaces that other modules should use.
 - `experiments.py` for run lifecycle and item logging
 - `comparison.py` for run comparison and cohort analysis
 - `query.py` for read-only lookup and reporting helpers
+- `replay.py` for call-snapshot replay and comparison
+- `observed_runs.py`, `selected_attempts.py`, `structured_attempts.py`,
+  `attempt_diagnostics.py`, `call_receipts.py`, and `raw_artifacts.py` for
+  run/attempt/receipt records
+- `agent_tool_usage.py`, `tool_calls.py`, `interventions.py`,
+  `budget_reservations.py`, `prompt_drift.py`, and `context.py` for tool-usage,
+  intervention, budget, prompt-size, and context helpers
 - `__init__.py` for the public observability facade
 
 ## Local Rules

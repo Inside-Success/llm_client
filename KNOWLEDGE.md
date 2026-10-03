@@ -23,6 +23,11 @@ the subscription-backed Codex path. `llm_client` now treats exact `gpt-5.4`
 as a Codex alias across routing, agent detection, availability checks, and
 rate-limit provider classification.
 
+> Superseded (verified 2026-10-03): GPT-5.4-family requests, including `gpt-5.4` and
+> `codex/gpt-5.4`, are now hard-blocked before dispatch
+> (`llm_client/core/provider_policy.py`, around line 178); the Codex-alias routing
+> above is historical.
+
 ### 2026-04-01 — claude-code — best-practice
 
 **Ecosystem audit findings (Phase 7 of infra sprint).**

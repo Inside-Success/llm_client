@@ -20,12 +20,12 @@ Wiki home: http://localhost:8088/index.php/Project_Wiki
 
 | Surface | Role |
 |---|---|
-| `llm_client/client.py` and runtime modules | Public sync/async call surfaces and orchestration. |
-| `llm_client/models.py` | Result and request model contracts. |
+| `llm_client/core/client.py` and `llm_client/execution/` | Public sync/async call surfaces and orchestration. |
+| `llm_client/core/data_types.py` | Result and request model contracts (`LLMCallResult`). |
 | `llm_client/observability/` | Cost, trace, run, and diagnostic logging surfaces. |
-| `llm_client/model_registry.py` and packaged config | Task-based model selection. |
+| `llm_client/core/models.py`, `llm_client/core/model_selection.py`, and `llm_client/data/default_model_registry.json` | Task-based model selection (`get_model`, `list_models`) and packaged registry. |
 | `llm_client/tools/` | Tool-call registration and observability surfaces. |
-| `llm_client/prompts/` | Prompt rendering and explicit prompt identity support. |
+| `llm_client/prompts.py`, `llm_client/prompt_assets.py` | Prompt rendering (`render_prompt`) and explicit prompt identity support. |
 | `docs/adr/` | Architecture decisions for model identity, observability, runtime boundary, and related policies. |
 | `tests/` | Runtime, observability, schema, and compatibility tests. |
 

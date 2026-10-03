@@ -3,4 +3,5 @@
 Status: active.
 
 Repository-owned automated verification lives in this directory. Use `make
-test-quick` or `make check` as appropriate; this front door does not move tests.
+test` or `make check` as appropriate (commands: [AGENTS.md](AGENTS.md));
+this front door does not move tests.

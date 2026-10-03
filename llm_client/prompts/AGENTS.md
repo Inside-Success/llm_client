@@ -4,7 +4,9 @@ This subtree contains the prompt rendering engine for `llm_client`.
 
 ## Purpose
 
-Prompt rendering logic (`prompts.py`, `prompt_assets.py`) lives here. Canonical
+This directory itself holds only `llm_test_judge.yaml`. The rendering logic
+lives in the root-level modules `llm_client/prompts.py` and
+`llm_client/prompt_assets.py` (not in this directory). Canonical
 prompt asset data files (YAML/Jinja2 templates) live externally at
 `~/projects/prompts/` — configurable via `LLM_CLIENT_PROMPT_ASSET_ROOT`.
 Package fallback copies for required built-ins live under
