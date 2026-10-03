@@ -1,5 +1,20 @@
 # Update Log
 
+## 2026-10-03 (concept and workflow re-derivation)
+
+- **Ingest** | Re-derived the six concept pages and two workflow pages from
+  code at `Inside-Success/llm_client` revision `fe581ed` (tree `1accdb4`),
+  covering the 3 new modules and 15 edited modules since `4f7ecfa`, and
+  repointed every citation from the personal upstream to
+  `Inside-Success/llm_client@fe581ed` with line ranges verified. New immutable
+  manifest `raw/source-manifest-fe581ed-inside-success.json` (same code surface
+  and digest as `5228ceb`, new source commit, same authority hashes); the
+  freshness check default points to it, and `98c9333` is retained as history.
+- **Update** | Added [revision fe581ed](sources/revision-fe581ed.md), updated
+  the package map for the new modules, and marked the `5228ceb` page's
+  "not re-derived" note as resolved. Prompt-assets page now covers the prompt
+  context-contract and duplicate-content checks that were already in code.
+
 ## 2026-10-03 (authority re-pin)
 
 - **Maintenance** | The documentation review edited hashed authority inputs

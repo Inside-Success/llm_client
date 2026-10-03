@@ -3,7 +3,7 @@ type: concept
 title: Prompt Assets
 description: Versioned YAML/Jinja prompt identity, rendering, and observability boundaries.
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-10-03
 sources: [../../../../llm_client/prompts.py, ../../../../llm_client/prompt_assets.py, ../../../../llm_client/prompt_assets]
 confidence: high
 ---
@@ -22,6 +22,11 @@ pinned asset file. Callers may pass the normalized prompt reference into the
 public LLM call so observability can associate execution with the asset without
 confusing the reference with the rendered prompt bytes.
 
+Before rendering, `render_prompt` enforces a sibling `<template>.contract.yaml`
+context budget (strict mode is configurable) and reports large content repeated
+inside the context; setting `LLM_CLIENT_PROMPT_DUPLICATE_STRICT` makes
+duplication an error.
+
 # Ownership
 
 This package owns prompt loading, rendering, identity, and propagation into
@@ -33,6 +38,8 @@ call envelope.
 
 # Citations
 
-1. [`render_prompt`, lines 57–128](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/prompts.py#L57-L128)
-2. [`resolve_prompt_asset`, lines 160–217](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/prompt_assets.py#L160-L217)
-3. [Prompt-assets directory at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/prompt_assets)
+All links pin Inside-Success/llm_client at `fe581ed`.
+
+1. [`render_prompt`, lines 62-149](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/prompts.py#L62-L149)
+2. [`resolve_prompt_asset`, lines 160-217](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/prompt_assets.py#L160-L217)
+3. [Prompt-assets directory](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/prompt_assets)

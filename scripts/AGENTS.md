@@ -13,7 +13,8 @@ Utility scripts for development and governance. The scripts below use argparse; 
 | `scripts/meta/merge_pr.py` | Merge PRs via GitHub CLI |
 | `scripts/meta/parse_plan.py` | Parse plan metadata |
 | `scripts/meta/generate_quiz.py` | Generate comprehension quiz prompts |
-| `scripts/meta/check_required_reading.py` | Enforce required docs read before editing coupled source files (`.claude/hooks/gate-edit.sh` calls `scripts/check_required_reading.py`, a compatibility wrapper that delegates to `file_context`) |
+| `scripts/meta/check_required_reading.py` | Enforce required docs read before editing coupled source files (the only copy; `.claude/hooks/gate-edit.sh` calls it directly; honors `LLM_CLIENT_READ_GATE_MODE`, `meta-process.yaml`, and `--config`) |
+| `scripts/meta/validate_doc_authority.py` | Doc-authority drift validator from the governed-repo contract. Needs `scripts/doc_authority.yaml`, which this repo does not author (its schema is defined only in `enforced_planning/doc_authority.py`, not in repo docs), so it exits 2 with a message and no gate runs it |
 | `scripts/meta/validate_relationships.py` | Validate relationships/read-gate config integrity |
 | `scripts/meta/check_codebase_wiki_freshness.py` | Verify the immutable codebase-wiki source surface, authority hashes, external capsules, and optional remote pins |
 | `scripts/meta/worktree-coordination/check_claims.py` | Claim, inspect, and release sanctioned worktree ownership |

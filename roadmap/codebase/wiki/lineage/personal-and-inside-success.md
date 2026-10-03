@@ -4,7 +4,7 @@ title: Personal and Inside Success Repository Lineage
 description: Inside-Success/llm_client is independent and canonical for Inside Success since 2026-10-03; the former personal upstream is ancestry only.
 created: 2026-08-16
 updated: 2026-10-03
-sources: [../../../../docs/plans/105_inside_success_fork_reconciliation.md, ../sources/revision-5228ceb.md, ../sources/revision-4f7ecfa.md, ../sources/inside-success-f4a08fe.md, ../../raw/source-manifest-5228ceb-inside-success.json]
+sources: [../../../../docs/plans/105_inside_success_fork_reconciliation.md, ../sources/revision-fe581ed.md, ../sources/revision-5228ceb.md, ../sources/revision-4f7ecfa.md, ../sources/inside-success-f4a08fe.md, ../../raw/source-manifest-5228ceb-inside-success.json]
 confidence: high
 ---
 
@@ -40,7 +40,7 @@ identical commit SHAs.
 
 # Wiki treatment
 
-Before 2026-10-03 the wiki bound both sources independently (history; the current binding is the single canonical `5228ceb` source):
+Before 2026-10-03 the wiki bound both sources independently (history; the current binding is the single canonical `fe581ed` source):
 
 | Source | Revision | Tree | Capsule state |
 | --- | --- | --- | --- |
@@ -92,7 +92,7 @@ code relationships.
 
 1. [Plan 105 reconciliation authority at `c2f3693`](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/docs/plans/105_inside_success_fork_reconciliation.md)
 2. [Personal comparison source revision on GitHub](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
-3. [Current canonical source binding](../../raw/source-manifest-98c9333-inside-success.json)
+3. [Current canonical source binding](../../raw/source-manifest-fe581ed-inside-success.json)
 4. [Company source tree](https://github.com/Inside-Success/llm_client/tree/f4a08fec950c8d973194e904ac3834e1e255166d)
 5. [Company-only policy overlay](https://github.com/Inside-Success/llm_client/blob/f4a08fec950c8d973194e904ac3834e1e255166d/llm_client/inside_success_policy.py)
 6. [Personal Codex deadline source](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/sdk/agents_codex.py)

@@ -42,7 +42,7 @@ A unified LLM client with mandatory observability, cost tracking and policy enfo
 ## Coverage and limits
 
 - This page is hand-authored from the repository's own files on 2026-10-03; it is not a reviewed enrichment pass and does not summarise the plan files.
-- `make codebase-wiki-check` passes on `main` as of 2026-10-03 after the wiki was re-ingested from `Inside-Success/llm_client` revision `5228ceb` (manifest `roadmap/codebase/raw/source-manifest-98c9333-inside-success.json`). The codebase-wiki concept and workflow pages still cite older revisions; see the source ingest page under [roadmap](../roadmap/README.md). Owner of the next gap: this repository's maintainers, tracked through the [plan index](../docs/plans/AGENTS.md).
+- `make codebase-wiki-check` passes on `main` as of 2026-10-03 after the wiki was re-derived from `Inside-Success/llm_client` revision `fe581ed` (manifest `roadmap/codebase/raw/source-manifest-fe581ed-inside-success.json`), including its concept and workflow pages; see the source ingest page under [roadmap](../roadmap/README.md). Owner of the next gap: this repository's maintainers, tracked through the [plan index](../docs/plans/AGENTS.md).
 
 ## If this page did not answer your question
 
