@@ -67,7 +67,14 @@ details scoped below the repository root.
     `llm_client` Python/config surface and its canonical authority inputs against
     the active immutable wiki manifest. Use `make codebase-wiki-check-full` when
     Project Meta and network access are available to authenticate external
-    capsules and the company-downstream revision as well.
+    capsules and the live company default-branch revision as well.
+
+## Repository Identity
+
+`Inside-Success/llm_client` is independent and canonical for Inside Success
+since 2026-10-03. `BrianMills2718/llm_client` is the former personal
+upstream: ancestry only. Do not sync, merge, or port from it, and do not open
+pull requests to it. Lineage: `roadmap/codebase/wiki/lineage/personal-and-inside-success.md`.
 
 ## Workflow
 

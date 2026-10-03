@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Inside Success note (2026-10-03): personal-machine setup inherited from the
+# former maintainer's own copy of llm_client. It configures Brian Mills's
+# personal GitHub identity and is not Inside Success tooling; do not run it
+# for company work.
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then

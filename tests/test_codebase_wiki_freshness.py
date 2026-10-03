@@ -42,13 +42,18 @@ def _repository(tmp_path: Path) -> Path:
     _git(repository, "init", "-b", "main")
     _git(repository, "config", "user.email", "fixture@example.com")
     _git(repository, "config", "user.name", "Fixture")
-    _git(repository, "remote", "add", "origin", "https://github.com/BrianMills2718/llm_client.git")
+    _git(repository, "remote", "add", "origin", "https://github.com/Inside-Success/llm_client.git")
     _git(repository, "add", ".")
     _git(repository, "commit", "-m", "fixture")
     return repository
 
 
-def _manifest(repository: Path, manifest_path: Path) -> WikiSourceManifestV1:
+def _manifest(
+    repository: Path,
+    manifest_path: Path,
+    *,
+    source_repository: str = "Inside-Success/llm_client",
+) -> WikiSourceManifestV1:
     """Build a valid manifest from a fixture's exact source."""
     revision = _git(repository, "rev-parse", "HEAD")
     tree = _git(repository, "rev-parse", "HEAD^{tree}")
@@ -66,7 +71,7 @@ def _manifest(repository: Path, manifest_path: Path) -> WikiSourceManifestV1:
         schema_version="1.1",
         document_type="codebase_wiki_source_manifest",
         project_id="llm_client",
-        source_repository="BrianMills2718/llm_client",
+        source_repository=source_repository,
         source_revision=revision,
         source_tree_revision=tree,
         code_surface=surface,
@@ -98,6 +103,23 @@ def test_matching_worktree_and_pinned_revision_pass(tmp_path: Path) -> None:
     assert receipt.errors == []
     assert {check.status for check in receipt.checks} == {"passed"}
 
+
+
+def test_former_personal_upstream_manifest_is_not_canonical(tmp_path: Path) -> None:
+    """Reject a wiki ingested from the former upstream even when its bytes match."""
+    repository = _repository(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = _manifest(
+        repository,
+        manifest_path,
+        source_repository="BrianMills2718/llm_client",
+    )
+
+    receipt = evaluate_manifest(repository, manifest_path, manifest)
+
+    assert receipt.ok is False
+    failed = {check.check_id for check in receipt.checks if check.status == "failed"}
+    assert failed == {"source_repository_canonical", "source_repository_identity"}
 
 def test_changed_or_new_tracked_source_fails(tmp_path: Path) -> None:
     """Reject both blob drift and path-set expansion below a selected root."""

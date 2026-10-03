@@ -39,12 +39,13 @@ DEFAULT_EXECUTION_EMBEDDING_MODEL = "openrouter/openai/text-embedding-3-small"
 # list is evaluated. Adding a route is a reviewed source change, not a project
 # configuration option.
 #
-# This is the set both repositories share -- the one that syncs to and from
-# BrianMills2718/llm_client. It is named separately from the composed
-# ALLOWED_EXECUTION_MODELS below so a test can assert on it directly. Deriving
+# This is the generic set inherited from the former personal upstream
+# (BrianMills2718/llm_client; no longer synced since 2026-10-03). It is named
+# separately from the composed ALLOWED_EXECUTION_MODELS below so a test can
+# assert on it directly. Deriving
 # it as `ALLOWED_EXECUTION_MODELS - INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS`
 # does not work: set subtraction cannot see a route that is present in both,
-# which is exactly the state a personal->company sync would produce if a
+# which is exactly the state a hand port or local edit would produce if a
 # reviewed company exception ever leaked into the shared list.
 SHARED_EXECUTION_MODELS: frozenset[str] = frozenset(
     {

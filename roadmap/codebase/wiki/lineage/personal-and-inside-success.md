@@ -1,21 +1,36 @@
 ---
 type: lineage
 title: Personal and Inside Success Repository Lineage
-description: Ownership and synchronization boundaries between Brian's canonical upstream and the company downstream.
+description: Inside-Success/llm_client is independent and canonical for Inside Success since 2026-10-03; the former personal upstream is ancestry only.
 created: 2026-08-16
-updated: 2026-08-23
+updated: 2026-10-03
 sources: [../../../../docs/plans/105_inside_success_fork_reconciliation.md, ../sources/revision-4f7ecfa.md, ../sources/inside-success-f4a08fe.md, ../../raw/source-manifest-4f7ecfa-company-f4a08fe.json]
 confidence: high
 ---
+
+# Current relationship (2026-10-03)
+
+`Inside-Success/llm_client` is independent and canonical for Inside Success.
+It was disconnected from its former personal upstream, `BrianMills2718/llm_client`,
+on 2026-10-03 because the upstream maintainer, Brian Mills, left Inside Success on
+2026-10-02. There is no sync in either direction: do not merge, port, or
+backport from the former upstream, and do not open pull requests to it. The
+revision facts below are history. The last capsule-backed company source is
+`f4a08fe`; the last freshly observed company default branch in a wiki ingest
+was `926599c` (2026-08-23). The current wiki ingest is still bound to personal
+revision `4f7ecfa`, so `make codebase-wiki-check` reports it as non-canonical
+until the wiki is re-ingested from an `Inside-Success/llm_client` revision.
 
 # Two identities
 
 | Repository | Role | Ownership boundary |
 | --- | --- | --- |
-| `BrianMills2718/llm_client` | Personal canonical implementation upstream | Brian-owned; this is the repository and revision described by the current wiki ingest |
-| `Inside-Success/llm_client` | Organization-owned downstream | Inside Success governance; changes travel through reviewed company integration rather than silently rewriting the personal line |
+| `Inside-Success/llm_client` | Canonical Inside Success repository (independent since 2026-10-03) | Inside Success governance; all company changes land here through its own reviewed pull requests |
+| `BrianMills2718/llm_client` | Former personal upstream (until 2026-10-03) | Brian-owned and separate; ancestry only, not a sync source or contribution target. It is still the repository and revision described by the current wiki ingest |
 
 These are not one repository and are not merged into one ownership domain.
+The rest of this section and the tables below record the relationship before
+2026-10-03.
 They can contain equivalent code trees while retaining different commit IDs,
 ancestry, branch controls, credentials, and publication authority. Plan 105
 reconciled earlier divergence by preserving unique history, adapting reviewed

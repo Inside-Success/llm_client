@@ -218,7 +218,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Autonomous PR workflow with preflight checks.")
     parser.add_argument("--base", default="main", help="Target base branch.")
     parser.add_argument("--expected-origin-repo", required=True, help="Expected origin repo name (e.g., my-repo).")
-    parser.add_argument("--account", default="BrianMills2718", help="GitHub account for gh auth switch.")
+    parser.add_argument(
+        "--account",
+        default=None,
+        help="Optional GitHub account to select with gh auth switch; omitted keeps the current gh identity.",
+    )
     parser.add_argument("--fill", action="store_true", help="Use gh --fill when creating PR.")
     parser.add_argument("--title", default=None, help="PR title (optional).")
     parser.add_argument("--body-file", type=Path, default=None, help="PR body file path.")
@@ -232,7 +236,8 @@ def main() -> int:
     branch = _ensure_branch(cwd)
     _ensure_clean_tree(cwd)
     _ensure_origin(cwd, args.expected_origin_repo)
-    _switch_gh_account(cwd, gh_env, args.account)
+    if args.account:
+        _switch_gh_account(cwd, gh_env, args.account)
 
     if args.preflight_only:
         print("Preflight passed.")

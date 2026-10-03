@@ -386,9 +386,10 @@ def test_removed_compatibility_mode_fails_before_dispatch(
 
 # --- The reviewed downstream overlay is the ONLY way a banned family runs ---
 #
-# This is the Inside Success downstream. Upstream
-# (BrianMills2718/llm_client) asserts flatly that no Opus or GPT-5.4 route
-# reaches `ALLOWED_EXECUTION_MODELS`; here that assertion is false on purpose.
+# This is the Inside Success repository. The former personal upstream
+# (BrianMills2718/llm_client, no longer synced since 2026-10-03) asserts
+# flatly that no Opus or GPT-5.4 route reaches `ALLOWED_EXECUTION_MODELS`;
+# here that assertion is false on purpose.
 # `llm_client/inside_success_policy.py` carries a reviewed, human-accepted
 # exception -- the benchmark-selected Grounded Research roster -- and
 # `model_execution_policy.py` unions it into the allowlist.
@@ -398,8 +399,8 @@ def test_removed_compatibility_mode_fails_before_dispatch(
 #
 #   1. the shared upstream set stays clean -- a banned family may enter the
 #      composed allowlist only through the overlay, never through the set both
-#      repositories share. This is what catches the next personal->company
-#      sync, or a local edit, quietly adding Opus to the shared set. It asserts
+#      repositories share. This is what catches a hand port from the former
+#      upstream, or a local edit, quietly adding Opus to the shared set. It asserts
 #      on SHARED_EXECUTION_MODELS by name, because deriving the shared set as
 #      ALLOWED_EXECUTION_MODELS minus the overlay would subtract away any route
 #      that leaked into both, which is the leak's actual shape;
