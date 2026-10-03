@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Inside Success note (2026-10-03): personal-machine migration helper inherited
+# from the former maintainer's own copy of llm_client. It is not Inside Success
+# tooling; do not run it for company work.
 set -euo pipefail
 
 OUT_DIR="${OUT_DIR:-$HOME/Desktop}"

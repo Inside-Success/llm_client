@@ -105,9 +105,11 @@ an immediate fix or an explicit owner and next source event.
   that one example function represents the entire codebase.
 - Types and docstrings are extraction inputs. Wiki pages must add relationships,
   concepts, workflows, boundaries, and uncertainty without inventing behavior.
-- Keep `BrianMills2718/llm_client` and `Inside-Success/llm_client` as distinct
-  repository identities. Describe synchronization or ancestry explicitly; do
-  not call them the same repository.
+- `Inside-Success/llm_client` is this repository and has been independent and
+  canonical for Inside Success since 2026-10-03. `BrianMills2718/llm_client`
+  is the former personal upstream: describe it only as ancestry, never as a
+  sync source or contribution target, and do not call them the same repository.
+  New ingests bind `Inside-Success/llm_client` revisions.
 - Source wins over capsule; capsule wins over wiki prose for extracted facts.
 - Do not infer runtime health, deployment state, or provider behavior from the
   source-only wiki.

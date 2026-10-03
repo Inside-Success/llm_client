@@ -15,7 +15,7 @@ claim.
 | Where does each of the 165 Python files belong? | [Package map](packages/package-map.md) |
 | What happens during a normal text call? | [Text-call lifecycle](workflows/text-call-lifecycle.md) |
 | What happens during a typed structured call? | [Structured-call lifecycle](workflows/structured-call-lifecycle.md) |
-| Why are there personal and company repositories? | [Personal and Inside Success lineage](lineage/personal-and-inside-success.md) |
+| Why are there personal and company repositories, and which is canonical? | [Personal and Inside Success lineage](lineage/personal-and-inside-success.md) |
 
 ## Concepts
 

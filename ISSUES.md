@@ -40,7 +40,7 @@ would overwrite the canonical source.
 
 | Field | Value |
 |---|---|
-| Status | Pending policy-friction handoff |
+| Status | Closed (obsolete) 2026-10-03: this repository no longer receives pushes from the former personal checkout |
 | Severity | Medium |
 | Reported | 2026-07-15 during Plan #105 fork publication |
 

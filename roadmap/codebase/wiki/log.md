@@ -1,5 +1,14 @@
 # Update Log
 
+## 2026-10-03
+
+- **Lineage** | Recorded that `Inside-Success/llm_client` is independent and
+  canonical for Inside Success; `BrianMills2718/llm_client` is the former
+  personal upstream (maintainer left the company on 2026-10-02) and is no
+  longer a sync source or contribution target. No source re-ingest was
+  performed; the freshness check now reports the personal-bound manifest as
+  non-canonical.
+
 ## 2026-08-23
 
 - **Ingest** | Bound the current 166-file Python/config surface to source

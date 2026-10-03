@@ -17,6 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# Inside-Success/llm_client has been independent and canonical for Inside
+# Success since 2026-10-03. BrianMills2718/llm_client is the former personal
+# upstream: ancestry only, never a sync source or contribution target.
+CANONICAL_SOURCE_REPOSITORY = "Inside-Success/llm_client"
+
 
 class FreshnessError(ValueError):
     """Raised when a freshness input cannot be observed exactly."""
@@ -170,7 +175,9 @@ class WikiSourceManifestV1(StrictModel):
     schema_version: Literal["1.1"]
     document_type: Literal["codebase_wiki_source_manifest"]
     project_id: Literal["llm_client"]
-    source_repository: Literal["BrianMills2718/llm_client"]
+    # The former upstream stays parseable so the immutable historical manifests
+    # in roadmap/codebase/raw/ still load; the canonical-source check fails them.
+    source_repository: Literal["Inside-Success/llm_client", "BrianMills2718/llm_client"]
     source_revision: str
     source_tree_revision: str
     code_surface: CodeSurfaceV1
@@ -348,6 +355,13 @@ def evaluate_manifest(
         if not passed:
             errors.append(f"{check_id}: {detail}")
 
+    canonical = manifest.source_repository == CANONICAL_SOURCE_REPOSITORY
+    record(
+        "source_repository_canonical",
+        canonical,
+        f"manifest={manifest.source_repository} canonical={CANONICAL_SOURCE_REPOSITORY}"
+        + ("" if canonical else "; re-ingest the wiki from the canonical repository"),
+    )
     try:
         origin = _git_output(repository, ["remote", "get-url", "origin"], runner=runner)
         identity = _normalize_remote(origin.decode("utf-8"))
