@@ -206,6 +206,11 @@ def main(argv: list[str] | None = None) -> int:
         default="/tmp/.claude_session_reads",
         help="Session file tracking read paths (default: /tmp/.claude_session_reads)",
     )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Repo-relative relationships file (default: configured config_file)",
+    )
     args = parser.parse_args(argv)
 
     repo_root = _repo_root()
@@ -217,7 +222,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Read gate disabled for: {target}")
         return 0
 
-    relationships = _load_relationships(repo_root, settings["config_file"])
+    config_file = _norm(args.config) if args.config else settings["config_file"]
+    relationships = _load_relationships(repo_root, config_file)
     required_docs, matched_coupling = _required_docs_for_target(target, relationships)
     read_set = _load_read_set(Path(args.reads_file), repo_root)
     missing = _missing_docs(required_docs, read_set, repo_root)

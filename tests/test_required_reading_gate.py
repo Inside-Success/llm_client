@@ -91,3 +91,30 @@ def test_coupled_file_passes_when_required_docs_are_read() -> None:
         reads=_required_docs_for("llm_client/core/client.py"),
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_config_option_overrides_relationships_file(tmp_path: Path) -> None:
+    """`--config` (used by the edit hook) selects the relationships file."""
+    config = tmp_path / "rel.yaml"
+    config.write_text("{}\n", encoding="utf-8")
+    reads = tmp_path / "reads"
+    reads.write_text("", encoding="utf-8")
+    rel_config = os.path.relpath(config, REPO_ROOT)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(CHECK_SCRIPT),
+            "llm_client/core/client.py",
+            "--reads-file",
+            str(reads),
+            "--config",
+            rel_config,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=str(REPO_ROOT),
+        env=dict(os.environ, LLM_CLIENT_READ_GATE_UNCOUPLED_MODE="off"),
+    )
+    # An empty config couples nothing, so the otherwise-blocking file passes.
+    assert proc.returncode == 0, proc.stdout + proc.stderr

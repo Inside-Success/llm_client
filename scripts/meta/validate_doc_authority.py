@@ -128,6 +128,17 @@ def main(argv: list[str] | None = None) -> int:
                 )
         return 0
 
+    effective_config = config_path or (repo_root / doc_authority.DEFAULT_DOC_AUTHORITY_CONFIG)
+    if not effective_config.exists():
+        print(
+            f"error: doc-authority config not found: {effective_config}. "
+            "This validator only applies to repositories that author a "
+            "scripts/doc_authority.yaml; llm_client does not (no repository doc "
+            "defines its schema, and no gate runs this validator).",
+            file=sys.stderr,
+        )
+        return 2
+
     issues = [
         issue.to_dict()
         for issue in doc_authority.validate_doc_authority(

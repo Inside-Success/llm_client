@@ -3,8 +3,8 @@ type: concept
 title: Agents and Tools
 description: How agent SDK routing, MCP turns, Python tools, contracts, artifacts, and evidence compose with the core runtime.
 created: 2026-08-16
-updated: 2026-08-23
-sources: [../../../../llm_client/agent, ../../../../llm_client/tools, ../../../../llm_client/sdk]
+updated: 2026-10-03
+sources: [../../../../llm_client/agent, ../../../../llm_client/tools, ../../../../llm_client/sdk, ../../../../llm_client/codex_canary.py, ../../../../llm_client/execution/codex_identity.py]
 confidence: high
 ---
 
@@ -48,6 +48,38 @@ experiment receipt must use and validate `codex_jsonl`, not reconstruct a
 stream from the convenience projection. Both fields survive the public
 structured-call path and process-safe result serialization.
 
+# Codex account identity evidence
+
+`execution/codex_identity.py` (new since the former upstream revision
+`4f7ecfa`) resolves which ChatGPT account a Codex call will use before dispatch.
+It applies only to the model `codex` or `codex/*`. It reads `auth.json` from an
+explicit `codex_home` kwarg (binding `explicit`) or from `CODEX_HOME` /
+`~/.codex` (binding `ambient`), and keeps only a SHA-256 digest of
+`tokens.account_id`; no path or token is retained. If the file or field is
+absent (API-key authentication), the digest is `None` rather than an error, so
+a caller that requires one specific account must also require an explicit
+`codex_home`. The public envelope copies the binding and digest onto lifecycle
+events (see [Observability and budgets](observability-and-budgets.md)).
+
+# Dedicated Codex subscription lane
+
+`codex_canary.py` queues jobs for one dedicated account lane under hard limits
+(`CodexCanaryConfig`) and returns content-free `CodexCanaryReceipt`s.
+`submit` runs a text call; `submit_structured` (added since `4f7ecfa`) takes a
+Pydantic `response_model`, runs it through `acall_llm_structured` on the Codex
+route, and returns a `CodexCanaryStructuredOutcome` holding the receipt plus the
+typed value, which is kept out of the queue receipt. An optional explicit paid
+fallback model (with a spend ceiling) is called with the same text-or-structured
+shape; the typed value is returned only when the job status is `succeeded`.
+
+# Agent submit gating
+
+`agent/mcp_turn_outcomes.py` couples two submit gates after a pending-atoms
+rejection: TODO progress and fresh evidence. A successful `todo_write` whose
+status line differs from the one at the failure clears both gates, so the
+submit validator re-checks the terminal even if no new evidence pointer was
+added.
+
 # Navigation
 
 Begin in `agent/mcp_agent.py` for the public MCP loop, then follow the turn
@@ -58,8 +90,15 @@ systems live in `workflow/`; see the [package map](../packages/package-map.md).
 
 # Citations
 
-1. [Agent package at the pinned revision](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/agent)
-2. [`callable_to_openai_tool`, lines 457–538](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/tools/tool_utils.py#L457-L538)
-3. [Typed tool-call observability](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/tool_calls.py#L1-L161)
-4. [Current exact-session and event-custody adapter](https://github.com/BrianMills2718/llm_client/blob/4f7ecfa9527bb68dd5a9bda81abd384612c0d9cd/llm_client/sdk/agents_codex.py#L590-L924)
-5. [Exact-line extraction](https://github.com/BrianMills2718/llm_client/blob/4f7ecfa9527bb68dd5a9bda81abd384612c0d9cd/llm_client/sdk/agents_codex.py#L1604-L1624)
+All links pin Inside-Success/llm_client at `fe581ed`.
+
+1. [Agent package](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/agent)
+2. [`callable_to_openai_tool`, lines 457-538](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/tools/tool_utils.py#L457-L538)
+3. [Typed tool-call observability](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/observability/tool_calls.py)
+4. [Codex session contract and receipt checks, lines 731-830](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/sdk/agents_codex.py#L731-L830)
+5. [Persistent-home requirement, lines 265-275](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/sdk/agents_codex.py#L265-L275)
+6. [Streaming rejects explicit session modes, lines 1400-1408](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/sdk/agents_codex.py#L1400-L1408)
+7. [CLI event and JSONL extraction, lines 915-916](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/sdk/agents_codex.py#L915-L916)
+8. [Codex account identity, lines 1-61](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/execution/codex_identity.py#L1-L61)
+9. [Canary queue, lines 105-392](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/codex_canary.py#L105-L392)
+10. [Submit-gate clearing, lines 484-490](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/agent/mcp_turn_outcomes.py#L484-L490)

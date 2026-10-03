@@ -226,7 +226,7 @@ REPO_ROOT="$(resolve_repo_root)"
 READS_FILE="$(resolve_data_path "${CLAUDE_SESSION_READS_FILE:-/tmp/.claude_session_reads}")"
 LOG_FILE="$(resolve_data_path "${CLAUDE_HOOK_LOG_FILE:-.claude/hook_log.jsonl}")"
 HOOK_LOG_SCRIPT="$REPO_ROOT/scripts/meta/hook_log.py"
-CHECK_SCRIPT="$REPO_ROOT/scripts/check_required_reading.py"
+CHECK_SCRIPT="$REPO_ROOT/scripts/meta/check_required_reading.py"
 CONTEXT_PACKET_SCRIPT="$REPO_ROOT/scripts/meta/context_packet.py"
 CHECK_CONFIG="${CLAUDE_CHECK_REQUIRED_READING_CONFIG:-}"
 RELATIONSHIP_CONTEXT_CONFIG="${RELATIONSHIP_CONTEXT_CONFIG:-scripts/relationships.yaml}"
@@ -264,7 +264,7 @@ if [[ "${SKIP_READ_GATE:-}" == "1" ]]; then
 fi
 
 if [[ ! -f "$CHECK_SCRIPT" ]]; then
-    log_gate_decision "skip" "missing check_required_reading.py" "0" "0"
+    log_gate_decision "skip" "missing scripts/meta/check_required_reading.py" "0" "0"
     exit 0
 fi
 

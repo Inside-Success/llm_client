@@ -41,10 +41,9 @@ difference is the instruction files renamed from `CLAUDE.md` to `AGENTS.md`.
 | `llm_client/utils/litellm_log_filters.py` | New: targeted noise filter for LiteLLM's background logging worker |
 | `core/client.py`, `core/errors.py`, `core/model_execution_policy.py`, `execution/*` (call contracts, lifecycle, wrappers, kernel, retry, structured runtime, timeout policy), `agent/mcp_turn_outcomes.py`, `codex_canary.py`, `langfuse_callbacks.py`, `utils/openrouter.py` | Modified |
 
-This wiki's concept, workflow, and architecture pages were written against
-`4f7ecfa` and cite that revision. They were not rewritten for these edits;
-reopen native source at `5228ceb` for exact behavior of the modified modules.
-Only the file counts and the lineage page were refreshed in this ingest.
+This ingest refreshed only the file counts and the lineage page. The concept
+and workflow pages were re-derived from code later; see
+[revision `fe581ed`](revision-fe581ed.md), which supersedes this binding.
 
 # Limits
 

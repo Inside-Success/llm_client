@@ -3,8 +3,8 @@ type: workflow
 title: Structured-Call Lifecycle
 description: End-to-end path from a Pydantic response model to validated output and attempt-level evidence.
 created: 2026-08-16
-updated: 2026-08-16
-sources: [../../../../llm_client/core/client.py, ../../../../llm_client/execution/structured_runtime.py, ../../../../llm_client/observability/structured_attempts.py]
+updated: 2026-10-03
+sources: [../../../../llm_client/core/client.py, ../../../../llm_client/execution/structured_runtime.py, ../../../../llm_client/observability/structured_attempts.py, ../../../../llm_client/core/errors.py, ../../../../llm_client/execution/retry.py]
 confidence: high
 ---
 
@@ -38,6 +38,14 @@ bound the whole retry/fallback chain. Attempt events preserve validation
 issues, failure classes, and recovery decisions, while content policy governs
 whether durable stores may retain prompt/response material.
 
+# Failure handling inside the flow
+
+If the provider's raw finish reason is `error`, the attempt raises
+`LLMProviderResponseError` before validation; the shared kernel retries it
+(source `provider`) like any retryable failure, and retry log lines carry the
+model, task, and a compact error summary rather than the full schema. See
+[Structured output](../concepts/structured-output.md).
+
 # Edit map
 
 - Public behavior and parameters: `core/client.py`.
@@ -53,6 +61,9 @@ for the surrounding evidence lifecycle.
 
 # Citations
 
-1. [`call_llm_structured`, lines 596–718](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/core/client.py#L596-L718)
-2. [Structured runtime implementation](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/execution/structured_runtime.py#L974-L2266)
-3. [Structured-attempt evidence contracts](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/observability/structured_attempts.py)
+All links pin Inside-Success/llm_client at `fe581ed`.
+
+1. [`call_llm_structured`, lines 606-736](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/core/client.py#L606-L736)
+2. [Sync and async structured runtimes, from line 1033](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/execution/structured_runtime.py#L1033-L1100); [async from line 2347](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/execution/structured_runtime.py#L2347-L2400)
+3. [Provider-failure check, lines 912-941](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/execution/structured_runtime.py#L912-L941)
+4. [Structured-attempt evidence contracts](https://github.com/Inside-Success/llm_client/blob/fe581ed19486f26dd06e8d08366ebe2bda21f8d1/llm_client/observability/structured_attempts.py)

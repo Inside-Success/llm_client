@@ -2,7 +2,7 @@
 
 Start here for architecture and code-navigation questions. This is a compiled,
 interlinked explanation of the complete Python repository at
-`Inside-Success/llm_client` revision `5228ceb8b3e04750105b26292584aa9e7323d7a9`. It is derived orientation: follow
+`Inside-Success/llm_client` revision `fe581ed19486f26dd06e8d08366ebe2bda21f8d1`. It is derived orientation: follow
 its links, then reopen native source before changing code or making an exact
 claim.
 
@@ -28,8 +28,9 @@ claim.
 
 ## Source and maintenance
 
-- [Revision `5228ceb` source ingest](sources/revision-5228ceb.md) — current canonical Inside Success source, new modules since `4f7ecfa`, and limits.
-- [Revision `4f7ecfa` source ingest](sources/revision-4f7ecfa.md) — former personal upstream, exact Codex CLI JSONL custody; most pages here still describe this revision.
+- [Revision `fe581ed` source ingest](sources/revision-fe581ed.md) — current canonical Inside Success source; what was re-derived since `4f7ecfa`, and limits.
+- [Revision `5228ceb` source ingest](sources/revision-5228ceb.md) — prior canonical binding; first re-ingest of the Inside Success repository.
+- [Revision `4f7ecfa` source ingest](sources/revision-4f7ecfa.md) — former personal upstream, exact Codex CLI JSONL custody; superseded.
 - [Revision `657a98f` source ingest](sources/revision-657a98f.md) — prior Python compatibility binding.
 - [Revision `917318b` source ingest](sources/revision-917318b.md) — exact Codex-session seam and provider-free evidence.
 - [Revision `c2f3693` capsule ingest](sources/revision-c2f3693.md) — prior verified personal capsule evidence.
@@ -40,4 +41,4 @@ claim.
 The wiki indexes the full repository at package level and deepens the most
 important cross-package flows. Detailed symbol records remain in the older
 revision-bound capsules and are reopened only when a question needs that level
-of detail; exact current claims return to native source at `5228ceb`; the concept and workflow pages cite `4f7ecfa` or older and were not rewritten.
+of detail; exact current claims return to native source at `fe581ed`. The concept and workflow pages were re-derived from that revision's code.
