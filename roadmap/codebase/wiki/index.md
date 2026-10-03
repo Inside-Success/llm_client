@@ -1,8 +1,8 @@
 # llm_client Codebase Wiki
 
 Start here for architecture and code-navigation questions. This is a compiled,
-interlinked explanation of the complete Python repository at revision
-`4f7ecfa9527bb68dd5a9bda81abd384612c0d9cd`. It is derived orientation: follow
+interlinked explanation of the complete Python repository at
+`Inside-Success/llm_client` revision `5228ceb8b3e04750105b26292584aa9e7323d7a9`. It is derived orientation: follow
 its links, then reopen native source before changing code or making an exact
 claim.
 
@@ -12,7 +12,7 @@ claim.
 | --- | --- |
 | What is this repository and what does it own? | [Overview](overview.md) |
 | How do the main layers connect? | [Architecture](architecture.md) |
-| Where does each of the 165 Python files belong? | [Package map](packages/package-map.md) |
+| Where does each of the 168 Python files belong? | [Package map](packages/package-map.md) |
 | What happens during a normal text call? | [Text-call lifecycle](workflows/text-call-lifecycle.md) |
 | What happens during a typed structured call? | [Structured-call lifecycle](workflows/structured-call-lifecycle.md) |
 | Why are there personal and company repositories, and which is canonical? | [Personal and Inside Success lineage](lineage/personal-and-inside-success.md) |
@@ -28,7 +28,8 @@ claim.
 
 ## Source and maintenance
 
-- [Revision `4f7ecfa` source ingest](sources/revision-4f7ecfa.md) — current source, exact Codex CLI JSONL custody, provenance, and limits.
+- [Revision `5228ceb` source ingest](sources/revision-5228ceb.md) — current canonical Inside Success source, new modules since `4f7ecfa`, and limits.
+- [Revision `4f7ecfa` source ingest](sources/revision-4f7ecfa.md) — former personal upstream, exact Codex CLI JSONL custody; most pages here still describe this revision.
 - [Revision `657a98f` source ingest](sources/revision-657a98f.md) — prior Python compatibility binding.
 - [Revision `917318b` source ingest](sources/revision-917318b.md) — exact Codex-session seam and provider-free evidence.
 - [Revision `c2f3693` capsule ingest](sources/revision-c2f3693.md) — prior verified personal capsule evidence.
@@ -39,4 +40,4 @@ claim.
 The wiki indexes the full repository at package level and deepens the most
 important cross-package flows. Detailed symbol records remain in the older
 revision-bound capsules and are reopened only when a question needs that level
-of detail; exact current claims return to native source at `4f7ecfa`.
+of detail; exact current claims return to native source at `5228ceb`; the concept and workflow pages cite `4f7ecfa` or older and were not rewritten.

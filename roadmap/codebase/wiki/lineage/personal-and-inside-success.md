@@ -4,7 +4,7 @@ title: Personal and Inside Success Repository Lineage
 description: Inside-Success/llm_client is independent and canonical for Inside Success since 2026-10-03; the former personal upstream is ancestry only.
 created: 2026-08-16
 updated: 2026-10-03
-sources: [../../../../docs/plans/105_inside_success_fork_reconciliation.md, ../sources/revision-4f7ecfa.md, ../sources/inside-success-f4a08fe.md, ../../raw/source-manifest-4f7ecfa-company-f4a08fe.json]
+sources: [../../../../docs/plans/105_inside_success_fork_reconciliation.md, ../sources/revision-5228ceb.md, ../sources/revision-4f7ecfa.md, ../sources/inside-success-f4a08fe.md, ../../raw/source-manifest-5228ceb-inside-success.json]
 confidence: high
 ---
 
@@ -17,16 +17,15 @@ on 2026-10-03 because the upstream maintainer, Brian Mills, left Inside Success 
 backport from the former upstream, and do not open pull requests to it. The
 revision facts below are history. The last capsule-backed company source is
 `f4a08fe`; the last freshly observed company default branch in a wiki ingest
-was `926599c` (2026-08-23). The current wiki ingest is still bound to personal
-revision `4f7ecfa`, so `make codebase-wiki-check` reports it as non-canonical
-until the wiki is re-ingested from an `Inside-Success/llm_client` revision.
+was `926599c` (2026-08-23). The current wiki ingest is bound to canonical `Inside-Success/llm_client`
+revision `5228ceb` (see [source ingest](../sources/revision-5228ceb.md)).
 
 # Two identities
 
 | Repository | Role | Ownership boundary |
 | --- | --- | --- |
 | `Inside-Success/llm_client` | Canonical Inside Success repository (independent since 2026-10-03) | Inside Success governance; all company changes land here through its own reviewed pull requests |
-| `BrianMills2718/llm_client` | Former personal upstream (until 2026-10-03) | Brian-owned and separate; ancestry only, not a sync source or contribution target. It is still the repository and revision described by the current wiki ingest |
+| `BrianMills2718/llm_client` | Former personal upstream (until 2026-10-03) | Brian-owned and separate; ancestry only, not a sync source or contribution target. Described only by the historical ingest [`4f7ecfa`](../sources/revision-4f7ecfa.md) |
 
 These are not one repository and are not merged into one ownership domain.
 The rest of this section and the tables below record the relationship before
@@ -41,7 +40,7 @@ identical commit SHAs.
 
 # Wiki treatment
 
-The wiki now binds both sources independently:
+Before 2026-10-03 the wiki bound both sources independently (history; the current binding is the single canonical `5228ceb` source):
 
 | Source | Revision | Tree | Capsule state |
 | --- | --- | --- | --- |
@@ -93,7 +92,7 @@ code relationships.
 
 1. [Plan 105 reconciliation authority at `c2f3693`](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/docs/plans/105_inside_success_fork_reconciliation.md)
 2. [Personal comparison source revision on GitHub](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
-3. [Current dual-lineage source binding](../../raw/source-manifest-4f7ecfa-company-f4a08fe.json)
+3. [Current canonical source binding](../../raw/source-manifest-5228ceb-inside-success.json)
 4. [Company source tree](https://github.com/Inside-Success/llm_client/tree/f4a08fec950c8d973194e904ac3834e1e255166d)
 5. [Company-only policy overlay](https://github.com/Inside-Success/llm_client/blob/f4a08fec950c8d973194e904ac3834e1e255166d/llm_client/inside_success_policy.py)
 6. [Personal Codex deadline source](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/sdk/agents_codex.py)
