@@ -125,3 +125,8 @@ Plan 356 makes Instructor a first-class structured-attempt path without moving
 evaluation semantics into this substrate. The shared retry kernel owns retry
 count and disposition, and downstream evaluations may require the resulting
 attempt receipt before treating a model result as execution evidence.
+
+Current-code note (verified 2026-10-03): `llm_client/task_graph.py` named in
+decision item 7 no longer exists in this repository (extracted to project-meta,
+see ADR 0008); the workflow layer that remains here is `llm_client/workflow/`
+and `llm_client/workflow_langgraph.py`. The decision itself is unchanged.

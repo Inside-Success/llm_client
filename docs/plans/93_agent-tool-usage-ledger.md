@@ -25,7 +25,7 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
 
 ## References Reviewed
 
-- `CLAUDE.md` and subtree instruction files — repository rules.
+- `AGENTS.md` and subtree instruction files — repository rules.
 - `docs/API_REFERENCE.md` and `scripts/meta/generate_api_reference.py` — public API docs contract.
 - `docs/adr/0007-observability-contract-boundary.md` — metadata-first canonical observability boundary.
 - `docs/adr/0013-stream-lifecycle-heartbeat-observability.md` — truthful lifecycle semantics.
@@ -58,7 +58,7 @@ copying sensitive prompts, arguments, outputs, or filesystem paths.
 - `docs/adr/0012-shared-data-plane-boundary.md` (update verification context)
 - `docs/adr/0013-stream-lifecycle-heartbeat-observability.md` (re-verify unchanged stream boundary)
 - `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md` (update verification context)
-- this plan and `docs/plans/CLAUDE.md`
+- this plan and `docs/plans/AGENTS.md`
 
 ## Plan
 

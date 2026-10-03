@@ -1,6 +1,6 @@
 # Plan #339: Structured Route Capability and Disconnect Retry
 
-**Status:** 🚧 In Progress
+**Status:** 🚧 In Progress (shared-client code landed, see 2026-07-30 evidence; shared-client publication and the non-mocked Process Tracing replay remain)
 **Type:** implementation
 **Priority:** Critical
 **Blocked By:** None
@@ -72,7 +72,7 @@ real resilience unless transient failures cause another observable dispatch.
 
 ## References Reviewed
 
-- `CLAUDE.md` - runtime-substrate, structured-output, observability, and
+- `AGENTS.md` - runtime-substrate, structured-output, observability, and
   fail-loud rules.
 - `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` - route
   capability belongs to current provider evidence, not a fabricated endpoint
@@ -174,7 +174,7 @@ persisted once for the final attempted ordinal.
   (add superseding capability clarification)
 - `docs/plans/339_structured_route_capability_and_disconnect_retry.md`
   (update status/evidence)
-- `docs/plans/CLAUDE.md` (modify)
+- `docs/plans/AGENTS.md` (modify)
 
 ## Plan
 
@@ -224,11 +224,11 @@ downstream retry claim from deterministic tests alone.
       current OpenRouter routes for the bounded strict-contract probes.
 - [ ] Terra and previously certified unaffected routes preserve native-schema
       execution.
-- [ ] The exact observed remote disconnect is classified transient without
+- [x] The exact observed remote disconnect is classified transient without
       making all `APIError` instances retryable.
-- [ ] A structured call with retries produces a second real invocation and
+- [x] A structured call with retries produces a second real invocation and
       unique attempt ordinals after the controlled disconnect fixture.
-- [ ] Quota and no-compatible-route fixtures terminate after ordinal `0`.
+- [x] Quota and no-compatible-route fixtures terminate after ordinal `0`.
 - [ ] Focused tests and full repository gates pass.
 - [ ] One non-mocked Process Tracing replay uses the published revision and
       preserves exact frozen input hashes.
@@ -278,7 +278,7 @@ universal route availability.
 - Markdown links, relationship validation, registry JSON parsing, generated
   API reference generation, plan-status consistency, and `git diff --check`
   pass. AGENTS rendering remains blocked by the canonical checkout's existing
-  `AGENTS.md -> CLAUDE.md` symlink guard; this plan does not mutate governance
+  `AGENTS.md -> CLAUDE.md` symlink guard (historical: that symlink no longer exists; CLAUDE.md files were renamed to AGENTS.md in #29); this plan does not mutate governance
   generation.
 - The controlled exact OpenRouter disconnect produced dispatch ordinals `0`
   and `1`; permanent quota and no-compatible-route controls remained terminal.

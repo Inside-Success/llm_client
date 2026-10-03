@@ -36,7 +36,7 @@ Read these first when working under `llm_client/`:
 Canonical prompt assets live in `~/projects/prompts/` (external, shared across
 projects). Package fallback copies for required built-ins may live under
 `llm_client/prompt_assets/` so clean installs can resolve core prompt refs.
-Override with `LLM_CLIENT_PROMPT_ASSET_ROOT` env var.
+Resolution order (`prompt_assets._resolve_prompt_root`): `LLM_CLIENT_PROMPT_ASSET_ROOT` env var, then `~/projects/prompts/` if that directory exists, then the package fallback.
 
 ## Working Rules
 
@@ -48,3 +48,15 @@ Override with `LLM_CLIENT_PROMPT_ASSET_ROOT` env var.
    than repeating parent policy.
 5. Regenerate the API reference after changing any public module docstring,
    signature, or export surface.
+
+## Subpackage rules
+
+- [agent/AGENTS.md](agent/AGENTS.md)
+- [cli/AGENTS.md](cli/AGENTS.md)
+- [core/AGENTS.md](core/AGENTS.md)
+- [execution/AGENTS.md](execution/AGENTS.md)
+- [observability/AGENTS.md](observability/AGENTS.md)
+- [prompts/AGENTS.md](prompts/AGENTS.md)
+- [sdk/AGENTS.md](sdk/AGENTS.md)
+- [tools/AGENTS.md](tools/AGENTS.md)
+- [utils/AGENTS.md](utils/AGENTS.md)

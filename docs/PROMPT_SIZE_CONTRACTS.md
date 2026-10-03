@@ -111,12 +111,12 @@ of health.
 
 ## Component B -- call-boundary ceiling
 
-Measured inside `_prepare_public_call_envelope`, which already serializes the
+Measured inside `_prepare_public_call_envelope` (`llm_client/execution/call_wrappers.py`), which already serializes the
 messages to compute `prompt_sha256`; the check costs a `len()`, not a second
 serialization.
 
 ```python
-from llm_client.execution.call_contracts import register_task_prompt_budget
+from llm_client.execution.call_contracts import register_task_prompt_budget  # defined in llm_client/execution/call_contracts.py
 
 register_task_prompt_budget("myproject.review", 40_000)
 ```
@@ -128,14 +128,14 @@ measured -- measurement is unconditional, enforcement is opt-in.
 Ceilings are **registered by consumers**, not hard-coded here. `llm_client`
 owns the mechanism; it does not carry any project's task names.
 
-**Warn by default, strict on demand** (`LLM_CLIENT_PROMPT_SIZE_STRICT=1`, or
-`CI`). These calls run inside long repair loops where hard-failing by default
+**Warn by default, strict on demand** (`LLM_CLIENT_PROMPT_SIZE_STRICT=1`
+only; `CI` does not enable it). These calls run inside long repair loops where hard-failing by default
 would turn a cost problem into an availability problem.
 
 The payload is **never truncated** to fit. Silently trimming a prompt would
 change the model's inputs behind the caller's back.
 
-Sizing is `len(serialized) // 4`, shared with `llm_client.agent.context_budget`.
+Sizing is `len(serialized) // 4` (the same 4-chars-per-token constant is duplicated in `llm_client.agent.context_budget`).
 Measured against one real payload it read 788,548 against a provider-reported
 615,835 -- about 28% high on JSON-heavy content. That is fine for catching a
 20x breach and useless as a billing figure; `prompt_tokens` on the
@@ -193,7 +193,7 @@ budgeting is enforceable today and sufficient -- it names the offender.
 
 A template with no contract file is unconstrained, so adoption is incremental.
 A *malformed* contract raises: it must not silently degrade into "no
-constraints". Strict mode is `LLM_CLIENT_PROMPT_CONTEXT_STRICT=1` or `CI`.
+constraints". Strict mode is `LLM_CLIENT_PROMPT_CONTEXT_STRICT=1` only; `CI` does not enable it.
 
 ## Coverage limits
 

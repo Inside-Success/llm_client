@@ -146,7 +146,7 @@ For long-thinking adoption telemetry:
 from llm_client import get_background_mode_adoption
 
 summary = get_background_mode_adoption(
-    experiments_path="~/projects/data/task_graph/experiments.jsonl",
+    experiments_path="/path/to/task_graph/experiments.jsonl",  # default: $LLM_CLIENT_DATA_ROOT/task_graph/experiments.jsonl
     run_id_prefix="nightly_",
 )
 print(summary["background_mode_rate_among_reasoning"])
@@ -166,11 +166,15 @@ python -m llm_client adoption --run-id-prefix nightly_ --since 2026-02-20 \
 ## Eval helpers
 
 ```python
-from prompt_eval.experiment_eval import (
-    build_gate_signals,
+from llm_client.experiment_summary import (
     extract_agent_outcome,
     summarize_agent_outcomes,
 )
+# External package (not part of this repo; not installed by default):
+# `build_gate_signals` and the other gate/triage helpers live in prompt_eval.
+# `llm_client.experiment_eval` is a compatibility shim that re-exports them
+# and raises ImportError if prompt_eval is missing.
+from llm_client.experiment_eval import build_gate_signals
 
 outcome = extract_agent_outcome(item_result)
 summary = summarize_agent_outcomes(run_items)

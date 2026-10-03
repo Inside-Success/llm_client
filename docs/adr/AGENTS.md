@@ -4,9 +4,9 @@ ADRs document significant architectural decisions.
 
 ## ADR Index
 
-| # | Title | Status | Date |
-|---|-------|--------|------|
-| 0001 | Use ADRs | Accepted | YYYY-MM-DD |
+The index lives in [README.md](README.md) (ADRs 0001-0016; the number 0015 is
+used by two ADRs, so the next number is 0017). Keep it complete when adding or
+superseding an ADR.
 
 ## ADR Lifecycle
 
@@ -18,7 +18,7 @@ Proposed → Accepted/Rejected → Superseded (optional)
 
 1. Copy template to `NNNN-title.md`
 2. Fill in sections
-3. Add to index above
+3. Add to the index in `README.md`
 4. Get review if needed
 
 ## ADR Template
@@ -46,8 +46,8 @@ What becomes easier or harder as a result of this decision?
 | Proposed | Under discussion |
 | Accepted | Decision made, being implemented |
 | Rejected | Decided not to do this |
-| Superseded | Replaced by newer ADR |
+| Superseded | Replaced by a newer ADR, or made obsolete by a recorded code relocation (as ADR 0008) |
 
 ## Related
 
-- `meta-process/patterns/07_adr.md` - Full ADR pattern
+- `README.md` - ADR index and the 0015 duplicate-number note

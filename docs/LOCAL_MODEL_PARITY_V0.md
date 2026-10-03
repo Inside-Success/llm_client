@@ -1,8 +1,8 @@
 # Local Model Parity v0 — Design Contract
 
-**Status**: Design (not yet implemented)
+**Status**: Design (not implemented; verified 2026-10-03: no `LLM_CLIENT_ROUTING_PREFERENCE`, `OLLAMA_API_BASE`, `RoutingPreference`, `OllamaUnavailableError`, or Ollama registry entries exist in `llm_client/`)
 **Date**: 2026-04-01
-**Plan ref**: project-meta Plan #13
+**Plan ref**: project-meta Plan #13 (external repo, not checked here)
 
 ---
 
@@ -24,8 +24,8 @@ Local model support exists but is not first-class:
 | Capability | Status |
 |-----------|--------|
 | Basic Ollama completion | Works (via litellm) |
-| Difficulty tier integration | Tier 1 uses `ollama/llama3.1` first |
-| Runtime availability detection | `_is_ollama_available()` exists |
+| Difficulty tier integration | Tier 1 uses `ollama/llama3.1` first (`llm_client/difficulty.py`) |
+| Runtime availability detection | `_is_ollama_available()` exists in `llm_client/difficulty.py` |
 | Task-based model selection | Not supported (registry is cloud-only) |
 | Model registry entries | None — 0 local models in default registry |
 | Custom API base config | Not supported (hardcoded to litellm default) |
@@ -72,7 +72,7 @@ The following call modes must be verified for the declared local provider:
 ### Current gap
 
 `get_model(task="extraction")` ignores local models because the default
-registry (`data/default_model_registry.json`) has zero Ollama entries.
+registry (`llm_client/data/default_model_registry.json`) has zero Ollama entries.
 
 ### Design decision
 
@@ -125,7 +125,7 @@ Controlled by env var `LLM_CLIENT_ROUTING_PREFERENCE=cloud_first` (default).
 
 - `ollama/model` strings continue to work directly
 - Difficulty tier system continues to check Ollama availability
-- Rate limiting at 5 concurrent requests preserved
+- Rate limiting at 5 concurrent requests preserved (`llm_client/utils/rate_limit.py`, `"ollama": 5`)
 
 ---
 
@@ -133,7 +133,7 @@ Controlled by env var `LLM_CLIENT_ROUTING_PREFERENCE=cloud_first` (default).
 
 ### Current
 
-`_is_ollama_available()` shells out to `ollama list` with a 5s timeout.
+`_is_ollama_available()` (`llm_client/difficulty.py`) checks `shutil.which("ollama")`, then shells out to `ollama list` with a 5s timeout.
 
 ### v0 improvement
 
@@ -212,7 +212,7 @@ The v0 parity test suite must verify:
 7. Cost is recorded as $0.00
 
 Tests should be marked `@pytest.mark.skipif(not _is_ollama_available())`
-to avoid CI failures when Ollama is not installed.
+so they skip locally when Ollama is not installed.
 
 ---
 

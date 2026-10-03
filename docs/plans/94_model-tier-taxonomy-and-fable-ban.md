@@ -1,6 +1,6 @@
 # Plan #94: Model Tier Taxonomy and Fable Ban
 
-**Status:** In Progress (tier selectors implemented; route certification follow-up open)
+**Status:** In Progress (tier selectors and route-certification emission implemented; task-configured technical output ceiling not implemented)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -30,9 +30,9 @@ even when a project carries generic human override metadata.
 
 ## References Reviewed
 
-- `CLAUDE.md` — repo workflow and shared-infrastructure rules.
-- `llm_client/llm_client/CLAUDE.md` — package surface rules.
-- `llm_client/tests/CLAUDE.md` — deterministic test expectations.
+- `AGENTS.md` — repo workflow and shared-infrastructure rules.
+- `llm_client/AGENTS.md` — package surface rules.
+- `tests/AGENTS.md` — deterministic test expectations.
 - `llm_client/data/default_model_registry.json` — packaged model/task registry.
 - `llm_client/core/models.py` — registry loading and task selection.
 - `llm_client/model_policy_audit.py` — cross-project raw model literal scanner.
@@ -56,7 +56,7 @@ even when a project carries generic human override metadata.
 - `tests/test_models.py` (modify)
 - `tests/test_model_policy_audit.py` (modify)
 - `tests/test_client.py` (modify)
-- `docs/plans/CLAUDE.md` (modify)
+- `docs/plans/AGENTS.md` (modify)
 
 ---
 
@@ -144,8 +144,11 @@ a named route. Prior transport proof and latest route health are separate, so a
 later timeout remains visible without erasing evidence that the exact route once
 accepted and returned the schema.
 
-Automatic emission remains blocked on the active provider-compatible schema
-repair because the runtime must first preserve the actual OpenRouter endpoint.
+(Superseded by later work: `llm_client/execution/structured_runtime.py`
+`_record_openrouter_native_route_observation` now emits
+`ROUTE_CERTIFICATION_OBSERVED` after a successful validated call; the
+paragraph below is the 2026-07-16 state.) Automatic emission remained blocked
+on the active provider-compatible schema repair because the runtime must first preserve the actual OpenRouter endpoint.
 The registry module does not modify routing or infer endpoint identity from the
 requested model. Task-configured output ceilings remain a separate follow-up.
 

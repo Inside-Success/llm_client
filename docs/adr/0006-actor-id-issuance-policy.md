@@ -5,6 +5,10 @@ Date: 2026-02-23
 Last verified: 2026-04-05
 
 Verification context: Codex actor routing now canonicalizes exact gpt-5.4 requests before SDK dispatch
+(historical 2026-04-05 note, unverified against current code: Plan #348 later
+banned `gpt-5.4`, and no `gpt-5.4` canonicalization remains in the Codex adapter;
+it has no bearing on the `actor_id` decision below).
+
 ## Context
 
 Foundation events require `actor_id`, but issuance semantics were not formally

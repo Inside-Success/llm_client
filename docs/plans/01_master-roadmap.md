@@ -30,10 +30,11 @@ re-planning from scratch after every passing slice.
 
 ## Research
 
-- `CLAUDE.md` and `docs/plans/CLAUDE.md` define repository workflow and the
+- `AGENTS.md` and `docs/plans/AGENTS.md` define repository workflow and the
   current plan registry.
-- Current personal and Inside Success Git refs establish canonical versus
-  candidate implementation lineage.
+- Git refs of `Inside-Success/llm_client` establish canonical versus
+  candidate implementation lineage (the former personal upstream is ancestry
+  only).
 - Child-plan acceptance evidence and current deterministic tests establish
   whether work is complete, merely merged, or still awaiting downstream use.
 
@@ -204,18 +205,21 @@ current workload. The library has since added strict model policy, exact
 structured-attempt custody, lifecycle diagnostics, runtime cost governance,
 and concurrent root-budget reservations.
 
-**Canonical state, last reconciled 2026-07-25:**
+**Canonical state:** the canonical repository is `Inside-Success/llm_client`
+`main` (independent of the former personal upstream since 2026-10-03). The
+authoritative list of open and awaiting-acceptance plans is the "Current
+Execution" section of [AGENTS.md](./AGENTS.md); this roadmap does not duplicate
+it. As verified against that index and the plan files:
 
-- personal `main` includes lifecycle-integrity repair `f870362`; its full deterministic suite passes
-  (`1,930 passed`, `3 skipped`, `12 deselected`);
 - Plan #119 cost governance and Plan #335 concurrent reservations are complete;
-- Plans #121, #122, and #334 are merged implementations whose downstream
-  Process Tracing verification remains open;
-- Plan #124 is active only as a dirty candidate worktree and is not yet
-  canonical. It owns the next implementation packet: one logical deadline
-  across a structured retry/fallback chain;
-- Plans #91 and #94 remain separate open product/policy work; they are not
-  implicit prerequisites for Plan #124.
+- Plans #121, #122, #334, #124, and #91 are implemented on `main`; each awaits
+  one governed downstream replay (Process Tracing, or DIGIMON for #91);
+- Plan #94's task-configured technical output ceiling is not implemented;
+- there is no single default next implementation packet recorded here; pick
+  the next one from "Current Execution" in `docs/plans/AGENTS.md`.
+
+(The 2026-07-25 reconciliation that named Plan #124 as the next packet is
+obsolete: Plan #124 has since landed, e.g. `cbbcc74`, `b8f55c9`.)
 
 The former provider-governance proposal is retained as superseded Plan #40.
 Its intended boundaries landed incrementally through Plans #94, #104,

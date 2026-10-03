@@ -1,6 +1,6 @@
 # Plan #346: Production LLM Call Receipt
 
-**Status:** In Progress  
+**Status:** Implemented (shared receipt landed in `df11123`/`d32313a`; Team-Brains Hermes adapter acceptance pending)
 **Type:** implementation  
 **Priority:** Critical  
 **Blocked By:** None  
@@ -25,7 +25,7 @@ runtime-specific collection at the runtime boundary.
 
 ## References Reviewed
 
-- `CLAUDE.md` — public-surface, planning, and generated-doc rules.
+- `AGENTS.md` — public-surface, planning, and generated-doc rules.
 - `docs/adr/0007-observability-contract-boundary.md` — canonical observability
   ownership and bounded metadata.
 - `docs/adr/0010-cross-project-runtime-substrate.md` — shared runtime ownership.
@@ -46,7 +46,7 @@ runtime-specific collection at the runtime boundary.
 - `tests/test_call_receipts.py` (create)
 - `tests/test_public_surface.py`
 - `docs/API_REFERENCE.md` and `docs/API_REFERENCE.html` (generated)
-- `docs/plans/CLAUDE.md`
+- `docs/plans/AGENTS.md`
 
 ---
 

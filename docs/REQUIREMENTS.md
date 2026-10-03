@@ -41,7 +41,9 @@ call_llm(model, messages,
 )
 ```
 
-No call may omit these. Enforcement is configurable via `LLM_CLIENT_REQUIRE_TAGS`.
+No call may omit these. Strict enforcement is enabled by `LLM_CLIENT_REQUIRE_TAGS`, by `CI`, or by
+a benchmark/eval/ci task prefix (`tags_strict_mode` in
+`llm_client/execution/call_contracts.py`).
 
 ### Result contract
 
@@ -59,15 +61,16 @@ model (`extra="ignore"`, defaults).
 
 Task-based model selection via `get_model(task)` and `list_models(task)`.
 
-Task profiles: `extraction`, `budget_extraction`, `graph_building`,
-`fast_extraction`, `bulk_cheap`, `synthesis`, `deep_review`,
-`code_generation`, `judging`, `agent_reasoning`.
+Task profiles and the shared default (`default_intelligent`) are defined in
+`llm_client/data/default_model_registry.json` and listed in `README.md`
+(canonical); `python -m llm_client models tasks` prints the live list. Older
+names (`extraction`, `judging`, ...) remain as compatibility selectors.
 
-Default for shared task-based work: `openrouter/minimax/minimax-m3`.
-Projects that select another model directly or through `override_model`,
+Projects that select a model directly or through `override_model`,
 `fallback_model`, `fallback_models`, or `benchmark_model` must record a local
 `model_override_acceptance` entry with `accepted_by` and `reason`, or use the
-explicit emergency bypass comment accepted by the model-policy audit.
+explicit emergency bypass comment accepted by the model-policy audit
+(`llm_client/model_policy_audit.py`).
 
 ## Observability
 
@@ -82,7 +85,7 @@ Query the observability DB for real costs. Never estimate.
 
 ## Consumers
 
-Projects that depend on `llm_client` (via `pip install -e ~/projects/llm_client`):
+Projects that depend on `llm_client` (via `pip install -e ~/projects/llm_client`; the consumer list is historical and unverified against current repos):
 
 - **research_v3** — KG-driven OSINT platform
 - **grounded-research** — adjudication layer

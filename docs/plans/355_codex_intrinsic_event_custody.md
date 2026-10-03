@@ -1,6 +1,6 @@
 # Plan #355: Codex Intrinsic Event Custody
 
-**Status:** In Progress
+**Status:** Implemented (shared-client contract and exact-JSONL correction landed; downstream Agent Ecology 3 and AC16 acceptance pending)
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -92,7 +92,7 @@ then fail closed on malformed or unsupported envelopes.
 - generated `docs/API_REFERENCE.md`
 - generated `docs/API_REFERENCE.html`
 - `docs/plans/355_codex_intrinsic_event_custody.md`
-- `docs/plans/CLAUDE.md`
+- `docs/plans/AGENTS.md`
 
 ## Plan
 

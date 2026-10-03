@@ -51,7 +51,7 @@
 - `tests/test_workflow_deliberate.py` (modify): add tests for barrier semantics — verify round-N agents see only round-(N-1) snapshot.
 - `tests/test_workflow_deliberate_barrier.py` (create): focused barrier-protocol unit tests; anonymization tests; turn-shuffle tests.
 - `runs/plan-35-barrier-pilot/` (artifact dir, created at run time): A/B comparison artifacts vs the cascade-topology baseline.
-- `docs/plans/CLAUDE.md` (modify): add Plan #35 row to the index.
+- `docs/plans/AGENTS.md` (modify): add Plan #35 row to the index.
 - `docs/plans/34_deliberation_verifier_adjudicator.md` (modify): note that the Plan #35 follow-up was reordered (barrier first, LLM-semantic match second).
 
 ---
@@ -131,12 +131,12 @@
 
 ## Acceptance Criteria
 
-- [ ] Phase 1-3 tests pass
+- [x] Phase 1-3 tests pass
 - [ ] Full workflow sweep passes (modulo 4 pre-existing prompt-asset failures unrelated to deliberate)
-- [ ] Phase 4 A/B comparison artifacts committed under `runs/plan-35-barrier-pilot/`
-- [ ] Phase 4 comparison shows barrier+anonymization produces measurable independence improvement (e.g., higher peer-reference rate, lower second-mover accommodation rate)
+- [x] Phase 4 A/B comparison artifacts committed under `runs/plan-35-barrier-pilot/`
+- [x] Phase 4 comparison shows barrier+anonymization produces measurable independence improvement (e.g., higher peer-reference rate, lower second-mover accommodation rate)
 - [ ] Phase 6 asymmetric-agent check completed; recommendation documented even if "no change needed"
-- [ ] `docs/plans/CLAUDE.md` updated to mark Plan #35 row
+- [x] `docs/plans/AGENTS.md` updated to mark Plan #35 row
 - [ ] API reference regenerated if public surface changed
 
 ---

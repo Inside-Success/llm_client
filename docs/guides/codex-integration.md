@@ -2,15 +2,24 @@
 
 ## Workspace agent mode
 
+All examples in this guide go through the `call_llm` model policy: the model
+must be in the execution allowlist (`codex`, `codex/gpt-5.6-luna`,
+`codex/gpt-5.6-sol`, `codex/gpt-5.6-terra`, `claude-code`, `claude-code/sonnet`,
+`claude-code/haiku`; see `llm_client/core/model_execution_policy.py`), a
+non-default model needs `model_justification=`, and Codex needs an explicit
+`reasoning_effort`. A bare `codex/gpt-5` is rejected.
+
 For code-generation/editing workflows that depend on workspace side effects,
 set `execution_mode="workspace_agent"` to prevent accidental routing to
 chat-only models.
 
 ```python
 result = call_llm(
-    "codex/gpt-5",
+    "codex/gpt-5.6-luna",
     messages,
     execution_mode="workspace_agent",
+    reasoning_effort="medium",
+    model_justification="Workspace-editing task needs the Codex agent route.",
     task="codex_demo",
     trace_id="codex_demo",
     max_budget=5.00,
@@ -30,9 +39,11 @@ tool loops, run non-streaming turns in a dedicated worker process:
 
 ```python
 result = call_llm(
-    "codex/gpt-5",
+    "codex/gpt-5.6-luna",
     messages,
     execution_mode="workspace_agent",
+    reasoning_effort="medium",
+    model_justification="Workspace-editing task needs the Codex agent route.",
     task="codex_isolation",
     trace_id="codex_isolation",
     max_budget=5.00,
@@ -101,6 +112,7 @@ result = call_llm(
     trace_id="repair_component/agent",
     max_budget=2.00,
     reasoning_effort="medium",
+    model_justification="Resume the exact Codex session from the earlier receipt.",
     codex_transport="cli",
     codex_session_mode="resume",  # fresh | resume | fork
     codex_session_id=prior_session_id,
@@ -168,6 +180,7 @@ result = call_llm(
     codex_transport="auto",
     agent_hard_timeout=300,
     reasoning_effort="medium",
+    model_justification="Workspace-editing task needs the Codex agent route.",
 )
 ```
 

@@ -47,7 +47,7 @@ security, or authorize replay spend.
 
 ## References Reviewed
 
-- `CLAUDE.md` and subtree instructions.
+- `AGENTS.md` and subtree instructions.
 - ADRs 0001, 0002, 0003, 0004, 0007, 0009, 0010, 0012, 0013, and 0014.
 - Plans 97, 101, 102, 109, and 111.
 - `llm_client/execution/structured_runtime.py`
@@ -79,7 +79,7 @@ security, or authorize replay spend.
 - `tests/test_structured_raw_artifacts.py`
 - `tests/test_selected_attempts.py`
 - generated API documentation if doc generation changes it
-- `docs/plans/CLAUDE.md`
+- `docs/plans/AGENTS.md`
 - this plan
 
 ## Required Tests

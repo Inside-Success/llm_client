@@ -2,7 +2,8 @@
 
 ## Long-thinking mode
 
-`gpt-5.2-pro` supports long-thinking runs. Set `reasoning_effort="high"` or
+`gpt-5.2-pro` and `gpt-5.5-pro` (`_LONG_THINKING_MODELS` in
+`llm_client/execution/background_runtime.py`) support long-thinking runs. Set `reasoning_effort="high"` or
 `"xhigh"` to enable Responses background mode with automatic polling:
 
 ```python
@@ -19,6 +20,23 @@ result = call_llm(
 ```
 
 Requires `OPENROUTER_API_KEY` (OpenRouter endpoint) or `OPENAI_API_KEY` (direct).
+
+Note: neither long-thinking model is in the current `call_llm` execution
+allowlist (`ALLOWED_EXECUTION_MODELS` in
+`llm_client/core/model_execution_policy.py`), so the call above raises
+`LLMConfigurationError` ("model is not in the llm_client execution allowlist")
+today. The background runtime exists, but using it requires adding a reviewed
+allowlist entry first.
+
+## Model policy
+
+Every `call_llm` call is checked against an allowlist (`model_policy`
+accepts only `"enforce_allowlist"`, which is also the default). Any allowed
+model other than the default (`openrouter/openai/gpt-5.6-luna`) requires a
+non-empty `model_justification=`, and configurable-reasoning models require an
+explicit `reasoning_effort=` (use `"none"` for off). The examples below follow
+this contract. Details: `llm_client/core/model_execution_policy.py`;
+route selection: [model-selection.md](model-selection.md).
 
 ## Execution modes
 
@@ -47,6 +65,7 @@ result = call_llm(
     reasoning_effort="none",
     retry=policy,
     model_policy="enforce_allowlist",
+    model_justification="Cheap bulk route reviewed for this task.",
     task="...",
     trace_id="...",
     max_budget=1.00,
@@ -85,6 +104,7 @@ result = call_llm(
     hooks=hooks,
     reasoning_effort="none",
     model_policy="enforce_allowlist",
+    model_justification="Cheap bulk route reviewed for this task.",
     task="...",
     trace_id="...",
     max_budget=1.00,
@@ -103,6 +123,7 @@ result = call_llm(
     cache=cache,
     reasoning_effort="none",
     model_policy="enforce_allowlist",
+    model_justification="Cheap bulk route reviewed for this task.",
     task="...",
     trace_id="...",
     max_budget=1.00,
@@ -137,7 +158,10 @@ Or via environment: `LLM_CLIENT_OPENROUTER_ROUTING=off`
 
 Provider-governance rules are applied before the final routing decision:
 
-- GPT-5.4-family requests fail before dispatch; use GPT-5.6 Luna when compatible
+- GPT-5.4-family exact aliases are flagged as prohibited (use GPT-5.6 Luna when compatible);
+  bare `gpt-5.4*` ids fail before dispatch, but the Inside Success overlay routes in
+  `llm_client/inside_success_policy.py` (for example `openrouter/openai/gpt-5.4-mini`)
+  are allowlisted and still reach dispatch with a logged governance warning
 - bare Gemini ids canonicalize to `gemini/<model>`
 - `result.routing_trace["provider_governance_events"]` records these decisions
 
@@ -159,10 +183,17 @@ Configure a key pool with:
 - `OPENROUTER_API_KEYS` (comma/semicolon/newline-delimited), or
 - `OPENROUTER_API_KEY` plus numbered vars (`OPENROUTER_API_KEY_2`, `_3`, ...).
 
+The key ring never crosses billing accounts: keys that belong to a different
+account than the one owning the repository's spend are dropped, not failed over
+to (`_apply_account_routing` in `llm_client/utils/openrouter.py`; per-repository
+account map in `llm_client/data/openrouter_account_routing.json`).
+
 ## Timeout policy
 
-- `LLM_CLIENT_TIMEOUT_POLICY=ban` — disable all per-call request timeouts globally.
-- `LLM_CLIENT_TIMEOUT_POLICY=allow` (default) — permit explicit `timeout` values.
+- `LLM_CLIENT_TIMEOUT_POLICY=ban` — disable all per-call request timeouts globally
+  (also accepted: `disable`, `disabled`, `off`, `none`, `false`, `no`, `0`).
+- `LLM_CLIENT_TIMEOUT_POLICY=allow` (default) — permit explicit `timeout` values
+  (see `llm_client/execution/timeout_policy.py`).
 
 ## Foundation event strict mode
 
@@ -182,6 +213,7 @@ active = get_active_llm_calls(project="my-project", limit=20)
 ## Model identity fields
 
 - `result.model` — legacy compatibility; use `resolved_model` instead
+- `result.cost` — cost of the call; `result.marginal_cost` — cost attributable to this call (0.0 on a cache hit)
 - `result.requested_model` — caller input
 - `result.resolved_model` / `result.execution_model` — terminal executed model
 - `result.routing_trace` — routing/fallback metadata

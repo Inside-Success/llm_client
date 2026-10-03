@@ -1,3 +1,7 @@
+---
+wiki_refs: [wiki/index.md]
+---
+
 # Capability Decomposition
 
 Last updated: 2026-04-05
@@ -12,7 +16,8 @@ Use this together with:
 
 - [`../plans/22_capability-ownership-and-sanctioned-worktree-alignment.md`](../plans/22_capability-ownership-and-sanctioned-worktree-alignment.md)
 - [`../../README.md`](../../README.md)
-- [`../../CLAUDE.md`](../../CLAUDE.md)
+- [`../../AGENTS.md`](../../AGENTS.md)
+- [`../../wiki/index.md`](../../wiki/index.md)
 
 ## Role
 
@@ -48,7 +53,7 @@ in consuming project repos.
 
 ## Known Consumers
 
-Current known ecosystem consumers include:
+Current known ecosystem consumers include (external repos, not verified here):
 
 - `prompt_eval`
 - `Digimon_for_KG_application`
@@ -80,5 +85,7 @@ integrations exist.
   evidence-driven.
 - The right enforcement point for requiring consumer repos to prefer
   `llm_client` over ad hoc runtime wrappers is still unsettled.
-- The provider-governance contract is being formalized by Plan #25 so the
-  recent Gemini/codex fixes stop living as tactical runtime patches.
+- The provider-governance contract is recorded in
+  [ADR 0015](../adr/0015-provider-governance-and-shared-coordination.md)
+  (Plan #25, Gemini exhaustion fallback hardening, is complete); whether it
+  covers every tactical Gemini/codex fix is unverified.

@@ -92,7 +92,7 @@ code relationships.
 
 1. [Plan 105 reconciliation authority at `c2f3693`](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/docs/plans/105_inside_success_fork_reconciliation.md)
 2. [Personal comparison source revision on GitHub](https://github.com/BrianMills2718/llm_client/tree/c2f3693a7a8f1f2e211368c189a64df69dcb381f)
-3. [Current canonical source binding](../../raw/source-manifest-5228ceb-inside-success.json)
+3. [Current canonical source binding](../../raw/source-manifest-98c9333-inside-success.json)
 4. [Company source tree](https://github.com/Inside-Success/llm_client/tree/f4a08fec950c8d973194e904ac3834e1e255166d)
 5. [Company-only policy overlay](https://github.com/Inside-Success/llm_client/blob/f4a08fec950c8d973194e904ac3834e1e255166d/llm_client/inside_success_policy.py)
 6. [Personal Codex deadline source](https://github.com/BrianMills2718/llm_client/blob/c2f3693a7a8f1f2e211368c189a64df69dcb381f/llm_client/sdk/agents_codex.py)

@@ -1,5 +1,9 @@
 # `llm_client` issue tracker
 
+Statuses re-checked against `main` (98c9333) on 2026-10-03 unless a row says otherwise.
+Issues LLM-003/004/006/008/009 are cross-project policy frictions that are not
+fully verifiable from this repository's code; they stay pending until transferred.
+
 ## Register
 
 ### LLM-001: Repository-wide static-analysis targets are baseline-red
@@ -10,18 +14,18 @@
 | Severity | Medium |
 | Reported | 2026-07-09 during Plan #92 verification |
 
-`make lint` reported 309 errors on 2026-07-14 across `llm_client/` and `tests/`, including
-unused imports/variables, import-order findings, and duplicate definitions.
-`make typecheck` reported 210 errors across 40 pre-existing files. Plan 101's
-changed canonical modules and tests pass focused Ruff, and its new module
-passes strict mypy with imported-module diagnostics silenced, so neither
-baseline is a Plan 101 regression. The full 1,667-test suite passes when the
-repo-local virtual environment is put on `PATH`; plain `make test` from a new
-worktree instead uses system Python and misses the declared `langgraph` extra.
+Re-measured 2026-10-03 on main: `ruff check llm_client/ tests/` (ruff 0.16.3 from
+`~/.local/bin`; the count depends on the ruff version) reports 1,098 errors, and
+`mypy --strict llm_client/` reports 194 errors in 44 files (the 2026-07-14
+figures were 309 and 210 across 40 files). Neither baseline is a regression of
+any single plan. The Makefile defines `$(PYTHON)` (prefers `.venv`) but `test`,
+`test-quick`, `lint`, and `typecheck` still invoke bare `python`/`ruff`/`mypy`,
+so a new worktree can run system Python and miss the declared `langgraph` extra
+(the `dev` extra includes it).
 
-**Next:** Create a bounded static-analysis baseline cleanup plan and make the
-Makefile select the repo-local environment before treating `make check` as a
-required green gate.
+**Next:** Create a bounded static-analysis baseline cleanup plan and make every
+quality target use `$(PYTHON)` before treating `make check` as a required green
+gate.
 
 ### LLM-002: Canonical instruction source is self-contradictory (resolved)
 
@@ -31,10 +35,11 @@ required green gate.
 | Severity | High |
 | Reported | 2026-07-15 during Plan #104 orientation |
 
-`CLAUDE.md` is now the authored repository authority and `AGENTS.md` is a
-separate deterministic generated projection. The sync validator passes and the
-renderer retains its negative control rejecting an `AGENTS.md` symlink that
-would overwrite the canonical source.
+At resolution time `CLAUDE.md` was the authored repository authority and
+`AGENTS.md` a separate deterministic generated projection. Historical note:
+`CLAUDE.md` was later retired in #29; `AGENTS.md` is now the single authored
+instruction source (`scripts/meta/check_agents_sync.py --check` reports
+"AGENTS.md is the authored instruction source").
 
 ### LLM-013: Inside Success remote routes pushes through the personal credential
 
@@ -60,14 +65,14 @@ identity with write access to the same repository.
   `github-insidesuccess` SSH host alias and add a credential-routing check that
   verifies fetch and dry-run push identity for each multi-account remote.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).
 
 ### LLM-012: Failed pre-commit validation leaves generated docs staged
 
 | Field | Value |
 |---|---|
-| Status | Pending policy-friction handoff |
+| Status | Partially addressed: `hooks/pre-commit` now runs doc-coupling (line 72) before API-reference generation and staging (lines 91-97); it still `git add`s `docs/plans/AGENTS.md` (line 68) first. Policy-friction handoff pending |
 | Severity | Medium |
 | Reported | 2026-07-15 during Plan #105 implementation commit |
 
@@ -88,14 +93,14 @@ review scope before the agent could satisfy the reported requirement.
   blocking checks pass; add a negative control proving failed hooks leave the
   index unchanged.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).
 
 ### LLM-011: Push rejection prescribes an unscoped claim
 
 | Field | Value |
 |---|---|
-| Status | Pending policy-friction handoff |
+| Status | Pending policy-friction handoff (re-checked 2026-10-03: `scripts/meta/worktree-coordination/check_claims.py:1208` still prints an unscoped `--claim --task`; line 1255 suggests `--feature`) |
 | Severity | Low |
 | Reported | 2026-07-15 during Plan #105 branch publication |
 
@@ -114,8 +119,8 @@ claim should have been scoped, requiring release and recreation.
   tracked plan document and print `--plan N`; when inference is unavailable,
   explain the required scope choice instead of prescribing an unscoped command.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).
 
 ### LLM-009: Parallel yielded commands lose first-class wait handles
 
@@ -141,14 +146,14 @@ remained.
 - **Recommendation:** Surface yielded session IDs as first-class waitable results
   from orchestrated calls or reject parallel orchestration of yielding commands.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).
 
 ### LLM-007: Declared development install cannot collect the full test suite
 
 | Field | Value |
 |---|---|
-| Status | Confirmed |
+| Status | Confirmed (re-checked 2026-10-03: `data_contracts` and `prompt_eval` are still undeclared in `pyproject.toml`; tests still import them) |
 | Severity | Medium |
 | Reported | 2026-07-15 during Plan #104 full-suite verification |
 
@@ -190,29 +195,26 @@ disagree about ownership of the same work.
   the hook consumes; add a positive control covering Codex session claim through
   normal push.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).
 
-### LLM-005: Declared development install cannot run the declared lint target
+### LLM-005: Declared development install cannot run the declared lint target (resolved)
 
 | Field | Value |
 |---|---|
-| Status | Confirmed |
+| Status | Resolved: `pyproject.toml` `dev` extra now declares `ruff>=0.12,<1.0` (verified 2026-10-03) |
 | Severity | Medium |
 | Reported | 2026-07-15 during Plan #104 environment verification |
 
-`make install` installs `.[dev]`, and that extra does not declare Ruff. The same
-Makefile's `lint` target invokes `ruff check`, so a clean repository-local setup
-cannot execute its declared quality target without an undeclared global tool.
-
-**Next:** Add a bounded Ruff dependency to the `dev` extra and cover a clean
-environment's ability to execute every declared quality command.
+At report time `make install` installed `.[dev]` without Ruff while the `lint`
+target invokes `ruff check`. The `dev` extra now includes Ruff; a clean-environment
+check that every declared quality command executes remains unwritten.
 
 ### LLM-006: Capability-certification skill references a missing authority
 
 | Field | Value |
 |---|---|
-| Status | Pending policy-friction handoff |
+| Status | Pending policy-friction handoff (references external `project-meta`/`ecosystem-ops` paths; not checkable from this repo) |
 | Severity | High |
 | Reported | 2026-07-15 during Plan #104 certification |
 
@@ -237,14 +239,14 @@ consumer can be executed.
   skill to their current authoritative paths; add a skill-integrity check that
   fails when a required local reference is missing.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).
 
 ### LLM-003: Required-reading gate cannot observe Codex repository reads
 
 | Field | Value |
 |---|---|
-| Status | Pending policy-friction handoff |
+| Status | Pending policy-friction handoff (re-checked 2026-10-03: `.claude/hooks/track-reads.sh` is still the only recorder of `/tmp/.claude_session_reads`) |
 | Severity | High |
 | Reported | 2026-07-15 during Plan #104 read-gate verification |
 
@@ -292,14 +294,14 @@ completed command from an interrupted one.
   persist an explicit terminal result that a resumed agent can query; document
   the supported recovery command and add a compaction-resume positive control.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).
 
 ### LLM-010: Repository lacks the required coordination claim entrypoint
 
 | Field | Value |
 |---|---|
-| Status | Pending policy-friction handoff |
+| Status | Confirmed (re-checked 2026-10-03: the Makefile has no `claim` or `release-claim` target; claiming goes through `make worktree`/`make session-start` and `scripts/meta/worktree-coordination/check_claims.py --claim`) |
 | Severity | Medium |
 | Reported | 2026-07-15 during Plan #105 coordination setup |
 
@@ -318,5 +320,5 @@ before modifying shared projects, but the expected repository command,
   document and expose a supported client-neutral claim command through the
   Make target glossary with a positive integration check.
 
-The shared `project-meta/policy_friction.md` is actively claimed by
-`plan0137-report-vgap-20260712`; transfer this entry after that claim closes.
+Transfer target is the external `project-meta/policy_friction.md` (not in this repo;
+the 2026-07 claim that blocked transfer is unverified as still active).

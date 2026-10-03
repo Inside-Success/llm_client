@@ -16,21 +16,31 @@ result = call_llm(
     "openrouter/deepseek/deepseek-v4-flash",
     messages,
     reasoning_effort="none",
+    model_justification="Bounded bulk decision on the cheap reviewed tier.",
     task="bounded_decision",
     trace_id=trace_id,
     max_budget=0.05,
 )
 ```
 
-DeepSeek V4 Flash is the only no-justification default. Any other allowed
-canonical route requires a non-empty `model_justification`; the decision is
-retained in both the routing trace and replayable call snapshot. A justification
-cannot authorize a route absent from the allowlist. GPT-5 Mini, GPT-5.1 Mini,
-GPT-5.4 Mini, and Codex Mini routes are intentionally absent and therefore fail
-before provider dispatch.
+The only no-justification route is the default execution model,
+`openrouter/openai/gpt-5.6-luna` (`DEFAULT_EXECUTION_MODEL` in
+`llm_client/core/model_execution_policy.py`); DeepSeek V4 Flash as shown above
+is an allowed non-default route and therefore needs `model_justification`. Any
+other allowed canonical route requires a non-empty `model_justification`; the
+decision is retained in both the routing trace and replayable call snapshot. A
+justification cannot authorize a route absent from the allowlist. GPT-5 Mini, GPT-5.1 Mini, bare GPT-5.4/GPT-5.5 ids, and Codex Mini
+routes are absent from the shared allowlist or hard-blocked and fail before
+provider dispatch.
 
-GPT-5.5 is retired: direct, Pro, and OpenRouter aliases are absent from the
-allowlist and registry and are hard-blocked before provider dispatch.
+The allowlist is the shared set plus the Inside Success overlay
+(`INSIDE_SUCCESS_ADDITIONAL_EXECUTION_MODELS` in
+`llm_client/inside_success_policy.py`). The overlay allows exact routes that the
+generic policy retires, including `openrouter/openai/gpt-5.5`, `codex/gpt-5.5`,
+GPT-5.4 mini/nano and Opus 4.8 and Sonnet routes. Verified by
+`evaluate_model_execution_policy` on 2026-10-03: those routes pass the
+allowlist; bare `opus`, `gpt-5.5`, `gpt-5.4-mini` and `openrouter/openai/gpt-5-mini`
+do not.
 
 Enforcement is unconditional. `model_policy="enforce_allowlist"` remains an
 accepted explicit value for replay clarity, but omitting it has the same
@@ -45,6 +55,7 @@ result = call_llm(
     messages,
     execution_mode="workspace_agent",
     reasoning_effort="medium",
+    model_justification="Workspace edits need the Codex agent lane.",
     task="repo_edit",
     trace_id=trace_id,
     max_budget=5.00,
@@ -64,6 +75,7 @@ result = call_llm_structured(
     messages,
     response_model=Decision,
     reasoning_effort="xhigh",
+    model_justification="Bounded decision on the cheap reviewed tier.",
     task="bounded_decision",
     trace_id=trace_id,
     max_budget=0.05,
@@ -120,6 +132,7 @@ result, call = call_llm_structured(
         allow_provider_fallbacks=False,
     ),
     reasoning_effort="none",
+    model_justification="Bounded decision on the cheap reviewed tier.",
     task="bounded_decision",
     trace_id=trace_id,
     max_budget=0.05,
@@ -163,14 +176,18 @@ be allowed, and every non-default route requires `model_justification`:
 | `ultra_fast_low_intel` | Mercury 2 | tiny rewrites, routing, low-stakes transforms | judgment, synthesis, policy |
 | `ultra_cheap_low_intel` | GPT-5 nano | disposable low-stakes bulk work | correctness-sensitive work |
 | `fast_cheap_mid` | DeepSeek V4 Flash | bulk structured work with a real reasoning floor | final review or high-stakes decisions |
-| `fast_mid` | GPT-5.4 nano | latency-sensitive general work | deep reasoning |
+| `fast_mid` | GPT-5.6 Luna (OpenRouter) | latency-sensitive general work | deep reasoning |
 | `default_intelligent` | MiniMax-M3 | normal project default | workspace side effects |
 | `fast_intelligent` | GLM 5.2 | stronger reasoning without huge latency | final “best possible” escalation |
 | `very_intelligent` | Grok 4.5 | difficult semantic judgment, coreference, ontology authoring, and deep review | automatic bulk pipelines |
 | `max_intelligence` | GPT-5.6 Sol through OpenRouter | explicit max-quality escalation | default routing |
 
+Default models above are what `get_model(<selector>)` resolves to against the
+packaged registry (`llm_client/data/default_model_registry.json`), checked
+2026-10-03; run `python -m llm_client models tasks` for the live mapping.
 Compatibility selectors such as `extraction`, `judging`, `synthesis`, and
-`bulk_cheap` remain available so existing projects do not break. New code
+`bulk_cheap` remain available (all currently resolve to MiniMax-M3) so existing
+projects do not break. New code
 should use the tier names above and keep task intent in the required
 `task=` observability tag.
 
@@ -216,7 +233,9 @@ quickly.
 
 ### Current reasoning-heavy shortlist
 
-Observed 2026-07-28. Intelligence and speed are Artificial Analysis
+Observed 2026-07-28 (dated external snapshot; the registry's own
+`intelligence`/`speed`/`cost` fields in `default_model_registry.json` are
+separate values and differ). Intelligence and speed are Artificial Analysis
 Intelligence Index v4.1 and first-party/median-provider output speed at the
 listed effort. Cost is the OpenRouter route's current USD input/output price
 per million tokens. Context and declared structured capability come from the
@@ -316,11 +335,11 @@ task shape.
 
 | Model route | Tier | Structured-route status | Observed evidence and use decision |
 |---|---|---|---|
-| `openrouter/deepseek/deepseek-v4-flash` | `fast_cheap_mid` | **Certified for one bounded extraction contract** | Plan 0147 retained a successful native-`json_schema` extraction with exact evidence offsets and no cache/fallback. It is the current default for high-volume bounded extraction, not a general semantic-quality winner. Evidence: `onto-canon6/docs/runs/plan0147/2026-07-16_functional_poc_v1.md`. |
-| `openrouter/minimax/minimax-m3` | `default_intelligent` | **Transport reached; output contract not certified** | Plan 0141's provider accepted the structural schema and returned content, but local Pydantic/business validation rejected the monolithic response. This does not prove poor extraction quality, but it does mean MiniMax is not certified for that semantic-authoring schema. Use only after the selected task's smaller contract has a retained passing trace. Evidence: `onto-canon6/docs/runs/2026-07-14_plan0141_minimax_discovery_probe.md`. |
-| `openrouter/x-ai/grok-4.5` | `very_intelligent` | **Native route reached; capacity blocked** | The Jane/Bob coreference request reached the native-schema route but OpenRouter returned HTTP 402 while reserving its default output allowance. This is neither a semantic failure nor a certification. Retry only after the task-profile output ceiling is wired. Evidence: `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
+| `openrouter/deepseek/deepseek-v4-flash` | `fast_cheap_mid` | **Certified for one bounded extraction contract** | Plan 0147 retained a successful native-`json_schema` extraction with exact evidence offsets and no cache/fallback. It is the current default for high-volume bounded extraction, not a general semantic-quality winner. Evidence (external repo `onto-canon6`, not checkable from here): `onto-canon6/docs/runs/plan0147/2026-07-16_functional_poc_v1.md`. |
+| `openrouter/minimax/minimax-m3` | `default_intelligent` | **Transport reached; output contract not certified** | Plan 0141's provider accepted the structural schema and returned content, but local Pydantic/business validation rejected the monolithic response. This does not prove poor extraction quality, but it does mean MiniMax is not certified for that semantic-authoring schema. Use only after the selected task's smaller contract has a retained passing trace. Evidence (external repo `onto-canon6`): `onto-canon6/docs/runs/2026-07-14_plan0141_minimax_discovery_probe.md`. |
+| `openrouter/x-ai/grok-4.5` | `very_intelligent` | **Native route reached; capacity blocked** | The Jane/Bob coreference request reached the native-schema route but OpenRouter returned HTTP 402 while reserving its default output allowance. This is neither a semantic failure nor a certification. Retry only after the task-profile output ceiling is wired. Evidence (external repo `onto-canon6`): `onto-canon6/docs/runs/2026-07-16_plan0141_coreference_vertical.md`. |
 | `gemini/gemini-2.5-flash` | explicit route | **Unavailable in observed environment** | The Plan 0147 retry received a daily-quota exhaustion response. It produced no accepted semantic output and no capability conclusion. |
-| GPT-5.5, direct or OpenRouter | historical only | **Hard-blocked before dispatch** | The retained direct strict-schema receipt remains historical transport evidence. New calls use the GPT-5.6 family. |
+| GPT-5.5, direct or OpenRouter | historical only | **Generic policy retires it; Inside Success overlay allowlists exact `openrouter/openai/gpt-5.5` and `codex/gpt-5.5`** | Bare `gpt-5.5` is hard-blocked before dispatch. The retained direct strict-schema receipt remains historical transport evidence. New calls use the GPT-5.6 family. |
 | direct `gpt-5.6` (Sol) | `max_intelligence` direct counterpart | **Certified for one bounded strict-schema contract** | Direct OpenAI Responses API returned schema-valid typed content. The provider-policy exact alias preserves this direct route even while the tier selector uses OpenRouter. This is route evidence, not semantic-quality certification. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
 | direct `gpt-5.6-terra` | explicit manual selection | **Certified for one bounded strict-schema contract** | Same contract-tested direct Responses API route as Sol, retained as an explicit choice rather than a default. Evidence: `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md`. |
 | `openrouter/openai/gpt-5.6-sol` (medium) | explicit manual selection | **Instructor default; bounded native certificate retained** | The OpenRouter native-`json_schema` route returned a validated Cybernetic Influence `resource_request_v1`, but the 2026-07-29 Process Tracing probe found no endpoint accepting its requested structured parameter profile. Shared auto mode now uses Instructor; the older certificate remains valid only for its named contract. Evidence: `docs/runs/2026-07-25_openrouter_gpt56_sol_authoring_schema_certification.md` and trace `process-tracing.sol-medium-capability-probe.20260730T000519Z`. |
@@ -340,10 +359,12 @@ bounded direct-route evidence; Luna has one retained OpenRouter planner result.
 None of those narrow contracts proves general task quality.
 
 The enforced allowlist supersedes family-by-family bans for all callers.
-Fable, Opus, GPT-5.5, GPT Mini, Codex Mini, unknown models, and opaque account-side
-selectors are all unavailable because they are not exact allowlist entries.
-Neither `model_justification` nor generic `model_override_acceptance` can
-authorize an unlisted route.
+Unknown models, bare family names (for example `opus`), and opaque account-side
+selectors are unavailable because they are not exact allowlist entries.
+Exact routes added by the Inside Success overlay (see the first section) are
+allowed here even where the generic upstream retires them. Neither
+`model_justification` nor generic `model_override_acceptance` can authorize an
+unlisted route.
 
 ## Should every project register through `llm_client`?
 
@@ -352,8 +373,8 @@ is:
 
 - project code imports `llm_client` for LLM execution;
 - every call is governed even when `model_policy` is omitted;
-- DeepSeek V4 Flash is used by default;
-- another exact allowed route includes a durable `model_justification`;
+- the default execution model (GPT-5.6 Luna via OpenRouter) is used by default;
+- any other exact allowed route includes a durable `model_justification`;
 - direct raw model literals are audited;
 - unlisted models are blocked regardless of override metadata.
 

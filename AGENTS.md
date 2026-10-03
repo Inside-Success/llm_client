@@ -51,12 +51,12 @@ details scoped below the repository root.
 ## Principles
 
 1. **Runtime substrate, not thin wrapper** -- `llm_client` is a control plane providing routing, observability, retry/fallback, and structured output enforcement. It is not a convenience layer over LiteLLM.
-2. **Required kwargs on every call** -- `task=`, `trace_id=`, `max_budget=`. No exceptions.
+2. **Required kwargs on every call** -- `task=`, `trace_id=`, `max_budget=`. Always pass them: when `LLM_CLIENT_REQUIRE_TAGS` or `CI` is truthy, or the task starts with `benchmark`/`bench`/`eval`/`ci`, a missing value raises; otherwise the client substitutes `adhoc`/an auto trace id/unlimited budget and logs an `AUTO_TAG` warning (`llm_client/execution/call_contracts.py`, `require_tags`).
 3. **Prompts as data** -- YAML/Jinja2 templates in `prompts/`, loaded via `render_prompt()`. No f-string prompts in calling code.
 4. **Structured output via `json_schema`** -- Always use `json_schema` response_format, never `json_object`. Schema field descriptions are the primary mechanism for correct output.
 5. **Observability first** -- All state changes logged with context. Query `~/projects/data/llm_observability.db` for real costs; never estimate.
 6. **Fail loud** -- No silent fallbacks, no `except: pass`. Errors surface with context.
-7. **Programs A-D complete** -- Do not invent new cleanup slices without fresh evidence. The roadmap tracks what remains.
+7. **Programs A-E complete** -- Do not invent new cleanup slices without fresh evidence. The roadmap tracks what remains.
 8. **API reference is generated** -- Run `python scripts/meta/generate_api_reference.py --write` after changing the public surface or docstrings.
 9. **Wiki-first architecture questions** -- Start unfamiliar architecture,
    workflow, or ownership questions at `roadmap/codebase/wiki/index.md`. Use the

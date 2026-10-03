@@ -1,6 +1,6 @@
 # Plan #360: Codex Subscription Default
 
-**Status:** Implemented (focused verification)
+**Status:** Superseded in part by Plan #361 (commit `c008582` reverted `DEFAULT_EXECUTION_MODEL` to `openrouter/openai/gpt-5.6-luna`, now a compatibility fallback; `codex/gpt-5.6-luna` stays allowlisted and is selected by `resolve_workload_route()`). The acceptance items below describe the state at commit `253d478`, not current `main`.
 **Type:** implementation
 **Priority:** High
 **Blocked By:** None
@@ -43,7 +43,7 @@ subscription-route failures.
 - `tests/test_model_execution_policy.py` (modify)
 - `README.md` (modify)
 - `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` (modify)
-- `docs/plans/CLAUDE.md` (modify)
+- `docs/plans/AGENTS.md` (modify)
 
 ## Plan
 

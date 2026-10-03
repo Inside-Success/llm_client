@@ -11,10 +11,15 @@ without becoming a second implementation layer.
 ## What Lives Here
 
 - `common.py` for shared CLI helpers
-- `adoption.py`, `backfill.py`, `cost.py`, `experiments.py`,
-  `experiments_analytics.py`, `models.py`, `replay.py`, `scores.py`,
-  `tool_lint.py`, and `traces.py` for subcommand handlers
-- `__init__.py` for subcommand registration
+- Subcommand handlers: `adoption.py`, `backfill.py`, `cost.py`,
+  `dashboard.py` (+ `dashboard_server.py`), `deliberate.py`, `duet.py`,
+  `experiments.py` (+ `experiments_analytics.py`), `json_schema_call.py`,
+  `models.py`, `prompt_drift.py`, `prompt_show.py`, `provider_limits.py`,
+  `replay.py`, `review_artifact.py`, `review_cycle.py`,
+  `route_certification.py`, `scores.py`, `tool_lint.py`, `tool_usage.py`,
+  `tools.py`, and `traces.py`
+- `__init__.py` for subcommand registration (the authoritative command list is
+  `python -m llm_client --help`)
 
 ## Local Rules
 

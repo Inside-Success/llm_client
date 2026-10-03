@@ -52,7 +52,7 @@ vertical or evidence that AC16 succeeds.
 
 ## References Reviewed
 
-- `CLAUDE.md` and `llm_client/sdk/CLAUDE.md` - repository and adapter rules.
+- `AGENTS.md` and `llm_client/sdk/AGENTS.md` - repository and adapter rules.
 - `docs/adr/0010-cross-project-runtime-substrate.md` - shared execution and
   observability ownership.
 - `docs/adr/0005-reason-code-registry-governance.md` - stable fail-loud reason
@@ -79,7 +79,7 @@ vertical or evidence that AC16 succeeds.
 - `pyproject.toml` (modify: preserve advertised supported-Python installability)
 - `docs/guides/codex-integration.md` (modify)
 - `docs/plans/363_codex_session_continuation.md` (create)
-- `docs/plans/CLAUDE.md` (modify)
+- `docs/plans/AGENTS.md` (modify)
 
 ---
 

@@ -1,6 +1,6 @@
 # Scripts Directory
 
-Utility scripts for development and CI. All scripts support `--help` for options.
+Utility scripts for development and governance. The scripts below use argparse; run with `--help` for options.
 
 ## Core Scripts
 
@@ -13,7 +13,7 @@ Utility scripts for development and CI. All scripts support `--help` for options
 | `scripts/meta/merge_pr.py` | Merge PRs via GitHub CLI |
 | `scripts/meta/parse_plan.py` | Parse plan metadata |
 | `scripts/meta/generate_quiz.py` | Generate comprehension quiz prompts |
-| `scripts/meta/check_required_reading.py` | Enforce required docs read before editing coupled source files |
+| `scripts/meta/check_required_reading.py` | Enforce required docs read before editing coupled source files (`.claude/hooks/gate-edit.sh` calls `scripts/check_required_reading.py`, a compatibility wrapper that delegates to `file_context`) |
 | `scripts/meta/validate_relationships.py` | Validate relationships/read-gate config integrity |
 | `scripts/meta/check_codebase_wiki_freshness.py` | Verify the immutable codebase-wiki source surface, authority hashes, external capsules, and optional remote pins |
 | `scripts/meta/worktree-coordination/check_claims.py` | Claim, inspect, and release sanctioned worktree ownership |
@@ -33,7 +33,7 @@ python scripts/meta/complete_plan.py --plan N           # Mark complete
 # Blocked-plan checks
 python scripts/meta/check_plan_blockers.py --strict
 
-# Required-reading gate check (used by .claude/hooks/gate-edit.sh)
+# Required-reading gate check
 python scripts/meta/check_required_reading.py llm_client/client.py
 
 # Relax gate temporarily without code changes
@@ -42,7 +42,7 @@ LLM_CLIENT_READ_GATE_MODE=warn python scripts/meta/check_required_reading.py llm
 # Read-gate smoke tests (strict/warn/off behavior)
 pytest -q tests/test_required_reading_gate.py
 
-# Validate relationships config before CI
+# Validate relationships config
 python scripts/meta/validate_relationships.py --strict
 
 # Codebase wiki freshness (offline gate, then full external/network check)
@@ -57,7 +57,7 @@ make worktree-remove BRANCH=plan-22-example
 
 ## Configuration
 
-Edit config files in repo root to customize behavior:
+Related config and authority files:
 - `docs/plans/AGENTS.md` - plan index
 - `docs/ops/CAPABILITY_DECOMPOSITION.md` - repo-local capability ownership source of record
 - `scripts/relationships.yaml` - source/doc couplings and required-reading defaults
