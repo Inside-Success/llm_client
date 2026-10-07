@@ -12,7 +12,7 @@ compatibility contracts in `llm_client`.
 | 0005 | [Reason code registry governance](0005-reason-code-registry-governance.md) | Accepted | 2026-02-23 | Plan #2 |
 | 0006 | [Actor ID issuance policy](0006-actor-id-issuance-policy.md) | Accepted | 2026-02-23 | Plan #2 |
 | 0007 | [Observability contract boundary](0007-observability-contract-boundary.md) | Accepted | 2026-02-23 | Plan #6 |
-| 0008 | [Task graph evaluation contract boundary](0008-task-graph-evaluation-contract-boundary.md) | Superseded 2026-03-24 | 2026-02-23 | Plan #6; `task_graph.py` extracted to project-meta and `experiment_eval.py` to `prompt_eval` (Plan #17); `llm_client/experiment_eval.py` remains as a compatibility shim |
+| 0008 | [Task graph evaluation contract boundary](../ARCHIVED_DOCS_INDEX.md) | Superseded 2026-03-24 | 2026-02-23 | Plan #6; `task_graph.py` extracted to project-meta and `experiment_eval.py` to `prompt_eval` (Plan #17); `llm_client/experiment_eval.py` remains as a compatibility shim |
 | 0009 | [Long-thinking background polling](0009-long-thinking-background-polling.md) | Accepted | 2026-02-23 | Plan #7 |
 | 0010 | [Cross-project runtime substrate](0010-cross-project-runtime-substrate.md) | Accepted | 2026-03-17 | Plan #10 |
 | 0011 | [Prompt assets explicit identity](0011-prompt-assets-explicit-identity.md) | Accepted | 2026-03-17 | Plans #11–#12 |

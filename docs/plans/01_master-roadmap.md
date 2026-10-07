@@ -93,7 +93,7 @@ true:
 
 ### Program A: Runtime Boundary Hardening
 
-**Plan:** [02_client-boundary-hardening.md](./02_client-boundary-hardening.md)  
+**Plan:** [02_client-boundary-hardening.md](../ARCHIVED_DOCS_INDEX.md)  
 **Status:** Complete
 
 **Success criteria:**
@@ -113,7 +113,7 @@ true:
 
 ### Program B: Model Policy Modernization
 
-**Plan:** [03_model-policy-modernization.md](./03_model-policy-modernization.md)  
+**Plan:** [03_model-policy-modernization.md](../ARCHIVED_DOCS_INDEX.md)  
 **Status:** Complete
 
 **Success criteria:**
@@ -134,7 +134,7 @@ true:
 
 ### Program C: Workflow Layer Boundary
 
-**Plan:** [04_workflow-layer-boundary.md](./04_workflow-layer-boundary.md)  
+**Plan:** [04_workflow-layer-boundary.md](../ARCHIVED_DOCS_INDEX.md)  
 **Status:** Complete
 
 **Success criteria:**
@@ -147,7 +147,7 @@ boundary blockers.
 
 ### Program D: Eval Boundary Cleanup
 
-**Plan:** [05_eval-boundary-cleanup.md](./05_eval-boundary-cleanup.md)  
+**Plan:** [05_eval-boundary-cleanup.md](../ARCHIVED_DOCS_INDEX.md)  
 **Status:** Complete
 
 **Success criteria:**
@@ -169,7 +169,7 @@ stable enough that package-boundary churn is low.
 
 ### Program E: Simplification and Observability Modernization
 
-**Plan:** [06_simplification-and-observability.md](./06_simplification-and-observability.md)
+**Plan:** [06_simplification-and-observability.md](../ARCHIVED_DOCS_INDEX.md)
 **Status:** Complete
 
 **Success criteria:**
