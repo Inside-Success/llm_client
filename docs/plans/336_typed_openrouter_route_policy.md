@@ -38,7 +38,7 @@ listed stop condition instead of inventing another routing mechanism.
   `openrouter/deepseek/deepseek-v4-flash` returned a Pydantic-validated result
   under `data_collection="deny"` and `zdr=true`. Authenticated post-call
   evidence observed `Fireworks` as the selected upstream. See
-  [`2026-07-27_typed_openrouter_route_policy_probe.md`](../runs/2026-07-27_typed_openrouter_route_policy_probe.md).
+  [`RUNS.md#2026-07-27_typed_openrouter_route_policy_probe`](../runs/RUNS.md#2026-07-27_typed_openrouter_route_policy_probe).
   No provider was allowlisted for that public probe, so it is not private-data
   authorization evidence.
 - **Remaining:** complete the shared-client verification/closeout, then migrate
@@ -198,12 +198,12 @@ processing is authorized.
 - `AGENTS.md` — runtime-substrate identity, plan workflow, structured-output,
   trace, and fail-loud rules.
 - `docs/plans/01_master-roadmap.md` — canonical program authority.
-- `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` — borrow
+- `docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary` — borrow
   OpenRouter/LiteLLM capabilities; keep local enforcement and evidence; do not
   build a second provider capability database.
-- `docs/plans/99_strict_native_json_schema_execution.md` — native-schema policy
+- `docs/plans/COMPLETED_PLANS.md#99_strict_native_json_schema_execution` — native-schema policy
   and failure semantics.
-- `docs/plans/110_provider-capabilities-opus-ban.md` — normalized parameters,
+- `docs/plans/COMPLETED_PLANS.md#110_provider-capabilities-opus-ban` — normalized parameters,
   `require_parameters`, and provider-routing ownership.
 - `llm_client/core/models.py` — model-level structured capability registry.
 - `llm_client/execution/call_contracts.py` — current typed call policy home.
@@ -583,7 +583,7 @@ make check
 - `tests/test_structured_attempts.py` — one-attempt diagnostic lifecycle.
 - `docs/API_REFERENCE.md` — regenerate, never hand-edit.
 - `docs/guides/model-selection.md` — model capability versus route readiness.
-- `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` — narrow
+- `docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary` — narrow
   amendment recording typed policy compilation; preserve its no-live-registry
   decision.
 - `scripts/relationships.yaml` — add read-gate/code-doc edges if required by

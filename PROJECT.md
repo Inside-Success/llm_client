@@ -49,8 +49,8 @@ Do not claim:
 3. Read [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for scope and non-goals.
 4. Read [docs/ops/CAPABILITY_DECOMPOSITION.md](docs/ops/CAPABILITY_DECOMPOSITION.md)
    for ownership boundaries.
-5. Read [docs/adr/0010-cross-project-runtime-substrate.md](docs/adr/0010-cross-project-runtime-substrate.md)
-   and [docs/adr/0007-observability-contract-boundary.md](docs/adr/0007-observability-contract-boundary.md)
+5. Read [docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate](docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate)
+   and [docs/adr/DECISIONS.md#0007-observability-contract-boundary](docs/adr/DECISIONS.md#0007-observability-contract-boundary)
    for the runtime and observability decisions.
 6. Read [docs/VALIDATION.md](docs/VALIDATION.md) and
    [docs/CONCERNS.md](docs/CONCERNS.md) before using this as portfolio

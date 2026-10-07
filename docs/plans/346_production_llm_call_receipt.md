@@ -26,12 +26,12 @@ runtime-specific collection at the runtime boundary.
 ## References Reviewed
 
 - `AGENTS.md` — public-surface, planning, and generated-doc rules.
-- `docs/adr/0007-observability-contract-boundary.md` — canonical observability
+- `docs/adr/DECISIONS.md#0007-observability-contract-boundary` — canonical observability
   ownership and bounded metadata.
-- `docs/adr/0010-cross-project-runtime-substrate.md` — shared runtime ownership.
-- `docs/adr/0012-shared-data-plane-boundary.md` — hashes and references rather
+- `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate` — shared runtime ownership.
+- `docs/adr/DECISIONS.md#0012-shared-data-plane-boundary` — hashes and references rather
   than copied bulk content.
-- `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md` — request
+- `docs/adr/DECISIONS.md#0014-call-replay-and-divergence-diagnosis-boundary` — request
   fingerprints are distinct from prompt hashes and receipts are not provider
   attestation.
 

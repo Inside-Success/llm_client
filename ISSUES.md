@@ -6,6 +6,30 @@ fully verifiable from this repository's code; they stay pending until transferre
 
 ## Register
 
+### LLM-014: Hash-pinned files still name consolidated Markdown paths
+
+| Field | Value |
+|---|---|
+| Status | Open |
+| Severity | Low |
+| Reported | 2026-10-07 during the Markdown-cap consolidation |
+
+On 2026-10-07 fifteen ADRs, seven completed plans and four run/ops records were
+merged into `docs/adr/DECISIONS.md`, `docs/plans/COMPLETED_PLANS.md` and
+`docs/runs/RUNS.md` (each old file is a section anchored by its old file name).
+Files that the codebase-wiki freshness check hash-pins could not be repointed
+without re-deriving the wiki manifest, so they still name old paths:
+`llm_client/workflow/deliberate.py` and `llm_client/cli/deliberate.py`
+(`docs/plans/33_deliberation_workflow.md`), `llm_client/workflow/deliberate_verifier.py`
+(`docs/plans/34_deliberation_verifier_adjudicator.md`), and
+`docs/plans/105_inside_success_fork_reconciliation.md` (ADR paths, as code
+spans). `docs/ARCHIVED_DOCS_INDEX.md` maps each old path to its new anchor.
+**Fix:** at the next codebase-wiki re-derive, change those mentions to
+`docs/plans/COMPLETED_PLANS.md#<old-stem>` / `docs/adr/DECISIONS.md#<old-stem>`
+in the same change that refreshes the manifest. Historical run ledgers under
+`runs/`, `roadmap/codebase/raw/source-manifest-*.json` and the April
+`scripts/inferred_deps.json` snapshot record paths as they were and are left as is.
+
 ### LLM-001: Repository-wide static-analysis targets are baseline-red
 
 | Field | Value |

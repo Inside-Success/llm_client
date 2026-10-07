@@ -30,7 +30,7 @@ failed before a durable child call starts, failed after one starts, or cancelled
 
 ## References Reviewed
 
-- `docs/adr/0010-cross-project-runtime-substrate.md` - shared run/event
+- `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate` - shared run/event
   persistence belongs here while workflow orchestration remains above it.
 - `llm_client/observability/experiments.py` - reusable persistence/context
   precedent, but its schema and statuses are experiment-specific.
@@ -102,7 +102,7 @@ response.
 - `llm_client/__init__.py` (public typed API)
 - `tests/test_observed_runs.py` (create)
 - `tests/test_client_lifecycle.py` (lineage regression if required)
-- `docs/adr/0010-cross-project-runtime-substrate.md` (contract clarification)
+- `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate` (contract clarification)
 - `docs/guides/observed-runs.md` (create)
 - generated API reference and plan index
 

@@ -35,22 +35,22 @@ missing provider evidence before changing a model, retry policy, or timeout.
   timeout taxonomy.
 - `tests/test_attempt_diagnostics.py:190-225` - existing timeout and
   attribution controls.
-- `docs/adr/0001-model-identity-v0.md` and
-  `docs/adr/0004-result-model-semantics-migration.md` - requested and resolved
+- `docs/adr/DECISIONS.md#0001-model-identity-v0` and
+  `docs/adr/DECISIONS.md#0004-result-model-semantics-migration` - requested and resolved
   model identity remains additive and unguessed.
-- `docs/adr/0002-routing-config-precedence.md` and
-  `docs/plans/117_explicit_reasoning_policy.md` - route and timeout policy are
+- `docs/adr/DECISIONS.md#0002-routing-config-precedence` and
+  `docs/plans/COMPLETED_PLANS.md#117_explicit_reasoning_policy` - route and timeout policy are
   explicit runtime inputs rather than ambient inference.
-- `docs/adr/0003-warning-taxonomy.md` - a known client deadline is an
+- `docs/adr/DECISIONS.md#0003-warning-taxonomy` - a known client deadline is an
   observability fact, not a provider-blame warning.
-- `docs/adr/0007-observability-contract-boundary.md`,
-  `docs/adr/0012-shared-data-plane-boundary.md`, and
-  `docs/adr/0013-stream-lifecycle-heartbeat-observability.md` - metadata-only
+- `docs/adr/DECISIONS.md#0007-observability-contract-boundary`,
+  `docs/adr/DECISIONS.md#0012-shared-data-plane-boundary`, and
+  `docs/adr/DECISIONS.md#0013-stream-lifecycle-heartbeat-observability` - metadata-only
   retention and lifecycle semantics.
-- `docs/adr/0009-long-thinking-background-polling.md`,
-  `docs/adr/0010-cross-project-runtime-substrate.md`,
-  `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md`, and
-  `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` - this
+- `docs/adr/DECISIONS.md#0009-long-thinking-background-polling`,
+  `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate`,
+  `docs/adr/DECISIONS.md#0014-call-replay-and-divergence-diagnosis-boundary`, and
+  `docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary` - this
   is a reusable client-side timeout fact, distinct from background polling,
   replay, provider telemetry, and vendor attribution.
 - `docs/plans/121_attempt_diagnostic_envelope.md` - prior diagnostic contract.

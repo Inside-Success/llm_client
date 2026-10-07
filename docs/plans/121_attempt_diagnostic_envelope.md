@@ -54,24 +54,24 @@ guesswork.
   metadata-first attempt history and its deliberate exception/body exclusion.
 - `docs/plans/120_durable_call_lifecycle.md` - dispatch/terminal lineage and
   process-interruption semantics that this plan extends.
-- `docs/adr/0007-observability-contract-boundary.md`,
-  `docs/adr/0012-shared-data-plane-boundary.md`,
-  `docs/adr/0013-stream-lifecycle-heartbeat-observability.md`, and
-  `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md` -
+- `docs/adr/DECISIONS.md#0007-observability-contract-boundary`,
+  `docs/adr/DECISIONS.md#0012-shared-data-plane-boundary`,
+  `docs/adr/DECISIONS.md#0013-stream-lifecycle-heartbeat-observability`, and
+  `docs/adr/DECISIONS.md#0014-call-replay-and-divergence-diagnosis-boundary` -
   observability, privacy, lifecycle, and replay boundaries.
-- `docs/adr/0001-model-identity-v0.md` and
-  `docs/adr/0004-result-model-semantics-migration.md` - requested, resolved,
+- `docs/adr/DECISIONS.md#0001-model-identity-v0` and
+  `docs/adr/DECISIONS.md#0004-result-model-semantics-migration` - requested, resolved,
   and per-attempt model identities must remain additive and never be guessed.
-- `docs/adr/0002-routing-config-precedence.md` and
-  `docs/plans/117_explicit_reasoning_policy.md` - diagnostic tests set routing,
+- `docs/adr/DECISIONS.md#0002-routing-config-precedence` and
+  `docs/plans/COMPLETED_PLANS.md#117_explicit_reasoning_policy` - diagnostic tests set routing,
   timeout, and reasoning policy explicitly rather than reading ambient state.
-- `docs/adr/0003-warning-taxonomy.md` - diagnostic persistence and missing
+- `docs/adr/DECISIONS.md#0003-warning-taxonomy` - diagnostic persistence and missing
   required evidence are errors, not advisory warnings.
-- `docs/adr/0009-long-thinking-background-polling.md` - background polling has
+- `docs/adr/DECISIONS.md#0009-long-thinking-background-polling` - background polling has
   a separate response identity and timeout lifecycle; it is not silently
   projected as a native-schema transport failure.
-- `docs/adr/0010-cross-project-runtime-substrate.md` and
-  `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` - this
+- `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate` and
+  `docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary` - this
   is a reusable local substrate; vendor telemetry is complementary and never
   replaces client-observed evidence.
 

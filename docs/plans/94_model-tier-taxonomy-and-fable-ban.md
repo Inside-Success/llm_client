@@ -161,7 +161,7 @@ requested model. Task-configured output ceilings remain a separate follow-up.
 - `.venv/bin/python scripts/meta/complete_plan.py --plan 94 --skip-e2e` — failed because the full unit-test subprocess timed out at 300 seconds after collection; doc-code coupling passed. Policy friction logged in `project-meta/policy_friction.md`.
 - `pytest -q tests/test_route_certification.py tests/test_openrouter_generation.py tests/test_route_certification_runtime.py tests/test_cli_route_certification.py` — exact observation, authenticated provider evidence, three-source join, corruption, substitution, cache, and CLI query coverage.
 - `pytest -q tests/test_structured_runtime.py tests/test_models.py::TestGetModel::test_openrouter_gpt56_planner_routes_are_registered` — 18 passed; includes positive disjoint-union transport projection, an overlapping-union negative control, unchanged local Pydantic validation, and route registration.
-- Retained DIGIMON planner prompt probes — Terra and Luna both returned JSON that validates against the original planner schema after provider-only `oneOf` to `anyOf` projection. Evidence: `docs/runs/2026-07-21_openrouter_gpt56_planner_schema_compatibility.md`.
+- Retained DIGIMON planner prompt probes — Terra and Luna both returned JSON that validates against the original planner schema after provider-only `oneOf` to `anyOf` projection. Evidence: `docs/runs/RUNS.md#2026-07-21_openrouter_gpt56_planner_schema_compatibility`.
 
 ---
 

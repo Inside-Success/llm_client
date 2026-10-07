@@ -76,7 +76,7 @@
         },
         {
           "kind": "repository_path",
-          "target": "docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md",
+          "target": "docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary",
           "repository": "llm_client",
           "access": "exclusive",
           "coordination_key": "llm-client-adr-0016"

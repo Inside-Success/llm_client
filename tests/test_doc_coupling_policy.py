@@ -21,7 +21,7 @@ def _coupling(coupling_type: str, *, soft: bool | None = None) -> dict[str, obje
 
     result: dict[str, object] = {
         "sources": ["llm_client/core/client.py"],
-        "docs": ["docs/adr/0001-model-identity-v0.md"],
+        "docs": ["docs/adr/DECISIONS.md"],
         "description": "Test relationship.",
         "type": coupling_type,
     }

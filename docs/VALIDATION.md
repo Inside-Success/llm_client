@@ -29,8 +29,8 @@ decision-valid and analysis-valid layers.
 | Runtime API | `README.md` and `docs/API_REFERENCE.md` | Core call surfaces and result fields are documented. |
 | Requirements | `docs/REQUIREMENTS.md` | Required metadata, observability, model registry, and non-goals are explicit. |
 | Applied case shape | `docs/APPLIED_OBSERVABILITY_CASE.md` | Portfolio evidence should be tied to downstream decisions. |
-| Runtime substrate ADR | `docs/adr/0010-cross-project-runtime-substrate.md` | Cross-project ownership is explicit. |
-| Observability ADR | `docs/adr/0007-observability-contract-boundary.md` | Logging/persistence boundary is explicit. |
+| Runtime substrate ADR | `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate` | Cross-project ownership is explicit. |
+| Observability ADR | `docs/adr/DECISIONS.md#0007-observability-contract-boundary` | Logging/persistence boundary is explicit. |
 | Capability ownership | `docs/ops/CAPABILITY_DECOMPOSITION.md` | Adjacent repo boundaries are documented. |
 
 ## Evidence Not Yet Present
@@ -51,7 +51,7 @@ Core checks:
 make test
 make lint
 make typecheck
-python scripts/check_markdown_links.py PROJECT.md docs/METHODOLOGY.md docs/ARTIFACTS.md docs/VALIDATION.md docs/CONCERNS.md docs/adr/0015-portfolio-runtime-substrate-scope.md docs/wiki_manifest.yaml
+python scripts/check_markdown_links.py PROJECT.md docs/METHODOLOGY.md docs/ARTIFACTS.md docs/VALIDATION.md docs/CONCERNS.md docs/adr/DECISIONS.md#0015-portfolio-runtime-substrate-scope docs/wiki_manifest.yaml
 git diff --check
 ```
 
