@@ -52,7 +52,7 @@
 - `tests/test_workflow_deliberate_barrier.py` (create): focused barrier-protocol unit tests; anonymization tests; turn-shuffle tests.
 - `runs/plan-35-barrier-pilot/` (artifact dir, created at run time): A/B comparison artifacts vs the cascade-topology baseline.
 - `docs/plans/AGENTS.md` (modify): add Plan #35 row to the index.
-- `docs/plans/34_deliberation_verifier_adjudicator.md` (modify): note that the Plan #35 follow-up was reordered (barrier first, LLM-semantic match second).
+- `docs/plans/COMPLETED_PLANS.md#34_deliberation_verifier_adjudicator` (modify): note that the Plan #35 follow-up was reordered (barrier first, LLM-semantic match second).
 
 ---
 

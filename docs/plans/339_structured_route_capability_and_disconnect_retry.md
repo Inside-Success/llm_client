@@ -74,19 +74,19 @@ real resilience unless transient failures cause another observable dispatch.
 
 - `AGENTS.md` - runtime-substrate, structured-output, observability, and
   fail-loud rules.
-- `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` - route
+- `docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary` - route
   capability belongs to current provider evidence, not a fabricated endpoint
   inventory.
-- `docs/plans/110_provider-capabilities-opus-ban.md` - provider capability and
+- `docs/plans/COMPLETED_PLANS.md#110_provider-capabilities-opus-ban` - provider capability and
   normalized-parameter ownership.
-- `docs/plans/117_explicit_reasoning_policy.md` - governed reasoning contract.
+- `docs/plans/COMPLETED_PLANS.md#117_explicit_reasoning_policy` - governed reasoning contract.
 - `docs/plans/336_typed_openrouter_route_policy.md` - no-compatible-route is a
   non-retryable capability failure.
 - `docs/plans/337_current-model-selection-evidence-and-gpt-5-5-retirement.md`
   - current Luna/Sol registry claims and bounded certification language.
-- `docs/runs/2026-07-21_openrouter_gpt56_planner_schema_compatibility.md` -
+- `docs/runs/RUNS.md#2026-07-21_openrouter_gpt56_planner_schema_compatibility` -
   retained Luna planner-schema success and its explicit scope limit.
-- `docs/runs/2026-07-25_openrouter_gpt56_sol_authoring_schema_certification.md`
+- `docs/runs/RUNS.md#2026-07-25_openrouter_gpt56_sol_authoring_schema_certification`
   - retained Sol authoring-schema success and invalidation inputs.
 - `llm_client/core/models.py` - registry schema, selectors, and current
   `supports_structured_output()` contract.

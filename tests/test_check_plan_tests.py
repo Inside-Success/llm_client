@@ -49,12 +49,30 @@ def test_find_test_class_uses_ast_scope_for_async_and_top_level_tests() -> None:
     )
 
 
-def test_plan99_required_tests_are_exact_and_executable() -> None:
+def _completed_plan_file(anchor: str, tmp_path: Path) -> Path:
+    """Rebuild one completed plan as its own file from docs/plans/COMPLETED_PLANS.md.
+
+    Completed plans live as sections of COMPLETED_PLANS.md (headings demoted one
+    level, section starts at ``<a id="<anchor>"></a>``); the plan tooling parses
+    per-file plans, so restore the original heading levels into a temporary file.
+    """
+
+    text = (ROOT / "docs/plans/COMPLETED_PLANS.md").read_text(encoding="utf-8")
+    start = text.index(f'<a id="{anchor}"></a>')
+    end = text.find("\n<a id=", start + 1)
+    section = text[start:] if end == -1 else text[start:end]
+    lines = [line[1:] if line.startswith("##") else line for line in section.splitlines()[1:]]
+    path = tmp_path / f"{anchor}.md"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_plan99_required_tests_are_exact_and_executable(tmp_path: Path) -> None:
     """Plan 99 declarations resolve only to concrete pytest files or nodes."""
 
     module = _load_script()
     plan = module.parse_plan_file(
-        ROOT / "docs/plans/99_strict_native_json_schema_execution.md"
+        _completed_plan_file("99_strict_native_json_schema_execution", tmp_path)
     )
     assert plan is not None
     requirements = plan.new_tests + plan.existing_tests

@@ -53,11 +53,11 @@ vertical or evidence that AC16 succeeds.
 ## References Reviewed
 
 - `AGENTS.md` and `llm_client/sdk/AGENTS.md` - repository and adapter rules.
-- `docs/adr/0010-cross-project-runtime-substrate.md` - shared execution and
+- `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate` - shared execution and
   observability ownership.
-- `docs/adr/0005-reason-code-registry-governance.md` - stable fail-loud reason
+- `docs/adr/DECISIONS.md#0005-reason-code-registry-governance` - stable fail-loud reason
   semantics at shared runtime boundaries.
-- `docs/adr/0006-actor-id-issuance-policy.md` - explicit actor/session identity
+- `docs/adr/DECISIONS.md#0006-actor-id-issuance-policy` - explicit actor/session identity
   custody rather than inferred identity.
 - `docs/guides/codex-integration.md` - existing public Codex transport contract.
 - `docs/plans/355_codex_intrinsic_event_custody.md` - existing Codex result and

@@ -33,18 +33,18 @@ without claiming provider fault.
   - strict envelope and additive SQLite persistence.
 - `docs/plans/121_attempt_diagnostic_envelope.md` and `AGENTS.md` - privacy,
   observability, and verification constraints.
-- `docs/adr/0001-model-identity-v0.md`
-- `docs/adr/0002-routing-config-precedence.md`
-- `docs/adr/0003-warning-taxonomy.md`
-- `docs/adr/0004-result-model-semantics-migration.md`
-- `docs/adr/0007-observability-contract-boundary.md`
-- `docs/adr/0009-long-thinking-background-polling.md`
-- `docs/adr/0010-cross-project-runtime-substrate.md`
-- `docs/adr/0012-shared-data-plane-boundary.md`
-- `docs/adr/0013-stream-lifecycle-heartbeat-observability.md`
-- `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md`
-- `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md`
-- `docs/plans/117_explicit_reasoning_policy.md`
+- `docs/adr/DECISIONS.md#0001-model-identity-v0`
+- `docs/adr/DECISIONS.md#0002-routing-config-precedence`
+- `docs/adr/DECISIONS.md#0003-warning-taxonomy`
+- `docs/adr/DECISIONS.md#0004-result-model-semantics-migration`
+- `docs/adr/DECISIONS.md#0007-observability-contract-boundary`
+- `docs/adr/DECISIONS.md#0009-long-thinking-background-polling`
+- `docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate`
+- `docs/adr/DECISIONS.md#0012-shared-data-plane-boundary`
+- `docs/adr/DECISIONS.md#0013-stream-lifecycle-heartbeat-observability`
+- `docs/adr/DECISIONS.md#0014-call-replay-and-divergence-diagnosis-boundary`
+- `docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary`
+- `docs/plans/COMPLETED_PLANS.md#117_explicit_reasoning_policy`
 
 ---
 

@@ -5,7 +5,7 @@ title: "Inside Success LLM Client wiki front door"
 status: authored
 authority: derived
 owner: Inside-Success/llm_client
-as_of: 2026-10-03
+as_of: 2026-10-07
 visibility: unknown
 source_of_truth: false
 ---
@@ -28,10 +28,18 @@ A unified LLM client with mandatory observability, cost tracking and policy enfo
 - Documentation directory front door: [docs/README.md](../docs/README.md) (routes to every doc, guide and subtree rule file)
 - Open issues: `ISSUES.md`; shared agent findings: `KNOWLEDGE.md`; changes: `CHANGELOG.md`
 
+## Consolidated record files
+
+Groups of small records are kept as one file each; every former file is a section whose anchor is its old file name without `.md` (old path to anchor table: [archived docs index](../docs/ARCHIVED_DOCS_INDEX.md#consolidated-not-removed-2026-10-07)).
+
+- Architecture decisions: [docs/adr/DECISIONS.md](../docs/adr/DECISIONS.md) holds ADRs 0001-0007, 0009-0014, 0015 (portfolio scope) and 0016, e.g. [ADR 0001 model identity](../docs/adr/DECISIONS.md#0001-model-identity-v0), [ADR 0010 runtime substrate](../docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate), [ADR 0016 provider capability](../docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary). ADR 0015 (provider governance) stays its own file; the [ADR index](../docs/adr/README.md) lists all of them with status.
+- Completed plans: [docs/plans/COMPLETED_PLANS.md](../docs/plans/COMPLETED_PLANS.md) holds Plans [#33](../docs/plans/COMPLETED_PLANS.md#33_deliberation_workflow), [#34](../docs/plans/COMPLETED_PLANS.md#34_deliberation_verifier_adjudicator), [#99](../docs/plans/COMPLETED_PLANS.md#99_strict_native_json_schema_execution), [#104](../docs/plans/COMPLETED_PLANS.md#104_openrouter-provider-limit-observer), [#110](../docs/plans/COMPLETED_PLANS.md#110_provider-capabilities-opus-ban), [#117](../docs/plans/COMPLETED_PLANS.md#117_explicit_reasoning_policy) and [#348](../docs/plans/COMPLETED_PLANS.md#348_gpt54_ban_luna_default). Active, implemented-pending-acceptance and blocked plans stay as `docs/plans/NN_name.md` files because the plan tooling reads them per file; completed Plans #22 and #105 stay as files because hash-pinned codebase-wiki sources reference them.
+- Run and operational evidence: [docs/runs/RUNS.md](../docs/runs/RUNS.md) holds the [2026-07-09 worktree disposition report](../docs/runs/RUNS.md#2026-07-09-worktree-disposition-report), the [2026-07-21 GPT-5.6 planner-schema compatibility run](../docs/runs/RUNS.md#2026-07-21_openrouter_gpt56_planner_schema_compatibility), the [2026-07-25 Sol authoring-schema certification](../docs/runs/RUNS.md#2026-07-25_openrouter_gpt56_sol_authoring_schema_certification) and the [2026-07-27 typed route-policy probe](../docs/runs/RUNS.md#2026-07-27_typed_openrouter_route_policy_probe).
+
 ## Superseded or point-in-time
 
-- `docs/HANDOFF.md` is a point-in-time record (2026-07-25, revision 5a3369e); its own banner says the plan index wins on status.
-- ADR 0008 is marked Superseded in the [ADR index](../docs/adr/README.md).
+- Finished plans, dated reviews, investigations and handoffs removed on 2026-10-07 (including `docs/HANDOFF.md` and superseded ADR 0008) are listed, with restore commands, in the [archived docs index](../docs/ARCHIVED_DOCS_INDEX.md).
+- [.claude/HANDOFF.md](../.claude/HANDOFF.md) is a point-in-time session handoff; the plan index wins on status.
 - Do not treat the codebase wiki as proof of an exact signature; reopen the native source ([AGENTS.md](../AGENTS.md), rule 9).
 
 ## Code and how to run
@@ -41,7 +49,7 @@ A unified LLM client with mandatory observability, cost tracking and policy enfo
 
 ## Coverage and limits
 
-- This page is hand-authored from the repository's own files on 2026-10-03; it is not a reviewed enrichment pass and does not summarise the plan files.
+- This page is hand-authored from the repository's own files on 2026-10-03 (consolidated-record routes added 2026-10-07); it is not a reviewed enrichment pass and does not summarise the plan files.
 - `make codebase-wiki-check` passes on `main` as of 2026-10-03 after the wiki was re-derived from `Inside-Success/llm_client` revision `fe581ed` (manifest `roadmap/codebase/raw/source-manifest-fe581ed-inside-success.json`), including its concept and workflow pages; see the source ingest page under [roadmap](../roadmap/README.md). Owner of the next gap: this repository's maintainers, tracked through the [plan index](../docs/plans/AGENTS.md).
 
 ## If this page did not answer your question

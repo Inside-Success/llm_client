@@ -35,8 +35,8 @@ Wiki home: http://localhost:8088/index.php/Project_Wiki
 |---|---|---|
 | [docs/APPLIED_OBSERVABILITY_CASE.md](APPLIED_OBSERVABILITY_CASE.md) | Portfolio framing | Best reviewer-facing case shape. |
 | [docs/REQUIREMENTS.md](REQUIREMENTS.md) | Runtime contract | Defines required metadata and non-goals. |
-| [docs/adr/0010-cross-project-runtime-substrate.md](adr/0010-cross-project-runtime-substrate.md) | Runtime ownership | Establishes cross-project substrate boundary. |
-| [docs/adr/0007-observability-contract-boundary.md](adr/0007-observability-contract-boundary.md) | Observability boundary | Defines persistence and compatibility posture. |
+| [docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate](adr/DECISIONS.md#0010-cross-project-runtime-substrate) | Runtime ownership | Establishes cross-project substrate boundary. |
+| [docs/adr/DECISIONS.md#0007-observability-contract-boundary](adr/DECISIONS.md#0007-observability-contract-boundary) | Observability boundary | Defines persistence and compatibility posture. |
 | [docs/ops/CAPABILITY_DECOMPOSITION.md](ops/CAPABILITY_DECOMPOSITION.md) | Capability ownership | Prevents reabsorbing prompt evaluation or project logic. |
 
 ## Missing Portfolio Artifacts

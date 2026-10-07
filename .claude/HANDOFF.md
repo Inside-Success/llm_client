@@ -34,7 +34,7 @@ None remain for the completed Plans #92 and #93 scope.
 
 ## Deferred work — not active session work
 
-The reviewed forward-port queue is documented in `docs/ops/2026-07-09-worktree-disposition-report.md`. Recommended order:
+The reviewed forward-port queue is documented in `docs/runs/RUNS.md#2026-07-09-worktree-disposition-report`. Recommended order:
 
 1. `observability-config-truthfulness-v2` from `plan26-observability-config-truthfulness@86733ac`. Resolve import-time environment caching and test isolation; audit concurrent SQLite path switching before porting.
 2. `secure-trace-browser-salvage` from `fix/instructor-retry-unwrapping@3def0e3`. Do not merge wholesale: require authentication, redaction, bounded previews, deterministic aggregation, and safe URL schemes.

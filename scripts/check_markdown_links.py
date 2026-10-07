@@ -31,6 +31,9 @@ REFERENCE_LINK_RE = re.compile(r"^\s*\[[^\]]+]\s*:\s*(\S+)")
 
 HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 
+# Explicit HTML anchors, e.g. <a id="0001-model-identity-v0"></a> in consolidated docs.
+EXPLICIT_ANCHOR_RE = re.compile(r"<a\s+(?:id|name)=\"([^\"]+)\"")
+
 
 @dataclass(frozen=True)
 class LinkViolation:
@@ -124,6 +127,7 @@ def _extract_markdown_anchors(markdown_path: Path) -> set[str]:
     duplicate_counts: dict[str, int] = {}
 
     for line in markdown_path.read_text(encoding="utf-8").splitlines():
+        anchors.update(EXPLICIT_ANCHOR_RE.findall(line))
         match = HEADING_RE.match(line)
         if not match:
             continue

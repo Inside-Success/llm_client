@@ -29,9 +29,9 @@ publish:
     type: ConcernRegister
     title: LLM Client Concern Register
     tags: [portfolio, llm-tooling, concerns]
-  - path: docs/adr/0015-portfolio-runtime-substrate-scope.md
+  - path: docs/adr/DECISIONS.md
     type: ADR
-    title: Present LLM Client As Runtime Substrate Evidence
+    title: LLM Client Architecture Decisions (incl. ADR 0015 Runtime Substrate Evidence)
     tags: [llm-tooling, shared-infrastructure, architecture]
   - path: docs/REQUIREMENTS.md
     type: Requirements

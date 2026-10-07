@@ -80,9 +80,10 @@ def test_uncoupled_file_defaults_to_strict_mode() -> None:
 
 
 def test_client_coupling_includes_background_polling_adr() -> None:
-    assert "docs/adr/0009-long-thinking-background-polling.md" in _required_docs_for(
-        "llm_client/core/client.py"
-    )
+    # ADR 0009 is the `0009-long-thinking-background-polling` section of DECISIONS.md.
+    assert "docs/adr/DECISIONS.md" in _required_docs_for("llm_client/core/client.py")
+    decisions = (REPO_ROOT / "docs/adr/DECISIONS.md").read_text(encoding="utf-8")
+    assert '<a id="0009-long-thinking-background-polling"></a>' in decisions
 
 
 def test_coupled_file_passes_when_required_docs_are_read() -> None:

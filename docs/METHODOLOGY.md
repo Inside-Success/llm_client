@@ -73,11 +73,11 @@ Exploratory surfaces need observed call data, not speculation.
 
 ## ADR Map
 
-- [0007-observability-contract-boundary.md](adr/0007-observability-contract-boundary.md)
+- [DECISIONS.md#0007-observability-contract-boundary](adr/DECISIONS.md#0007-observability-contract-boundary)
   defines the observability contract boundary.
-- [0010-cross-project-runtime-substrate.md](adr/0010-cross-project-runtime-substrate.md)
+- [DECISIONS.md#0010-cross-project-runtime-substrate](adr/DECISIONS.md#0010-cross-project-runtime-substrate)
   defines the cross-project runtime substrate.
-- [0015-portfolio-runtime-substrate-scope.md](adr/0015-portfolio-runtime-substrate-scope.md)
+- [DECISIONS.md#0015-portfolio-runtime-substrate-scope](adr/DECISIONS.md#0015-portfolio-runtime-substrate-scope)
   records the portfolio scope decision: support applied traces, do not lead as
   a standalone analyst product.
 

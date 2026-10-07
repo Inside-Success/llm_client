@@ -34,7 +34,7 @@ disagreement.
 
 ```bash
 python -m llm_client duet-review \
-  --plan-doc docs/plans/33_deliberation_workflow.md \
+  --plan-doc docs/plans/COMPLETED_PLANS.md#33_deliberation_workflow \
   --workspace "$PWD" \
   --out runs/my-duet-review \
   --task-title "Review the deliberation plan" \
@@ -126,6 +126,6 @@ except `runs/README.md`). Add curated evidence deliberately with
 - `docs/plans/30_duet_autonomous_hardening.md`
 - `docs/plans/31_task_family_abstraction.md`
 - `docs/plans/32_twin_update_profile.md`
-- `docs/plans/33_deliberation_workflow.md`
-- `docs/plans/34_deliberation_verifier_adjudicator.md`
+- `docs/plans/COMPLETED_PLANS.md#33_deliberation_workflow`
+- `docs/plans/COMPLETED_PLANS.md#34_deliberation_verifier_adjudicator`
 - `docs/plans/35_deliberation_within_round_barrier_protocol.md`

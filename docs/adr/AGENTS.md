@@ -14,11 +14,21 @@ superseding an ADR.
 Proposed → Accepted/Rejected → Superseded (optional)
 ```
 
+## Where ADRs live
+
+ADR bodies are sections of [DECISIONS.md](DECISIONS.md) (one file, to keep the
+repository under its 100-Markdown-file cap). Each section starts with an
+explicit anchor `<a id="NNNN-title"></a>`, the old per-file name without `.md`.
+Only `0015-provider-governance-and-shared-coordination.md` remains a separate
+file, because a hash-pinned codebase-wiki source links to it.
+
 ## Creating an ADR
 
-1. Copy template to `NNNN-title.md`
+1. Append a section to `DECISIONS.md`: `<a id="NNNN-title"></a>`, then
+   `## ADR NNNN: Title`, then the template body with its headings one level
+   lower (`###`). Add it to the Contents list at the top.
 2. Fill in sections
-3. Add to the index in `README.md`
+3. Add to the index in `README.md`, linking `DECISIONS.md#NNNN-title`
 4. Get review if needed
 
 ## ADR Template

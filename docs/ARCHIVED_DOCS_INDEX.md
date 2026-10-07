@@ -106,3 +106,40 @@ Removed from commit `22789824993422975fc7ea7d06bf5f82e3486f20`. Count: 96.
 | `docs/reviews/2026-07-13_plan99_exact_replay_acceptance.md` | Plan 99 Exact Replay Independent Acceptance | `git show 22789824993422975fc7ea7d06bf5f82e3486f20:docs/reviews/2026-07-13_plan99_exact_replay_acceptance.md` |
 | `docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md` | Direct GPT-5 Native-Schema Route Certification | `git show 22789824993422975fc7ea7d06bf5f82e3486f20:docs/runs/2026-07-16_gpt5_direct_native_schema_route_certification.md` |
 | `investigations/2026-07-16-experiment-run-start-ledger-integrity.md` | Experiment Run Start Ledger Integrity | `git show 22789824993422975fc7ea7d06bf5f82e3486f20:investigations/2026-07-16-experiment-run-start-ledger-integrity.md` |
+
+## Consolidated, not removed (2026-10-07)
+
+These files were merged, body unchanged apart from heading levels and repointed
+links, into one file per group. Each became a section whose anchor is the old
+file name without `.md`. Old path mentions that remain in hash-pinned files
+(for example `docs/plans/105_inside_success_fork_reconciliation.md`, pinned by
+the codebase wiki manifest) resolve through this table.
+
+| Old path | Now |
+|----------|-----|
+| `docs/adr/0001-model-identity-v0.md` | [docs/adr/DECISIONS.md#0001-model-identity-v0](adr/DECISIONS.md#0001-model-identity-v0) |
+| `docs/adr/0002-routing-config-precedence.md` | [docs/adr/DECISIONS.md#0002-routing-config-precedence](adr/DECISIONS.md#0002-routing-config-precedence) |
+| `docs/adr/0003-warning-taxonomy.md` | [docs/adr/DECISIONS.md#0003-warning-taxonomy](adr/DECISIONS.md#0003-warning-taxonomy) |
+| `docs/adr/0004-result-model-semantics-migration.md` | [docs/adr/DECISIONS.md#0004-result-model-semantics-migration](adr/DECISIONS.md#0004-result-model-semantics-migration) |
+| `docs/adr/0005-reason-code-registry-governance.md` | [docs/adr/DECISIONS.md#0005-reason-code-registry-governance](adr/DECISIONS.md#0005-reason-code-registry-governance) |
+| `docs/adr/0006-actor-id-issuance-policy.md` | [docs/adr/DECISIONS.md#0006-actor-id-issuance-policy](adr/DECISIONS.md#0006-actor-id-issuance-policy) |
+| `docs/adr/0007-observability-contract-boundary.md` | [docs/adr/DECISIONS.md#0007-observability-contract-boundary](adr/DECISIONS.md#0007-observability-contract-boundary) |
+| `docs/adr/0009-long-thinking-background-polling.md` | [docs/adr/DECISIONS.md#0009-long-thinking-background-polling](adr/DECISIONS.md#0009-long-thinking-background-polling) |
+| `docs/adr/0010-cross-project-runtime-substrate.md` | [docs/adr/DECISIONS.md#0010-cross-project-runtime-substrate](adr/DECISIONS.md#0010-cross-project-runtime-substrate) |
+| `docs/adr/0011-prompt-assets-explicit-identity.md` | [docs/adr/DECISIONS.md#0011-prompt-assets-explicit-identity](adr/DECISIONS.md#0011-prompt-assets-explicit-identity) |
+| `docs/adr/0012-shared-data-plane-boundary.md` | [docs/adr/DECISIONS.md#0012-shared-data-plane-boundary](adr/DECISIONS.md#0012-shared-data-plane-boundary) |
+| `docs/adr/0013-stream-lifecycle-heartbeat-observability.md` | [docs/adr/DECISIONS.md#0013-stream-lifecycle-heartbeat-observability](adr/DECISIONS.md#0013-stream-lifecycle-heartbeat-observability) |
+| `docs/adr/0014-call-replay-and-divergence-diagnosis-boundary.md` | [docs/adr/DECISIONS.md#0014-call-replay-and-divergence-diagnosis-boundary](adr/DECISIONS.md#0014-call-replay-and-divergence-diagnosis-boundary) |
+| `docs/adr/0015-portfolio-runtime-substrate-scope.md` | [docs/adr/DECISIONS.md#0015-portfolio-runtime-substrate-scope](adr/DECISIONS.md#0015-portfolio-runtime-substrate-scope) |
+| `docs/adr/0016-provider-capability-and-vendor-telemetry-boundary.md` | [docs/adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary](adr/DECISIONS.md#0016-provider-capability-and-vendor-telemetry-boundary) |
+| `docs/ops/2026-07-09-worktree-disposition-report.md` | [docs/runs/RUNS.md#2026-07-09-worktree-disposition-report](runs/RUNS.md#2026-07-09-worktree-disposition-report) |
+| `docs/runs/2026-07-21_openrouter_gpt56_planner_schema_compatibility.md` | [docs/runs/RUNS.md#2026-07-21_openrouter_gpt56_planner_schema_compatibility](runs/RUNS.md#2026-07-21_openrouter_gpt56_planner_schema_compatibility) |
+| `docs/runs/2026-07-25_openrouter_gpt56_sol_authoring_schema_certification.md` | [docs/runs/RUNS.md#2026-07-25_openrouter_gpt56_sol_authoring_schema_certification](runs/RUNS.md#2026-07-25_openrouter_gpt56_sol_authoring_schema_certification) |
+| `docs/runs/2026-07-27_typed_openrouter_route_policy_probe.md` | [docs/runs/RUNS.md#2026-07-27_typed_openrouter_route_policy_probe](runs/RUNS.md#2026-07-27_typed_openrouter_route_policy_probe) |
+| `docs/plans/33_deliberation_workflow.md` | [docs/plans/COMPLETED_PLANS.md#33_deliberation_workflow](plans/COMPLETED_PLANS.md#33_deliberation_workflow) |
+| `docs/plans/34_deliberation_verifier_adjudicator.md` | [docs/plans/COMPLETED_PLANS.md#34_deliberation_verifier_adjudicator](plans/COMPLETED_PLANS.md#34_deliberation_verifier_adjudicator) |
+| `docs/plans/99_strict_native_json_schema_execution.md` | [docs/plans/COMPLETED_PLANS.md#99_strict_native_json_schema_execution](plans/COMPLETED_PLANS.md#99_strict_native_json_schema_execution) |
+| `docs/plans/104_openrouter-provider-limit-observer.md` | [docs/plans/COMPLETED_PLANS.md#104_openrouter-provider-limit-observer](plans/COMPLETED_PLANS.md#104_openrouter-provider-limit-observer) |
+| `docs/plans/110_provider-capabilities-opus-ban.md` | [docs/plans/COMPLETED_PLANS.md#110_provider-capabilities-opus-ban](plans/COMPLETED_PLANS.md#110_provider-capabilities-opus-ban) |
+| `docs/plans/117_explicit_reasoning_policy.md` | [docs/plans/COMPLETED_PLANS.md#117_explicit_reasoning_policy](plans/COMPLETED_PLANS.md#117_explicit_reasoning_policy) |
+| `docs/plans/348_gpt54_ban_luna_default.md` | [docs/plans/COMPLETED_PLANS.md#348_gpt54_ban_luna_default](plans/COMPLETED_PLANS.md#348_gpt54_ban_luna_default) |

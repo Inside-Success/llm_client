@@ -12,7 +12,8 @@ Wiki route: [wiki/index.md](../wiki/index.md) is the repository front door.
 
 | Need | Read |
 | --- | --- |
-| Plans, delivery status, ADRs | [plan index](plans/AGENTS.md), [ADR index](adr/README.md), [ADR rules](adr/AGENTS.md) |
+| Plans, delivery status, ADRs | [plan index](plans/AGENTS.md), [completed plans](plans/COMPLETED_PLANS.md), [ADR index](adr/README.md), [ADR texts](adr/DECISIONS.md), [ADR rules](adr/AGENTS.md) |
+| Run and operational evidence | [runs/RUNS.md](runs/RUNS.md) (one section per dated probe, certification or inventory; add new records as sections) |
 | What `llm_client` owns | [CAPABILITY_DECOMPOSITION](ops/CAPABILITY_DECOMPOSITION.md), [ECOSYSTEM_TOP_DOWN_ARCHITECTURE](ECOSYSTEM_TOP_DOWN_ARCHITECTURE.md) |
 | Requirements, methodology, validation | [REQUIREMENTS](REQUIREMENTS.md), [METHODOLOGY](METHODOLOGY.md), [VALIDATION](VALIDATION.md) |
 | Artifact and prompt-size contracts | [ARTIFACTS](ARTIFACTS.md), [PROMPT_SIZE_CONTRACTS](PROMPT_SIZE_CONTRACTS.md) |
