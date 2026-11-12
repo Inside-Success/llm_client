@@ -47,8 +47,11 @@ logger = logging.getLogger(__name__)
 # for a structured-output request; this constant lets a caller-independent
 # default additionally exclude it explicitly rather than relying solely on
 # the remote provider's own enforcement.
+# Rechecked 2026-11-12 (Team-Brains #1253): openai/gpt-6.1-terra's
+# amazon-bedrock/us-east-1 endpoint also lacks structured_outputs; every
+# openai/gpt-6-luna endpoint, Bedrock included, lists it.
 _OPENROUTER_MODELS_WITHOUT_BEDROCK_STRUCTURED_OUTPUT = frozenset(
-    {"gpt-5.6-luna", "gpt-5.6-terra"}
+    {"gpt-5.6-luna", "gpt-5.6-terra", "gpt-6.1-terra"}
 )
 _OPENROUTER_BEDROCK_PROVIDER_TAG = "amazon-bedrock"
 

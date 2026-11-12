@@ -157,6 +157,16 @@ def test_all_supported_gpt56_family_routes_are_allowlisted() -> None:
     assert expected.issubset(REASONING_CAPABILITIES)
 
 
+def test_gpt6_openrouter_routes_are_allowlisted_with_reasoning_capabilities() -> None:
+    """Team Tools runs the Reality brain on gpt-6.1-terra (Team-Brains #1253)."""
+    expected = {"openrouter/openai/gpt-6-luna", "openrouter/openai/gpt-6.1-terra"}
+
+    assert expected.issubset(ALLOWED_EXECUTION_MODELS)
+    assert expected.issubset(REASONING_CAPABILITIES)
+    for model in expected:
+        evaluate_reasoning_policy([model], reasoning_effort="low")
+
+
 def test_allowed_alternate_without_justification_fails() -> None:
     with pytest.raises(LLMConfigurationError, match="require model_justification"):
         evaluate_model_execution_policy(

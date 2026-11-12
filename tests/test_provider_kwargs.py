@@ -516,6 +516,31 @@ def test_bare_direct_terra_does_not_get_an_openrouter_route_policy() -> None:
     assert "provider" not in call_kwargs
 
 
+def test_openrouter_gpt61_terra_gets_the_bedrock_exclusion_but_gpt6_luna_does_not() -> None:
+    """OpenRouter, 2026-11-12: gpt-6.1-terra's Bedrock endpoint lacks
+    structured_outputs; every gpt-6-luna endpoint has it (Team-Brains #1253)."""
+
+    def provider_for(model: str) -> object:
+        return _prepare_call_kwargs(
+            model,
+            [{"role": "user", "content": "hello"}],
+            timeout=0,
+            num_retries=0,
+            reasoning_effort=None,
+            api_base=None,
+            kwargs={},
+        ).get("provider")
+
+    assert provider_for("openrouter/openai/gpt-6.1-terra") == {
+        "require_parameters": True,
+        "ignore": ["amazon-bedrock"],
+    }
+    assert provider_for("openrouter/openai/gpt-6-luna") != {
+        "require_parameters": True,
+        "ignore": ["amazon-bedrock"],
+    }
+
+
 def test_other_openrouter_models_do_not_get_the_bedrock_default() -> None:
     """The default is scoped to the two verified-affected models only."""
 
