@@ -60,6 +60,8 @@ SHARED_EXECUTION_MODELS: frozenset[str] = frozenset(
         "openrouter/openai/gpt-5.6-luna",
         "openrouter/openai/gpt-5.6-sol",
         "openrouter/openai/gpt-5.6-terra",
+        "openrouter/openai/gpt-6-luna",
+        "openrouter/openai/gpt-6.1-terra",
         "openrouter/google/gemini-3.1-pro-preview",
         "openrouter/qwen/qwen3.7-max",
         "openrouter/x-ai/grok-4.5",
@@ -171,6 +173,20 @@ REASONING_CAPABILITIES: dict[str, ReasoningCapability] = {
         source=_OPENROUTER_GPT56_SOL_SOURCE,
     ),
     "openrouter/openai/gpt-5.6-terra": _reasoning_capability(
+        {"none", "low", "medium", "high", "xhigh", "max"},
+        mandatory=False,
+        observed_default="medium",
+        source=_OPENROUTER_MODELS_SOURCE,
+    ),
+    # Checked against OpenRouter GET /models on 2026-11-12: both list the same
+    # efforts, mandatory=False and default "medium" (Team-Brains #1253).
+    "openrouter/openai/gpt-6-luna": _reasoning_capability(
+        {"none", "low", "medium", "high", "xhigh", "max"},
+        mandatory=False,
+        observed_default="medium",
+        source=_OPENROUTER_MODELS_SOURCE,
+    ),
+    "openrouter/openai/gpt-6.1-terra": _reasoning_capability(
         {"none", "low", "medium", "high", "xhigh", "max"},
         mandatory=False,
         observed_default="medium",

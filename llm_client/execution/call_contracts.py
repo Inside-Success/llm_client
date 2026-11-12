@@ -505,6 +505,8 @@ _GPT5_REASONING_GATED_SAMPLING = {
     "gpt-5.5-pro",
     "gpt-5.6",
     "gpt-5.6-terra",
+    "gpt-6-luna",
+    "gpt-6.1-terra",
     "gpt-5.1-chat-latest",
     "gpt-5.2-chat-latest",
 }
