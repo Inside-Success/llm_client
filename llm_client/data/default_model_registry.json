@@ -136,6 +136,25 @@
       ]
     },
     {
+      "api_key_env": "OPENROUTER_API_KEY",
+      "context": 1050000,
+      "cost": 1.5,
+      "intelligence": 38,
+      "litellm_id": "openrouter/openai/gpt-6-luna",
+      "name": "gpt-6-luna-openrouter",
+      "native_structured_output": true,
+      "provider": "openrouter",
+      "speed": 192,
+      "structured_output": true,
+      "tags": [
+        "1m-context",
+        "manual-selection",
+        "openrouter",
+        "reasoning",
+        "unbenchmarked"
+      ]
+    },
+    {
       "api_key_env": "GEMINI_API_KEY",
       "context": 1000000,
       "cost": 1.13,
