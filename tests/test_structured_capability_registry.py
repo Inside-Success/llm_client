@@ -218,3 +218,38 @@ class TestModelSupportsNativeSchema:
         ):
             assert _model_supports_native_schema("openrouter/x/unknown") is True
             litellm_map.assert_called_once_with(model="openrouter/x/unknown")
+
+
+class TestOpenRouterGpt6Luna:
+    """gpt-6-luna is a curated native-schema route, not a LiteLLM-map guess.
+
+    Before this entry the registry did not know ``openrouter/openai/gpt-6-luna``,
+    so the capability check fell back to LiteLLM. LiteLLM's map (1.97 to 1.105)
+    holds ``gpt-6-luna`` but not the ``openrouter/openai/`` key, so it answered
+    False and every native-schema call failed in Team Tools and the meeting
+    runtime (Inside-Success/Team-Brains#2225, 2026-11-25). Execution allowlist
+    and reasoning table already carry the route (2d8150e).
+    """
+
+    def test_registry_declares_native_schema(self):
+        assert supports_native_structured_output("openrouter/openai/gpt-6-luna") is True
+        assert supports_structured_output("openrouter/openai/gpt-6-luna") is True
+
+    def test_capability_check_does_not_consult_litellm(self):
+        with patch("litellm.supports_response_schema", return_value=False) as litellm_map:
+            assert _model_supports_native_schema("openrouter/openai/gpt-6-luna") is True
+            litellm_map.assert_not_called()
+
+    def test_route_is_never_chosen_by_task_selection(self):
+        """Adding the route changes no automatic model choice."""
+        from llm_client.core.models import _load_config
+
+        entry = next(
+            m for m in _load_config()["models"]
+            if (m if isinstance(m, dict) else m.model_dump())["litellm_id"]
+            == "openrouter/openai/gpt-6-luna"
+        )
+        entry = entry if isinstance(entry, dict) else entry.model_dump()
+        assert "manual-selection" in entry["tags"]
+        assert "default" not in entry["tags"]
+        assert not [tag for tag in entry["tags"] if tag.startswith("tier-")]
